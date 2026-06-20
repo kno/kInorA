@@ -61,6 +61,7 @@ const WORKSPACE_PACKAGE_FILES = [
   join(ROOT, "apps/web/package.json"),
   join(ROOT, "apps/api/package.json"),
   join(ROOT, "packages/contracts/package.json"),
+  join(ROOT, "packages/domain/package.json"),
 ];
 
 function collectDependencies(pkg) {
