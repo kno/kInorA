@@ -1,0 +1,67 @@
+# openspec/config.yaml
+schema: spec-driven
+
+context: |
+  Monorepo (pnpm workspaces) — Next.js + TypeScript (web), Fastify + Node.js (API),
+  PostgreSQL + Drizzle ORM, Auth.js, Vercel AI SDK + OpenAI, Stripe, PWA + Capacitor.
+  Docker + GitHub Actions CI/CD.
+  No application code yet — pure roadmap phase from README.md.
+  Planned: Clean Architecture, security by design, strict TDD.
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Relate each proposal to the README.md roadmap
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+    - Cover edge cases: loading, empty, error, offline, validation
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+    - Follow Clean Architecture layer boundaries
+    - Security by design: validate at every boundary
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session (max ~200 LoC change)
+  apply:
+    - Follow existing code patterns where they exist
+    tdd: true                # strict TDD: RED → GREEN → Triangle (edge cases)
+    test_command: "pnpm --filter <workspace> test"
+  verify:
+    test_command: "pnpm --filter <workspace> test"
+    build_command: "pnpm build"
+    coverage_threshold: 80
+  archive:
+    - Warn before merging destructive deltas
+
+testing:
+  strict_tdd: true
+  detected: "2026-06-20"
+  note: "No testing tools installed yet (no application code). Intent is strict TDD with vitest/jest, testing-library, and Playwright."
+  runner:
+    command: "TBD — expected pnpm --filter <workspace> test"
+    framework: "TBD — expected vitest or jest"
+  layers:
+    unit:
+      available: false
+      tool: "TBD — expected vitest"
+    integration:
+      available: false
+      tool: "TBD — expected testing-library + supertest"
+    e2e:
+      available: false
+      tool: "TBD — expected Playwright"
+  coverage:
+    available: false
+    command: "TBD — expected vitest --coverage"
+  quality:
+    linter:
+      available: false
+      tool: "TBD — expected ESLint"
+    type_checker:
+      available: false
+      tool: "TBD — expected tsc --noEmit"
+    formatter:
+      available: false
+      tool: "TBD — expected Prettier"
