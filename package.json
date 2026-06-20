@@ -1,0 +1,19 @@
+{
+  "name": "kinora",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n web,api -c blue,green \"pnpm --filter web dev\" \"pnpm --filter api dev\"",
+    "build": "pnpm -r build",
+    "type-check": "pnpm -r type-check",
+    "test": "pnpm -r test",
+    "deps-guard": "node scripts/deps-guard.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "9.2.3",
+    "typescript": "5.8.3"
+  },
+  "engines": {
+    "node": ">=24.17.0"
+  },
+  "packageManager": "pnpm@10.17.1"
+}
