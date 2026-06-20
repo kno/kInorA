@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createPlanDraft } from "../plan/plan-draft";
+import { createPlanDraft } from "@kinora/domain";
 import type { PlanSpec, PlanGoal, TrainingLocation } from "@kinora/contracts";
 
 describe("createPlanDraft", () => {
