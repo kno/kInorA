@@ -1,2 +1,13 @@
 # SDD / AI agent artifacts
 .atl/
+
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+dist/
+
+# Environment files
+.env*
+!.env.example
