@@ -1,128 +1,128 @@
 # kInorA
 
-Entrenamiento personalizado asistido por **I**nteligencia **A**rtificial.
+Personalized training powered by **A**rtificial **I**ntelligence.
 
-kInorA genera y adapta planes de entrenamiento a medida de cada usuario — objetivos, nivel, equipamiento disponible y limitaciones físicas — a través de dos modos de interacción: un wizard visual de tarjetas y un asistente conversacional con voz. El sistema aprende del progreso real del usuario sesión a sesión y ajusta el plan de forma continua.
-
----
-
-## a. Descripción general
-
-kInorA es una plataforma compuesta por una **web** (landing pública + zona privada) y una **app mobile**, con un motor de IA como núcleo del producto. Sus características distintivas:
-
-- **Definición de planes en dos modos**: tarjetas (rápido, visual) o conversacional con voz (natural, matizado). Ambos modos alimentan la misma estructura de datos, por lo que el usuario puede alternar entre ellos sin perder progreso.
-- **Adaptación a limitaciones físicas**: el usuario declara lesiones, condiciones crónicas o limitaciones de movilidad, y la IA filtra, sustituye o ajusta ejercicios en consecuencia — siempre como sugerencia, nunca como diagnóstico médico.
-- **Adaptación a equipamiento disponible**: el plan respeta lo que el usuario tiene accesible (gimnasio completo, equipamiento casero limitado, o nada). Si un ejercicio resulta no viable después de generado el plan, se sustituye automáticamente por un equivalente.
-- **Memoria persistente del usuario**: la IA recuerda preferencias, equipamiento, contexto y patrones de comportamiento entre sesiones, enriqueciendo cada interacción futura. El usuario puede ver, editar y borrar esta memoria.
-- **Seguimiento de entrenamiento offline-first**: registro de series con un flujo de tres estados (por debajo / cumplido / por encima) optimizado para uso en el gimnasio, con sincronización automática al recuperar conexión.
-- **Modelo freemium con trial**: tier gratuito funcional, 30 días de Pro sin necesidad de tarjeta, y sistema de cupones para campañas y referidos.
+kInorA generates and adapts training plans tailored to each user — goals, level, available equipment, and physical limitations — through two interaction modes: a visual card wizard and a conversational voice assistant. The system learns from the user's actual progress session by session and adjusts the plan continuously.
 
 ---
 
-## b. Stack tecnológico
+## a. Overview
 
-| Capa                        | Tecnología                                                                                        |
-| --------------------------- | ------------------------------------------------------------------------------------------------- |
-| Frontend (web)              | Next.js + TypeScript                                                                              |
-| Backend (API)               | Fastify + Node.js                                                                                 |
-| Base de datos               | PostgreSQL                                                                                        |
-| ORM                         | Drizzle                                                                                           |
-| Autenticación               | Auth.js (NextAuth v5) — email/contraseña + Google OAuth, con account linking automático por email |
-| Integración LLM             | Vercel AI SDK (agnóstico de proveedor)                                                            |
-| Modelo LLM                  | OpenAI GPT-4o                                                                                     |
-| Reconocimiento de voz (STT) | OpenAI Whisper                                                                                    |
-| Síntesis de voz (TTS)       | OpenAI TTS                                                                                        |
-| Pagos y suscripciones       | Stripe                                                                                            |
-| Email transaccional         | Resend                                                                                            |
-| Almacenamiento de assets    | Cloudflare R2 (S3-compatible)                                                                     |
-| App mobile                  | PWA embebida en shell nativa vía Capacitor                                                        |
-| Repositorio                 | Monorepo — pnpm workspaces                                                                        |
-| Infraestructura             | VPS + Docker                                                                                      |
-| CI/CD                       | GitHub Actions                                                                                    |
+kInorA is a platform composed of a **web** (public landing + private area) and a **mobile app**, with an AI engine at the product's core. Its distinguishing features:
+
+- **Plan definition in two modes**: cards (fast, visual) or conversational with voice (natural, nuanced). Both modes feed the same data structure, so the user can switch between them without losing progress.
+- **Physical limitation adaptation**: the user declares injuries, chronic conditions, or mobility limitations, and the AI filters, substitutes, or adjusts exercises accordingly — always as a suggestion, never as a medical diagnosis.
+- **Available equipment adaptation**: the plan respects what the user has access to (full gym, limited home equipment, or nothing). If an exercise turns out to be unfeasible after plan generation, it is automatically replaced with an equivalent.
+- **Persistent user memory**: the AI remembers preferences, equipment, context, and behavior patterns between sessions, enriching every future interaction. The user can view, edit, and delete this memory.
+- **Offline-first workout tracking**: set logging with a three-state flow (below / met / above) optimized for gym use, with automatic sync when connectivity is restored.
+- **Freemium model with trial**: functional free tier, 30-day Pro trial with no credit card required, and a coupon system for campaigns and referrals.
 
 ---
 
-## c. Instalación y ejecución
+## b. Tech Stack
 
-### Requisitos previos
+| Layer                       | Technology                                                                                     |
+| --------------------------- | ---------------------------------------------------------------------------------------------- |
+| Frontend (web)              | Next.js + TypeScript                                                                           |
+| Backend (API)               | Fastify + Node.js                                                                              |
+| Database                    | PostgreSQL                                                                                     |
+| ORM                         | Drizzle                                                                                        |
+| Authentication              | Auth.js (NextAuth v5) — email/password + Google OAuth, with automatic account linking by email |
+| LLM Integration             | Vercel AI SDK (provider-agnostic)                                                              |
+| LLM Model                   | OpenAI GPT-4o                                                                                  |
+| Speech-to-Text (STT)        | OpenAI Whisper                                                                                 |
+| Text-to-Speech (TTS)        | OpenAI TTS                                                                                     |
+| Payments & Subscriptions    | Stripe                                                                                         |
+| Transactional Email         | Brevo                                                                                          |
+| Asset Storage               | VPS                                                                                            |
+| Mobile App                  | PWA embedded in native shell via Capacitor                                                     |
+| Repository                  | Monorepo — pnpm workspaces                                                                     |
+| Infrastructure              | VPS + Docker                                                                                   |
+| CI/CD                       | GitHub Actions                                                                                 |
+
+---
+
+## c. Installation and Execution
+
+### Prerequisites
 
 - Node.js ≥ 24
 - pnpm ≥ 11
-- Docker y Docker Compose
-- PostgreSQL 18 (o usar el contenedor incluido)
-- Cuenta de OpenAI u OpenRouter con API key
-- Cuenta de Stripe (modo test para desarrollo)
-- Credenciales OAuth de Google
+- Docker and Docker Compose
+- PostgreSQL 18 (or use the included container)
+- OpenAI or OpenRouter account with API key
+- Stripe account (test mode for development)
+- Google OAuth credentials
 
-### Configuración
+### Setup
 
-1. Clona el repositorio:
+1. Clone the repository:
 
    ```bash
    git clone https://github.com/<org>/kinora.git
    cd kinora
    ```
 
-2. Instala las dependencias del monorepo:
+2. Install monorepo dependencies:
 
    ```bash
    pnpm install
    ```
 
-3. Copia el archivo de variables de entorno de ejemplo en cada app y rellena los valores:
+3. Copy the example environment variable file into each app and fill in the values:
 
    ```bash
    cp apps/web/.env.example apps/web/.env
    cp apps/api/.env.example apps/api/.env
    ```
 
-   Variables principales a configurar: `DATABASE_URL`, `AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OPENAI_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`.
+   Key variables to configure: `DATABASE_URL`, `AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OPENAI_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`.
 
-4. Levanta la base de datos local:
+4. Start the local database:
 
    ```bash
    docker compose up -d postgres
    ```
 
-5. Ejecuta las migraciones:
+5. Run migrations:
 
    ```bash
    pnpm --filter api db:migrate
    ```
 
-   _(opcional)_ Puebla el catálogo de ejercicios con datos de partida:
+   _(optional)_ Seed the exercise catalog with initial data:
 
    ```bash
    pnpm --filter api db:seed
    ```
 
-### Ejecución en desarrollo
+### Development Execution
 
-Arranca web y API en paralelo:
+Start web and API in parallel:
 
 ```bash
 pnpm dev
 ```
 
-- Web disponible en `http://localhost:3000`
-- API disponible en `http://localhost:4000`
+- Web available at `http://localhost:3000`
+- API available at `http://localhost:4000`
 
-Para ejecutar solo un workspace:
+To run only one workspace:
 
 ```bash
 pnpm --filter web dev
 pnpm --filter api dev
 ```
 
-### Build de producción
+### Production Build
 
 ```bash
 pnpm build
 ```
 
-### Despliegue
+### Deployment
 
-El despliegue es automático vía GitHub Actions al hacer push a `main`. El pipeline ejecuta sobre el VPS:
+Deployment is automatic via GitHub Actions on push to `main`. The pipeline runs on the VPS:
 
 ```bash
 git pull origin main
@@ -130,100 +130,161 @@ docker build -t kinora .
 docker run -d --env-file .env -p 80:3000 kinora
 ```
 
-El archivo `.env` de producción vive únicamente en el VPS y nunca se sube al repositorio. Las credenciales del pipeline (SSH, etc.) se gestionan como GitHub Actions Secrets.
+The `.env` file for production lives exclusively on the VPS and is never uploaded to the repository. Pipeline credentials (SSH, etc.) are managed as GitHub Actions Secrets.
 
 ---
 
-## d. Estructura del proyecto
+## d. Project Structure
 
 ```
 kinora/
 ├── apps/
-│   ├── web/                    # Next.js — landing, zona privada, dashboard
-│   │   ├── app/                # App Router de Next.js
-│   │   ├── components/         # Componentes React
+│   ├── web/                    # Next.js — landing, private area, dashboard
+│   │   ├── app/                # Next.js App Router
+│   │   ├── components/         # React components
 │   │   └── .env.example
 │   │
-│   └── api/                    # Fastify — lógica de negocio y endpoints
+│   └── api/                    # Fastify — business logic and endpoints
 │       ├── src/
-│       │   ├── routes/         # Endpoints REST
-│       │   ├── modules/        # Dominio: plans, exercises, limitations, memory, tracking, billing
-│       │   ├── db/             # Esquema Drizzle y migraciones
-│       │   └── ai/             # Integraciones con Vercel AI SDK (LLM, STT, TTS)
+│       │   ├── routes/         # REST endpoints
+│       │   ├── modules/        # Domain: plans, exercises, limitations, memory, tracking, billing
+│       │   ├── db/             # Drizzle schema and migrations
+│       │   └── ai/             # Vercel AI SDK integrations (LLM, STT, TTS)
 │       └── .env.example
 │
 ├── packages/
-│   └── shared/                 # Tipos TypeScript y schemas Zod compartidos entre web y api
+│   └── shared/                 # Shared TypeScript types and Zod schemas between web and api
 │
-├── mobile-shell/                # Configuración de Capacitor — wraps la PWA en shell nativa
+├── mobile-shell/                # Capacitor configuration — wraps the PWA in a native shell
 │
 ├── .github/
-│   └── workflows/              # Pipelines de CI/CD
+│   └── workflows/              # CI/CD pipelines
 │
-├── docker-compose.yml           # Entorno local (Postgres, etc.)
+├── docker-compose.yml           # Local environment (Postgres, etc.)
 ├── Dockerfile
 ├── pnpm-workspace.yaml
 └── README.md
 ```
 
-### Entidades principales del dominio
+### Main Domain Entities
 
-- `User` / `AuthIdentity` — usuarios y sus métodos de autenticación vinculados
-- `Organization` — preparado para multi-tenant (tier Trainer y B2B en versiones futuras)
-- `Limitation` — lesiones y limitaciones físicas declaradas
-- `Exercise` — catálogo de ejercicios con taxonomía de patrones y matriz de carga por zona corporal
-- `PlanSpec` — especificación de un plan, poblada desde modo tarjetas o conversacional
-- `WorkoutSession` / `SessionExercise` / `SetRecord` — jerarquía de seguimiento de entrenamiento
-- `UserMemory` — memoria persistente de contexto del usuario para personalización de la IA
-- `Coupon` / `Subscription` — gestión de planes de pago, trials y promociones
+- `User` / `AuthIdentity` — users and their linked authentication methods
+- `Organization` — prepared for multi-tenant (Trainer tier and B2B in future versions)
+- `Limitation` — declared injuries and physical limitations
+- `Exercise` — exercise catalog with pattern taxonomy and body-zone load matrix
+- `PlanSpec` — plan specification, populated from card or conversational mode
+- `WorkoutSession` / `SessionExercise` / `SetRecord` — workout tracking hierarchy
+- `UserMemory` — persistent user context memory for AI personalization
+- `Coupon` / `Subscription` — payment plan management, trials, and promotions
 
 ---
 
-## e. Funcionalidades principales
+## e. Main Features
 
-### Definición de planes de entrenamiento
+### Training Plan Definition
 
-- Modo tarjetas: wizard de 7 pasos (objetivo, días, duración, localización, equipamiento, limitaciones, confirmación)
-- Modo conversacional: chat guiado por IA con extracción incremental de datos, con soporte de voz (entrada y salida)
-- Cambio fluido entre ambos modos sin pérdida de progreso
+- Card mode: 7-step wizard (goal, days, duration, location, equipment, limitations, confirmation)
+- Conversational mode: AI-guided chat with incremental data extraction, voice input and output supported
+- Seamless switching between both modes without progress loss
 
-### Personalización por IA
+### AI Personalization
 
-- Generación de planes según objetivo, nivel, disponibilidad y equipamiento
-- Adaptación a lesiones y limitaciones físicas con sustitución inteligente de ejercicios
-- Ajuste dinámico del plan según adherencia, RPE y progreso real
-- Memoria persistente: la IA recuerda preferencias, equipamiento y contexto entre sesiones, visible y editable por el usuario
+- Plan generation based on goal, level, availability, and equipment
+- Adaptation to injuries and physical limitations with intelligent exercise substitution
+- Dynamic plan adjustment based on adherence, RPE, and actual progress
+- Persistent memory: the AI remembers preferences, equipment, and context between sessions, visible and editable by the user
 
-### Seguimiento de entrenamiento
+### Workout Tracking
 
-- Tracker offline-first con registro rápido de series (por debajo / cumplido / por encima)
-- Feedback de zona corporal tras ejercicios adaptados por lesión
-- Check-in post-sesión con RPE global y notas
+- Offline-first tracker with fast set logging (below / met / above)
+- Body-zone feedback after injury-adapted exercises
+- Post-session check-in with overall RPE and notes
 
-### Estadísticas y progreso
+### Statistics and Progress
 
-- Dashboard con adherencia, volumen semanal, racha y récords personales
-- Vista de detalle por ejercicio con progresión de carga
-- Panel de memoria del asistente con gestión por parte del usuario
+- Dashboard with adherence, weekly volume, streak, and personal records
+- Per-exercise detail view with load progression
+- Assistant memory panel with user management
 
-### Cuenta y autenticación
+### Account and Authentication
 
-- Registro con email/contraseña y Google OAuth
-- Vinculación automática de cuentas por email entre proveedores
-- Arquitectura extensible a nuevos proveedores sociales
+- Registration with email/password and Google OAuth
+- Automatic account linking by email across providers
+- Extensible architecture for additional social providers
 
-### Modelo de suscripción
+### Subscription Model
 
-- Tiers Free y Pro
-- Trial de 30 días de Pro sin necesidad de tarjeta de crédito
-- Sistema de cupones para campañas y programas de referidos
-- Arquitectura preparada (no activa en v1) para tier Trainer y B2B gimnasios
+- Free and Pro tiers
+- 30-day Pro trial with no credit card required
+- Coupon system for campaigns and referral programs
+- Architecture prepared (not active in v1) for Trainer tier and B2B gyms
 
 ---
 
 ## Roadmap
 
-- **v1** — MVP: modo tarjetas, generación de plan por IA, tracker, tiers Free/Pro
-- **v1.1** — Modo conversacional con voz, adaptación dinámica del plan
-- **v2** — Tier Trainer: gestión de clientes, planes con marca propia
-- **v3** — B2B Gimnasios: white label, integración multi-tenant
+- **v1** — MVP: card mode, AI plan generation, tracker, Free/Pro tiers
+- **v1.1** — Conversational mode with voice, dynamic plan adaptation
+- **v2** — Trainer tier: client management, branded plans
+- **v3** — B2B Gyms: white label, multi-tenant integration
+
+---
+
+## Execution Plan by Spec
+
+The project will be built from scratch following versioned specs in `openspec/specs/`. The order is deliberate: executable foundations first, then security and product, and only then advanced capabilities. Each spec must produce a small, bootable, and verifiable slice.
+
+Mandatory principles throughout execution:
+
+- The application **must install, start, and pass smoke checks from the very first slice**.
+- **Clean Architecture** with inward-pointing dependencies and shared contracts.
+- **Multi-tenant from the first commit**, even though Trainer/B2B arrive in later versions.
+- **Security by design**: validation at boundaries, tenant isolation, and fail-secure by default.
+- **Strict TDD**: RED → GREEN → Triangle for edge cases.
+- Mobile support from v1: **PWA/mobile-first + Capacitor preparation**.
+- Physical limitations generate **warnings and suggested substitutions**, never medical diagnosis or clinical blocking.
+
+### v1 — Launchable MVP
+
+| Order | Spec | Goal |
+|------:|------|------|
+| 01a | `01a-v1-monorepo-setup` | Create the pnpm monorepo and a bootable baseline with web + API. |
+| 01b | `01b-v1-clean-architecture-contracts` | Define layers, shared contracts, and dependency rules. |
+| 01c | `01c-v1-multi-tenant-schema` | Establish tenant scope from the first model/migration. |
+| 02 | `02-v1-infrastructure-ci-cd` | Docker, local environment, health checks, CI/CD, and VPS deploy. |
+| 03 | `03-v1-quality-tdd` | Test stack, coverage, and RED-GREEN-Triangle flow. |
+| 04 | `04-v1-ai-operation` | `AGENTS.md`, project skills, and rules for optimal AI collaboration. |
+| 05a | `05a-v1-auth-core` | Auth.js, email/password, OAuth, and account linking. |
+| 05b | `05b-v1-security-tenant-validation` | Tenant isolation, authorization, and input validation. |
+| 06 | `06-v1-mobile-foundation` | PWA, responsive baseline, and Capacitor shell. |
+| 07 | `07-v1-plan-wizard` | Visual card wizard that produces `PlanSpec`. |
+| 08 | `08-v1-ai-plan-generation` | AI plan generation with safe substitutions. |
+| 09a | `09a-v1-workout-tracking-core` | Online session, set, RPE, and notes logging. |
+| 09b | `09b-v1-workout-offline-history` | Offline-first, sync, and workout history. |
+| 10a | `10a-v1-user-memory-structured` | Editable structured memory: profile, preferences, and training data. |
+| 10b | `10b-v1-user-memory-vector` | Conversational memory with embeddings/vector store. |
+| 11a | `11a-v1-billing-plans-tiers` | Free/Pro, 30-day trial, and feature gating. |
+| 11b | `11b-v1-billing-stripe-integration` | Stripe in test mode, webhooks, and coupons. |
+
+### v1.1 — Conversational Interaction and Adaptation
+
+| Order | Spec | Goal |
+|------:|------|------|
+| 12 | `12-v1.1-interactive-text-chat` | Text chat that extracts and confirms `PlanSpec`. |
+| 13 | `13-v1.1-interactive-voice-chat` | Voice with Whisper STT and OpenAI TTS. |
+| 14a | `14a-v1.1-adaptation-adherence` | Adaptation based on actual user adherence. |
+| 14b | `14b-v1.1-adaptation-rpe-feedback` | Adaptation based on RPE, feedback, and perceived intensity. |
+
+### v2 — Trainer Tier
+
+| Order | Spec | Goal |
+|------:|------|------|
+| 15a | `15a-v2-trainer-account-access` | Trainer account, permissions, and client assignment. |
+| 15b | `15b-v2-trainer-dashboard-branding` | Client dashboard, progress, and branded plans. |
+
+### v3 — B2B Gyms
+
+| Order | Spec | Goal |
+|------:|------|------|
+| 16a | `16a-v3-gym-white-label` | White label: branding, domain/subdomain, and visual identity. |
+| 16b | `16b-v3-gym-admin-multigym` | Gym administration, aggregate analytics, and multi-location. |
