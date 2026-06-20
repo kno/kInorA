@@ -50,7 +50,7 @@ kInorA es una plataforma compuesta por una **web** (landing pública + zona priv
 - pnpm ≥ 11
 - Docker y Docker Compose
 - PostgreSQL 18 (o usar el contenedor incluido)
-- Cuenta de OpenAI con API key
+- Cuenta de OpenAI u OpenRouter con API key
 - Cuenta de Stripe (modo test para desarrollo)
 - Credenciales OAuth de Google
 
