@@ -10,12 +10,12 @@ kInorA genera y adapta planes de entrenamiento a medida de cada usuario — obje
 
 kInorA es una plataforma compuesta por una **web** (landing pública + zona privada) y una **app mobile**, con un motor de IA como núcleo del producto. Sus características distintivas:
 
-- **Definición de planes en dos modos**: tarjetas (rápido, visual) o conversacional con voz (natural, matizado). Ambos modos alimentan la misma estructura de datos (`plan_spec`), por lo que el usuario puede alternar entre ellos sin perder progreso.
+- **Definición de planes en dos modos**: tarjetas (rápido, visual) o conversacional con voz (natural, matizado). Ambos modos alimentan la misma estructura de datos, por lo que el usuario puede alternar entre ellos sin perder progreso.
 - **Adaptación a limitaciones físicas**: el usuario declara lesiones, condiciones crónicas o limitaciones de movilidad, y la IA filtra, sustituye o ajusta ejercicios en consecuencia — siempre como sugerencia, nunca como diagnóstico médico.
 - **Adaptación a equipamiento disponible**: el plan respeta lo que el usuario tiene accesible (gimnasio completo, equipamiento casero limitado, o nada). Si un ejercicio resulta no viable después de generado el plan, se sustituye automáticamente por un equivalente.
 - **Memoria persistente del usuario**: la IA recuerda preferencias, equipamiento, contexto y patrones de comportamiento entre sesiones, enriqueciendo cada interacción futura. El usuario puede ver, editar y borrar esta memoria.
 - **Seguimiento de entrenamiento offline-first**: registro de series con un flujo de tres estados (por debajo / cumplido / por encima) optimizado para uso en el gimnasio, con sincronización automática al recuperar conexión.
-- **Modelo freemium con trial sin fricción**: tier gratuito funcional, 30 días de Pro sin necesidad de tarjeta, y sistema de cupones para campañas y referidos.
+- **Modelo freemium con trial**: tier gratuito funcional, 30 días de Pro sin necesidad de tarjeta, y sistema de cupones para campañas y referidos.
 
 ---
 
@@ -46,10 +46,10 @@ kInorA es una plataforma compuesta por una **web** (landing pública + zona priv
 
 ### Requisitos previos
 
-- Node.js ≥ 20
-- pnpm ≥ 9
+- Node.js ≥ 24
+- pnpm ≥ 11
 - Docker y Docker Compose
-- PostgreSQL 16 (o usar el contenedor incluido)
+- PostgreSQL 18 (o usar el contenedor incluido)
 - Cuenta de OpenAI con API key
 - Cuenta de Stripe (modo test para desarrollo)
 - Credenciales OAuth de Google
@@ -90,7 +90,7 @@ kInorA es una plataforma compuesta por una **web** (landing pública + zona priv
    pnpm --filter api db:migrate
    ```
 
-   _(opcional)_ Pobla el catálogo de ejercicios con datos de partida:
+   _(opcional)_ Puebla el catálogo de ejercicios con datos de partida:
 
    ```bash
    pnpm --filter api db:seed
