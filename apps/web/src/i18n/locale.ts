@@ -1,6 +1,10 @@
 /**
- * i18n locale resolution — STUB for TDD RED phase.
- * Always returns English; makes all 11 locale tests fail.
+ * i18n locale resolution for the kInorA web app.
+ *
+ * Resolution order:
+ * 1. `langParam` (URL query string `?lang=`) — explicit override wins
+ * 2. `Accept-Language` header — best-match from supported locales
+ * 3. Fallback to English
  */
 
 export type SupportedLocale = "en" | "es";
@@ -8,15 +12,83 @@ export type Messages = Record<string, string>;
 
 const SUPPORTED_LOCALES: ReadonlySet<string> = new Set(["en", "es"]);
 
+import enMessages from "./messages/en.json";
+import esMessages from "./messages/es.json";
+
+const MESSAGE_CATALOGUES: Record<SupportedLocale, Messages> = {
+  en: enMessages as unknown as Messages,
+  es: esMessages as unknown as Messages,
+};
+
+const FALLBACK_MESSAGES: Messages = {
+  title: "kInorA",
+  subtitle: "Personalized training powered by AI",
+  cta: "Get Started",
+};
+
+/**
+ * Resolve the locale from the Accept-Language header and an optional
+ * URL `?lang=` parameter. The `langParam` always wins when valid;
+ * otherwise the first supported match in Accept-Language is used;
+ * English is the ultimate fallback.
+ */
 export function resolveLocale(
-  _acceptLanguage: string | null,
-  _langParam: string | null | undefined
+  acceptLanguage: string | null,
+  langParam: string | null | undefined
 ): SupportedLocale {
-  // Stub: always returns English — tests expecting "es" will fail
+  // 1. Explicit URL parameter wins
+  if (langParam !== null && langParam !== undefined) {
+    const normalised = langParam.toLowerCase().trim();
+    const lang = normalised.split("-")[0] ?? "";
+    if (lang && SUPPORTED_LOCALES.has(lang)) {
+      return lang as SupportedLocale;
+    }
+    // Unsupported explicit lang → fallback
+    return "en";
+  }
+
+  // 2. Parse Accept-Language header
+  if (acceptLanguage) {
+    const matches = parseAcceptLanguage(acceptLanguage);
+    for (const lang of matches) {
+      if (SUPPORTED_LOCALES.has(lang)) {
+        return lang as SupportedLocale;
+      }
+    }
+  }
+
+  // 3. Default fallback
   return "en";
 }
 
-export function loadMessages(_locale: SupportedLocale): Messages {
-  // Stub: returns empty messages — tests checking message content will fail
-  return {};
+/**
+ * Load the message catalogue for the given locale.
+ * Falls back to English for unknown locales.
+ */
+export function loadMessages(locale: SupportedLocale): Messages {
+  const safeLocale: SupportedLocale = SUPPORTED_LOCALES.has(locale)
+    ? locale
+    : "en";
+
+  return MESSAGE_CATALOGUES[safeLocale] ?? FALLBACK_MESSAGES;
+}
+
+/**
+ * Parse an Accept-Language header into an ordered array of
+ * language prefixes (lowercase, quality-sorted descending).
+ */
+function parseAcceptLanguage(header: string): string[] {
+  return header
+    .split(",")
+    .map((entry) => {
+      const parts = entry.trim().split(";q=");
+      const lang = parts[0]?.trim() ?? "";
+      const qPart = parts[1];
+      const quality = qPart ? parseFloat(qPart) : 1;
+      const prefix = lang.toLowerCase().split("-")[0] ?? "";
+      return { prefix, quality };
+    })
+    .filter((entry): entry is { prefix: string; quality: number } => entry.prefix.length > 0)
+    .sort((a, b) => b.quality - a.quality)
+    .map((entry) => entry.prefix);
 }
