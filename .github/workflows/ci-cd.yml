@@ -152,7 +152,6 @@ jobs:
           done
 
           docker compose run --rm --no-deps \
-            -e DATABASE_URL \
             api pnpm --filter api db:migrate
 
           pnpm start
