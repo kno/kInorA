@@ -3,10 +3,10 @@ schema: spec-driven
 
 context: |
   Monorepo (pnpm workspaces) — Next.js + TypeScript (web), Fastify + Node.js (API),
-  PostgreSQL + Drizzle ORM, Auth.js, Vercel AI SDK + OpenAI, Stripe, PWA + Capacitor.
-  Docker + GitHub Actions CI/CD.
-  No application code yet — pure roadmap phase from README.md.
-  Planned: Clean Architecture, security by design, strict TDD.
+  PostgreSQL + Drizzle ORM, domain/contracts packages, and Vitest workspace tests.
+  Clean Architecture boundaries are enforced with dependency-cruiser and deps-guard.
+  Docker and GitHub Actions CI/CD are roadmap targets for 02-v1-infrastructure-ci-cd.
+  Strict TDD is enabled by OpenSpec config and available test runners.
 
 rules:
   proposal:
@@ -37,31 +37,34 @@ rules:
 
 testing:
   strict_tdd: true
-  detected: "2026-06-20"
-  note: "No testing tools installed yet (no application code). Intent is strict TDD with vitest/jest, testing-library, and Playwright."
+  detected: "2026-06-21"
+  note: "Vitest is installed for web, api, and domain workspaces; contracts currently has type-check only. No E2E, coverage, linter, or formatter command is configured yet."
   runner:
-    command: "TBD — expected pnpm --filter <workspace> test"
-    framework: "TBD — expected vitest or jest"
+    command: "pnpm -r test"
+    framework: "Vitest 3.2.4"
   layers:
     unit:
-      available: false
-      tool: "TBD — expected vitest"
+      available: true
+      tool: "Vitest"
     integration:
-      available: false
-      tool: "TBD — expected testing-library + supertest"
+      available: true
+      tool: "Vitest API route/repository and cross-boundary tests"
     e2e:
       available: false
-      tool: "TBD — expected Playwright"
+      tool: "Not configured"
   coverage:
     available: false
-    command: "TBD — expected vitest --coverage"
+    command: "Not configured"
   quality:
     linter:
       available: false
-      tool: "TBD — expected ESLint"
+      tool: "Not configured"
     type_checker:
-      available: false
-      tool: "TBD — expected tsc --noEmit"
+      available: true
+      tool: "pnpm type-check"
     formatter:
       available: false
-      tool: "TBD — expected Prettier"
+      tool: "Not configured"
+    architecture_guard:
+      available: true
+      tool: "pnpm architecture"

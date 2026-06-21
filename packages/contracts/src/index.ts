@@ -10,8 +10,6 @@
 
 export interface HealthResponse {
   status: "ok";
-  timestamp: string; // ISO 8601
-  uptime: number; // seconds since server start
 }
 
 export type PlanGoal = "strength" | "hypertrophy" | "fat_loss" | "general_fitness";
