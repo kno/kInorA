@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kinora}
+      POSTGRES_USER: ${POSTGRES_USER:-kinora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kinora}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: ${GHCR_IMAGE:-kinora}:${IMAGE_TAG:-local}
+    build:
+      context: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      HOST: 0.0.0.0
+      DATABASE_URL: ${DATABASE_URL:-postgres://kinora:kinora@postgres:5432/kinora}
+    ports:
+      - "${API_PORT:-4000}:4000"
+    command: ["pnpm", "--filter", "api", "start"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  web:
+    image: ${GHCR_IMAGE:-kinora}:${IMAGE_TAG:-local}
+    build:
+      context: .
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    command: ["pnpm", "--filter", "web", "start"]
+
+volumes:
+  postgres-data:
