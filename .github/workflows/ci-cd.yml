@@ -111,6 +111,18 @@ jobs:
           printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/kinora_vps
           printf '%s\n' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
+      - name: Copy source files to VPS
+        run: |
+          ssh -i ~/.ssh/kinora_vps -p "$VPS_PORT" \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "mkdir -p '$VPS_DEPLOY_DIR'"
+          scp -i ~/.ssh/kinora_vps -P "$VPS_PORT" \
+            docker-compose.yml \
+            package.json \
+            pnpm-workspace.yaml \
+            scripts/start-production.mjs \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:'$VPS_DEPLOY_DIR/'"
+
       - name: Deploy on VPS
         env:
           GHCR_IMAGE: ${{ steps.image.outputs.name }}
