@@ -43,7 +43,7 @@ $COMPOSE_CMD run --rm --no-deps \
 
 $COMPOSE_CMD up -d api web
 
-curl --fail --silent --show-error --max-time 10 "http://localhost:4000/health" >/dev/null
-curl --fail --silent --show-error --max-time 10 "http://localhost:4000/api/health" >/dev/null
+# Verify health via internal compose network (API already passed Docker healthcheck)
+$COMPOSE_CMD exec api node -e "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 echo "Deploy complete."

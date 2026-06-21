@@ -28,8 +28,7 @@ services:
       PORT: 4000
       HOST: 0.0.0.0
       DATABASE_URL: ${DATABASE_URL:-postgres://kinora:kinora@postgres:5432/kinora}
-    ports:
-      - "${API_PORT:-4000}:4000"
+    # No ports — web proxies /api/* through internal network
     command: ["pnpm", "--filter", "api", "start"]
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
