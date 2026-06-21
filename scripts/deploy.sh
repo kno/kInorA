@@ -6,6 +6,9 @@ eval "$(printf '%s' "$ENV_PAYLOAD" | base64 -d)"
 
 cd "$VPS_DEPLOY_DIR"
 
+# Stop and remove any previous containers before deploying
+docker compose down --remove-orphans 2>/dev/null || true
+
 # Compose command with optional override file
 COMPOSE_CMD="docker compose -f docker-compose.yml"
 if [ -f docker-compose.override.yml ]; then
