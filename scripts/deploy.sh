@@ -43,7 +43,7 @@ $COMPOSE_CMD run --rm --no-deps \
 
 $COMPOSE_CMD up -d api web
 
-curl --fail --silent --show-error --max-time 10 "$PRODUCTION_BASE_URL/health" >/dev/null
-curl --fail --silent --show-error --max-time 10 "$PRODUCTION_BASE_URL/api/health" >/dev/null
+curl --fail --silent --show-error --max-time 10 "http://localhost:4000/health" >/dev/null
+curl --fail --silent --show-error --max-time 10 "http://localhost:4000/api/health" >/dev/null
 
 echo "Deploy complete."
