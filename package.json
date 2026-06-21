@@ -7,7 +7,7 @@
     "type-check": "pnpm -r type-check",
     "test": "pnpm -r test",
     "deps-guard": "node scripts/deps-guard.mjs",
-    "architecture": "depcruise --config .dependency-cruiser.cjs packages/domain/src packages/contracts/src"
+    "architecture": "depcruise --config .dependency-cruiser.cjs packages/domain/src packages/contracts/src apps/api/src && node scripts/architecture-negative-test.mjs"
   },
   "devDependencies": {
     "concurrently": "9.2.3",

@@ -77,12 +77,66 @@ module.exports = {
       },
     },
     {
+      name: "contracts-no-outer-npm-unresolvable",
+      comment:
+        "Contracts layer MUST NOT depend on framework, DB, auth, payment, AI, or Docker npm packages even if unresolvable. No schema leakage across boundaries.",
+      severity: "error",
+      from: { path: "^packages/contracts/src/" },
+      to: {
+        dependencyTypes: ["undetermined", "unknown"],
+        couldNotResolve: true,
+        pathNot: ["^@kinora/", "^\\."],
+      },
+    },
+    {
       name: "contracts-no-workspace-deps",
       comment:
         "Contracts package MUST NOT depend on any other workspace package.",
       severity: "error",
       from: { path: "^packages/contracts/src/" },
       to: { path: ["^@kinora/"] },
+    },
+    {
+      name: "contracts-no-db-packages",
+      comment:
+        "Contracts package MUST NOT depend on database packages — no schema leakage across boundaries.",
+      severity: "error",
+      from: { path: "^packages/contracts/src/" },
+      to: {
+        dependencyTypes: ["npm", "npm-dev", "npm-optional", "npm-peer", "undetermined", "unknown"],
+        path: [
+          "node_modules/.+/pg/",
+          "node_modules/.+/mysql/",
+          "node_modules/.+/mongodb/",
+          "node_modules/.+/sqlite/",
+          "node_modules/.+/drizzle/",
+          "node_modules/.+/prisma/",
+          "node_modules/.+/mongoose/",
+          "node_modules/.+/knex/",
+          "node_modules/.+/sequelize/",
+          "node_modules/.+/typeorm/",
+        ],
+      },
+    },
+    {
+      name: "api-no-db-outside-infra",
+      comment:
+        "API code outside the db/tenant infrastructure layer MUST NOT import database packages directly. Use repositories instead.",
+      severity: "error",
+      from: {
+        path: "^apps/api/src/",
+        pathNot: [
+          "^apps/api/src/db/",
+          "^apps/api/src/tenant/",
+        ],
+      },
+      to: {
+        dependencyTypes: ["npm", "npm-dev", "npm-optional", "npm-peer", "undetermined", "unknown"],
+        path: [
+          "node_modules/.+/pg/",
+          "node_modules/.+/drizzle/",
+        ],
+      },
     },
   ],
   options: {

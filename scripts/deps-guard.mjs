@@ -3,8 +3,9 @@
 /**
  * Dependency guard — ensures no out-of-scope packages are present.
  *
- * Prohibited categories per the 01a spec:
- *   DB drivers, auth, Stripe, AI, Docker, CI/CD, PWA, Capacitor
+ * Capability categories per the 01c spec:
+ *   - DB packages: ALLOWED in apps/api only; BLOCKED from domain, contracts, web
+ *   - Auth, Stripe, AI, Docker, CI/CD, PWA, Capacitor: BLOCKED everywhere
  *
  * Exits 0 if clean, 1 with a descriptive error listing any violations.
  */
@@ -18,18 +19,7 @@ const __dirname = dirname(__filename);
 const ROOT = join(__dirname, "..");
 
 // Packages that MUST NOT appear in any workspace dependency list.
-const PROHIBITED_PATTERNS = [
-  // Database drivers
-  /pg/i,
-  /mysql/i,
-  /mongodb/i,
-  /sqlite/i,
-  /drizzle/i,
-  /prisma/i,
-  /mongoose/i,
-  /knex/i,
-  /sequelize/i,
-  /typeorm/i,
+const PROHIBITED_EVERYWHERE = [
   // Authentication
   /auth\.js/i,
   /next-auth/i,
@@ -57,6 +47,24 @@ const PROHIBITED_PATTERNS = [
   /capacitor/i,
 ];
 
+// DB packages: allowed ONLY in apps/api; banned from domain, contracts, web.
+const DB_PATTERNS = [
+  /pg/i,
+  /mysql/i,
+  /mongodb/i,
+  /sqlite/i,
+  /drizzle/i,
+  /prisma/i,
+  /mongoose/i,
+  /knex/i,
+  /sequelize/i,
+  /typeorm/i,
+];
+
+// Workspaces where DB packages are permitted (API infrastructure).
+const DB_ALLOWED_WORKSPACES = ["apps/api"];
+
+// Full list of workspace package files to check.
 const WORKSPACE_PACKAGE_FILES = [
   join(ROOT, "apps/web/package.json"),
   join(ROOT, "apps/api/package.json"),
@@ -65,12 +73,17 @@ const WORKSPACE_PACKAGE_FILES = [
 ];
 
 function collectDependencies(pkg) {
-  const deps = [
+  return [
     ...Object.keys(pkg.dependencies || {}),
     ...Object.keys(pkg.devDependencies || {}),
     ...Object.keys(pkg.peerDependencies || {}),
   ];
-  return deps;
+}
+
+function isDbAllowed(filepath) {
+  return DB_ALLOWED_WORKSPACES.some((allowed) =>
+    filepath.includes(allowed)
+  );
 }
 
 let hasViolations = false;
@@ -89,10 +102,21 @@ for (const filePath of WORKSPACE_PACKAGE_FILES) {
   const violations = [];
 
   for (const dep of allDeps) {
-    for (const pattern of PROHIBITED_PATTERNS) {
+    // Check globally prohibited packages
+    for (const pattern of PROHIBITED_EVERYWHERE) {
       if (pattern.test(dep)) {
         violations.push(dep);
         break;
+      }
+    }
+
+    // Check DB packages — prohibited unless in an allowed workspace
+    if (!isDbAllowed(filePath)) {
+      for (const pattern of DB_PATTERNS) {
+        if (pattern.test(dep)) {
+          violations.push(dep);
+          break;
+        }
       }
     }
   }
