@@ -6,14 +6,17 @@ eval "$(printf '%s' "$ENV_PAYLOAD" | base64 -d)"
 
 cd "$VPS_DEPLOY_DIR"
 
+# Persist the deployed image reference for SSH restarts without GitHub secrets.
+printf 'GHCR_IMAGE=%s\nIMAGE_TAG=%s\n' "$GHCR_IMAGE" "$IMAGE_TAG" > .env.deploy
+
 # Stop and remove any previous containers before deploying
 docker compose down --remove-orphans 2>/dev/null || true
 
 # Compose command with optional override file
-COMPOSE_CMD="docker compose -f docker-compose.yml"
+COMPOSE_CMD="docker compose --env-file .env.deploy -f docker-compose.yml"
 if [ -f docker-compose.override.yml ]; then
   echo "Found docker-compose.override.yml, applying..."
-  COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.override.yml"
+  COMPOSE_CMD="docker compose --env-file .env.deploy -f docker-compose.yml -f docker-compose.override.yml"
 fi
 
 printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin

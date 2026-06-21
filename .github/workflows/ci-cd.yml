@@ -85,19 +85,6 @@ jobs:
             ${{ steps.image.outputs.name }}:${{ github.sha }}
             ${{ steps.image.outputs.name }}:latest
 
-      - name: Make package public
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PACKAGE="${{ steps.image.outputs.name }}"
-          # Strip registry prefix: ghcr.io/kno/kinora -> kno/kinora
-          PACKAGE_NAME="${PACKAGE#ghcr.io/}"
-          OWNER="${PACKAGE_NAME%%/*}"
-          PACKAGE="${PACKAGE_NAME#*/}"
-          echo "Making $OWNER/$PACKAGE public..."
-          gh api --method PATCH "/users/$OWNER/packages/container/$PACKAGE" \
-            -f visibility=public
-
   deploy:
     name: Deploy on VPS
     runs-on: ubuntu-latest
