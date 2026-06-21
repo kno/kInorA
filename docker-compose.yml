@@ -49,8 +49,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       HOSTNAME: 0.0.0.0
-    ports:
-      - "${WEB_PORT:-3000}:3000"
+    # No ports — reverse proxy will expose it later
     command: ["pnpm", "--filter", "web", "start"]
 
 volumes:
