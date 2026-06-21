@@ -121,7 +121,7 @@ jobs:
             package.json \
             pnpm-workspace.yaml \
             scripts/start-production.mjs \
-            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:'$VPS_DEPLOY_DIR/'"
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$VPS_DEPLOY_DIR/"
 
       - name: Deploy on VPS
         env:
