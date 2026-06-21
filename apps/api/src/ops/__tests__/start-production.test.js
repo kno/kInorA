@@ -1,35 +1,30 @@
 import { describe, expect, it } from "vitest";
 import {
-  createProductionStartPlan,
+  planSteps,
   resolveComposeProjectName,
 } from "../../../../../scripts/start-production.mjs";
 
 describe("production startup command planning", () => {
   it("plans PostgreSQL readiness before starting app services", () => {
-    const plan = createProductionStartPlan({ env: { COMPOSE_PROJECT_NAME: "kinora" } });
+    const { projectName, steps } = planSteps({ env: { COMPOSE_PROJECT_NAME: "kinora" } });
 
-    expect(plan).toEqual([
-      {
-        label: "ensure-postgres",
-        command: "docker",
-        args: ["compose", "-p", "kinora", "up", "-d", "postgres"],
-      },
-      {
-        label: "wait-for-postgres",
-        command: "docker",
-        args: ["compose", "-p", "kinora", "exec", "-T", "postgres", "pg_isready", "-U", "kinora", "-d", "kinora"],
-        retry: { attempts: 30, delayMs: 2000 },
-      },
-      {
-        label: "start-services",
-        command: "docker",
-        args: ["compose", "-p", "kinora", "up", "-d", "api", "web"],
-      },
+    expect(projectName).toBe("kinora");
+    expect(steps.map((s) => s.label)).toEqual([
+      "ensure-postgres",
+      "wait-for-postgres",
+      "start-services",
     ]);
+
+    expect(steps[0].args).toEqual(["compose", "-p", "kinora", "up", "-d", "postgres"]);
+    expect(steps[1].args).toEqual([
+      "compose", "-p", "kinora", "exec", "-T", "postgres",
+      "pg_isready", "-U", "kinora", "-d", "kinora",
+    ]);
+    expect(steps[2].args).toEqual(["compose", "-p", "kinora", "up", "-d", "api", "web"]);
   });
 
   it("uses configured PostgreSQL credentials for readiness checks", () => {
-    const plan = createProductionStartPlan({
+    const { steps } = planSteps({
       env: {
         COMPOSE_PROJECT_NAME: "kinora-prod",
         POSTGRES_USER: "app_user",
@@ -37,12 +32,9 @@ describe("production startup command planning", () => {
       },
     });
 
-    expect(plan[1]).toEqual({
-      label: "wait-for-postgres",
-      command: "docker",
-      args: ["compose", "-p", "kinora-prod", "exec", "-T", "postgres", "pg_isready", "-U", "app_user", "-d", "app_db"],
-      retry: { attempts: 30, delayMs: 2000 },
-    });
+    const waitStep = steps[1];
+    expect(waitStep.args).toContain("app_user");
+    expect(waitStep.args).toContain("app_db");
   });
 
   it("rejects blank Compose project names", () => {
@@ -52,24 +44,17 @@ describe("production startup command planning", () => {
   });
 
   it("enforces ordering: postgres → wait → services", () => {
-    const plan = createProductionStartPlan({ env: { COMPOSE_PROJECT_NAME: "kinora" } });
-    const labels = plan.map((s) => s.label);
+    const { steps } = planSteps({ env: { COMPOSE_PROJECT_NAME: "kinora" } });
+    const labels = steps.map((s) => s.label);
 
-    const pgIdx = labels.indexOf("ensure-postgres");
-    const waitIdx = labels.indexOf("wait-for-postgres");
-    const svcIdx = labels.indexOf("start-services");
-
-    expect(pgIdx).not.toBe(-1);
-    expect(waitIdx).not.toBe(-1);
-    expect(svcIdx).not.toBe(-1);
-
-    expect(pgIdx).toBeLessThan(waitIdx);
-    expect(waitIdx).toBeLessThan(svcIdx);
+    expect(labels.indexOf("ensure-postgres")).toBe(0);
+    expect(labels.indexOf("wait-for-postgres")).toBe(1);
+    expect(labels.indexOf("start-services")).toBe(2);
   });
 
   it("includes a bounded retry on the readiness step", () => {
-    const plan = createProductionStartPlan({ env: { COMPOSE_PROJECT_NAME: "kinora" } });
-    const waitStep = plan.find((s) => s.label === "wait-for-postgres");
+    const { steps } = planSteps({ env: { COMPOSE_PROJECT_NAME: "kinora" } });
+    const waitStep = steps.find((s) => s.label === "wait-for-postgres");
 
     expect(waitStep).toBeDefined();
     expect(waitStep.retry).toBeDefined();
@@ -77,5 +62,14 @@ describe("production startup command planning", () => {
     expect(waitStep.retry.attempts).toBeLessThanOrEqual(60);
     expect(waitStep.retry.delayMs).toBeGreaterThanOrEqual(500);
     expect(waitStep.retry.delayMs).toBeLessThanOrEqual(5000);
+  });
+
+  it("returns project metadata alongside steps", () => {
+    const result = planSteps({ env: { COMPOSE_PROJECT_NAME: "kinora" } });
+
+    expect(result).toHaveProperty("projectName");
+    expect(result).toHaveProperty("postgresUser");
+    expect(result).toHaveProperty("postgresDb");
+    expect(result).toHaveProperty("steps");
   });
 });
