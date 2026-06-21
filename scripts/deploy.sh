@@ -38,7 +38,7 @@ done
 $COMPOSE_CMD run --rm --no-deps \
   api pnpm --filter api db:migrate
 
-pnpm start
+$COMPOSE_CMD up -d api web
 
 curl --fail --silent --show-error --max-time 10 "$PRODUCTION_BASE_URL/health" >/dev/null
 curl --fail --silent --show-error --max-time 10 "$PRODUCTION_BASE_URL/api/health" >/dev/null

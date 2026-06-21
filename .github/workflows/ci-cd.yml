@@ -125,11 +125,8 @@ jobs:
             "mkdir -p '$VPS_DEPLOY_DIR/scripts'"
           scp -i ~/.ssh/kinora_vps -P "$VPS_PORT" \
             docker-compose.yml \
-            package.json \
-            pnpm-workspace.yaml \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$VPS_DEPLOY_DIR/"
           scp -i ~/.ssh/kinora_vps -P "$VPS_PORT" \
-            scripts/start-production.mjs \
             scripts/deploy.sh \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$VPS_DEPLOY_DIR/scripts/"
 
