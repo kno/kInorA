@@ -121,6 +121,7 @@ jobs:
             package.json \
             pnpm-workspace.yaml \
             scripts/start-production.mjs \
+            scripts/deploy.sh \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$VPS_DEPLOY_DIR/"
 
       - name: Deploy on VPS
@@ -135,40 +136,4 @@ jobs:
           ENV_PAYLOAD=$(printf '%s' "$ENV_SCRIPT" | base64 -w0)
 
           ssh -i ~/.ssh/kinora_vps -p "$VPS_PORT" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
-            "ENV_PAYLOAD='$ENV_PAYLOAD' bash -s" <<'REMOTE'
-          set -euo pipefail
-
-          # Decode and source environment (base64 avoids shell injection through SSH command line)
-          eval "$(printf '%s' "$ENV_PAYLOAD" | base64 -d)"
-
-          cd "$VPS_DEPLOY_DIR"
-          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-          docker pull "$GHCR_IMAGE:$IMAGE_TAG"
-
-          export GHCR_IMAGE IMAGE_TAG
-          docker compose up -d postgres
-
-          echo "Waiting for PostgreSQL to be ready..."
-          POSTGRES_USER="${POSTGRES_USER:-kinora}"
-          POSTGRES_DB="${POSTGRES_DB:-kinora}"
-          for i in $(seq 1 30); do
-            if docker compose exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
-              echo "PostgreSQL is ready after ${i} attempt(s)."
-              break
-            fi
-            if [ "$i" -eq 30 ]; then
-              echo "ERROR: PostgreSQL did not become ready within 30 attempts."
-              docker compose logs --tail=20 postgres
-              exit 1
-            fi
-            sleep 2
-          done
-
-          docker compose run --rm --no-deps \
-            api pnpm --filter api db:migrate
-
-          pnpm start
-
-          curl --fail --silent --show-error --max-time 10 "$PRODUCTION_BASE_URL/health" >/dev/null
-          curl --fail --silent --show-error --max-time 10 "$PRODUCTION_BASE_URL/api/health" >/dev/null
-          REMOTE
+            "ENV_PAYLOAD='$ENV_PAYLOAD' bash '$VPS_DEPLOY_DIR/scripts/deploy.sh'"
