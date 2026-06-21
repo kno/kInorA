@@ -1,14 +1,11 @@
-# 02-v1-infrastructure-ci-cd Specification
+# Delta for 02-v1-infrastructure-ci-cd
 
-## Purpose
-
-Provide the project infrastructure — package manager, containerization, environment configuration, CI/CD pipeline, VPS deploy, and a first-run developer experience that produces a running application.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: First-Run Baseline
 
 The project MUST provide a root first-run developer flow using the pinned package manager from `package.json`. `pnpm dev` MUST start local web/API services, and the running system MUST expose both `GET /health` and `GET /api/health` with HTTP 200 JSON health responses.
+(Previously: only required `pnpm dev` and health coverage without package-manager pin clarity or both route contracts.)
 
 #### Scenario: Clean install and start
 
@@ -32,6 +29,7 @@ The project MUST provide a root first-run developer flow using the pinned packag
 ### Requirement: Docker Compose for Dependencies
 
 The project MUST provide Docker Compose dependency orchestration for local development. Compose MUST start PostgreSQL using values documented in `.env.example`, and the application MUST be able to connect to that PostgreSQL service during first-run development.
+(Previously: required Docker Compose PostgreSQL only at a high level.)
 
 #### Scenario: Database available via Docker
 
@@ -55,6 +53,7 @@ The project MUST provide Docker Compose dependency orchestration for local devel
 ### Requirement: CI/CD Pipeline
 
 The project MUST include GitHub Actions workflows that run install, type-check, tests, architecture guard, and build on push and pull request. On merge to `main`, deployment MUST be automatic and complete: build the production image, push it to `ghcr.io`, SSH to the VPS, run database migrations on the VPS, and start production with `pnpm start`. The VPS MUST NOT use `pnpm dev`; `pnpm start` MUST verify PostgreSQL is running or start it before serving traffic.
+(Previously: CI/CD required generic lint/type-check/test/build and deploy without GHCR, migration, production start, or PostgreSQL startup guarantees.)
 
 #### Scenario: Pull request triggers CI
 
