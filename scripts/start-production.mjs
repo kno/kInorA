@@ -67,16 +67,11 @@ function runStep(step) {
 
     if (attempt === attempts) {
       const commandLine = `${step.command} ${step.args.join(" ")}`;
-      const errorOutput =
-        result.error && typeof result.error === "object"
-          ? result.error.message
-          : result.stderr?.toString().trim() || result.stdout?.toString().trim() || "no output";
 
       throw new Error(
         `${step.label} failed after ${attempts} attempt${attempts === 1 ? "" : "s"}\n` +
           `  Command: ${commandLine}\n` +
-          `  Exit code: ${result.status}\n` +
-          `  Error: ${errorOutput}`
+          `  Exit code: ${result.status}`
       );
     }
 
