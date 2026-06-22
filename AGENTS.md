@@ -78,6 +78,7 @@ Implementation follows `openspec/specs/03-v1-quality-tdd/spec.md`.
 ## Frontend and design-system rules
 
 - Use the project design system before creating new UI primitives.
+- For web or mobile UI work, use the Open Design `kiNorA` project as the visual source of truth. Read `docs/open-design-kinora.md` first and use the local snapshot under `docs/open-design/kinora/`; only pull from Open Design MCP when refreshing stale or missing design artifacts.
 - Reuse existing components and variants when they express the same intent.
 - Keep components focused and placed in independent files when they have their own responsibility, state, styling variants, tests, or reuse potential.
 - Separate container/data-fetching concerns from presentational components.

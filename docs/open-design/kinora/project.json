@@ -1,0 +1,15 @@
+{
+  "id": "ceeff5f6-0930-4e48-a0b0-17a6a5c9b9ad",
+  "name": "kiNorA",
+  "skillId": null,
+  "designSystemId": null,
+  "metadata": {
+    "kind": "other",
+    "nameSource": "user"
+  },
+  "appliedPluginSnapshotId": "3d0cb554-7586-466e-9284-c5f5be39dd2f",
+  "createdAt": 1781941601551,
+  "updatedAt": 1782102103914,
+  "entryFile": null,
+  "kind": "other"
+}

@@ -1,0 +1,805 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Estadísticas — kInorA</title>
+  <style>
+/* ============================================================
+   kInorA — shared design system
+   Reconstructed from v0 chat `kinora-eOTftpCTxTX` (see DESIGN.md)
+   Dark-only · near-black canvas · single lime accent
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
+:root {
+  /* surfaces */
+  --bg:        oklch(5% 0.006 270);
+  --surface:   oklch(11% 0.006 270);
+  --surface-2: oklch(15% 0.006 270);
+  --border:    oklch(24% 0.006 270);
+  --fg:        oklch(96% 0.002 270);
+  --muted:     oklch(66% 0.006 270);
+
+  /* brand accent (lime) */
+  --accent:    oklch(89% 0.20 128);
+  --accent-fg: oklch(5% 0.006 270);
+  --accent-dim: oklch(89% 0.20 128 / 0.12);
+
+  /* states */
+  --success: oklch(89% 0.20 128);
+  --warning: oklch(84% 0.14 90);
+  --danger:  oklch(68% 0.19 25);
+  --info:    oklch(72% 0.13 250);
+
+  /* type */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body:    'DM Sans', -apple-system, system-ui, sans-serif;
+
+  /* radii */
+  --r-card: 18px;
+  --r-btn: 12px;
+  --r-pill: 999px;
+
+  /* rhythm */
+  --sp-1: 8px;  --sp-2: 12px; --sp-3: 16px;
+  --sp-4: 24px; --sp-5: 32px; --sp-6: 48px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-weight: 600;
+}
+
+.num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.accent { color: var(--accent); }
+
+a { color: inherit; text-decoration: none; }
+
+/* ---- primitives ---- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: var(--sp-4);
+}
+.card-2 { background: var(--surface-2); }
+
+.btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 15px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  border-radius: var(--r-btn);
+  padding: 12px 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background .15s, border-color .15s, transform .05s;
+}
+.btn:hover { background: var(--border); }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.btn-primary:hover { filter: brightness(1.05); background: var(--accent); }
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--surface-2); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.pill-active {
+  background: var(--accent-dim);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 6px 12px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.divider { height: 1px; background: var(--border); border: 0; }
+
+.progress-track {
+  height: 8px; border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.progress-fill { height: 100%; background: var(--accent); border-radius: 999px; }
+
+::selection { background: var(--accent); color: var(--accent-fg); }
+
+/* thin scrollbars on dark */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+</style>
+  <style>
+    /* ---- Layout shell ---- */
+    body { display: flex; min-height: 100vh; overflow-x: hidden; }
+
+    /* ---- Sidebar ---- */
+    .sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0;
+      width: 248px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      z-index: 100;
+    }
+    .sidebar-brand {
+      display: flex; align-items: center; gap: 10px;
+      padding: 24px 20px 20px;
+    }
+    .brand-mark {
+      width: 26px; height: 26px;
+      background: var(--accent);
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+    .brand-name {
+      font-family: var(--font-display);
+      font-size: 20px; font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--fg);
+    }
+    .sidebar-nav {
+      flex: 1;
+      padding: 4px 12px;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 12px;
+      height: 44px;
+      border-radius: 10px;
+      font-size: 14px; font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      position: relative;
+      transition: background .12s, color .12s;
+    }
+    .nav-item:hover { background: var(--surface-2); color: var(--fg); }
+    .nav-item.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+    .nav-item.active::before {
+      content: '';
+      position: absolute; left: 0; top: 8px; bottom: 8px;
+      width: 3px;
+      background: var(--accent);
+      border-radius: 0 3px 3px 0;
+    }
+    .nav-icon { width: 18px; height: 18px; flex-shrink: 0; }
+    .sidebar-bottom {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .user-chip {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background .12s;
+    }
+    .user-chip:hover { background: var(--surface-2); }
+    .user-avatar {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display);
+      font-size: 13px; font-weight: 600;
+      color: var(--fg);
+      flex-shrink: 0;
+    }
+    .user-info { flex: 1; min-width: 0; }
+    .user-name {
+      font-size: 13px; font-weight: 600;
+      color: var(--fg);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .user-plan {
+      font-size: 11px; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .settings-btn {
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 8px; flex-shrink: 0;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background .12s, color .12s;
+    }
+    .settings-btn:hover { background: var(--surface-2); color: var(--fg); }
+
+    /* ---- Main ---- */
+    .main {
+      margin-left: 248px;
+      flex: 1;
+      min-height: 100vh;
+      background: var(--bg);
+      padding: 32px;
+    }
+    .main-inner { max-width: 1200px; }
+
+    /* ---- Top bar ---- */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 28px;
+    }
+    .topbar h1 { font-size: 28px; font-weight: 700; }
+    .range-pills { display: flex; gap: 4px; }
+
+    /* ---- KPI row ---- */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      padding: 20px;
+    }
+    .kpi-label {
+      font-size: 12px; font-weight: 600;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .kpi-value {
+      font-family: var(--font-display);
+      font-size: 32px; font-weight: 700;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+    .kpi-delta {
+      font-size: 13px; font-weight: 500;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .kpi-delta.pos { color: var(--success); }
+    .kpi-delta.neg { color: var(--muted); }
+
+    /* ---- Chart card ---- */
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .chart-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .chart-title { font-family: var(--font-display); font-size: 17px; font-weight: 600; }
+    .chart-legend { display: flex; align-items: center; gap: 16px; font-size: 13px; color: var(--muted); }
+    .legend-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent); display: inline-block; margin-right: 6px;
+    }
+    .legend-dot-prev {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--border); display: inline-block; margin-right: 6px;
+    }
+    .chart-wrap { position: relative; }
+    .chart-wrap svg { display: block; width: 100%; overflow: visible; }
+
+    /* ---- Secondary charts ---- */
+    .secondary-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .sec-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      padding: 24px;
+    }
+    .sec-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; margin-bottom: 20px; }
+
+    /* bar chart layout */
+    .bar-chart { display: flex; flex-direction: column; gap: 10px; }
+    .bar-row { display: flex; align-items: center; gap: 10px; }
+    .bar-label { font-size: 13px; color: var(--muted); width: 64px; flex-shrink: 0; text-align: right; }
+    .bar-track { flex: 1; height: 10px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 999px; background: var(--accent); }
+    .bar-val { font-family: var(--font-display); font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); width: 28px; text-align: right; }
+
+    /* distribution */
+    .dist-list { display: flex; flex-direction: column; gap: 14px; }
+    .dist-row { display: flex; flex-direction: column; gap: 6px; }
+    .dist-meta { display: flex; justify-content: space-between; align-items: baseline; }
+    .dist-name { font-size: 14px; font-weight: 500; }
+    .dist-pct { font-family: var(--font-display); font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); }
+    .dist-bar-track { height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+    .dist-bar-fill { height: 100%; border-radius: 999px; }
+
+    /* ---- PR table ---- */
+    .pr-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      overflow: hidden;
+    }
+    .pr-card-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); }
+    .pr-table { width: 100%; border-collapse: collapse; }
+    .pr-table th {
+      font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--muted);
+      padding: 10px 24px; text-align: left;
+    }
+    .pr-table td { padding: 14px 24px; font-size: 14px; border-top: 1px solid var(--border); }
+    .pr-table td.num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+    .pr-exercise { font-weight: 500; }
+    .pr-date { color: var(--muted); font-size: 13px; }
+    .pr-trend { display: flex; align-items: center; gap: 6px; }
+    .trend-arrow-up { color: var(--success); }
+    .trend-arrow-down { color: var(--danger); }
+    .trend-arrow-flat { color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<!-- ============================
+     SIDEBAR
+     ============================ -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-mark"></div>
+    <span class="brand-name">kInorA</span>
+  </div>
+
+  <nav class="sidebar-nav">
+    <a href="#" class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 10L9 3l7 7"/>
+        <path d="M4 8.5V15h3.5v-3.5h3V15H14V8.5"/>
+      </svg>
+      Inicio
+    </a>
+    <a href="#" class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="3" width="14" height="13" rx="2"/>
+        <path d="M6 3V1M12 3V1M2 7h14"/>
+      </svg>
+      Mi plan
+    </a>
+    <a href="#" class="nav-item active">
+      <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="2,13 6,9 9,11 13,6 16,8"/>
+        <path d="M13 6h3v3"/>
+      </svg>
+      Estadísticas
+    </a>
+    <a href="#" class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="9" cy="9" r="7"/>
+        <path d="M9 6v3l2 2"/>
+      </svg>
+      Crear plan
+    </a>
+    <a href="#" class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 14s0-5 5-5 5 5 5 5"/>
+        <circle cx="9" cy="5" r="2.5"/>
+      </svg>
+      Ejercicios
+    </a>
+  </nav>
+
+  <div class="sidebar-bottom">
+    <div class="user-chip">
+      <div class="user-avatar">LF</div>
+      <div class="user-info">
+        <div class="user-name">Lucía Fernández</div>
+        <div class="user-plan">Plan Pro</div>
+      </div>
+      <div class="settings-btn" title="Ajustes">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="8" r="2.5"/>
+          <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ============================
+     MAIN
+     ============================ -->
+<main class="main">
+  <div class="main-inner">
+
+    <!-- Top bar -->
+    <div class="topbar">
+      <h1>Estadísticas</h1>
+      <div class="range-pills">
+        <button class="pill" onclick="setRange(this,'sem')">Semana</button>
+        <button class="pill pill-active" onclick="setRange(this,'mes')">Mes</button>
+        <button class="pill" onclick="setRange(this,'ano')">Año</button>
+      </div>
+    </div>
+
+    <!-- KPI row -->
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Volumen total</div>
+        <div class="kpi-value num">18 340 <span style="font-size:16px;font-weight:500;color:var(--muted)">kg</span></div>
+        <div class="kpi-delta pos">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,10 7,4 12,10"/></svg>
+          +12% vs mes anterior
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Sesiones</div>
+        <div class="kpi-value num">16</div>
+        <div class="kpi-delta pos">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,10 7,4 12,10"/></svg>
+          +2 vs mes anterior
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Tiempo total</div>
+        <div class="kpi-value num">19 <span style="font-size:16px;font-weight:500;color:var(--muted)">h 40 min</span></div>
+        <div class="kpi-delta neg">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4 7,10 12,4"/></svg>
+          −5 min vs mes anterior
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">PRs / récords</div>
+        <div class="kpi-value num">3</div>
+        <div class="kpi-delta pos">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,10 7,4 12,10"/></svg>
+          +1 vs mes anterior
+        </div>
+      </div>
+    </div>
+
+    <!-- Volume chart card -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="eyebrow" style="margin-bottom:4px">Evolución</div>
+          <div class="chart-title">Volumen de entrenamiento — Mayo 2025</div>
+        </div>
+        <div class="chart-legend">
+          <span><span class="legend-dot"></span>Este mes</span>
+          <span><span class="legend-dot-prev"></span>Mes anterior</span>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <!--
+          SVG area/line chart
+          viewBox 0 0 860 200
+          Y axis: 0–2400 kg/sesión  X axis: 4 semanas = semanas 1-4
+          Points (x, y) mapped: y = 200 - (val/2400)*180
+          Data (May): 980,1240,1080,1580,1320,1460,880,1700,1560,1280,1820,1640,1900,1480,1760,1380
+          → 16 sessions spread over 4 weeks, x spaced at 860/15 steps ≈ 57px
+        -->
+        <svg viewBox="0 0 860 210" preserveAspectRatio="xMidYMid meet" style="height:210px">
+          <defs>
+            <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.18"/>
+              <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+            </linearGradient>
+            <linearGradient id="areaGradPrev" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="var(--border)" stop-opacity="0.4"/>
+              <stop offset="100%" stop-color="var(--border)" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+
+          <!-- Gridlines -->
+          <line x1="40" y1="20" x2="840" y2="20" stroke="var(--border)" stroke-width="1"/>
+          <line x1="40" y1="65" x2="840" y2="65" stroke="var(--border)" stroke-width="1"/>
+          <line x1="40" y1="110" x2="840" y2="110" stroke="var(--border)" stroke-width="1"/>
+          <line x1="40" y1="155" x2="840" y2="155" stroke="var(--border)" stroke-width="1"/>
+          <line x1="40" y1="190" x2="840" y2="190" stroke="var(--border)" stroke-width="1"/>
+
+          <!-- Y axis labels -->
+          <text x="34" y="24" text-anchor="end" font-family="var(--font-display)" font-size="11" fill="var(--muted)" font-variant-numeric="tabular-nums">2 400</text>
+          <text x="34" y="69" text-anchor="end" font-family="var(--font-display)" font-size="11" fill="var(--muted)" font-variant-numeric="tabular-nums">1 800</text>
+          <text x="34" y="114" text-anchor="end" font-family="var(--font-display)" font-size="11" fill="var(--muted)" font-variant-numeric="tabular-nums">1 200</text>
+          <text x="34" y="159" text-anchor="end" font-family="var(--font-display)" font-size="11" fill="var(--muted)" font-variant-numeric="tabular-nums">600</text>
+          <text x="34" y="194" text-anchor="end" font-family="var(--font-display)" font-size="11" fill="var(--muted)" font-variant-numeric="tabular-nums">0</text>
+
+          <!-- X axis labels (weeks) -->
+          <text x="40" y="206" text-anchor="middle" font-family="var(--font-body)" font-size="11" fill="var(--muted)">S1</text>
+          <text x="253" y="206" text-anchor="middle" font-family="var(--font-body)" font-size="11" fill="var(--muted)">S2</text>
+          <text x="467" y="206" text-anchor="middle" font-family="var(--font-body)" font-size="11" fill="var(--muted)">S3</text>
+          <text x="680" y="206" text-anchor="middle" font-family="var(--font-body)" font-size="11" fill="var(--muted)">S4</text>
+          <text x="840" y="206" text-anchor="middle" font-family="var(--font-body)" font-size="11" fill="var(--muted)">—</text>
+
+          <!--
+            Previous month (faint) — 16 pts
+            y = 190 - (val/2400)*170
+            Vals: 740,920,860,1100,980,1050,700,1200,1140,980,1300,1120,1440,1060,1200,1010
+          -->
+          <polyline
+            points="40,137.6 93,124.8 147,130 200,112.5 253,120.4 306,116.5 360,140.4 413,105 467,109.2 520,119.7 573,97.9 626,110.2 680,88 733,115 787,105 840,118.5"
+            fill="none" stroke="var(--border)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+
+          <!--
+            Current month fill area — same 16 pts
+            y = 190 - (val/2400)*170
+            Vals: 980,1240,1080,1580,1320,1460,880,1700,1560,1280,1820,1640,1900,1480,1760,1380
+          -->
+          <polygon
+            points="40,120.6 93,102.5 147,113.5 200,78.2 253,96.7 306,86.8 360,127.8 413,69.7 467,79.5 520,99.7 573,61.2 626,73.7 680,55.4 733,85.3 787,65.2 840,92.5 840,190 40,190"
+            fill="url(#areaGrad)"/>
+          <polyline
+            points="40,120.6 93,102.5 147,113.5 200,78.2 253,96.7 306,86.8 360,127.8 413,69.7 467,79.5 520,99.7 573,61.2 626,73.7 680,55.4 733,85.3 787,65.2 840,92.5"
+            fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+
+          <!-- Hover dots (visible) — selected key points -->
+          <circle cx="680" cy="55.4" r="4" fill="var(--accent)" stroke="var(--bg)" stroke-width="2"/>
+          <circle cx="573" cy="61.2" r="4" fill="var(--accent)" stroke="var(--bg)" stroke-width="2"/>
+
+          <!-- Tooltip callout on peak -->
+          <rect x="652" y="34" width="66" height="18" rx="5" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1"/>
+          <text x="685" y="47" text-anchor="middle" font-family="var(--font-display)" font-size="11" fill="var(--fg)" font-variant-numeric="tabular-nums">1 900 kg</text>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Secondary charts -->
+    <div class="secondary-row">
+      <!-- Bar chart: sets per muscle group -->
+      <div class="sec-card">
+        <div class="sec-title">Series por grupo muscular</div>
+        <div class="bar-chart">
+          <div class="bar-row">
+            <div class="bar-label">Espalda</div>
+            <div class="bar-track"><div class="bar-fill" style="width:88%"></div></div>
+            <div class="bar-val num">44</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label">Pierna</div>
+            <div class="bar-track"><div class="bar-fill" style="width:80%;opacity:.75"></div></div>
+            <div class="bar-val num">40</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label">Pecho</div>
+            <div class="bar-track"><div class="bar-fill" style="width:72%;opacity:.7"></div></div>
+            <div class="bar-val num">36</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label">Hombro</div>
+            <div class="bar-track"><div class="bar-fill" style="width:52%;opacity:.6"></div></div>
+            <div class="bar-val num">26</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label">Brazo</div>
+            <div class="bar-track"><div class="bar-fill" style="width:44%;opacity:.55"></div></div>
+            <div class="bar-val num">22</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label">Core</div>
+            <div class="bar-track"><div class="bar-fill" style="width:30%;opacity:.45"></div></div>
+            <div class="bar-val num">15</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Distribution: donut + legend -->
+      <div class="sec-card">
+        <div class="sec-title">Distribución de entrenamientos</div>
+        <div style="display:flex;align-items:center;gap:28px">
+          <!-- Inline SVG donut -->
+          <svg viewBox="0 0 120 120" width="120" height="120" style="flex-shrink:0">
+            <!--
+              Donut: r=44, circumference = 2π*44 ≈ 276.5
+              Fuerza 62% → 171.4  Cardio 26% → 71.9  Movilidad 12% → 33.2
+              stroke-dasharray = slice dash / circumference
+              segments ordered: start at top (rotate -90)
+            -->
+            <circle cx="60" cy="60" r="44" fill="none" stroke="var(--surface-2)" stroke-width="16"/>
+            <!-- Fuerza (62%) -->
+            <circle cx="60" cy="60" r="44" fill="none"
+              stroke="var(--accent)" stroke-width="16"
+              stroke-dasharray="171.4 276.5"
+              stroke-dashoffset="0"
+              transform="rotate(-90 60 60)"/>
+            <!-- Cardio (26%) offset=171.4 -->
+            <circle cx="60" cy="60" r="44" fill="none"
+              stroke="var(--info)" stroke-width="16"
+              stroke-dasharray="71.9 276.5"
+              stroke-dashoffset="-171.4"
+              transform="rotate(-90 60 60)"/>
+            <!-- Movilidad (12%) offset=243.3 -->
+            <circle cx="60" cy="60" r="44" fill="none"
+              stroke="var(--muted)" stroke-width="16"
+              stroke-dasharray="33.2 276.5"
+              stroke-dashoffset="-243.3"
+              transform="rotate(-90 60 60)"/>
+            <!-- Centre label -->
+            <text x="60" y="55" text-anchor="middle" font-family="var(--font-display)" font-size="16" font-weight="700" fill="var(--fg)">16</text>
+            <text x="60" y="70" text-anchor="middle" font-family="var(--font-body)" font-size="10" fill="var(--muted)">sesiones</text>
+          </svg>
+          <!-- Legend -->
+          <div class="dist-list" style="flex:1">
+            <div class="dist-row">
+              <div class="dist-meta">
+                <span class="dist-name" style="display:flex;align-items:center;gap:8px">
+                  <span style="width:10px;height:10px;border-radius:50%;background:var(--accent);display:inline-block;flex-shrink:0"></span>
+                  Fuerza
+                </span>
+                <span class="dist-pct">62%</span>
+              </div>
+              <div class="dist-bar-track"><div class="dist-bar-fill" style="width:62%;background:var(--accent)"></div></div>
+            </div>
+            <div class="dist-row">
+              <div class="dist-meta">
+                <span class="dist-name" style="display:flex;align-items:center;gap:8px">
+                  <span style="width:10px;height:10px;border-radius:50%;background:var(--info);display:inline-block;flex-shrink:0"></span>
+                  Cardio
+                </span>
+                <span class="dist-pct">26%</span>
+              </div>
+              <div class="dist-bar-track"><div class="dist-bar-fill" style="width:26%;background:var(--info)"></div></div>
+            </div>
+            <div class="dist-row">
+              <div class="dist-meta">
+                <span class="dist-name" style="display:flex;align-items:center;gap:8px">
+                  <span style="width:10px;height:10px;border-radius:50%;background:var(--muted);display:inline-block;flex-shrink:0"></span>
+                  Movilidad
+                </span>
+                <span class="dist-pct">12%</span>
+              </div>
+              <div class="dist-bar-track"><div class="dist-bar-fill" style="width:12%;background:var(--muted)"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PR table -->
+    <div class="pr-card">
+      <div class="pr-card-header">
+        <div class="eyebrow" style="margin-bottom:4px">Historial</div>
+        <div style="font-family:var(--font-display);font-size:17px;font-weight:600">Récords personales</div>
+      </div>
+      <table class="pr-table">
+        <thead>
+          <tr>
+            <th>Ejercicio</th>
+            <th>1RM estimado</th>
+            <th>Fecha</th>
+            <th>Tendencia</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="pr-exercise">Sentadilla con barra</td>
+            <td class="num">112,5 kg</td>
+            <td class="pr-date">14 may 2025</td>
+            <td class="pr-trend">
+              <svg width="42" height="16" viewBox="0 0 42 16">
+                <polyline points="2,12 9,10 16,11 23,8 30,6 37,4" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="trend-arrow-up" style="font-size:12px;font-weight:600">+7,5</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="pr-exercise">Press de banca</td>
+            <td class="num">92 kg</td>
+            <td class="pr-date">9 may 2025</td>
+            <td class="pr-trend">
+              <svg width="42" height="16" viewBox="0 0 42 16">
+                <polyline points="2,11 9,9 16,10 23,8 30,7 37,5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="trend-arrow-up" style="font-size:12px;font-weight:600">+5</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="pr-exercise">Peso muerto convencional</td>
+            <td class="num">138 kg</td>
+            <td class="pr-date">21 may 2025</td>
+            <td class="pr-trend">
+              <svg width="42" height="16" viewBox="0 0 42 16">
+                <polyline points="2,10 9,8 16,9 23,7 30,5 37,3" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="trend-arrow-up" style="font-size:12px;font-weight:600">+10</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="pr-exercise">Press militar</td>
+            <td class="num">64 kg</td>
+            <td class="pr-date">5 may 2025</td>
+            <td class="pr-trend">
+              <svg width="42" height="16" viewBox="0 0 42 16">
+                <polyline points="2,8 9,9 16,8 23,9 30,8 37,8" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="trend-arrow-flat" style="font-size:12px;font-weight:600">—</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="pr-exercise">Dominadas lastradas</td>
+            <td class="num">BW +22 kg</td>
+            <td class="pr-date">28 abr 2025</td>
+            <td class="pr-trend">
+              <svg width="42" height="16" viewBox="0 0 42 16">
+                <polyline points="2,6 9,7 16,8 23,9 30,10 37,11" fill="none" stroke="var(--danger)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="trend-arrow-down" style="font-size:12px;font-weight:600">−2</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="pr-exercise">Remo con barra</td>
+            <td class="num">95 kg</td>
+            <td class="pr-date">16 may 2025</td>
+            <td class="pr-trend">
+              <svg width="42" height="16" viewBox="0 0 42 16">
+                <polyline points="2,12 9,10 16,8 23,7 30,5 37,3" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="trend-arrow-up" style="font-size:12px;font-weight:600">+5</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div><!-- /main-inner -->
+</main>
+
+<script>
+  function setRange(btn, _range) {
+    document.querySelectorAll('.range-pills .pill').forEach(function(p) {
+      p.classList.remove('pill-active');
+    });
+    btn.classList.add('pill-active');
+  }
+</script>
+</body>
+</html>

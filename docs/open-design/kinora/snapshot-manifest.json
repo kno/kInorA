@@ -1,0 +1,43 @@
+{
+  "pulledAt": "2026-06-22T04:28:15.227Z",
+  "source": "Open Design MCP",
+  "project": {
+    "name": "kiNorA",
+    "id": "ceeff5f6-0930-4e48-a0b0-17a6a5c9b9ad"
+  },
+  "mcpServer": "open-design",
+  "files": [
+    "DESIGN.md",
+    "assets/kinora.css",
+    "index.html",
+    "kinora-brand-proposals.html",
+    "brand-proposals.html",
+    "screens/web-landing.html",
+    "screens/web-dashboard.html",
+    "screens/web-plan.html",
+    "screens/web-stats.html",
+    "screens/web-create-plan.html",
+    "screens/mobile-dashboard.html",
+    "screens/mobile-create-plan.html",
+    "screens/mobile-voice.html",
+    "screens/mobile-exercise.html",
+    "screens/mobile-tracker.html"
+  ],
+  "notes": [
+    "This is a local snapshot for implementation reference.",
+    "Refresh from Open Design before major visual redesigns or when the source project changes.",
+    "Do not copy generated HTML directly into production code; translate into project components."
+  ],
+  "lastPartialRefreshAt": "2026-06-22T04:32:59.543Z",
+  "lastPartialRefresh": {
+    "source": "Open Design MCP",
+    "project": {
+      "name": "kiNorA",
+      "id": "ceeff5f6-0930-4e48-a0b0-17a6a5c9b9ad"
+    },
+    "files": [
+      "kinora-brand-proposals.html",
+      "brand-proposals.html"
+    ]
+  }
+}

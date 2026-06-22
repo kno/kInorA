@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>kInorA — Crear plan</title>
+  <style>
+/* ============================================================
+   kInorA — shared design system
+   Reconstructed from v0 chat `kinora-eOTftpCTxTX` (see DESIGN.md)
+   Dark-only · near-black canvas · single lime accent
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
+:root {
+  /* surfaces */
+  --bg:        oklch(5% 0.006 270);
+  --surface:   oklch(11% 0.006 270);
+  --surface-2: oklch(15% 0.006 270);
+  --border:    oklch(24% 0.006 270);
+  --fg:        oklch(96% 0.002 270);
+  --muted:     oklch(66% 0.006 270);
+
+  /* brand accent (lime) */
+  --accent:    oklch(89% 0.20 128);
+  --accent-fg: oklch(5% 0.006 270);
+  --accent-dim: oklch(89% 0.20 128 / 0.12);
+
+  /* states */
+  --success: oklch(89% 0.20 128);
+  --warning: oklch(84% 0.14 90);
+  --danger:  oklch(68% 0.19 25);
+  --info:    oklch(72% 0.13 250);
+
+  /* type */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body:    'DM Sans', -apple-system, system-ui, sans-serif;
+
+  /* radii */
+  --r-card: 18px;
+  --r-btn: 12px;
+  --r-pill: 999px;
+
+  /* rhythm */
+  --sp-1: 8px;  --sp-2: 12px; --sp-3: 16px;
+  --sp-4: 24px; --sp-5: 32px; --sp-6: 48px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-weight: 600;
+}
+
+.num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.accent { color: var(--accent); }
+
+a { color: inherit; text-decoration: none; }
+
+/* ---- primitives ---- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: var(--sp-4);
+}
+.card-2 { background: var(--surface-2); }
+
+.btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 15px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  border-radius: var(--r-btn);
+  padding: 12px 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background .15s, border-color .15s, transform .05s;
+}
+.btn:hover { background: var(--border); }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.btn-primary:hover { filter: brightness(1.05); background: var(--accent); }
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--surface-2); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.pill-active {
+  background: var(--accent-dim);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 6px 12px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.divider { height: 1px; background: var(--border); border: 0; }
+
+.progress-track {
+  height: 8px; border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.progress-fill { height: 100%; background: var(--accent); border-radius: 999px; }
+
+::selection { background: var(--accent); color: var(--accent-fg); }
+
+/* thin scrollbars on dark */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+</style>
+  <style>
+    html, body {
+      width: 390px;
+      min-height: 844px;
+      margin: 0 auto;
+      overflow-x: hidden;
+      background: var(--bg);
+    }
+
+    .screen {
+      width: 390px;
+      min-height: 844px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Scrollable content area */
+    .scroll-area {
+      flex: 1;
+      overflow-y: auto;
+      padding-top: 16px;
+      padding-bottom: calc(64px + 24px + 80px); /* tab bar + home indicator + bottom actions */
+      padding-left: 20px;
+      padding-right: 20px;
+    }
+
+    /* ---- Top header ---- */
+    .top-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .top-title {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--fg);
+    }
+    .top-step {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* ---- Step progress ---- */
+    .step-progress {
+      margin-bottom: 28px;
+    }
+    .step-progress-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .step-progress-text {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .step-dots {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .step-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: background .2s, width .2s;
+    }
+    .step-dot.done { background: oklch(89% 0.20 128 / 0.50); }
+    .step-dot.current {
+      width: 18px;
+      border-radius: 3px;
+      background: var(--accent);
+    }
+
+    /* thin step bar */
+    .step-bar-track {
+      height: 3px;
+      background: var(--surface-2);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .step-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 999px;
+      width: 50%; /* paso 2 de 4 */
+      transition: width .3s ease;
+    }
+
+    /* ---- Step question ---- */
+    .step-question {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: var(--fg);
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+    .step-subtitle {
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+
+    /* ---- Objective cards ---- */
+    .objective-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .obj-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--r-card);
+      padding: 18px 14px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+      min-height: 110px;
+      transition: border-color .18s, background .18s, box-shadow .18s;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .obj-card:hover {
+      background: var(--surface-2);
+      border-color: oklch(89% 0.20 128 / 0.25);
+    }
+    .obj-card.selected {
+      border-color: var(--accent);
+      background: oklch(89% 0.20 128 / 0.07);
+      box-shadow: 0 0 0 1px oklch(89% 0.20 128 / 0.20);
+    }
+    .obj-card-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .18s, border-color .18s;
+    }
+    .obj-card.selected .obj-card-icon {
+      background: oklch(89% 0.20 128 / 0.12);
+      border-color: oklch(89% 0.20 128 / 0.35);
+    }
+    .obj-card-icon svg { width: 18px; height: 18px; color: var(--muted); }
+    .obj-card.selected .obj-card-icon svg { color: var(--accent); }
+
+    .obj-card-name {
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--fg);
+      line-height: 1.2;
+    }
+    .obj-card-desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .obj-card-check {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      align-self: flex-end;
+      margin-top: auto;
+      transition: background .18s, border-color .18s;
+    }
+    .obj-card.selected .obj-card-check {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .obj-card-check svg { width: 11px; height: 11px; color: var(--accent-fg); opacity: 0; transition: opacity .15s; }
+    .obj-card.selected .obj-card-check svg { opacity: 1; }
+
+    /* ---- Captured answers chips ---- */
+    .captured-section {
+      margin-bottom: 8px;
+    }
+    .captured-label {
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+    .captured-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .captured-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: var(--r-pill);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--fg);
+    }
+    .captured-chip-key {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    /* ---- Bottom action bar (fixed, above tab bar) ---- */
+    .action-bar {
+      position: fixed;
+      bottom: calc(64px + 24px);
+      left: 50%;
+      transform: translateX(-50%);
+      width: 390px;
+      padding: 12px 20px;
+      background: linear-gradient(to top, var(--bg) 60%, transparent);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 99;
+    }
+
+    .btn-continue {
+      width: 100%;
+      background: var(--accent);
+      color: var(--accent-fg);
+      border: none;
+      border-radius: var(--r-btn);
+      padding: 14px 20px;
+      font-family: var(--font-body);
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: filter .15s, transform .05s;
+      min-height: 52px;
+    }
+    .btn-continue:hover { filter: brightness(1.06); }
+    .btn-continue:active { transform: translateY(1px); }
+    .btn-continue svg { width: 16px; height: 16px; }
+
+    .btn-back {
+      width: 100%;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: var(--r-btn);
+      padding: 12px 20px;
+      font-family: var(--font-body);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background .15s, color .15s;
+      min-height: 48px;
+    }
+    .btn-back:hover { background: var(--surface-2); color: var(--fg); }
+
+    /* ---- Bottom Tab Bar ---- */
+    .tab-bar {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 390px;
+      height: calc(64px + 24px);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-around;
+      padding-top: 8px;
+      z-index: 100;
+    }
+    .tab-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      min-width: 44px;
+      min-height: 44px;
+      cursor: pointer;
+      color: var(--muted);
+      transition: color .15s;
+      text-decoration: none;
+    }
+    .tab-item.active { color: var(--accent); }
+    .tab-item svg { width: 22px; height: 22px; }
+    .tab-item-label { font-size: 10px; font-weight: 500; }
+    .tab-fab {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 0 8px;
+      min-width: 44px;
+      cursor: pointer;
+      color: var(--muted);
+      text-decoration: none;
+      margin-top: -14px;
+    }
+    .tab-fab-circle {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px oklch(89% 0.20 128 / 0.25);
+    }
+    .tab-fab-circle svg { width: 22px; height: 22px; color: var(--accent-fg); }
+    .tab-fab-label { font-size: 10px; font-weight: 500; color: var(--accent); }
+  </style>
+</head>
+<body>
+<div class="screen">
+  <div class="scroll-area">
+
+    <!-- Top header -->
+    <div class="top-header">
+      <div class="top-title">Crear plan</div>
+      <div class="top-step">Paso 2 de 4</div>
+    </div>
+
+    <!-- Step progress -->
+    <div class="step-progress">
+      <div class="step-progress-label">
+        <div class="step-progress-text">Objetivo</div>
+        <div class="step-dots">
+          <div class="step-dot done"></div>
+          <div class="step-dot current"></div>
+          <div class="step-dot"></div>
+          <div class="step-dot"></div>
+        </div>
+      </div>
+      <div class="step-bar-track">
+        <div class="step-bar-fill"></div>
+      </div>
+    </div>
+
+    <!-- Question -->
+    <div class="step-question">¿Cuál es tu objetivo principal?</div>
+    <div class="step-subtitle">Adaptaremos tu plan de entrenamiento y dieta a tu meta.</div>
+
+    <!-- Objective selection cards -->
+    <div class="objective-grid" id="obj-grid">
+
+      <div class="obj-card" data-obj="grasa" onclick="selectObj(this)">
+        <div class="obj-card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17.657 18.657A8 8 0 016.343 7.343M13.5 3.5L10.5 6.5M10.5 3.5L13.5 6.5"/>
+            <path d="M12 18c-3.314 0-6-2.686-6-6 0-1.5.55-2.87 1.46-3.93"/>
+          </svg>
+        </div>
+        <div>
+          <div class="obj-card-name">Perder grasa</div>
+          <div class="obj-card-desc">Déficit calórico progresivo con cardio y pesas</div>
+        </div>
+        <div class="obj-card-check">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 13l4 4L19 7"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="obj-card selected" data-obj="musculo" onclick="selectObj(this)">
+        <div class="obj-card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6.5 6.5c1-1 2.5-1.5 4-1.5s3 .5 4 1.5"/>
+            <path d="M3 12c0-1 .4-2 1-2.7"/>
+            <path d="M21 12c0-1-.4-2-1-2.7"/>
+            <ellipse cx="12" cy="13" rx="7" ry="5"/>
+            <path d="M5 13v3a7 7 0 0014 0v-3"/>
+          </svg>
+        </div>
+        <div>
+          <div class="obj-card-name">Ganar músculo</div>
+          <div class="obj-card-desc">Hipertrofia con volumen y progresión de carga</div>
+        </div>
+        <div class="obj-card-check">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 13l4 4L19 7"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="obj-card" data-obj="fuerza" onclick="selectObj(this)">
+        <div class="obj-card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 4v4M18 4v4M2 8h4M18 8h4M4 8h16v2a4 4 0 01-4 4H8a4 4 0 01-4-4V8zM10 14v4M14 14v4M8 18h8"/>
+          </svg>
+        </div>
+        <div>
+          <div class="obj-card-name">Fuerza</div>
+          <div class="obj-card-desc">Powerlifting y progresión en cargas máximas</div>
+        </div>
+        <div class="obj-card-check">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 13l4 4L19 7"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="obj-card" data-obj="salud" onclick="selectObj(this)">
+        <div class="obj-card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="obj-card-name">Salud general</div>
+          <div class="obj-card-desc">Bienestar, movilidad y hábitos sostenibles</div>
+        </div>
+        <div class="obj-card-check">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 13l4 4L19 7"/>
+          </svg>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Captured answers preview -->
+    <div class="captured-section">
+      <div class="captured-label">Respuestas anteriores</div>
+      <div class="captured-chips">
+        <div class="captured-chip">
+          <span class="captured-chip-key">Días:</span>
+          <span>4 por semana</span>
+        </div>
+        <div class="captured-chip">
+          <span class="captured-chip-key">Nivel:</span>
+          <span>Intermedio</span>
+        </div>
+        <div class="captured-chip">
+          <span class="captured-chip-key">Equipo:</span>
+          <span>Gimnasio completo</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /scroll-area -->
+
+  <!-- Action bar -->
+  <div class="action-bar">
+    <button class="btn-continue" id="btn-continue">
+      Continuar
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12h14M12 5l7 7-7 7"/>
+      </svg>
+    </button>
+    <button class="btn-back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+      Atrás
+    </button>
+  </div>
+
+  <!-- Bottom Tab Bar -->
+  <nav class="tab-bar">
+    <a class="tab-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+        <polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+      <span class="tab-item-label">Inicio</span>
+    </a>
+    <a class="tab-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+      <span class="tab-item-label">Plan</span>
+    </a>
+    <a class="tab-fab" href="#">
+      <div class="tab-fab-circle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </div>
+      <span class="tab-fab-label">Crear</span>
+    </a>
+    <a class="tab-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="20" x2="18" y2="10"/>
+        <line x1="12" y1="20" x2="12" y2="4"/>
+        <line x1="6" y1="20" x2="6" y2="14"/>
+      </svg>
+      <span class="tab-item-label">Stats</span>
+    </a>
+    <a class="tab-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+      <span class="tab-item-label">Perfil</span>
+    </a>
+  </nav>
+</div>
+
+<script>
+  function selectObj(card) {
+    document.querySelectorAll('.obj-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,373 @@
+
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>kinora — Propuestas de marca</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:        oklch(5% 0.006 270);
+    --surface:   oklch(11% 0.006 270);
+    --surface-2: oklch(15% 0.006 270);
+    --border:    oklch(24% 0.006 270);
+    --fg:        oklch(96% 0.002 270);
+    --muted:     oklch(66% 0.006 270);
+    --accent:    oklch(89% 0.20 128);
+    --accent-fg: oklch(5% 0.006 270);
+    --font-display:'Space Grotesk', system-ui, sans-serif;
+    --font-body:'DM Sans', -apple-system, system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);color:var(--fg);
+    font-family:var(--font-body);
+    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+    line-height:1.5;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:64px 32px 96px}
+  .eyebrow{font-family:var(--font-display);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  .page-h{font-family:var(--font-display);font-size:clamp(34px,5vw,52px);font-weight:700;letter-spacing:-.02em;margin:14px 0 14px;line-height:1.05}
+  .lede{color:var(--muted);font-size:17px;max-width:62ch}
+  .tokens{display:flex;flex-wrap:wrap;gap:10px;margin:34px 0 0;align-items:center}
+  .swatch{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px 14px 8px 8px}
+  .chip{width:34px;height:34px;border-radius:8px;flex:none}
+  .swatch b{font-family:var(--font-display);font-size:13px;font-weight:600}
+  .swatch span{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+  .type-token{font-family:var(--font-display);font-size:13px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px}
+  .type-token b{color:var(--fg)}
+  hr.div{border:0;border-top:1px solid var(--border);margin:56px 0}
+  .prop-head{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;margin-bottom:8px}
+  .prop-num{font-family:var(--font-display);font-size:13px;font-weight:600;color:var(--accent);letter-spacing:.16em}
+  .prop-name{font-family:var(--font-display);font-size:28px;font-weight:700;letter-spacing:-.02em}
+  .prop-tag{color:var(--muted);font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:5px 12px}
+  .prop-desc{color:var(--muted);font-size:15px;max-width:70ch;margin-bottom:28px}
+  .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:30px;position:relative;overflow:hidden}
+  .panel-label{font-family:var(--font-display);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:22px;font-weight:600}
+  .lockup{display:flex;align-items:center;gap:18px;min-height:120px}
+  .lockup svg{flex:none}
+  .wordmark{font-family:var(--font-display);font-weight:600;font-size:40px;letter-spacing:-.03em}
+  .wordmark .ai{color:var(--accent)}
+  .lockup-sub{margin-top:18px;color:var(--muted);font-size:12.5px;border-top:1px solid var(--border);padding-top:14px}
+  .icon-row{display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap}
+  .appicon{width:96px;height:96px;border-radius:23px;display:grid;place-items:center;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+  .ai-cap{font-size:11px;color:var(--muted);text-align:center;margin-top:8px;font-variant-numeric:tabular-nums}
+  .ai-wrap{display:flex;flex-direction:column;align-items:center}
+  .tabsim{display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px 10px 0 0;padding:9px 14px;max-width:230px;border-bottom:0}
+  .tabsim svg{flex:none}
+  .tabsim span{font-size:13px;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fav-sizes{display:flex;gap:18px;align-items:flex-end;margin-top:20px}
+  .fav-sizes .ai-wrap svg{display:block;background:var(--bg);border:1px solid var(--border);border-radius:6px}
+  .uiset{display:flex;gap:16px;flex-wrap:wrap}
+  .uichip{width:54px;height:54px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);display:grid;place-items:center}
+  .onlight{background:var(--fg);border-radius:14px;padding:22px;display:flex;align-items:center;gap:14px;margin-top:18px}
+  .onlight .wordmark{color:var(--bg);font-size:26px}
+  .why{display:flex;gap:10px;margin-top:18px;color:var(--muted);font-size:14px;align-items:flex-start}
+  .why svg{flex:none;margin-top:2px}
+  .why b{color:var(--fg);font-weight:600}
+  footer{margin-top:64px;color:var(--muted);font-size:13px;border-top:1px solid var(--border);padding-top:24px;line-height:1.7}
+  footer code{font-family:var(--font-display);color:var(--fg);background:var(--surface);padding:2px 7px;border-radius:6px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">kInorA · Sistema de marca</p>
+    <h1 class="page-h">Tres direcciones de logotipo&nbsp;e iconografía</h1>
+    <p class="lede">Cada propuesta respeta el sistema kInorA: lienzo near-black, un único acento verde lima usado con moderación, y la pareja Space&nbsp;Grotesk + DM&nbsp;Sans. Misma marca, tres personalidades. Cada una incluye logotipo, app icon, favicon y un set de iconos de UI a juego.</p>
+
+    <div class="tokens">
+      <div class="swatch"><span class="chip" style="background:var(--bg);border:1px solid var(--border)"></span><div><b>Fondo</b><br><span>#09090C</span></div></div>
+      <div class="swatch"><span class="chip" style="background:var(--surface)"></span><div><b>Superficie</b><br><span>#101014</span></div></div>
+      <div class="swatch"><span class="chip" style="background:var(--accent)"></span><div><b>Acento</b><br><span>#A8F060</span></div></div>
+      <div class="type-token">Display · <b>Space Grotesk</b></div>
+      <div class="type-token">Texto · <b>DM Sans</b></div>
+    </div>
+  </header>
+
+  <hr class="div" />
+
+  <section>
+    <div class="prop-head">
+      <span class="prop-num">01</span>
+      <span class="prop-name">Kinetic K</span>
+      <span class="prop-tag">Monograma geométrico · técnico</span>
+    </div>
+    <p class="prop-desc">Una <b>K</b> construida con el lenguaje de Space Grotesk: stem firme y dos brazos que parten de un mismo punto inclinándose hacia arriba, como un cuerpo en impulso. Es el más “producto-tech” y el que mejor escala a 16px.</p>
+
+    <div class="grid">
+      <div class="panel">
+        <p class="panel-label">Logotipo principal</p>
+        <div class="lockup">
+          <svg width="84" height="84" viewBox="0 0 48 48" fill="none">
+            <path d="M13 7 V41" stroke="var(--accent)" stroke-width="6.2" stroke-linecap="square"/>
+            <path d="M13 25 L33 8" stroke="var(--accent)" stroke-width="6.2" stroke-linecap="square"/>
+            <path d="M13 25 L33 42" stroke="var(--accent)" stroke-width="6.2" stroke-linecap="square"/>
+            <path d="M37 11 L41 14" stroke="var(--accent)" stroke-width="3" stroke-linecap="square" opacity=".55"/>
+            <path d="M37 17 L43 22" stroke="var(--accent)" stroke-width="3" stroke-linecap="square" opacity=".30"/>
+          </svg>
+          <div class="wordmark">k<span class="ai">I</span>nor<span class="ai">A</span></div>
+        </div>
+        <p class="lockup-sub">Las líneas de velocidad junto al vértice son opcionales — desaparecen en tamaños pequeños y favicon.</p>
+      </div>
+      <div class="panel">
+        <p class="panel-label">App icon</p>
+        <div class="icon-row">
+          <div class="ai-wrap">
+            <div class="appicon" style="background:var(--bg);border:1px solid var(--border)">
+              <svg width="52" height="52" viewBox="0 0 48 48" fill="none">
+                <path d="M13 7 V41" stroke="var(--accent)" stroke-width="6.2" stroke-linecap="square"/>
+                <path d="M13 25 L33 8" stroke="var(--accent)" stroke-width="6.2" stroke-linecap="square"/>
+                <path d="M13 25 L33 42" stroke="var(--accent)" stroke-width="6.2" stroke-linecap="square"/>
+              </svg>
+            </div>
+            <span class="ai-cap">Dark</span>
+          </div>
+          <div class="ai-wrap">
+            <div class="appicon" style="background:var(--accent)">
+              <svg width="52" height="52" viewBox="0 0 48 48" fill="none">
+                <path d="M13 7 V41" stroke="var(--accent-fg)" stroke-width="6.2" stroke-linecap="square"/>
+                <path d="M13 25 L33 8" stroke="var(--accent-fg)" stroke-width="6.2" stroke-linecap="square"/>
+                <path d="M13 25 L33 42" stroke="var(--accent-fg)" stroke-width="6.2" stroke-linecap="square"/>
+              </svg>
+            </div>
+            <span class="ai-cap">Lime</span>
+          </div>
+        </div>
+        <div class="onlight">
+          <svg width="34" height="34" viewBox="0 0 48 48" fill="none">
+            <path d="M13 7 V41" stroke="var(--bg)" stroke-width="6.2" stroke-linecap="square"/>
+            <path d="M13 25 L33 8" stroke="var(--bg)" stroke-width="6.2" stroke-linecap="square"/>
+            <path d="M13 25 L33 42" stroke="var(--bg)" stroke-width="6.2" stroke-linecap="square"/>
+          </svg>
+          <div class="wordmark">k<span style="color:var(--accent)">I</span>nor<span style="color:var(--accent)">A</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:18px">
+      <div class="panel">
+        <p class="panel-label">Favicon · pestaña</p>
+        <div class="tabsim">
+          <svg width="16" height="16" viewBox="0 0 48 48" fill="none">
+            <path d="M13 7 V41" stroke="var(--accent)" stroke-width="7" stroke-linecap="square"/>
+            <path d="M13 25 L33 8" stroke="var(--accent)" stroke-width="7" stroke-linecap="square"/>
+            <path d="M13 25 L33 42" stroke="var(--accent)" stroke-width="7" stroke-linecap="square"/>
+          </svg>
+          <span>kinora — Tu entrenador IA</span>
+        </div>
+        <div class="fav-sizes">
+          <div class="ai-wrap"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><path d="M13 7 V41" stroke="var(--accent)" stroke-width="6.2" stroke-linecap="square"/><path d="M13 25 L33 8" stroke="var(--accent)" stroke-width="6.2" stroke-linecap="square"/><path d="M13 25 L33 42" stroke="var(--accent)" stroke-width="6.2" stroke-linecap="square"/></svg><span class="ai-cap">48</span></div>
+          <div class="ai-wrap"><svg width="32" height="32" viewBox="0 0 48 48" fill="none"><path d="M13 7 V41" stroke="var(--accent)" stroke-width="6.6" stroke-linecap="square"/><path d="M13 25 L33 8" stroke="var(--accent)" stroke-width="6.6" stroke-linecap="square"/><path d="M13 25 L33 42" stroke="var(--accent)" stroke-width="6.6" stroke-linecap="square"/></svg><span class="ai-cap">32</span></div>
+          <div class="ai-wrap"><svg width="16" height="16" viewBox="0 0 48 48" fill="none"><path d="M13 7 V41" stroke="var(--accent)" stroke-width="7.4" stroke-linecap="square"/><path d="M13 25 L33 8" stroke="var(--accent)" stroke-width="7.4" stroke-linecap="square"/><path d="M13 25 L33 42" stroke="var(--accent)" stroke-width="7.4" stroke-linecap="square"/></svg><span class="ai-cap">16</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <p class="panel-label">Iconos de UI · trazo recto, cap square</p>
+        <div class="uiset">
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M3 11 L12 4 L21 11"/><path d="M5 10 V20 H19 V10"/></svg></div>
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="square"><path d="M3 9 V15 M21 9 V15 M6 7 V17 M18 7 V17 M6 12 H18"/></svg></div>
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 5 H20 V20 H4 Z"/><path d="M4 9 H20 M9 3 V7 M15 3 V7"/></svg></div>
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="square"><path d="M4 20 V13 M10 20 V8 M16 20 V4"/></svg></div>
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M9 4 H15 V12 A3 3 0 0 1 9 12 Z"/><path d="M5 11 A7 7 0 0 0 19 11 M12 18 V21"/></svg></div>
+        </div>
+        <p class="lockup-sub" style="margin-top:24px">Esquinas vivas y caps cuadrados para mantener el carácter técnico del monograma. Stats en lima como “dato activo”.</p>
+      </div>
+    </div>
+
+    <p class="why"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round"><path d="M5 13 l4 4 L19 7"/></svg><span><b>Por qué funciona:</b> es inconfundible como inicial, hereda la geometría del display type y aguanta perfecto a 16px — la opción más segura para producto.</span></p>
+  </section>
+
+  <hr class="div" />
+
+  <section>
+    <div class="prop-head">
+      <span class="prop-num">02</span>
+      <span class="prop-name">Orbit</span>
+      <span class="prop-tag">Abstracto · energía y ciclo</span>
+    </div>
+    <p class="prop-desc">Un punto de energía recorriendo una órbita abierta: evoca repeticiones, ciclos de entreno y conecta directamente con el <b>orbe del asistente de voz</b> que ya existe en la app. El más premium y “asistente IA” de los tres.</p>
+
+    <div class="grid">
+      <div class="panel">
+        <p class="panel-label">Logotipo principal</p>
+        <div class="lockup">
+          <svg width="84" height="84" viewBox="0 0 48 48" fill="none">
+            <circle cx="24" cy="24" r="16" stroke="var(--border)" stroke-width="4"/>
+            <path d="M24 8 A16 16 0 0 1 39 18" stroke="var(--muted)" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="24" cy="8" r="6" fill="var(--accent)"/>
+          </svg>
+          <div class="wordmark">k<span class="ai">I</span>nor<span class="ai">A</span></div>
+        </div>
+        <p class="lockup-sub">El punto lima es el único uso de acento en el lockup — el resto en grises de superficie.</p>
+      </div>
+      <div class="panel">
+        <p class="panel-label">App icon</p>
+        <div class="icon-row">
+          <div class="ai-wrap">
+            <div class="appicon" style="background:var(--bg);border:1px solid var(--border)">
+              <svg width="54" height="54" viewBox="0 0 48 48" fill="none">
+                <circle cx="24" cy="24" r="15" stroke="var(--border)" stroke-width="4"/>
+                <path d="M24 9 A15 15 0 0 1 38 19" stroke="var(--muted)" stroke-width="4" stroke-linecap="round"/>
+                <circle cx="24" cy="9" r="5.5" fill="var(--accent)"/>
+              </svg>
+            </div>
+            <span class="ai-cap">Dark</span>
+          </div>
+          <div class="ai-wrap">
+            <div class="appicon" style="background:var(--accent)">
+              <svg width="54" height="54" viewBox="0 0 48 48" fill="none">
+                <circle cx="24" cy="24" r="15" stroke="color-mix(in oklab, var(--accent-fg) 30%, transparent)" stroke-width="4"/>
+                <path d="M24 9 A15 15 0 0 1 38 19" stroke="var(--accent-fg)" stroke-width="4" stroke-linecap="round"/>
+                <circle cx="24" cy="9" r="5.5" fill="var(--accent-fg)"/>
+              </svg>
+            </div>
+            <span class="ai-cap">Lime</span>
+          </div>
+        </div>
+        <div class="onlight">
+          <svg width="36" height="36" viewBox="0 0 48 48" fill="none">
+            <circle cx="24" cy="24" r="15" stroke="color-mix(in oklab, var(--bg) 22%, transparent)" stroke-width="4"/>
+            <path d="M24 9 A15 15 0 0 1 38 19" stroke="var(--bg)" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="24" cy="9" r="5.5" fill="var(--bg)"/>
+          </svg>
+          <div class="wordmark">k<span style="color:var(--accent)">I</span>nor<span style="color:var(--accent)">A</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:18px">
+      <div class="panel">
+        <p class="panel-label">Favicon · pestaña</p>
+        <div class="tabsim">
+          <svg width="16" height="16" viewBox="0 0 48 48" fill="none">
+            <circle cx="24" cy="24" r="15" stroke="var(--muted)" stroke-width="5"/>
+            <circle cx="24" cy="9" r="8" fill="var(--accent)"/>
+          </svg>
+          <span>kinora — Tu entrenador IA</span>
+        </div>
+        <div class="fav-sizes">
+          <div class="ai-wrap"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="15" stroke="var(--border)" stroke-width="4"/><path d="M24 9 A15 15 0 0 1 38 19" stroke="var(--muted)" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="9" r="5.5" fill="var(--accent)"/></svg><span class="ai-cap">48</span></div>
+          <div class="ai-wrap"><svg width="32" height="32" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="14" stroke="var(--muted)" stroke-width="4.5"/><circle cx="24" cy="10" r="7" fill="var(--accent)"/></svg><span class="ai-cap">32</span></div>
+          <div class="ai-wrap"><svg width="16" height="16" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="13" stroke="var(--muted)" stroke-width="6"/><circle cx="24" cy="11" r="9" fill="var(--accent)"/></svg><span class="ai-cap">16</span></div>
+        </div>
+        <p class="lockup-sub" style="margin-top:18px">A 16px la órbita se simplifica a anillo + punto sólido para no perder legibilidad.</p>
+      </div>
+      <div class="panel">
+        <p class="panel-label">Iconos de UI · trazo redondeado</p>
+        <div class="uiset">
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 L12 4 L21 11"/><path d="M5 10 V20 H19 V10"/></svg></div>
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round"><path d="M3 9 V15 M21 9 V15 M6 7 V17 M18 7 V17 M6 12 H18"/></svg></div>
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 9 H20 M9 3 V7 M15 3 V7"/></svg></div>
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M4 20 V13 M10 20 V8 M16 20 V4"/></svg></div>
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11 A7 7 0 0 0 19 11 M12 18 V21"/></svg></div>
+        </div>
+        <p class="lockup-sub" style="margin-top:24px">Trazos con cap redondo y radios de 3px, en sintonía con la órbita. El mic conecta con el asistente de voz.</p>
+      </div>
+    </div>
+
+    <p class="why"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round"><path d="M5 13 l4 4 L19 7"/></svg><span><b>Por qué funciona:</b> es memorable sin depender de la letra, se anima de forma natural (el punto orbita en loaders/voz) y refuerza el ángulo “asistente IA”.</span></p>
+  </section>
+
+  <hr class="div" />
+
+  <section>
+    <div class="prop-head">
+      <span class="prop-num">03</span>
+      <span class="prop-name">Ascend</span>
+      <span class="prop-tag">Chevron de progreso · atlético</span>
+    </div>
+    <p class="prop-desc">Dos chevrones ascendentes — el superior en lima como “nivel alcanzado”. Lee como progreso, ganancia y subir de nivel; el más enérgico y deportivo, ideal para rachas y récords.</p>
+
+    <div class="grid">
+      <div class="panel">
+        <p class="panel-label">Logotipo principal</p>
+        <div class="lockup">
+          <svg width="84" height="84" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 30 L24 18 L38 30" stroke="var(--muted)" stroke-width="6"/>
+            <path d="M10 20 L24 8 L38 20" stroke="var(--accent)" stroke-width="6"/>
+          </svg>
+          <div class="wordmark">k<span class="ai">I</span>nor<span class="ai">A</span></div>
+        </div>
+        <p class="lockup-sub">El chevron inferior en gris da profundidad; sólo el superior usa el acento.</p>
+      </div>
+      <div class="panel">
+        <p class="panel-label">App icon</p>
+        <div class="icon-row">
+          <div class="ai-wrap">
+            <div class="appicon" style="background:var(--bg);border:1px solid var(--border)">
+              <svg width="54" height="54" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 31 L24 20 L37 31" stroke="var(--muted)" stroke-width="6"/>
+                <path d="M11 21 L24 10 L37 21" stroke="var(--accent)" stroke-width="6"/>
+              </svg>
+            </div>
+            <span class="ai-cap">Dark</span>
+          </div>
+          <div class="ai-wrap">
+            <div class="appicon" style="background:var(--accent)">
+              <svg width="54" height="54" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 31 L24 20 L37 31" stroke="color-mix(in oklab, var(--accent-fg) 45%, transparent)" stroke-width="6"/>
+                <path d="M11 21 L24 10 L37 21" stroke="var(--accent-fg)" stroke-width="6"/>
+              </svg>
+            </div>
+            <span class="ai-cap">Lime</span>
+          </div>
+        </div>
+        <div class="onlight">
+          <svg width="36" height="36" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 31 L24 20 L37 31" stroke="color-mix(in oklab, var(--bg) 40%, transparent)" stroke-width="6"/>
+            <path d="M11 21 L24 10 L37 21" stroke="var(--bg)" stroke-width="6"/>
+          </svg>
+          <div class="wordmark">k<span style="color:var(--accent)">I</span>nor<span style="color:var(--accent)">A</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:18px">
+      <div class="panel">
+        <p class="panel-label">Favicon · pestaña</p>
+        <div class="tabsim">
+          <svg width="16" height="16" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 30 L24 18 L38 30" stroke="var(--muted)" stroke-width="7"/>
+            <path d="M10 20 L24 8 L38 20" stroke="var(--accent)" stroke-width="7"/>
+          </svg>
+          <span>kinora — Tu entrenador IA</span>
+        </div>
+        <div class="fav-sizes">
+          <div class="ai-wrap"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M11 31 L24 20 L37 31" stroke="var(--muted)" stroke-width="6"/><path d="M11 21 L24 10 L37 21" stroke="var(--accent)" stroke-width="6"/></svg><span class="ai-cap">48</span></div>
+          <div class="ai-wrap"><svg width="32" height="32" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M11 30 L24 19 L37 30" stroke="var(--muted)" stroke-width="6.5"/><path d="M11 20 L24 9 L37 20" stroke="var(--accent)" stroke-width="6.5"/></svg><span class="ai-cap">32</span></div>
+          <div class="ai-wrap"><svg width="16" height="16" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M11 26 L24 14 L37 26" stroke="var(--accent)" stroke-width="8"/></svg><span class="ai-cap">16</span></div>
+        </div>
+        <p class="lockup-sub" style="margin-top:18px">A 16px se reduce a un único chevron lima para máxima legibilidad.</p>
+      </div>
+      <div class="panel">
+        <p class="panel-label">Iconos de UI · trazo atlético</p>
+        <div class="uiset">
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 L12 4 L21 11"/><path d="M5 10 V20 H19 V10"/></svg></div>
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2.3" stroke-linecap="round"><path d="M3 9 V15 M21 9 V15 M6 7 V17 M18 7 V17 M6 12 H18"/></svg></div>
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 9 H20 M9 3 V7 M15 3 V7"/></svg></div>
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16 L10 10 L14 14 L20 6"/><path d="M15 6 H20 V11"/></svg></div>
+          <div class="uichip"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11 A7 7 0 0 0 19 11 M12 18 V21"/></svg></div>
+        </div>
+        <p class="lockup-sub" style="margin-top:24px">Trazo un punto más grueso (2.3) y el icono de stats convertido en flecha de tendencia: refuerza el concepto de progreso.</p>
+      </div>
+    </div>
+
+    <p class="why"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round"><path d="M5 13 l4 4 L19 7"/></svg><span><b>Por qué funciona:</b> comunica el beneficio (progreso/ganancia) sin palabras, es energético y se presta a micro-animaciones de “subida” en rachas y récords.</span></p>
+  </section>
+
+  <footer>
+    <p>Las tres direcciones comparten paleta y tipografía del sistema kInorA — sólo cambian de personalidad. Todos los marks están dibujados en SVG vectorial: escalan sin pérdida y exportan a <code>.svg</code> / <code>.ico</code> / PNG (16·32·48·180·512) directamente.</p>
+    <p style="margin-top:8px">Recomendación: <b style="color:var(--fg)">01 Kinetic&nbsp;K</b> si priorizas reconocimiento de marca y producto; <b style="color:var(--fg)">02 Orbit</b> si quieres apoyar el ángulo de asistente IA con animación; <b style="color:var(--fg)">03 Ascend</b> si el mensaje central es progreso atlético.</p>
+  </footer>
+
+</div>
+</body>
+</html>

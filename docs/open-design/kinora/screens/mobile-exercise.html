@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=390, initial-scale=1.0">
+  <title>kInorA — Press de banca</title>
+  <style>
+/* ============================================================
+   kInorA — shared design system
+   Reconstructed from v0 chat `kinora-eOTftpCTxTX` (see DESIGN.md)
+   Dark-only · near-black canvas · single lime accent
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
+:root {
+  /* surfaces */
+  --bg:        oklch(5% 0.006 270);
+  --surface:   oklch(11% 0.006 270);
+  --surface-2: oklch(15% 0.006 270);
+  --border:    oklch(24% 0.006 270);
+  --fg:        oklch(96% 0.002 270);
+  --muted:     oklch(66% 0.006 270);
+
+  /* brand accent (lime) */
+  --accent:    oklch(89% 0.20 128);
+  --accent-fg: oklch(5% 0.006 270);
+  --accent-dim: oklch(89% 0.20 128 / 0.12);
+
+  /* states */
+  --success: oklch(89% 0.20 128);
+  --warning: oklch(84% 0.14 90);
+  --danger:  oklch(68% 0.19 25);
+  --info:    oklch(72% 0.13 250);
+
+  /* type */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body:    'DM Sans', -apple-system, system-ui, sans-serif;
+
+  /* radii */
+  --r-card: 18px;
+  --r-btn: 12px;
+  --r-pill: 999px;
+
+  /* rhythm */
+  --sp-1: 8px;  --sp-2: 12px; --sp-3: 16px;
+  --sp-4: 24px; --sp-5: 32px; --sp-6: 48px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-weight: 600;
+}
+
+.num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.accent { color: var(--accent); }
+
+a { color: inherit; text-decoration: none; }
+
+/* ---- primitives ---- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: var(--sp-4);
+}
+.card-2 { background: var(--surface-2); }
+
+.btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 15px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  border-radius: var(--r-btn);
+  padding: 12px 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background .15s, border-color .15s, transform .05s;
+}
+.btn:hover { background: var(--border); }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.btn-primary:hover { filter: brightness(1.05); background: var(--accent); }
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--surface-2); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.pill-active {
+  background: var(--accent-dim);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 6px 12px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.divider { height: 1px; background: var(--border); border: 0; }
+
+.progress-track {
+  height: 8px; border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.progress-fill { height: 100%; background: var(--accent); border-radius: 999px; }
+
+::selection { background: var(--accent); color: var(--accent-fg); }
+
+/* thin scrollbars on dark */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+</style>
+  <style>
+    html, body {
+      width: 390px;
+      min-height: 844px;
+      margin: 0 auto;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    .screen {
+      width: 390px;
+      min-height: 844px;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      padding-bottom: 108px; /* room for fixed bottom bar + home indicator */
+    }
+
+    /* ── Top bar ── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px 12px;
+      gap: 12px;
+    }
+    .topbar-center {
+      flex: 1;
+      text-align: center;
+      font-family: var(--font-display);
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--fg);
+    }
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      color: var(--fg);
+      flex-shrink: 0;
+    }
+    .icon-btn:active { transform: scale(0.96); }
+
+    /* ── Hero illustration panel ── */
+    .hero-panel {
+      width: 390px;
+      height: 220px;
+      background: var(--surface-2);
+      position: relative;
+      flex-shrink: 0;
+      overflow: hidden;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero-panel svg.illustration {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .hero-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(oklch(24% 0.006 270 / 0.35) 1px, transparent 1px),
+        linear-gradient(90deg, oklch(24% 0.006 270 / 0.35) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+    .hero-label {
+      position: absolute;
+      bottom: 12px;
+      left: 16px;
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .play-btn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 0 0 8px oklch(89% 0.20 128 / 0.12);
+    }
+    .play-btn svg { color: var(--accent-fg); margin-left: 3px; }
+
+    /* ── Content area ── */
+    .content {
+      flex: 1;
+      padding: 20px 20px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ── Muscle chips row ── */
+    .chips-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .muscle-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .muscle-chip.primary {
+      background: var(--accent-dim);
+      border-color: oklch(89% 0.20 128 / 0.25);
+      color: var(--accent);
+    }
+    .muscle-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+
+    /* ── Series card ── */
+    .series-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      overflow: hidden;
+    }
+    .series-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .series-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--fg);
+    }
+    .series-count {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* Table */
+    .series-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .series-table thead tr {
+      border-bottom: 1px solid var(--border);
+    }
+    .series-table th {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 8px 16px;
+      text-align: left;
+    }
+    .series-table th:last-child { text-align: center; }
+    .series-table td {
+      padding: 13px 16px;
+      font-size: 14px;
+      color: var(--fg);
+      font-family: var(--font-body);
+    }
+    .series-table td.num-cell {
+      font-family: var(--font-display);
+      font-variant-numeric: tabular-nums;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .series-table td:last-child {
+      text-align: center;
+    }
+    .series-table tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .1s;
+    }
+    .series-table tr:last-child { border-bottom: none; }
+    .series-table tr.done { opacity: 0.7; }
+    .series-table tr.active {
+      background: oklch(89% 0.20 128 / 0.06);
+    }
+    .series-table tr.active td { color: var(--fg); }
+
+    /* Estado badges */
+    .estado-done {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: oklch(89% 0.20 128 / 0.15);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+    }
+    .estado-active {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      border: 2px solid var(--accent);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .estado-pending {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Rest + Tecnica ── */
+    .rest-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+    .rest-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .rest-icon-wrap {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: oklch(84% 0.14 90 / 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--warning);
+      flex-shrink: 0;
+    }
+    .rest-label {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .rest-label strong {
+      display: block;
+      font-size: 15px;
+      color: var(--fg);
+      font-family: var(--font-display);
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    .rest-adjust {
+      font-size: 12px;
+      color: var(--muted);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      cursor: pointer;
+    }
+
+    .tecnica-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      padding: 16px;
+    }
+    .tecnica-card .eyebrow {
+      margin-bottom: 12px;
+    }
+    .cue-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .cue-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 14px;
+      color: var(--fg);
+      line-height: 1.4;
+    }
+    .cue-marker {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+      margin-top: 6px;
+    }
+
+    /* ── Bottom fixed bar ── */
+    .bottom-bar {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 390px;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      padding: 12px 20px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 100;
+    }
+    .bottom-bar .btn {
+      width: 100%;
+      justify-content: center;
+      height: 52px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+<div class="screen">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <button class="icon-btn" aria-label="Volver">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5l-5 5 5 5"/>
+      </svg>
+    </button>
+    <span class="topbar-center">Press de banca</span>
+    <button class="icon-btn" aria-label="Guardar ejercicio">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 3h10a1 1 0 011 1v13l-6-3-6 3V4a1 1 0 011-1z"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- HERO ILLUSTRATION -->
+  <div class="hero-panel" role="img" aria-label="Demostración de press de banca — toca play para ver el video">
+    <div class="hero-grid"></div>
+
+    <!-- Abstract bench press line figure -->
+    <svg class="illustration" viewBox="0 0 390 220" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <!-- Bench -->
+      <rect x="100" y="148" width="190" height="12" rx="6" fill="oklch(24% 0.006 270)" stroke="oklch(24% 0.006 270 / 0.8)" stroke-width="1"/>
+      <rect x="120" y="160" width="8" height="28" rx="3" fill="oklch(24% 0.006 270)"/>
+      <rect x="262" y="160" width="8" height="28" rx="3" fill="oklch(24% 0.006 270)"/>
+
+      <!-- Barbell (horizontal bar) -->
+      <line x1="60" y1="112" x2="330" y2="112" stroke="oklch(66% 0.006 270)" stroke-width="5" stroke-linecap="round"/>
+      <!-- Plates left -->
+      <rect x="68" y="98" width="22" height="28" rx="4" fill="oklch(24% 0.006 270)" stroke="oklch(89% 0.20 128 / 0.5)" stroke-width="1.5"/>
+      <rect x="60" y="101" width="12" height="22" rx="3" fill="oklch(20% 0.006 270)" stroke="oklch(89% 0.20 128 / 0.3)" stroke-width="1"/>
+      <!-- Plates right -->
+      <rect x="300" y="98" width="22" height="28" rx="4" fill="oklch(24% 0.006 270)" stroke="oklch(89% 0.20 128 / 0.5)" stroke-width="1.5"/>
+      <rect x="318" y="101" width="12" height="22" rx="3" fill="oklch(20% 0.006 270)" stroke="oklch(89% 0.20 128 / 0.3)" stroke-width="1"/>
+
+      <!-- Body: torso (lying) -->
+      <rect x="148" y="124" width="94" height="24" rx="8" fill="oklch(20% 0.006 270)" stroke="oklch(33% 0.006 270)" stroke-width="1.5"/>
+
+      <!-- Head -->
+      <circle cx="260" cy="136" r="14" fill="oklch(20% 0.006 270)" stroke="oklch(33% 0.006 270)" stroke-width="1.5"/>
+
+      <!-- Arms reaching up -->
+      <path d="M 170 124 Q 162 90 148 112" stroke="oklch(55% 0.006 270)" stroke-width="4" stroke-linecap="round" fill="none"/>
+      <path d="M 220 124 Q 228 90 242 112" stroke="oklch(55% 0.006 270)" stroke-width="4" stroke-linecap="round" fill="none"/>
+
+      <!-- Hands on bar indicator (small circles) -->
+      <circle cx="150" cy="112" r="5" fill="oklch(89% 0.20 128)" opacity="0.9"/>
+      <circle cx="240" cy="112" r="5" fill="oklch(89% 0.20 128)" opacity="0.9"/>
+
+      <!-- Legs (bent at knees, feet flat) -->
+      <path d="M 148 142 Q 128 158 140 170" stroke="oklch(55% 0.006 270)" stroke-width="4" stroke-linecap="round" fill="none"/>
+      <path d="M 242 142 Q 262 158 250 170" stroke="oklch(55% 0.006 270)" stroke-width="4" stroke-linecap="round" fill="none"/>
+
+      <!-- Motion arcs (subtle) -->
+      <path d="M 120 72 Q 130 60 148 68" stroke="oklch(89% 0.20 128 / 0.2)" stroke-width="1.5" fill="none" stroke-dasharray="4 4"/>
+      <path d="M 270 72 Q 260 60 242 68" stroke="oklch(89% 0.20 128 / 0.2)" stroke-width="1.5" fill="none" stroke-dasharray="4 4"/>
+    </svg>
+
+    <!-- Play overlay -->
+    <div class="play-btn" role="button" aria-label="Ver demostración en video" tabindex="0">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="currentColor" stroke="none">
+        <polygon points="8,5 19,11 8,17"/>
+      </svg>
+    </div>
+
+    <span class="hero-label">Demostración · Toca para reproducir</span>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <!-- Muscle chips -->
+    <div class="chips-row" role="list" aria-label="Músculos trabajados">
+      <span class="muscle-chip primary" role="listitem">
+        <span class="muscle-dot"></span>
+        Pecho
+      </span>
+      <span class="muscle-chip" role="listitem">
+        <span class="muscle-dot"></span>
+        Tríceps
+      </span>
+      <span class="muscle-chip" role="listitem">
+        <span class="muscle-dot"></span>
+        Hombro anterior
+      </span>
+    </div>
+
+    <!-- Series de hoy -->
+    <div class="series-card" role="region" aria-label="Series de hoy">
+      <div class="series-header">
+        <h3>Series de hoy</h3>
+        <span class="series-count muted">4 series</span>
+      </div>
+      <table class="series-table" aria-label="Registro de series">
+        <thead>
+          <tr>
+            <th>Serie</th>
+            <th>Carga</th>
+            <th>Reps</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="done" aria-label="Serie 1 completada">
+            <td class="num-cell">1</td>
+            <td class="num-cell">40<span style="font-size:12px;color:var(--muted);font-weight:500"> kg</span></td>
+            <td class="num-cell">12</td>
+            <td>
+              <span class="estado-done" aria-label="Completada">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="2,7 5.5,10.5 11,3"/>
+                </svg>
+              </span>
+            </td>
+          </tr>
+          <tr class="done" aria-label="Serie 2 completada">
+            <td class="num-cell">2</td>
+            <td class="num-cell">42.5<span style="font-size:12px;color:var(--muted);font-weight:500"> kg</span></td>
+            <td class="num-cell">10</td>
+            <td>
+              <span class="estado-done" aria-label="Completada">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="2,7 5.5,10.5 11,3"/>
+                </svg>
+              </span>
+            </td>
+          </tr>
+          <tr class="active" aria-label="Serie 3 en curso — serie actual" aria-current="step">
+            <td class="num-cell" style="color:var(--accent)">3</td>
+            <td class="num-cell">45<span style="font-size:12px;color:var(--muted);font-weight:500"> kg</span></td>
+            <td class="num-cell">8</td>
+            <td>
+              <span class="estado-active" aria-label="En curso">
+                HOY
+              </span>
+            </td>
+          </tr>
+          <tr aria-label="Serie 4 pendiente">
+            <td class="num-cell" style="color:var(--muted)">4</td>
+            <td class="num-cell" style="color:var(--muted)">45<span style="font-size:12px;font-weight:500"> kg</span></td>
+            <td class="num-cell" style="color:var(--muted)">8</td>
+            <td>
+              <span class="estado-pending" aria-label="Pendiente">
+                <svg width="8" height="8" viewBox="0 0 8 8" fill="var(--border)" stroke="none">
+                  <circle cx="4" cy="4" r="3"/>
+                </svg>
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Descanso -->
+    <div class="rest-row" role="region" aria-label="Descanso recomendado">
+      <div class="rest-left">
+        <div class="rest-icon-wrap" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="9" r="7"/>
+            <polyline points="9,5 9,9 12,11"/>
+          </svg>
+        </div>
+        <div class="rest-label">
+          Descanso recomendado
+          <strong class="num">90 s</strong>
+        </div>
+      </div>
+      <span class="rest-adjust" role="button" tabindex="0" aria-label="Ajustar tiempo de descanso">Ajustar</span>
+    </div>
+
+    <!-- Técnica -->
+    <div class="tecnica-card" role="region" aria-labelledby="tecnica-heading">
+      <p class="eyebrow" id="tecnica-heading">Puntos de técnica</p>
+      <ul class="cue-list">
+        <li class="cue-item">
+          <span class="cue-marker" aria-hidden="true"></span>
+          <span>Escápulas retraídas y deprimidas durante todo el movimiento</span>
+        </li>
+        <li class="cue-item">
+          <span class="cue-marker" aria-hidden="true"></span>
+          <span>Descenso controlado a 2–3 s; toca el pecho levemente antes de empujar</span>
+        </li>
+        <li class="cue-item">
+          <span class="cue-marker" aria-hidden="true"></span>
+          <span>Codos en ángulo ~45° respecto al torso, no perpendiculares</span>
+        </li>
+        <li class="cue-item">
+          <span class="cue-marker" aria-hidden="true"></span>
+          <span>Pies apoyados firmemente en el suelo, arco lumbar natural</span>
+        </li>
+      </ul>
+    </div>
+
+  </div><!-- /content -->
+
+</div><!-- /screen -->
+
+<!-- BOTTOM FIXED BAR -->
+<div class="bottom-bar" role="region" aria-label="Acciones principales">
+  <button class="btn btn-primary" aria-label="Marcar serie 3 como completada">
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <polyline points="3,9 7.5,13.5 15,4"/>
+    </svg>
+    Marcar serie
+  </button>
+  <button class="btn btn-ghost" style="color:var(--muted);justify-content:center;width:100%;height:44px;" aria-label="Ver ejercicios alternativos">
+    Ver alternativas
+  </button>
+</div>
+
+</body>
+</html>

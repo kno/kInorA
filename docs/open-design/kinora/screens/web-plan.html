@@ -1,0 +1,964 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>kInorA — Mi plan</title>
+  <style>
+/* ============================================================
+   kInorA — shared design system
+   Reconstructed from v0 chat `kinora-eOTftpCTxTX` (see DESIGN.md)
+   Dark-only · near-black canvas · single lime accent
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
+:root {
+  /* surfaces */
+  --bg:        oklch(5% 0.006 270);
+  --surface:   oklch(11% 0.006 270);
+  --surface-2: oklch(15% 0.006 270);
+  --border:    oklch(24% 0.006 270);
+  --fg:        oklch(96% 0.002 270);
+  --muted:     oklch(66% 0.006 270);
+
+  /* brand accent (lime) */
+  --accent:    oklch(89% 0.20 128);
+  --accent-fg: oklch(5% 0.006 270);
+  --accent-dim: oklch(89% 0.20 128 / 0.12);
+
+  /* states */
+  --success: oklch(89% 0.20 128);
+  --warning: oklch(84% 0.14 90);
+  --danger:  oklch(68% 0.19 25);
+  --info:    oklch(72% 0.13 250);
+
+  /* type */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body:    'DM Sans', -apple-system, system-ui, sans-serif;
+
+  /* radii */
+  --r-card: 18px;
+  --r-btn: 12px;
+  --r-pill: 999px;
+
+  /* rhythm */
+  --sp-1: 8px;  --sp-2: 12px; --sp-3: 16px;
+  --sp-4: 24px; --sp-5: 32px; --sp-6: 48px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-weight: 600;
+}
+
+.num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.accent { color: var(--accent); }
+
+a { color: inherit; text-decoration: none; }
+
+/* ---- primitives ---- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: var(--sp-4);
+}
+.card-2 { background: var(--surface-2); }
+
+.btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 15px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  border-radius: var(--r-btn);
+  padding: 12px 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background .15s, border-color .15s, transform .05s;
+}
+.btn:hover { background: var(--border); }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.btn-primary:hover { filter: brightness(1.05); background: var(--accent); }
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--surface-2); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.pill-active {
+  background: var(--accent-dim);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 6px 12px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.divider { height: 1px; background: var(--border); border: 0; }
+
+.progress-track {
+  height: 8px; border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.progress-fill { height: 100%; background: var(--accent); border-radius: 999px; }
+
+::selection { background: var(--accent); color: var(--accent-fg); }
+
+/* thin scrollbars on dark */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+</style>
+  <style>
+    /* ── Layout shell ────────────────────────────────────────── */
+    .app { display: flex; min-height: 100vh; }
+
+    /* ── Sidebar ─────────────────────────────────────────────── */
+    .sidebar {
+      position: fixed; inset: 0 auto 0 0;
+      width: 248px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      z-index: 100;
+    }
+
+    .sidebar-top { padding: 24px 20px 20px; }
+
+    .wordmark {
+      display: flex; align-items: center; gap: 9px;
+      font-family: var(--font-display);
+      font-size: 19px; font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--fg);
+      margin-bottom: 28px;
+    }
+    .wordmark-mark {
+      width: 22px; height: 22px;
+      background: var(--accent);
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+
+    .nav { display: flex; flex-direction: column; gap: 2px; }
+
+    .nav-item {
+      position: relative;
+      display: flex; align-items: center; gap: 12px;
+      height: 44px; padding: 0 14px;
+      border-radius: 10px;
+      font-size: 14px; font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background .12s, color .12s;
+      text-decoration: none;
+    }
+    .nav-item:hover { background: var(--surface-2); color: var(--fg); }
+    .nav-item.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+    .nav-item.active::before {
+      content: '';
+      position: absolute; left: 0; top: 8px; bottom: 8px;
+      width: 3px; background: var(--accent);
+      border-radius: 0 3px 3px 0;
+    }
+    .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+    .sidebar-bottom {
+      margin-top: auto;
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display); font-size: 13px; font-weight: 600;
+      color: var(--fg); flex-shrink: 0;
+    }
+    .user-info { flex: 1; min-width: 0; }
+    .user-name {
+      font-size: 13px; font-weight: 600;
+      color: var(--fg);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .user-plan { font-size: 11px; color: var(--accent); font-weight: 500; }
+    .settings-btn {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: transparent; border: none;
+      color: var(--muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .12s, color .12s;
+      flex-shrink: 0;
+    }
+    .settings-btn:hover { background: var(--surface-2); color: var(--fg); }
+    .settings-btn svg { width: 16px; height: 16px; }
+
+    /* ── Main area ───────────────────────────────────────────── */
+    .main {
+      margin-left: 248px;
+      flex: 1;
+      min-height: 100vh;
+      padding: 32px;
+      max-width: calc(1200px + 248px);
+    }
+
+    /* ── Topbar ──────────────────────────────────────────────── */
+    .topbar {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 28px;
+    }
+    .topbar-title { flex: 1; }
+    .topbar-title h1 { font-size: 28px; }
+    .topbar-right { display: flex; align-items: center; gap: 10px; }
+    .search-field {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 8px 14px;
+      font-size: 14px; color: var(--muted);
+      cursor: text;
+    }
+    .search-field svg { width: 15px; height: 15px; flex-shrink: 0; }
+    .notif-btn {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .12s, color .12s; position: relative;
+    }
+    .notif-btn:hover { background: var(--surface-2); color: var(--fg); }
+    .notif-btn svg { width: 18px; height: 18px; }
+
+    /* ── Week selector ───────────────────────────────────────── */
+    .week-header {
+      display: flex; align-items: center; gap: 16px;
+      margin-bottom: 24px;
+    }
+    .week-nav {
+      display: flex; align-items: center; gap: 0;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    .week-nav-btn {
+      width: 36px; height: 36px;
+      background: transparent; border: none;
+      color: var(--muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .12s, color .12s;
+    }
+    .week-nav-btn:hover { background: var(--surface-2); color: var(--fg); }
+    .week-nav-btn svg { width: 14px; height: 14px; }
+    .week-label {
+      font-family: var(--font-display);
+      font-size: 15px; font-weight: 600;
+      padding: 0 16px;
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      line-height: 36px;
+      white-space: nowrap;
+    }
+
+    /* ── Summary strip ───────────────────────────────────────── */
+    .summary-strip {
+      display: flex; gap: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+    .summary-item {
+      flex: 1; padding: 16px 20px;
+      border-right: 1px solid var(--border);
+    }
+    .summary-item:last-child { border-right: none; }
+    .summary-item .eyebrow { margin-bottom: 6px; }
+    .summary-val {
+      font-family: var(--font-display);
+      font-size: 22px; font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .summary-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Day cards grid ──────────────────────────────────────── */
+    .week-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .day-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 12px;
+      cursor: pointer;
+      transition: background .12s, border-color .12s;
+      min-height: 120px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .day-card:hover { background: var(--surface-2); border-color: var(--border); }
+    .day-card.active-day {
+      border-color: var(--accent);
+      background: var(--surface-2);
+    }
+    .day-card.rest-day { opacity: .55; cursor: default; }
+    .day-card.rest-day:hover { background: var(--surface); border-color: var(--border); }
+
+    .dc-header {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .dc-day-label {
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    .dc-day-label.today { color: var(--accent); }
+    .dc-check {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--surface-2);
+      border: 1.5px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .dc-check.done {
+      background: transparent;
+      border-color: var(--muted);
+    }
+    .dc-check.done svg { width: 10px; height: 10px; color: var(--muted); }
+    .dc-focus {
+      font-size: 13px; font-weight: 600;
+      color: var(--fg); line-height: 1.2;
+    }
+    .dc-focus.rest { color: var(--muted); font-weight: 400; }
+    .dc-meta { font-size: 11px; color: var(--muted); }
+    .dc-today-indicator {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent);
+      margin-top: auto;
+      align-self: flex-start;
+    }
+
+    /* ── Detail panel ────────────────────────────────────────── */
+    .detail-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      padding: 24px;
+      display: none;
+    }
+    .detail-panel.visible { display: block; }
+
+    .detail-header {
+      display: flex; align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .detail-title-block {}
+    .detail-title-block h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+    .detail-close {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      color: var(--muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .12s;
+    }
+    .detail-close:hover { background: var(--border); color: var(--fg); }
+    .detail-close svg { width: 14px; height: 14px; }
+
+    .ex-table {
+      width: 100%; border-collapse: collapse;
+    }
+    .ex-table th {
+      text-align: left; padding: 0 0 10px;
+      font-size: 11px; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--muted);
+      font-weight: 600; border-bottom: 1px solid var(--border);
+    }
+    .ex-table th:not(:first-child) { text-align: right; }
+    .ex-table td {
+      padding: 13px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .ex-table tr:last-child td { border-bottom: none; }
+    .ex-table td:not(:first-child) {
+      text-align: right;
+      font-family: var(--font-display);
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .ex-table td:first-child { font-weight: 500; }
+    .rest-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .rest-chip svg { width: 10px; height: 10px; }
+
+    .detail-cta { margin-top: 20px; }
+
+    /* Responsive guard */
+    @media (max-width: 1100px) {
+      .week-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    @media (max-width: 800px) {
+      .week-grid { grid-template-columns: repeat(2, 1fr); }
+      .summary-strip { flex-wrap: wrap; }
+      .summary-item { border-right: none; border-bottom: 1px solid var(--border); }
+      .summary-item:last-child { border-bottom: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══ SIDEBAR ═══════════════════════════════════════════════ -->
+  <nav class="sidebar">
+    <div class="sidebar-top">
+      <div class="wordmark">
+        <div class="wordmark-mark"></div>
+        kInorA
+      </div>
+
+      <div class="nav">
+        <!-- Inicio -->
+        <a href="web-dashboard.html" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+          </svg>
+          Inicio
+        </a>
+
+        <!-- Mi plan — ACTIVE -->
+        <a href="web-plan.html" class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+            <path d="M16 2v4M8 2v4M3 10h18"/>
+          </svg>
+          Mi plan
+        </a>
+
+        <!-- Estadísticas -->
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 20h18M7 14v6M12 9v11M17 4v16"/>
+          </svg>
+          Estadísticas
+        </a>
+
+        <!-- Crear plan -->
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 8v8M8 12h8"/>
+          </svg>
+          Crear plan
+        </a>
+
+        <!-- Ejercicios -->
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 4v16M18 4v16M6 12h12M2 7h4M18 7h4M2 17h4M18 17h4"/>
+          </svg>
+          Ejercicios
+        </a>
+      </div>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="avatar">LF</div>
+      <div class="user-info">
+        <div class="user-name">Lucía Fernández</div>
+        <div class="user-plan">Plan Pro</div>
+      </div>
+      <button class="settings-btn" aria-label="Ajustes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ═══ MAIN ═══════════════════════════════════════════════════ -->
+  <main class="main">
+
+    <!-- Topbar -->
+    <div class="topbar">
+      <div class="topbar-title">
+        <h1>Mi plan</h1>
+      </div>
+      <div class="topbar-right">
+        <div class="search-field">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"/>
+            <path d="M21 21l-4.35-4.35"/>
+          </svg>
+          Buscar ejercicio…
+        </div>
+        <button class="btn btn-primary" style="height:40px;padding:0 16px;font-size:14px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;">
+            <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+          Editar plan
+        </button>
+        <button class="notif-btn" aria-label="Notificaciones">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Week selector -->
+    <div class="week-header">
+      <div class="week-nav">
+        <button class="week-nav-btn" aria-label="Semana anterior" id="prevWeek">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <div class="week-label" id="weekLabel">Semana 12 · 8–14 jun</div>
+        <button class="week-nav-btn" aria-label="Semana siguiente" id="nextWeek">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+      </div>
+      <button class="btn btn-ghost" style="font-size:13px;padding:8px 12px;height:36px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;">
+          <rect x="3" y="4" width="18" height="18" rx="2"/>
+          <path d="M16 2v4M8 2v4M3 10h18"/>
+        </svg>
+        Hoy
+      </button>
+    </div>
+
+    <!-- Summary strip -->
+    <div class="summary-strip">
+      <div class="summary-item">
+        <div class="eyebrow">Sesiones planificadas</div>
+        <div class="summary-val num">5</div>
+        <div class="summary-sub">esta semana</div>
+      </div>
+      <div class="summary-item">
+        <div class="eyebrow">Volumen objetivo</div>
+        <div class="summary-val num">22.400 kg</div>
+        <div class="summary-sub">en 5 sesiones</div>
+      </div>
+      <div class="summary-item">
+        <div class="eyebrow">Días de descanso</div>
+        <div class="summary-val num">2</div>
+        <div class="summary-sub">Mié y Dom</div>
+      </div>
+      <div class="summary-item">
+        <div class="eyebrow">Duración estimada</div>
+        <div class="summary-val num">5h 30m</div>
+        <div class="summary-sub">total semanal</div>
+      </div>
+    </div>
+
+    <!-- Day cards grid -->
+    <div class="week-grid" id="weekGrid">
+
+      <!-- Lunes — done -->
+      <div class="day-card" data-day="lun" role="button" tabindex="0" aria-expanded="false">
+        <div class="dc-header">
+          <span class="dc-day-label">Lun 8</span>
+          <div class="dc-check done">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+        </div>
+        <div class="dc-focus">Tren superior</div>
+        <div class="dc-meta">6 ejercicios · 68 min</div>
+      </div>
+
+      <!-- Martes — done -->
+      <div class="day-card" data-day="mar" role="button" tabindex="0" aria-expanded="false">
+        <div class="dc-header">
+          <span class="dc-day-label">Mar 9</span>
+          <div class="dc-check done">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+        </div>
+        <div class="dc-focus">Piernas · Fuerza</div>
+        <div class="dc-meta">5 ejercicios · 70 min</div>
+      </div>
+
+      <!-- Miércoles — descanso -->
+      <div class="day-card rest-day" data-day="mie" role="button" tabindex="0" aria-expanded="false">
+        <div class="dc-header">
+          <span class="dc-day-label">Mié 10</span>
+          <div class="dc-check">
+          </div>
+        </div>
+        <div class="dc-focus rest">Descanso</div>
+        <div class="dc-meta">Recuperación activa</div>
+      </div>
+
+      <!-- Jueves — done -->
+      <div class="day-card" data-day="jue" role="button" tabindex="0" aria-expanded="false">
+        <div class="dc-header">
+          <span class="dc-day-label">Jue 11</span>
+          <div class="dc-check done">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+        </div>
+        <div class="dc-focus">Tren inferior · Hipertrofia</div>
+        <div class="dc-meta">5 ejercicios · 65 min</div>
+      </div>
+
+      <!-- Viernes — HOY, active by default -->
+      <div class="day-card active-day" data-day="vie" role="button" tabindex="0" aria-expanded="true">
+        <div class="dc-header">
+          <span class="dc-day-label today">Vie 12 · Hoy</span>
+          <div class="dc-check"></div>
+        </div>
+        <div class="dc-focus">Tren superior</div>
+        <div class="dc-meta">6 ejercicios · 68 min</div>
+        <div class="dc-today-indicator"></div>
+      </div>
+
+      <!-- Sábado — programado -->
+      <div class="day-card" data-day="sab" role="button" tabindex="0" aria-expanded="false">
+        <div class="dc-header">
+          <span class="dc-day-label">Sáb 13</span>
+          <div class="dc-check"></div>
+        </div>
+        <div class="dc-focus">Cardio · HIIT</div>
+        <div class="dc-meta">4 ejercicios · 40 min</div>
+      </div>
+
+      <!-- Domingo — descanso -->
+      <div class="day-card rest-day" data-day="dom" role="button" tabindex="0" aria-expanded="false">
+        <div class="dc-header">
+          <span class="dc-day-label">Dom 14</span>
+          <div class="dc-check"></div>
+        </div>
+        <div class="dc-focus rest">Descanso</div>
+        <div class="dc-meta">Día libre</div>
+      </div>
+
+    </div>
+
+    <!-- Detail panels (one per non-rest day) -->
+
+    <!-- LUN detail -->
+    <div class="detail-panel" id="detail-lun">
+      <div class="detail-header">
+        <div class="detail-title-block">
+          <div class="eyebrow" style="margin-bottom:4px;">Lunes 8 jun · Completado</div>
+          <h2>Tren superior — Fuerza</h2>
+          <div style="font-size:13px;color:var(--muted);margin-top:4px;">6 ejercicios · 68 min · Descanso 90–120 s</div>
+        </div>
+        <button class="detail-close" data-close="lun" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <table class="ex-table">
+        <thead>
+          <tr>
+            <th>Ejercicio</th>
+            <th>Series</th>
+            <th>Reps</th>
+            <th>Peso</th>
+            <th>Descanso</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Press banca plano</td><td>4</td><td>6</td><td class="num">82,5 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>120 s</span></td></tr>
+          <tr><td>Remo con barra</td><td>4</td><td>8</td><td class="num">65 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>90 s</span></td></tr>
+          <tr><td>Press militar</td><td>3</td><td>8</td><td class="num">42 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>90 s</span></td></tr>
+          <tr><td>Dominadas lastradas</td><td>4</td><td>6</td><td class="num">+10 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>120 s</span></td></tr>
+          <tr><td>Curl de bíceps con barra</td><td>3</td><td>10</td><td class="num">32 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>60 s</span></td></tr>
+          <tr><td>Tríceps en polea alta</td><td>3</td><td>12</td><td class="num">28 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>60 s</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- MAR detail -->
+    <div class="detail-panel" id="detail-mar">
+      <div class="detail-header">
+        <div class="detail-title-block">
+          <div class="eyebrow" style="margin-bottom:4px;">Martes 9 jun · Completado</div>
+          <h2>Piernas — Fuerza</h2>
+          <div style="font-size:13px;color:var(--muted);margin-top:4px;">5 ejercicios · 70 min · Descanso 120–180 s</div>
+        </div>
+        <button class="detail-close" data-close="mar" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <table class="ex-table">
+        <thead>
+          <tr><th>Ejercicio</th><th>Series</th><th>Reps</th><th>Peso</th><th>Descanso</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Sentadilla libre</td><td>4</td><td>5</td><td class="num">90 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>180 s</span></td></tr>
+          <tr><td>Peso muerto rumano</td><td>3</td><td>8</td><td class="num">75 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>120 s</span></td></tr>
+          <tr><td>Prensa de piernas</td><td>4</td><td>10</td><td class="num">120 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>90 s</span></td></tr>
+          <tr><td>Zancadas con mancuernas</td><td>3</td><td>12</td><td class="num">20 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>90 s</span></td></tr>
+          <tr><td>Curl femoral tumbado</td><td>3</td><td>12</td><td class="num">35 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>60 s</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- JUE detail -->
+    <div class="detail-panel" id="detail-jue">
+      <div class="detail-header">
+        <div class="detail-title-block">
+          <div class="eyebrow" style="margin-bottom:4px;">Jueves 11 jun · Completado</div>
+          <h2>Tren inferior — Hipertrofia</h2>
+          <div style="font-size:13px;color:var(--muted);margin-top:4px;">5 ejercicios · 65 min · Descanso 60–90 s</div>
+        </div>
+        <button class="detail-close" data-close="jue" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <table class="ex-table">
+        <thead>
+          <tr><th>Ejercicio</th><th>Series</th><th>Reps</th><th>Peso</th><th>Descanso</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Sentadilla frontal</td><td>4</td><td>8</td><td class="num">70 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>90 s</span></td></tr>
+          <tr><td>Extensión de cuádriceps</td><td>4</td><td>12</td><td class="num">45 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>60 s</span></td></tr>
+          <tr><td>Hip thrust con barra</td><td>4</td><td>10</td><td class="num">80 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>90 s</span></td></tr>
+          <tr><td>Zancadas búlgaras</td><td>3</td><td>10</td><td class="num">25 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>90 s</span></td></tr>
+          <tr><td>Gemelos en máquina</td><td>4</td><td>15</td><td class="num">60 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>45 s</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- VIE detail — today, visible by default -->
+    <div class="detail-panel visible" id="detail-vie">
+      <div class="detail-header">
+        <div class="detail-title-block">
+          <div class="eyebrow" style="margin-bottom:4px;">Viernes 12 jun · Hoy</div>
+          <h2>Tren superior — Fuerza</h2>
+          <div style="font-size:13px;color:var(--muted);margin-top:4px;">6 ejercicios · 68 min · Descanso 90–120 s</div>
+        </div>
+        <button class="detail-close" data-close="vie" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <table class="ex-table">
+        <thead>
+          <tr><th>Ejercicio</th><th>Series</th><th>Reps</th><th>Peso sugerido</th><th>Descanso</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Press banca plano</td><td>4</td><td>6</td><td class="num">82,5 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>120 s</span></td></tr>
+          <tr><td>Remo con barra</td><td>4</td><td>8</td><td class="num">65 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>90 s</span></td></tr>
+          <tr><td>Press militar</td><td>3</td><td>8</td><td class="num">42 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>90 s</span></td></tr>
+          <tr><td>Dominadas lastradas</td><td>4</td><td>6</td><td class="num">+10 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>120 s</span></td></tr>
+          <tr><td>Curl de bíceps con barra</td><td>3</td><td>10</td><td class="num">32 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>60 s</span></td></tr>
+          <tr><td>Tríceps en polea alta</td><td>3</td><td>12</td><td class="num">28 kg</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>60 s</span></td></tr>
+        </tbody>
+      </table>
+      <div class="detail-cta">
+        <button class="btn btn-primary" style="font-size:14px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Empezar sesión de hoy
+        </button>
+      </div>
+    </div>
+
+    <!-- SAB detail -->
+    <div class="detail-panel" id="detail-sab">
+      <div class="detail-header">
+        <div class="detail-title-block">
+          <div class="eyebrow" style="margin-bottom:4px;">Sábado 13 jun · Programado</div>
+          <h2>Cardio — HIIT</h2>
+          <div style="font-size:13px;color:var(--muted);margin-top:4px;">4 ejercicios · 40 min · Descanso 30–60 s</div>
+        </div>
+        <button class="detail-close" data-close="sab" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <table class="ex-table">
+        <thead>
+          <tr><th>Ejercicio</th><th>Rondas</th><th>Trabajo</th><th>Descanso</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Sentadilla con salto</td><td class="num">4</td><td>40 s</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>20 s</span></td><td></td></tr>
+          <tr><td>Burpees</td><td class="num">4</td><td>30 s</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>30 s</span></td><td></td></tr>
+          <tr><td>Zancadas alternas rápidas</td><td class="num">4</td><td>40 s</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>20 s</span></td><td></td></tr>
+          <tr><td>Mountain climbers</td><td class="num">4</td><td>40 s</td><td><span class="rest-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>20 s</span></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  (function() {
+    // Days that have detail panels
+    var detailDays = ['lun', 'mar', 'jue', 'vie', 'sab'];
+    var restDays   = ['mie', 'dom'];
+    var activeDay  = 'vie'; // today open by default
+
+    function openDay(day) {
+      if (restDays.indexOf(day) !== -1) return;
+
+      // Close all panels
+      document.querySelectorAll('.detail-panel').forEach(function(p) {
+        p.classList.remove('visible');
+      });
+
+      // Deactivate all cards
+      document.querySelectorAll('.day-card').forEach(function(c) {
+        c.classList.remove('active-day');
+        c.setAttribute('aria-expanded', 'false');
+      });
+
+      if (activeDay === day) {
+        // Toggle off
+        activeDay = null;
+        return;
+      }
+
+      activeDay = day;
+
+      // Activate card
+      var card = document.querySelector('[data-day="' + day + '"]');
+      if (card) {
+        card.classList.add('active-day');
+        card.setAttribute('aria-expanded', 'true');
+      }
+
+      // Show panel
+      var panel = document.getElementById('detail-' + day);
+      if (panel) {
+        panel.classList.add('visible');
+        // Smooth scroll to panel
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    // Bind day cards
+    document.querySelectorAll('.day-card').forEach(function(card) {
+      var day = card.getAttribute('data-day');
+      card.addEventListener('click', function() { openDay(day); });
+      card.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openDay(day);
+        }
+      });
+    });
+
+    // Bind close buttons
+    document.querySelectorAll('.detail-close').forEach(function(btn) {
+      var day = btn.getAttribute('data-close');
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var panel = document.getElementById('detail-' + day);
+        if (panel) panel.classList.remove('visible');
+        var card = document.querySelector('[data-day="' + day + '"]');
+        if (card) {
+          card.classList.remove('active-day');
+          card.setAttribute('aria-expanded', 'false');
+        }
+        if (activeDay === day) activeDay = null;
+      });
+    });
+
+    // Week nav (cosmetic)
+    var weekNum = 12;
+    var weekLabel = document.getElementById('weekLabel');
+    var weekRanges = ['1–7 jun','8–14 jun','15–21 jun','22–28 jun'];
+    var weekOffset = 0; // 0 = current (sem 12, 8-14 jun)
+
+    function updateWeekLabel() {
+      var idx = Math.max(0, Math.min(3, weekOffset + 1));
+      weekLabel.textContent = 'Semana ' + (weekNum + weekOffset - 1) + ' · ' + weekRanges[idx];
+    }
+
+    document.getElementById('prevWeek').addEventListener('click', function() {
+      weekOffset = Math.max(-1, weekOffset - 1);
+      updateWeekLabel();
+    });
+    document.getElementById('nextWeek').addEventListener('click', function() {
+      weekOffset = Math.min(2, weekOffset + 1);
+      updateWeekLabel();
+    });
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,939 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=390, initial-scale=1.0">
+  <title>kInorA — Tracker de sesión</title>
+  <style>
+/* ============================================================
+   kInorA — shared design system
+   Reconstructed from v0 chat `kinora-eOTftpCTxTX` (see DESIGN.md)
+   Dark-only · near-black canvas · single lime accent
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
+:root {
+  /* surfaces */
+  --bg:        oklch(5% 0.006 270);
+  --surface:   oklch(11% 0.006 270);
+  --surface-2: oklch(15% 0.006 270);
+  --border:    oklch(24% 0.006 270);
+  --fg:        oklch(96% 0.002 270);
+  --muted:     oklch(66% 0.006 270);
+
+  /* brand accent (lime) */
+  --accent:    oklch(89% 0.20 128);
+  --accent-fg: oklch(5% 0.006 270);
+  --accent-dim: oklch(89% 0.20 128 / 0.12);
+
+  /* states */
+  --success: oklch(89% 0.20 128);
+  --warning: oklch(84% 0.14 90);
+  --danger:  oklch(68% 0.19 25);
+  --info:    oklch(72% 0.13 250);
+
+  /* type */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body:    'DM Sans', -apple-system, system-ui, sans-serif;
+
+  /* radii */
+  --r-card: 18px;
+  --r-btn: 12px;
+  --r-pill: 999px;
+
+  /* rhythm */
+  --sp-1: 8px;  --sp-2: 12px; --sp-3: 16px;
+  --sp-4: 24px; --sp-5: 32px; --sp-6: 48px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-weight: 600;
+}
+
+.num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.accent { color: var(--accent); }
+
+a { color: inherit; text-decoration: none; }
+
+/* ---- primitives ---- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: var(--sp-4);
+}
+.card-2 { background: var(--surface-2); }
+
+.btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 15px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  border-radius: var(--r-btn);
+  padding: 12px 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background .15s, border-color .15s, transform .05s;
+}
+.btn:hover { background: var(--border); }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.btn-primary:hover { filter: brightness(1.05); background: var(--accent); }
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--surface-2); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.pill-active {
+  background: var(--accent-dim);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 6px 12px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.divider { height: 1px; background: var(--border); border: 0; }
+
+.progress-track {
+  height: 8px; border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.progress-fill { height: 100%; background: var(--accent); border-radius: 999px; }
+
+::selection { background: var(--accent); color: var(--accent-fg); }
+
+/* thin scrollbars on dark */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+</style>
+  <style>
+    html, body {
+      width: 390px;
+      min-height: 844px;
+      margin: 0 auto;
+      overflow-x: hidden;
+    }
+
+    .screen {
+      width: 390px;
+      min-height: 844px;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      padding-bottom: 32px;
+    }
+
+    /* ── Session header ── */
+    .session-header {
+      padding: 16px 20px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .session-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .session-title {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--fg);
+      line-height: 1.1;
+    }
+    .session-subtitle {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .session-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .elapsed-timer {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+    .elapsed-label {
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .elapsed-value {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--fg);
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+    .pause-btn {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .pause-btn:active { transform: scale(0.96); }
+
+    /* ── Progress bar area ── */
+    .progress-area {
+      padding: 16px 20px 0;
+    }
+    .progress-info {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .progress-info-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--fg);
+    }
+    .progress-info-count {
+      font-size: 13px;
+      color: var(--muted);
+      font-family: var(--font-display);
+      font-variant-numeric: tabular-nums;
+    }
+    /* Segmented progress */
+    .seg-bar {
+      display: flex;
+      gap: 4px;
+      height: 5px;
+    }
+    .seg {
+      flex: 1;
+      border-radius: 999px;
+      background: var(--surface-2);
+    }
+    .seg.done { background: var(--accent); }
+    .seg.active { background: oklch(89% 0.20 128 / 0.45); }
+
+    /* ── Divider ── */
+    .spacer { height: 16px; }
+
+    /* ── Current exercise card ── */
+    .exercise-card {
+      margin: 0 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    /* Subtle lime top edge accent */
+    .exercise-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--accent);
+      border-radius: 20px 20px 0 0;
+    }
+
+    .excard-eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .excard-name {
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--fg);
+      line-height: 1.05;
+      margin-bottom: 4px;
+    }
+    .excard-set-info {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+
+    /* Steppers row */
+    .steppers-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .stepper-group {
+      flex: 1;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .stepper-label {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+      text-align: center;
+    }
+    .stepper-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+    }
+    .step-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      font-size: 20px;
+      font-weight: 300;
+      transition: background .1s, transform .05s;
+    }
+    .step-btn:hover { background: var(--border); }
+    .step-btn:active { transform: scale(0.93); }
+    .step-value {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--fg);
+      letter-spacing: -0.02em;
+      text-align: center;
+      flex: 1;
+      line-height: 1;
+    }
+    .step-unit {
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+      font-weight: 500;
+      font-family: var(--font-body);
+      letter-spacing: 0;
+    }
+
+    /* Complete button */
+    .btn-complete {
+      width: 100%;
+      height: 54px;
+      background: var(--accent);
+      color: var(--accent-fg);
+      border: none;
+      border-radius: 14px;
+      font-family: var(--font-body);
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: filter .15s, transform .05s;
+    }
+    .btn-complete:hover { filter: brightness(1.06); }
+    .btn-complete:active { transform: scale(0.98); }
+
+    /* ── REST TIMER overlay card ── */
+    .rest-timer-card {
+      margin: 12px 16px 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 20px;
+      display: none; /* shown via JS when rest starts */
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      position: relative;
+    }
+    .rest-timer-card.visible {
+      display: flex;
+    }
+    .rest-header-row {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .rest-heading {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--fg);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .rest-heading-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--warning);
+      animation: pulse-dot 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.5; transform: scale(0.7); }
+    }
+    .rest-skip-btn {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 8px;
+      transition: background .1s;
+    }
+    .rest-skip-btn:hover { background: var(--surface-2); }
+
+    /* SVG ring */
+    .ring-wrap {
+      position: relative;
+      width: 130px;
+      height: 130px;
+      flex-shrink: 0;
+    }
+    .ring-wrap svg {
+      transform: rotate(-90deg);
+    }
+    .ring-center {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+    }
+    .ring-time {
+      font-family: var(--font-display);
+      font-size: 32px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--warning);
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+    .ring-label-sm {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .rest-actions {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+    }
+    .btn-add-time {
+      flex: 1;
+      height: 44px;
+      background: oklch(84% 0.14 90 / 0.12);
+      border: 1px solid oklch(84% 0.14 90 / 0.25);
+      border-radius: 12px;
+      color: var(--warning);
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .1s;
+    }
+    .btn-add-time:hover { background: oklch(84% 0.14 90 / 0.18); }
+    .btn-skip {
+      flex: 1;
+      height: 44px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .1s;
+    }
+    .btn-skip:hover { background: var(--border); }
+
+    /* ── Rest timer shown = exercise card compacted ── */
+    .screen.resting .exercise-card .btn-complete {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    /* ── Siguiente preview ── */
+    .next-preview {
+      margin: 12px 16px 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      opacity: 0.6;
+    }
+    .next-thumb {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .next-info {
+      flex: 1;
+    }
+    .next-eyebrow {
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+    .next-name {
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--fg);
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+    .next-detail {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .next-arrow {
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    /* ── Finish session row ── */
+    .finish-row {
+      margin: 12px 16px 0;
+      display: flex;
+      justify-content: center;
+    }
+    .btn-finish {
+      background: none;
+      border: 1px solid oklch(68% 0.19 25 / 0.4);
+      border-radius: 10px;
+      color: var(--danger);
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 10px 24px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background .1s;
+    }
+    .btn-finish:hover { background: oklch(68% 0.19 25 / 0.08); }
+
+  </style>
+</head>
+<body>
+<div class="screen" id="mainScreen">
+
+  <!-- SESSION HEADER -->
+  <div class="session-header" role="banner">
+    <div class="session-meta">
+      <p class="session-subtitle">Sesión activa</p>
+      <h1 class="session-title">Tren superior</h1>
+    </div>
+    <div class="session-right">
+      <div class="elapsed-timer" aria-live="polite" aria-label="Tiempo de sesión transcurrido">
+        <span class="elapsed-label">Tiempo</span>
+        <span class="elapsed-value num" id="elapsedDisplay">23:47</span>
+      </div>
+      <button class="pause-btn" id="pauseBtn" aria-label="Pausar sesión">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <rect x="3" y="2" width="4" height="12" rx="1.5" fill="currentColor" stroke="none"/>
+          <rect x="9" y="2" width="4" height="12" rx="1.5" fill="currentColor" stroke="none"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- PROGRESS -->
+  <div class="progress-area" role="region" aria-label="Progreso de la sesión">
+    <div class="progress-info">
+      <span class="progress-info-label">Ejercicio 3 de 6</span>
+      <span class="progress-info-count num">50%</span>
+    </div>
+    <div class="seg-bar" role="progressbar" aria-valuenow="3" aria-valuemin="0" aria-valuemax="6" aria-label="3 de 6 ejercicios completados">
+      <div class="seg done"></div>
+      <div class="seg done"></div>
+      <div class="seg active"></div>
+      <div class="seg"></div>
+      <div class="seg"></div>
+      <div class="seg"></div>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <!-- CURRENT EXERCISE CARD -->
+  <div class="exercise-card" id="exerciseCard" role="region" aria-label="Ejercicio actual">
+    <p class="excard-eyebrow">Ejercicio actual</p>
+    <h2 class="excard-name">Press de banca</h2>
+    <p class="excard-set-info" id="setInfo">Serie <span class="num" id="currentSetLabel">3</span> de 4 &nbsp;·&nbsp; Objetivo: 45 kg × 8 reps</p>
+
+    <!-- Steppers -->
+    <div class="steppers-row" role="group" aria-label="Ajustar carga y repeticiones">
+      <!-- Peso -->
+      <div class="stepper-group" aria-label="Carga en kg">
+        <span class="stepper-label">Carga</span>
+        <div class="stepper-controls">
+          <button class="step-btn" id="weightDown" aria-label="Reducir carga 2.5 kg">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="8" x2="13" y2="8"/></svg>
+          </button>
+          <div>
+            <div class="step-value num" id="weightVal">45</div>
+            <div class="step-unit">kg</div>
+          </div>
+          <button class="step-btn" id="weightUp" aria-label="Aumentar carga 2.5 kg">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
+          </button>
+        </div>
+      </div>
+      <!-- Reps -->
+      <div class="stepper-group" aria-label="Repeticiones">
+        <span class="stepper-label">Reps</span>
+        <div class="stepper-controls">
+          <button class="step-btn" id="repsDown" aria-label="Reducir repetición">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="8" x2="13" y2="8"/></svg>
+          </button>
+          <div>
+            <div class="step-value num" id="repsVal">8</div>
+            <div class="step-unit">reps</div>
+          </div>
+          <button class="step-btn" id="repsUp" aria-label="Aumentar repetición">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Complete button -->
+    <button class="btn-complete" id="completeBtn" aria-label="Completar serie 3">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="3,9 7.5,13.5 15,4"/>
+      </svg>
+      Completar serie
+    </button>
+  </div>
+
+  <!-- REST TIMER CARD (hidden until serie completada) -->
+  <div class="rest-timer-card" id="restCard" role="region" aria-label="Temporizador de descanso" aria-live="polite">
+    <div class="rest-header-row">
+      <span class="rest-heading">
+        <span class="rest-heading-dot" aria-hidden="true"></span>
+        Descanso activo
+      </span>
+      <button class="rest-skip-btn" id="skipBtnTop" aria-label="Saltar descanso">Saltar</button>
+    </div>
+
+    <!-- Ring countdown -->
+    <div class="ring-wrap" aria-hidden="true">
+      <svg width="130" height="130" viewBox="0 0 130 130">
+        <!-- Track -->
+        <circle cx="65" cy="65" r="55" fill="none" stroke="var(--surface-2)" stroke-width="8"/>
+        <!-- Progress ring -->
+        <circle
+          cx="65" cy="65" r="55"
+          fill="none"
+          stroke="var(--warning)"
+          stroke-width="8"
+          stroke-linecap="round"
+          stroke-dasharray="345.4"
+          stroke-dashoffset="0"
+          id="ringProgress"
+        />
+      </svg>
+      <div class="ring-center">
+        <span class="ring-time num" id="restDisplay">1:30</span>
+        <span class="ring-label-sm">descanso</span>
+      </div>
+    </div>
+
+    <div class="rest-actions">
+      <button class="btn-add-time" id="addTimeBtn" aria-label="Agregar 15 segundos">
+        +15 s
+      </button>
+      <button class="btn-skip" id="skipBtnBottom" aria-label="Saltar descanso">
+        Saltar descanso
+      </button>
+    </div>
+  </div>
+
+  <!-- SIGUIENTE EXERCISE PREVIEW -->
+  <div class="next-preview" id="nextPreview" role="region" aria-label="Siguiente ejercicio">
+    <div class="next-thumb" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="7" r="3"/>
+        <path d="M5 19c0-3.3 2.7-6 6-6s6 2.7 6 6"/>
+        <line x1="3" y1="11" x2="7" y2="9"/>
+        <line x1="19" y1="11" x2="15" y2="9"/>
+      </svg>
+    </div>
+    <div class="next-info">
+      <p class="next-eyebrow">A continuación</p>
+      <p class="next-name">Aperturas con mancuerna</p>
+      <p class="next-detail">3 series &nbsp;·&nbsp; 14 kg × 12 reps</p>
+    </div>
+    <div class="next-arrow" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="7,4 13,9 7,14"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- FINISH ROW -->
+  <div class="finish-row">
+    <button class="btn-finish" aria-label="Finalizar sesión de entrenamiento">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="2" y="2" width="11" height="11" rx="2"/>
+      </svg>
+      Finalizar sesión
+    </button>
+  </div>
+
+</div><!-- /screen -->
+
+<script>
+(function () {
+  'use strict';
+
+  /* ── Elapsed session timer ── */
+  var elapsedSeconds = 23 * 60 + 47;
+  var sessionPaused = false;
+  var elapsedDisplay = document.getElementById('elapsedDisplay');
+  var pauseBtn = document.getElementById('pauseBtn');
+
+  function formatMMSS(s) {
+    var m = Math.floor(s / 60);
+    var sec = s % 60;
+    return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+  }
+
+  var elapsedInterval = setInterval(function () {
+    if (!sessionPaused) {
+      elapsedSeconds++;
+      elapsedDisplay.textContent = formatMMSS(elapsedSeconds);
+    }
+  }, 1000);
+
+  pauseBtn.addEventListener('click', function () {
+    sessionPaused = !sessionPaused;
+    pauseBtn.setAttribute('aria-label', sessionPaused ? 'Reanudar sesión' : 'Pausar sesión');
+    pauseBtn.innerHTML = sessionPaused
+      ? '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="3,2 14,8 3,14" fill="currentColor" stroke="none"/></svg>'
+      : '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="2" width="4" height="12" rx="1.5" fill="currentColor" stroke="none"/><rect x="9" y="2" width="4" height="12" rx="1.5" fill="currentColor" stroke="none"/></svg>';
+  });
+
+  /* ── Steppers ── */
+  var weight = 45;
+  var reps = 8;
+  var weightDisplay = document.getElementById('weightVal');
+  var repsDisplay = document.getElementById('repsVal');
+
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+  document.getElementById('weightDown').addEventListener('click', function () {
+    weight = clamp(+(weight - 2.5).toFixed(1), 0, 300);
+    weightDisplay.textContent = weight % 1 === 0 ? weight : weight.toFixed(1);
+  });
+  document.getElementById('weightUp').addEventListener('click', function () {
+    weight = clamp(+(weight + 2.5).toFixed(1), 0, 300);
+    weightDisplay.textContent = weight % 1 === 0 ? weight : weight.toFixed(1);
+  });
+  document.getElementById('repsDown').addEventListener('click', function () {
+    reps = clamp(reps - 1, 1, 99);
+    repsDisplay.textContent = reps;
+  });
+  document.getElementById('repsUp').addEventListener('click', function () {
+    reps = clamp(reps + 1, 1, 99);
+    repsDisplay.textContent = reps;
+  });
+
+  /* ── Rest timer ── */
+  var REST_DURATION = 90; // seconds
+  var restRemaining = REST_DURATION;
+  var restInterval = null;
+  var CIRCUMFERENCE = 2 * Math.PI * 55; // ≈ 345.4
+
+  var restCard = document.getElementById('restCard');
+  var restDisplay = document.getElementById('restDisplay');
+  var ringProgress = document.getElementById('ringProgress');
+  var completeBtn = document.getElementById('completeBtn');
+  var currentSetLabel = document.getElementById('currentSetLabel');
+  var setInfo = document.getElementById('setInfo');
+  var currentSet = 3;
+
+  function formatRestTime(s) {
+    var m = Math.floor(s / 60);
+    var sec = s % 60;
+    return m + ':' + String(sec).padStart(2, '0');
+  }
+
+  function updateRing(remaining) {
+    var fraction = remaining / REST_DURATION;
+    var offset = CIRCUMFERENCE * (1 - fraction);
+    ringProgress.style.strokeDashoffset = offset.toFixed(2);
+    // Transition from amber to accent (lime) in last 15s
+    ringProgress.style.stroke = remaining <= 15 ? 'var(--accent)' : 'var(--warning)';
+  }
+
+  function stopRest() {
+    clearInterval(restInterval);
+    restInterval = null;
+    restCard.classList.remove('visible');
+    restRemaining = REST_DURATION;
+    restDisplay.textContent = formatRestTime(restRemaining);
+    updateRing(restRemaining);
+    // Advance set display
+    if (currentSet < 4) {
+      currentSet++;
+      currentSetLabel.textContent = currentSet;
+      setInfo.innerHTML = 'Serie <span class="num" id="currentSetLabel">' + currentSet + '</span> de 4 &nbsp;·&nbsp; Objetivo: 45 kg \xd7 8 reps';
+      completeBtn.setAttribute('aria-label', 'Completar serie ' + currentSet);
+    }
+    completeBtn.style.opacity = '';
+    completeBtn.style.pointerEvents = '';
+  }
+
+  function startRest() {
+    if (restInterval) return;
+    restRemaining = REST_DURATION;
+    restDisplay.textContent = formatRestTime(restRemaining);
+    updateRing(restRemaining);
+    restCard.classList.add('visible');
+    // Dim complete button during rest
+    completeBtn.style.opacity = '0.35';
+    completeBtn.style.pointerEvents = 'none';
+    restInterval = setInterval(function () {
+      restRemaining--;
+      restDisplay.textContent = formatRestTime(restRemaining);
+      updateRing(restRemaining);
+      if (restRemaining <= 0) {
+        stopRest();
+      }
+    }, 1000);
+  }
+
+  completeBtn.addEventListener('click', function () {
+    startRest();
+  });
+
+  document.getElementById('addTimeBtn').addEventListener('click', function () {
+    if (!restInterval) return;
+    restRemaining = Math.min(restRemaining + 15, 599);
+    restDisplay.textContent = formatRestTime(restRemaining);
+    updateRing(restRemaining);
+  });
+
+  function handleSkip() {
+    if (restInterval) {
+      stopRest();
+    }
+  }
+
+  document.getElementById('skipBtnTop').addEventListener('click', handleSkip);
+  document.getElementById('skipBtnBottom').addEventListener('click', handleSkip);
+
+  // Init ring at full
+  updateRing(REST_DURATION);
+
+})();
+</script>
+</body>
+</html>
