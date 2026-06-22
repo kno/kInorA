@@ -152,4 +152,38 @@ describe("provisionTenantForUser", () => {
     const keys = Object.keys(result);
     expect(keys).toEqual(["tenantId", "userId", "membershipId"]);
   });
+
+  it.each([
+    [1, /Failed to create tenant/i],
+    [2, /Failed to create user/i],
+    [3, /Failed to create membership/i],
+  ])("fails when insert step %i returns no rows", async (emptyStep, expectedError) => {
+    const callOrder: string[] = [];
+    const mockTx = {
+      insert: vi.fn().mockImplementation(() => ({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockImplementation(() => {
+            callOrder.push("insert-called");
+
+            if (callOrder.length === emptyStep) {
+              return Promise.resolve([]);
+            }
+
+            return Promise.resolve([{ id: `id-${callOrder.length}` }]);
+          }),
+        }),
+      })),
+    };
+
+    const mockDb = {
+      transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(mockTx)),
+    } as unknown as Parameters<typeof provisionTenantForUser>[0];
+
+    await expect(
+      provisionTenantForUser(mockDb, {
+        tenantName: "Test Corp",
+        userEmail: "test@example.com",
+      })
+    ).rejects.toThrow(expectedError);
+  });
 });
