@@ -74,3 +74,77 @@ export const memberships = pgTable(
     ),
   })
 );
+
+/**
+ * Credentials — password hashes for email/password auth users.
+ * One credential row per user (unique on userId).
+ * `passwordHash` stores a salted scrypt hash as `<saltHex>:<hashHex>`.
+ */
+export const credentials = pgTable(
+  "credentials",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    passwordHash: text("password_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    userIdUnique: uniqueIndex("credentials_user_id_unique").on(table.userId),
+  })
+);
+
+/**
+ * OAuth Accounts — links an external OIDC provider to a kInorA user.
+ * `userId` is nullable: a row may exist (by verified email) before it is
+ * linked to a user. Race-safe linking relies on the two unique indexes.
+ */
+export const oauth_accounts = pgTable(
+  "oauth_accounts",
+  {
+    providerId: text("provider_id").notNull(),
+    providerAccountId: text("provider_account_id").notNull(),
+    email: text("email").notNull(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    providerAccountUnique: uniqueIndex(
+      "oauth_accounts_provider_id_provider_account_id_unique"
+    ).on(table.providerId, table.providerAccountId),
+    providerEmailUnique: uniqueIndex("oauth_accounts_provider_id_email_unique").on(
+      table.providerId,
+      table.email
+    ),
+  })
+);
+
+/**
+ * Sessions — opaque DB-backed bearer tokens.
+ * The token sent to the client is never stored; only its scrypt hash is.
+ * `tokenHash` is unique and used for lookup. `tenantId` records the tenant
+ * the session was issued for; membership status is validated per request.
+ */
+export const sessions = pgTable(
+  "sessions",
+  {
+    tokenHash: text("token_hash").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    tokenHashUnique: uniqueIndex("sessions_token_hash_unique").on(table.tokenHash),
+  })
+);
