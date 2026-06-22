@@ -59,6 +59,8 @@ Use the project name or id when querying MCP tools. Prefer `get_artifact` for a 
 
 ## Brand contract
 
+The Open Design brand exploration contains three proposals: `Kinetic K`, `Orbit`, and `Ascend`. The selected brand direction for this repository is **Orbit**. Future UI and brand asset work must use Orbit as the canonical direction unless a later accepted SDD decision changes it.
+
 | Token | Value | Usage |
 |---|---|---|
 | `--bg` | `#09090C` / `oklch(5% 0.006 270)` | App background; dark-only canvas |
