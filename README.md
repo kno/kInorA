@@ -223,8 +223,8 @@ kinora/
 
 ## Roadmap
 
-- **v1** — MVP: card mode, AI plan generation, tracker, Free/Pro tiers
-- **v1.1** — Conversational mode with voice, dynamic plan adaptation
+- **v1** — MVP: Orbit UI shell, card mode, AI plan generation, tracker, progress surfaces, Free/Pro tiers
+- **v1.1** — Conversational create-plan flow with voice assistant, dynamic plan adaptation
 - **v2** — Trainer tier: client management, branded plans
 - **v3** — B2B Gyms: white label, multi-tenant integration
 
@@ -242,6 +242,7 @@ Mandatory principles throughout execution:
 - **Security by design**: validation at boundaries, tenant isolation, and fail-secure by default.
 - **Strict TDD**: RED → GREEN → Triangle for edge cases.
 - Mobile support from v1: **PWA/mobile-first + Capacitor preparation**.
+- UI work uses the local Open Design snapshot in `docs/open-design/kinora/` and the selected **Orbit** brand direction.
 - Physical limitations generate **warnings and suggested substitutions**, never medical diagnosis or clinical blocking.
 
 ### v1 — Launchable MVP
@@ -257,10 +258,12 @@ Mandatory principles throughout execution:
 | 05a | `05a-v1-auth-core` | Auth.js, email/password, OAuth, and account linking. |
 | 05b | `05b-v1-security-tenant-validation` | Tenant isolation, authorization, and input validation. |
 | 06 | `06-v1-mobile-foundation` | PWA, responsive baseline, and Capacitor shell. |
-| 07 | `07-v1-plan-wizard` | Visual card wizard that produces `PlanSpec`. |
+| 06b | `06b-v1-orbit-ui-shell` | Apply the Orbit design system, landing page, responsive shell, navigation, and non-functional screen scaffolds from Open Design. |
+| 07 | `07-v1-plan-wizard` | Card-based create-plan screens that produce `PlanSpec`. |
 | 08 | `08-v1-ai-plan-generation` | AI plan generation with safe substitutions. |
-| 09a | `09a-v1-workout-tracking-core` | Online session, set, RPE, and notes logging. |
+| 09a | `09a-v1-workout-tracking-core` | Live workout/session tracker and exercise execution surfaces. |
 | 09b | `09b-v1-workout-offline-history` | Offline-first, sync, and workout history. |
+| 09c | `09c-v1-progress-dashboard-stats` | Dashboard, statistics, weekly progress overview, and exercise detail progress backed by workout/history data. |
 | 10a | `10a-v1-user-memory-structured` | Editable structured memory: profile, preferences, and training data. |
 | 10b | `10b-v1-user-memory-vector` | Conversational memory with embeddings/vector store. |
 | 11a | `11a-v1-billing-plans-tiers` | Free/Pro, 30-day trial, and feature gating. |
@@ -270,8 +273,8 @@ Mandatory principles throughout execution:
 
 | Order | Spec | Goal |
 |------:|------|------|
-| 12 | `12-v1.1-interactive-text-chat` | Text chat that extracts and confirms `PlanSpec`. |
-| 13 | `13-v1.1-interactive-voice-chat` | Voice with Whisper STT and OpenAI TTS. |
+| 12 | `12-v1.1-interactive-text-chat` | Conversational create-plan screens that extract and confirm `PlanSpec`. |
+| 13 | `13-v1.1-interactive-voice-chat` | Voice assistant screens with Whisper STT and OpenAI TTS. |
 | 14a | `14a-v1.1-adaptation-adherence` | Adaptation based on actual user adherence. |
 | 14b | `14b-v1.1-adaptation-rpe-feedback` | Adaptation based on RPE, feedback, and perceived intensity. |
 

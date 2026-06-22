@@ -2,7 +2,9 @@
 
 ## Purpose
 
-Provide a card-based wizard UI that guides the user through defining a workout plan and produces a shared `PlanSpec` data structure consumed by other capabilities.
+Provide card-based create-plan screens that guide the user through defining a workout plan and produce a shared `PlanSpec` data structure consumed by other capabilities.
+
+The card-mode flow is the v1 create-plan scope. Conversational create-plan and voice-assistant screens are delivered by v1.1 specs.
 
 ## Requirements
 
@@ -21,6 +23,16 @@ The wizard MUST present sequential steps (goal, frequency, duration, equipment, 
 - GIVEN a user on step 4 (equipment)
 - WHEN they click "Back" to step 3 (duration)
 - THEN previously entered values for steps 1-3 are preserved
+
+### Requirement: Card-Based Open Design Alignment
+
+The create-plan screens MUST follow the card-based interaction model from the local Open Design snapshot while preserving the canonical `PlanSpec` output.
+
+#### Scenario: Create-plan screen presents card choices
+
+- GIVEN a user opens the v1 create-plan flow
+- WHEN a step renders
+- THEN the primary choices are presented as selectable cards rather than conversational prompts
 
 ### Requirement: PlanSpec Output
 
