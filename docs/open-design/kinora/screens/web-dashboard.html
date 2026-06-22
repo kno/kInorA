@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>kInorA — Inicio</title>
+  <style>
+/* ============================================================
+   kInorA — shared design system
+   Reconstructed from v0 chat `kinora-eOTftpCTxTX` (see DESIGN.md)
+   Dark-only · near-black canvas · single lime accent
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
+:root {
+  /* surfaces */
+  --bg:        oklch(5% 0.006 270);
+  --surface:   oklch(11% 0.006 270);
+  --surface-2: oklch(15% 0.006 270);
+  --border:    oklch(24% 0.006 270);
+  --fg:        oklch(96% 0.002 270);
+  --muted:     oklch(66% 0.006 270);
+
+  /* brand accent (lime) */
+  --accent:    oklch(89% 0.20 128);
+  --accent-fg: oklch(5% 0.006 270);
+  --accent-dim: oklch(89% 0.20 128 / 0.12);
+
+  /* states */
+  --success: oklch(89% 0.20 128);
+  --warning: oklch(84% 0.14 90);
+  --danger:  oklch(68% 0.19 25);
+  --info:    oklch(72% 0.13 250);
+
+  /* type */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body:    'DM Sans', -apple-system, system-ui, sans-serif;
+
+  /* radii */
+  --r-card: 18px;
+  --r-btn: 12px;
+  --r-pill: 999px;
+
+  /* rhythm */
+  --sp-1: 8px;  --sp-2: 12px; --sp-3: 16px;
+  --sp-4: 24px; --sp-5: 32px; --sp-6: 48px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-weight: 600;
+}
+
+.num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.accent { color: var(--accent); }
+
+a { color: inherit; text-decoration: none; }
+
+/* ---- primitives ---- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: var(--sp-4);
+}
+.card-2 { background: var(--surface-2); }
+
+.btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 15px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  border-radius: var(--r-btn);
+  padding: 12px 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background .15s, border-color .15s, transform .05s;
+}
+.btn:hover { background: var(--border); }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.btn-primary:hover { filter: brightness(1.05); background: var(--accent); }
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--surface-2); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.pill-active {
+  background: var(--accent-dim);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 6px 12px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.divider { height: 1px; background: var(--border); border: 0; }
+
+.progress-track {
+  height: 8px; border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.progress-fill { height: 100%; background: var(--accent); border-radius: 999px; }
+
+::selection { background: var(--accent); color: var(--accent-fg); }
+
+/* thin scrollbars on dark */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+</style>
+  <style>
+    /* ── Layout shell ────────────────────────────────────────── */
+    .app { display: flex; min-height: 100vh; }
+
+    /* ── Sidebar ─────────────────────────────────────────────── */
+    .sidebar {
+      position: fixed; inset: 0 auto 0 0;
+      width: 248px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      z-index: 100;
+    }
+
+    .sidebar-top { padding: 24px 20px 20px; }
+
+    .wordmark {
+      display: flex; align-items: center; gap: 9px;
+      font-family: var(--font-display);
+      font-size: 19px; font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--fg);
+      margin-bottom: 28px;
+    }
+    .wordmark-mark {
+      width: 22px; height: 22px;
+      background: var(--accent);
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+
+    .nav { display: flex; flex-direction: column; gap: 2px; }
+
+    .nav-item {
+      position: relative;
+      display: flex; align-items: center; gap: 12px;
+      height: 44px; padding: 0 14px;
+      border-radius: 10px;
+      font-size: 14px; font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background .12s, color .12s;
+      text-decoration: none;
+    }
+    .nav-item:hover { background: var(--surface-2); color: var(--fg); }
+    .nav-item.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+    .nav-item.active::before {
+      content: '';
+      position: absolute; left: 0; top: 8px; bottom: 8px;
+      width: 3px; background: var(--accent);
+      border-radius: 0 3px 3px 0;
+    }
+    .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+    .sidebar-bottom {
+      margin-top: auto;
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display); font-size: 13px; font-weight: 600;
+      color: var(--fg); flex-shrink: 0;
+    }
+    .user-info { flex: 1; min-width: 0; }
+    .user-name {
+      font-size: 13px; font-weight: 600;
+      color: var(--fg);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .user-plan { font-size: 11px; color: var(--accent); font-weight: 500; }
+    .settings-btn {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: transparent; border: none;
+      color: var(--muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .12s, color .12s;
+      flex-shrink: 0;
+    }
+    .settings-btn:hover { background: var(--surface-2); color: var(--fg); }
+    .settings-btn svg { width: 16px; height: 16px; }
+
+    /* ── Main area ───────────────────────────────────────────── */
+    .main {
+      margin-left: 248px;
+      flex: 1;
+      min-height: 100vh;
+      padding: 32px;
+      max-width: calc(1200px + 248px);
+    }
+
+    /* ── Topbar ──────────────────────────────────────────────── */
+    .topbar {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 32px;
+    }
+    .topbar-title { flex: 1; }
+    .topbar-title h1 { font-size: 28px; }
+    .topbar-right { display: flex; align-items: center; gap: 10px; }
+    .search-field {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 8px 14px;
+      font-size: 14px; color: var(--muted);
+      cursor: text;
+    }
+    .search-field svg { width: 15px; height: 15px; flex-shrink: 0; }
+    .notif-btn {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .12s, color .12s; position: relative;
+    }
+    .notif-btn:hover { background: var(--surface-2); color: var(--fg); }
+    .notif-btn svg { width: 18px; height: 18px; }
+    .notif-dot {
+      position: absolute; top: 8px; right: 8px;
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--surface);
+    }
+
+    /* ── Greeting ────────────────────────────────────────────── */
+    .greeting-block { margin-bottom: 28px; }
+    .greeting-block h1 {
+      font-size: 32px; font-weight: 700; line-height: 1.1;
+      margin-bottom: 4px;
+    }
+    .greeting-meta {
+      display: flex; align-items: center; gap: 16px;
+      color: var(--muted); font-size: 14px; margin-bottom: 10px;
+    }
+    .greeting-meta .sep { color: var(--border); }
+    .ai-coach-line {
+      font-size: 14px; color: var(--muted);
+      border-left: 2px solid var(--accent);
+      padding-left: 12px;
+    }
+
+    /* ── Grid layouts ─────────────────────────────────────────── */
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 20px;
+      margin-bottom: 22px;
+    }
+    .bottom-row {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 20px;
+    }
+
+    /* ── Metric card ─────────────────────────────────────────── */
+    .metric-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      padding: 20px;
+    }
+    .metric-card .eyebrow { margin-bottom: 10px; }
+    .metric-value {
+      font-family: var(--font-display);
+      font-size: 34px; font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+    .metric-value.lime { color: var(--accent); }
+    .metric-sub { font-size: 13px; color: var(--muted); }
+    .metric-progress { margin-top: 12px; }
+
+    /* Streak card specifics */
+    .streak-flame {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; font-weight: 500; color: var(--accent);
+      background: var(--accent-dim);
+      border-radius: 999px; padding: 4px 10px;
+      margin-bottom: 8px;
+    }
+    .streak-flame svg { width: 13px; height: 13px; }
+
+    /* ── Today's workout card ────────────────────────────────── */
+    .workout-card-header {
+      display: flex; align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .workout-card-header h2 { font-size: 18px; font-weight: 600; }
+    .exercise-list { display: flex; flex-direction: column; gap: 0; }
+    .exercise-row {
+      display: flex; align-items: center; gap: 14px;
+      padding: 13px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .exercise-row:last-child { border-bottom: none; }
+    .ex-check {
+      width: 22px; height: 22px; border-radius: 6px;
+      border: 1.5px solid var(--border);
+      background: transparent;
+      flex-shrink: 0; cursor: pointer;
+      transition: background .12s, border-color .12s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .ex-check:hover { border-color: var(--muted); }
+    .ex-info { flex: 1; min-width: 0; }
+    .ex-name { font-size: 14px; font-weight: 500; color: var(--fg); }
+    .ex-detail { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .ex-weight {
+      font-family: var(--font-display);
+      font-size: 13px; font-weight: 600;
+      color: var(--fg);
+      white-space: nowrap;
+    }
+
+    /* ── Weekly dots ─────────────────────────────────────────── */
+    .week-dots {
+      display: flex; gap: 8px;
+      margin-top: 16px;
+    }
+    .day-dot-wrap {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; gap: 6px;
+    }
+    .day-dot-label {
+      font-size: 11px; color: var(--muted);
+      font-weight: 500; text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .day-dot {
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 1.5px solid var(--border);
+      background: transparent;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .day-dot.done {
+      background: var(--surface-2);
+      border-color: var(--border);
+    }
+    .day-dot.done svg { width: 14px; height: 14px; color: var(--muted); }
+    .day-dot.today {
+      background: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    .day-dot.rest { opacity: .35; }
+
+    /* ── Mini chart ──────────────────────────────────────────── */
+    .chart-wrap {
+      margin-top: 14px;
+      position: relative;
+    }
+    .chart-label-row {
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--muted);
+      margin-top: 8px;
+    }
+
+    /* ── AI suggestion card ──────────────────────────────────── */
+    .ai-card-header {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 12px;
+    }
+    .ai-icon {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: var(--accent-dim);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .ai-icon svg { width: 14px; height: 14px; color: var(--accent); }
+    .ai-card-title { font-size: 13px; font-weight: 600; }
+    .ai-body { font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+    /* ── Right column stacking ───────────────────────────────── */
+    .right-col { display: flex; flex-direction: column; gap: 20px; }
+
+    /* Responsive guard */
+    @media (max-width: 1100px) {
+      .metrics-row { grid-template-columns: repeat(2, 1fr); }
+      .two-col, .bottom-row { grid-template-columns: 1fr; }
+      .right-col { flex-direction: row; flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══ SIDEBAR ═══════════════════════════════════════════════ -->
+  <nav class="sidebar">
+    <div class="sidebar-top">
+      <div class="wordmark">
+        <div class="wordmark-mark"></div>
+        kInorA
+      </div>
+
+      <div class="nav">
+        <!-- Inicio — ACTIVE -->
+        <a href="web-dashboard.html" class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+          </svg>
+          Inicio
+        </a>
+
+        <!-- Mi plan -->
+        <a href="web-plan.html" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+            <path d="M16 2v4M8 2v4M3 10h18"/>
+          </svg>
+          Mi plan
+        </a>
+
+        <!-- Estadísticas -->
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 20h18M7 14v6M12 9v11M17 4v16"/>
+          </svg>
+          Estadísticas
+        </a>
+
+        <!-- Crear plan -->
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 8v8M8 12h8"/>
+          </svg>
+          Crear plan
+        </a>
+
+        <!-- Ejercicios -->
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 4v16M18 4v16M6 12h12M2 7h4M18 7h4M2 17h4M18 17h4"/>
+          </svg>
+          Ejercicios
+        </a>
+      </div>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="avatar">LF</div>
+      <div class="user-info">
+        <div class="user-name">Lucía Fernández</div>
+        <div class="user-plan">Plan Pro</div>
+      </div>
+      <button class="settings-btn" aria-label="Ajustes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ═══ MAIN ═══════════════════════════════════════════════════ -->
+  <main class="main">
+
+    <!-- Topbar -->
+    <div class="topbar">
+      <div class="topbar-title">
+        <h1>Inicio</h1>
+      </div>
+      <div class="topbar-right">
+        <div class="search-field">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"/>
+            <path d="M21 21l-4.35-4.35"/>
+          </svg>
+          Buscar ejercicio…
+        </div>
+        <button class="btn btn-primary" style="height:40px;padding:0 16px;font-size:14px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Empezar sesión
+        </button>
+        <button class="notif-btn" aria-label="Notificaciones">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          <span class="notif-dot"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Greeting -->
+    <div class="greeting-block">
+      <h1>Hola, Lucía</h1>
+      <div class="greeting-meta">
+        <span>Viernes, 20 de junio de 2025</span>
+        <span class="sep">·</span>
+        <span>Semana 12</span>
+      </div>
+      <div class="ai-coach-line">
+        Hoy toca Tren superior. Te preparé 6 ejercicios, volumen estimado 4.200 kg.
+      </div>
+    </div>
+
+    <!-- Metrics row -->
+    <div class="metrics-row">
+
+      <!-- Racha — lime highlight -->
+      <div class="metric-card">
+        <div class="streak-flame">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z"/>
+            <path d="M12 6c0 3-3 5-3 8h6c0-3-3-5-3-8z"/>
+          </svg>
+          Racha activa
+        </div>
+        <div class="eyebrow">Racha</div>
+        <div class="metric-value lime num">12</div>
+        <div class="metric-sub">días consecutivos</div>
+      </div>
+
+      <!-- Sesiones -->
+      <div class="metric-card">
+        <div class="eyebrow">Sesiones esta semana</div>
+        <div class="metric-value num">4<span style="font-size:18px;color:var(--muted);font-weight:500;">/5</span></div>
+        <div class="metric-sub" style="margin-bottom:10px;">1 sesión restante</div>
+        <div class="progress-track metric-progress">
+          <div class="progress-fill" style="width:80%"></div>
+        </div>
+      </div>
+
+      <!-- Volumen -->
+      <div class="metric-card">
+        <div class="eyebrow">Volumen total</div>
+        <div class="metric-value num">18.340</div>
+        <div class="metric-sub">kg esta semana</div>
+      </div>
+
+      <!-- Tiempo -->
+      <div class="metric-card">
+        <div class="eyebrow">Tiempo entrenado</div>
+        <div class="metric-value num">4<span style="font-size:18px;color:var(--muted);font-weight:400;">h</span> 22<span style="font-size:18px;color:var(--muted);font-weight:400;">m</span></div>
+        <div class="metric-sub">promedio 66 min/sesión</div>
+      </div>
+
+    </div>
+
+    <!-- Two-column: workout + right -->
+    <div class="two-col">
+
+      <!-- Today's workout -->
+      <div class="card">
+        <div class="workout-card-header">
+          <div>
+            <div class="eyebrow" style="margin-bottom:6px;">Entrenamiento de hoy</div>
+            <h2>Tren superior · Fuerza</h2>
+            <div style="font-size:13px;color:var(--muted);margin-top:4px;">6 ejercicios · ~68 min · Descanso 90 s</div>
+          </div>
+        </div>
+
+        <hr class="divider" style="margin-bottom:0;">
+
+        <div class="exercise-list">
+
+          <div class="exercise-row">
+            <div class="ex-check" role="checkbox" aria-checked="false" tabindex="0"></div>
+            <div class="ex-info">
+              <div class="ex-name">Press banca plano</div>
+              <div class="ex-detail">4 series × 6 reps · descanso 120 s</div>
+            </div>
+            <div class="ex-weight num">82,5 kg</div>
+          </div>
+
+          <div class="exercise-row">
+            <div class="ex-check" role="checkbox" aria-checked="false" tabindex="0"></div>
+            <div class="ex-info">
+              <div class="ex-name">Remo con barra</div>
+              <div class="ex-detail">4 series × 8 reps · descanso 90 s</div>
+            </div>
+            <div class="ex-weight num">65 kg</div>
+          </div>
+
+          <div class="exercise-row">
+            <div class="ex-check" role="checkbox" aria-checked="false" tabindex="0"></div>
+            <div class="ex-info">
+              <div class="ex-name">Press militar</div>
+              <div class="ex-detail">3 series × 8 reps · descanso 90 s</div>
+            </div>
+            <div class="ex-weight num">42 kg</div>
+          </div>
+
+          <div class="exercise-row">
+            <div class="ex-check" role="checkbox" aria-checked="false" tabindex="0"></div>
+            <div class="ex-info">
+              <div class="ex-name">Dominadas lastradas</div>
+              <div class="ex-detail">4 series × 6 reps · descanso 120 s</div>
+            </div>
+            <div class="ex-weight num">+10 kg</div>
+          </div>
+
+          <div class="exercise-row">
+            <div class="ex-check" role="checkbox" aria-checked="false" tabindex="0"></div>
+            <div class="ex-info">
+              <div class="ex-name">Curl de bíceps con barra</div>
+              <div class="ex-detail">3 series × 10 reps · descanso 60 s</div>
+            </div>
+            <div class="ex-weight num">32 kg</div>
+          </div>
+
+          <div class="exercise-row">
+            <div class="ex-check" role="checkbox" aria-checked="false" tabindex="0"></div>
+            <div class="ex-info">
+              <div class="ex-name">Tríceps en polea alta</div>
+              <div class="ex-detail">3 series × 12 reps · descanso 60 s</div>
+            </div>
+            <div class="ex-weight num">28 kg</div>
+          </div>
+
+        </div>
+
+        <div style="margin-top:20px;">
+          <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:15px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            Empezar sesión
+          </button>
+        </div>
+      </div>
+
+      <!-- Right column -->
+      <div class="right-col">
+
+        <!-- Weekly streak dots -->
+        <div class="card">
+          <div class="eyebrow" style="margin-bottom:14px;">Check-in semanal</div>
+          <div class="week-dots">
+
+            <!-- Lun — done -->
+            <div class="day-dot-wrap">
+              <div class="day-dot done">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <span class="day-dot-label">Lun</span>
+            </div>
+
+            <!-- Mar — done -->
+            <div class="day-dot-wrap">
+              <div class="day-dot done">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <span class="day-dot-label">Mar</span>
+            </div>
+
+            <!-- Mié — rest -->
+            <div class="day-dot-wrap">
+              <div class="day-dot rest"></div>
+              <span class="day-dot-label">Mié</span>
+            </div>
+
+            <!-- Jue — done -->
+            <div class="day-dot-wrap">
+              <div class="day-dot done">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <span class="day-dot-label">Jue</span>
+            </div>
+
+            <!-- Vie — TODAY (lime) -->
+            <div class="day-dot-wrap">
+              <div class="day-dot today"></div>
+              <span class="day-dot-label" style="color:var(--accent);font-weight:600;">Vie</span>
+            </div>
+
+            <!-- Sáb — empty -->
+            <div class="day-dot-wrap">
+              <div class="day-dot"></div>
+              <span class="day-dot-label">Sáb</span>
+            </div>
+
+            <!-- Dom — empty -->
+            <div class="day-dot-wrap">
+              <div class="day-dot"></div>
+              <span class="day-dot-label">Dom</span>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Mini progress chart -->
+        <div class="card">
+          <div class="eyebrow" style="margin-bottom:4px;">Tu progreso</div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">Volumen semanal · últimas 6 semanas (kg)</div>
+          <div class="chart-wrap">
+            <svg viewBox="0 0 280 90" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:90px;">
+              <!-- Grid lines -->
+              <line x1="0" y1="75" x2="280" y2="75" stroke="var(--border)" stroke-width="1"/>
+              <line x1="0" y1="50" x2="280" y2="50" stroke="var(--border)" stroke-width="1" stroke-dasharray="4 4"/>
+              <line x1="0" y1="25" x2="280" y2="25" stroke="var(--border)" stroke-width="1" stroke-dasharray="4 4"/>
+              <!-- Area fill under curve -->
+              <defs>
+                <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.18"/>
+                  <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0 65 C46 65, 46 58, 56 58 C66 58, 66 48, 112 45 C158 42, 158 52, 168 50 C178 48, 178 32, 224 30 C270 28, 270 18, 280 15 L280 90 L0 90 Z"
+                    fill="url(#areaGrad)"/>
+              <!-- Line -->
+              <path d="M0 65 C46 65, 46 58, 56 58 C66 58, 66 48, 112 45 C158 42, 158 52, 168 50 C178 48, 178 32, 224 30 C270 28, 270 18, 280 15"
+                    stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- Data point — current -->
+              <circle cx="280" cy="15" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>
+            </svg>
+            <div class="chart-label-row">
+              <span>Sem 7</span><span>Sem 8</span><span>Sem 9</span><span>Sem 10</span><span>Sem 11</span><span>Sem 12</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI suggestion -->
+        <div class="card">
+          <div class="ai-card-header">
+            <div class="ai-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2a10 10 0 1 0 10 10"/>
+                <path d="M12 6v6l4 2"/>
+                <circle cx="19" cy="5" r="3"/>
+              </svg>
+            </div>
+            <div>
+              <div class="ai-card-title">Sugerencia de la IA</div>
+              <div style="font-size:11px;color:var(--muted);">Basada en tu historial</div>
+            </div>
+          </div>
+          <p class="ai-body">
+            Tu press banca lleva 3 semanas en 82,5 kg. Considera subir a 85 kg la próxima sesión si completas todas las series hoy con buena técnica.
+          </p>
+          <div style="margin-top:12px;display:flex;gap:8px;">
+            <button class="btn" style="font-size:13px;padding:8px 14px;">Ignorar</button>
+            <button class="btn" style="font-size:13px;padding:8px 14px;">Ver detalle</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // Checkbox toggle for exercise rows
+  document.querySelectorAll('.ex-check').forEach(function(box) {
+    function toggle() {
+      var checked = box.getAttribute('aria-checked') === 'true';
+      box.setAttribute('aria-checked', String(!checked));
+      if (!checked) {
+        box.style.background = 'var(--accent)';
+        box.style.borderColor = 'var(--accent)';
+        box.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-fg)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><polyline points="20 6 9 17 4 12"/></svg>';
+        var row = box.closest('.exercise-row');
+        if (row) {
+          row.querySelector('.ex-name').style.color = 'var(--muted)';
+          row.querySelector('.ex-name').style.textDecoration = 'line-through';
+        }
+      } else {
+        box.style.background = '';
+        box.style.borderColor = '';
+        box.innerHTML = '';
+        var row = box.closest('.exercise-row');
+        if (row) {
+          row.querySelector('.ex-name').style.color = '';
+          row.querySelector('.ex-name').style.textDecoration = '';
+        }
+      }
+    }
+    box.addEventListener('click', toggle);
+    box.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    });
+  });
+</script>
+</body>
+</html>

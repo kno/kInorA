@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>kInorA · Pantallas importadas</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
+:root{
+  --bg:oklch(5% 0.006 270);
+  --surface:oklch(11% 0.006 270);
+  --surface-2:oklch(15% 0.006 270);
+  --border:oklch(24% 0.006 270);
+  --fg:oklch(96% 0.002 270);
+  --muted:oklch(66% 0.006 270);
+  --accent:oklch(89% 0.20 128);
+  --accent-fg:oklch(5% 0.006 270);
+  --accent-dim:oklch(89% 0.20 128 / 0.12);
+  --font-display:'Space Grotesk',system-ui,sans-serif;
+  --font-body:'DM Sans',-apple-system,system-ui,sans-serif;
+  --r-card:18px;--r-btn:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--fg);font-family:var(--font-body);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+a{color:inherit;text-decoration:none}
+h1,h2,h3{font-family:var(--font-display);letter-spacing:-0.02em;line-height:1.05;font-weight:600}
+.muted{color:var(--muted)}
+.wrap{max-width:1320px;margin:0 auto;padding:0 32px}
+.eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+/* header */
+.top{position:sticky;top:0;z-index:20;background:color-mix(in oklab,var(--bg) 82%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+.top-in{display:flex;align-items:center;justify-content:space-between;height:64px}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-weight:700;font-size:19px;letter-spacing:-.02em}
+.brand .mark{width:18px;height:18px;border-radius:6px;background:var(--accent)}
+.top a.src{font-size:13px;color:var(--muted)}
+.top a.src:hover{color:var(--fg)}
+
+.hero{padding:64px 0 24px}
+.hero h1{font-size:clamp(34px,5vw,56px);max-width:16ch}
+.hero p{color:var(--muted);max-width:60ch;margin-top:16px;font-size:17px;line-height:1.55}
+.hero .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
+.chip{display:inline-flex;align-items:center;gap:8px;font-size:13px;padding:7px 13px;border-radius:999px;background:var(--surface);border:1px solid var(--border);color:var(--muted)}
+.chip b{color:var(--fg);font-weight:600}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--accent)}
+
+.section{padding:40px 0}
+.section-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:22px;border-bottom:1px solid var(--border);padding-bottom:14px}
+.section-head h2{font-size:22px}
+.section-head .count{font-family:var(--font-display);color:var(--muted);font-size:14px}
+
+.grid-web{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:24px}
+.grid-mob{display:grid;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));gap:24px}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden;transition:border-color .15s,transform .15s}
+.card:hover{border-color:color-mix(in oklab,var(--accent) 40%,var(--border))}
+.sc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px 14px}
+.sc-head h3{font-size:17px;margin-top:4px}
+.sc-head p{font-size:13px;color:var(--muted);margin-top:4px;max-width:34ch;line-height:1.45}
+.open{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--accent);white-space:nowrap;padding:7px 12px;border:1px solid var(--border);border-radius:var(--r-btn)}
+.open:hover{background:var(--accent-dim)}
+.open svg{width:14px;height:14px}
+
+/* live previews */
+.preview{position:relative;overflow:hidden;background:#000;border-top:1px solid var(--border)}
+.preview iframe{position:absolute;top:0;left:0;border:0;transform-origin:top left}
+.preview.web{border-bottom-left-radius:var(--r-card);border-bottom-right-radius:var(--r-card)}
+.preview.phone{background:transparent;display:flex;justify-content:center;align-items:flex-start;padding:22px 0 26px;border-top:1px solid var(--border)}
+.device{position:relative;flex:none;width:412px;padding:11px;border-radius:50px;background:linear-gradient(160deg,#222228,#0d0d11);box-shadow:0 22px 60px rgba(0,0,0,.55),inset 0 0 0 1px rgba(255,255,255,.05);transform-origin:top center}
+.device::before{content:"";position:absolute;top:21px;left:50%;transform:translateX(-50%);width:120px;height:31px;background:#000;border-radius:18px;z-index:3}
+.preview.phone iframe{position:static;left:auto;display:block;width:390px;height:844px;border:0;border-radius:39px;background:#000;transform:none}
+
+footer{border-top:1px solid var(--border);padding:32px 0 56px;color:var(--muted);font-size:13px;margin-top:24px}
+footer b{color:var(--fg)}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap top-in">
+    <div class="brand"><span class="mark"></span>kInorA</div>
+    <a class="src" href="DESIGN.md">DESIGN.md · sistema de diseño ↗</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="hero">
+    <span class="eyebrow">Importado · v0 chat kinora-eOTftpCTxTX</span>
+    <h1>Las pantallas de kInorA, reconstruidas.</h1>
+    <p>El chat de v0 es de solo lectura, así que reconstruí cada pantalla a partir del sistema de diseño extraído (ver <a href="DESIGN.md" style="color:var(--accent)">DESIGN.md</a>): lienzo near-black <span class="num">#09090C</span>, acento verde lima <span class="num">#A8F060</span>, Space Grotesk + DM Sans, tema dark-only. 5 superficies web + 5 móviles, cada una en su propio archivo.</p>
+    <div class="meta">
+      <span class="chip"><span class="dot"></span><b>10</b> pantallas</span>
+      <span class="chip"><b>Web</b> · sidebar app shell</span>
+      <span class="chip"><b>Mobile</b> · iPhone + bottom bar</span>
+      <span class="chip">Dark-only · acento lima</span>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>Web</h2><span class="count">5 superficies</span></div>
+    <div class="grid-web">
+
+      <article class="card">
+        <div class="sc-head">
+          <div><span class="eyebrow">Marketing</span><h3>Landing</h3><p>Hero, features, cómo funciona, pricing y CTA.</p></div>
+          <a class="open" href="screens/web-landing.html" target="_blank">Abrir <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="preview web" data-base-w="1440" data-base-h="2400" data-cap="560"><iframe src="screens/web-landing.html" loading="lazy" title="Landing"></iframe></div>
+      </article>
+
+      <article class="card">
+        <div class="sc-head">
+          <div><span class="eyebrow">App</span><h3>Dashboard</h3><p>Resumen del día, racha, progreso y entrenamiento de hoy.</p></div>
+          <a class="open" href="screens/web-dashboard.html" target="_blank">Abrir <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="preview web" data-base-w="1440" data-base-h="1100" data-cap="560"><iframe src="screens/web-dashboard.html" loading="lazy" title="Dashboard"></iframe></div>
+      </article>
+
+      <article class="card">
+        <div class="sc-head">
+          <div><span class="eyebrow">App</span><h3>Plan semanal</h3><p>Agenda de entrenamiento por días con detalle expandible.</p></div>
+          <a class="open" href="screens/web-plan.html" target="_blank">Abrir <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="preview web" data-base-w="1440" data-base-h="1100" data-cap="560"><iframe src="screens/web-plan.html" loading="lazy" title="Plan semanal"></iframe></div>
+      </article>
+
+      <article class="card">
+        <div class="sc-head">
+          <div><span class="eyebrow">App</span><h3>Estadísticas</h3><p>Analítica de volumen, grupos musculares y récords.</p></div>
+          <a class="open" href="screens/web-stats.html" target="_blank">Abrir <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="preview web" data-base-w="1440" data-base-h="1200" data-cap="560"><iframe src="screens/web-stats.html" loading="lazy" title="Estadísticas"></iframe></div>
+      </article>
+
+      <article class="card">
+        <div class="sc-head">
+          <div><span class="eyebrow">App</span><h3>Crear plan</h3><p>Modo asistente conversacional + modo formulario en cards.</p></div>
+          <a class="open" href="screens/web-create-plan.html" target="_blank">Abrir <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="preview web" data-base-w="1440" data-base-h="1100" data-cap="560"><iframe src="screens/web-create-plan.html" loading="lazy" title="Crear plan"></iframe></div>
+      </article>
+
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>Mobile</h2><span class="count">5 pantallas · iPhone</span></div>
+    <div class="grid-mob">
+
+      <article class="card">
+        <div class="sc-head">
+          <div><span class="eyebrow">Mobile</span><h3>Dashboard</h3></div>
+          <a class="open" href="screens/mobile-dashboard.html" target="_blank">Abrir <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="preview phone" data-base-w="412" data-base-h="866" data-cap="620"><div class="device"><iframe src="screens/mobile-dashboard.html" loading="lazy" title="Mobile dashboard"></iframe></div></div>
+      </article>
+
+      <article class="card">
+        <div class="sc-head">
+          <div><span class="eyebrow">Mobile</span><h3>Crear plan</h3></div>
+          <a class="open" href="screens/mobile-create-plan.html" target="_blank">Abrir <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="preview phone" data-base-w="412" data-base-h="866" data-cap="620"><div class="device"><iframe src="screens/mobile-create-plan.html" loading="lazy" title="Mobile crear plan"></iframe></div></div>
+      </article>
+
+      <article class="card">
+        <div class="sc-head">
+          <div><span class="eyebrow">Mobile</span><h3>Asistente de voz</h3></div>
+          <a class="open" href="screens/mobile-voice.html" target="_blank">Abrir <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="preview phone" data-base-w="412" data-base-h="866" data-cap="620"><div class="device"><iframe src="screens/mobile-voice.html" loading="lazy" title="Mobile voz"></iframe></div></div>
+      </article>
+
+      <article class="card">
+        <div class="sc-head">
+          <div><span class="eyebrow">Mobile</span><h3>Detalle de ejercicio</h3></div>
+          <a class="open" href="screens/mobile-exercise.html" target="_blank">Abrir <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="preview phone" data-base-w="412" data-base-h="866" data-cap="620"><div class="device"><iframe src="screens/mobile-exercise.html" loading="lazy" title="Mobile ejercicio"></iframe></div></div>
+      </article>
+
+      <article class="card">
+        <div class="sc-head">
+          <div><span class="eyebrow">Mobile</span><h3>Tracker de sesión</h3></div>
+          <a class="open" href="screens/mobile-tracker.html" target="_blank">Abrir <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+        </div>
+        <div class="preview phone" data-base-w="412" data-base-h="866" data-cap="620"><div class="device"><iframe src="screens/mobile-tracker.html" loading="lazy" title="Mobile tracker"></iframe></div></div>
+      </article>
+
+    </div>
+  </section>
+
+</main>
+
+<footer class="wrap">
+  Reconstruido del chat v0 <b>kinora-eOTftpCTxTX</b> (solo lectura). Tokens <b>#09090C</b> / <b>#A8F060</b>, Space Grotesk y DM Sans confirmados en la sesión; el resto del sistema está derivado en OKLch — ver <a href="DESIGN.md" style="color:var(--accent)">DESIGN.md</a>. Las vistas previas son interactivas; usa <b>Abrir</b> para la pantalla completa.
+</footer>
+
+<script>
+(function(){
+  function scale(p){
+    var bw=+p.dataset.baseW, bh=+p.dataset.baseH, cap=p.dataset.cap?+p.dataset.cap:Infinity;
+    var w=p.clientWidth; if(!w) return;
+    if(p.classList.contains('phone')){
+      var dev=p.querySelector('.device'); if(!dev) return;
+      var s=w/bw;                       // fit device to card width
+      if(bh*s>cap) s=cap/bh;            // but never exceed cap height
+      dev.style.transform='scale('+s+')';
+      p.style.height=(bh*s)+'px';
+    } else {
+      var s2=w/bw;
+      var f=p.querySelector('iframe');
+      f.style.width=bw+'px'; f.style.height=bh+'px'; f.style.transform='scale('+s2+')';
+      p.style.height=Math.min(bh*s2,cap)+'px';
+    }
+  }
+  function all(){document.querySelectorAll('.preview').forEach(scale);}
+  window.addEventListener('resize',all);
+  window.addEventListener('load',all);
+  document.querySelectorAll('.preview iframe').forEach(function(f){f.addEventListener('load',function(){scale(f.closest('.preview'));});});
+  all();
+})();
+</script>
+</body>
+</html>

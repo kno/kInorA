@@ -1,0 +1,1296 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crear plan — kInorA</title>
+  <style>
+/* ============================================================
+   kInorA — shared design system
+   Reconstructed from v0 chat `kinora-eOTftpCTxTX` (see DESIGN.md)
+   Dark-only · near-black canvas · single lime accent
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
+:root {
+  /* surfaces */
+  --bg:        oklch(5% 0.006 270);
+  --surface:   oklch(11% 0.006 270);
+  --surface-2: oklch(15% 0.006 270);
+  --border:    oklch(24% 0.006 270);
+  --fg:        oklch(96% 0.002 270);
+  --muted:     oklch(66% 0.006 270);
+
+  /* brand accent (lime) */
+  --accent:    oklch(89% 0.20 128);
+  --accent-fg: oklch(5% 0.006 270);
+  --accent-dim: oklch(89% 0.20 128 / 0.12);
+
+  /* states */
+  --success: oklch(89% 0.20 128);
+  --warning: oklch(84% 0.14 90);
+  --danger:  oklch(68% 0.19 25);
+  --info:    oklch(72% 0.13 250);
+
+  /* type */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body:    'DM Sans', -apple-system, system-ui, sans-serif;
+
+  /* radii */
+  --r-card: 18px;
+  --r-btn: 12px;
+  --r-pill: 999px;
+
+  /* rhythm */
+  --sp-1: 8px;  --sp-2: 12px; --sp-3: 16px;
+  --sp-4: 24px; --sp-5: 32px; --sp-6: 48px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-weight: 600;
+}
+
+.num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.accent { color: var(--accent); }
+
+a { color: inherit; text-decoration: none; }
+
+/* ---- primitives ---- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: var(--sp-4);
+}
+.card-2 { background: var(--surface-2); }
+
+.btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 15px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  border-radius: var(--r-btn);
+  padding: 12px 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background .15s, border-color .15s, transform .05s;
+}
+.btn:hover { background: var(--border); }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.btn-primary:hover { filter: brightness(1.05); background: var(--accent); }
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--surface-2); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.pill-active {
+  background: var(--accent-dim);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 6px 12px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.divider { height: 1px; background: var(--border); border: 0; }
+
+.progress-track {
+  height: 8px; border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.progress-fill { height: 100%; background: var(--accent); border-radius: 999px; }
+
+::selection { background: var(--accent); color: var(--accent-fg); }
+
+/* thin scrollbars on dark */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+</style>
+  <style>
+    /* ---- Layout shell ---- */
+    body { display: flex; min-height: 100vh; overflow-x: hidden; }
+
+    /* ---- Sidebar ---- */
+    .sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0;
+      width: 248px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      z-index: 100;
+    }
+    .sidebar-brand {
+      display: flex; align-items: center; gap: 10px;
+      padding: 24px 20px 20px;
+    }
+    .brand-mark {
+      width: 26px; height: 26px;
+      background: var(--accent);
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+    .brand-name {
+      font-family: var(--font-display);
+      font-size: 20px; font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--fg);
+    }
+    .sidebar-nav {
+      flex: 1;
+      padding: 4px 12px;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 12px;
+      height: 44px;
+      border-radius: 10px;
+      font-size: 14px; font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      position: relative;
+      transition: background .12s, color .12s;
+    }
+    .nav-item:hover { background: var(--surface-2); color: var(--fg); }
+    .nav-item.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+    .nav-item.active::before {
+      content: '';
+      position: absolute; left: 0; top: 8px; bottom: 8px;
+      width: 3px;
+      background: var(--accent);
+      border-radius: 0 3px 3px 0;
+    }
+    .nav-icon { width: 18px; height: 18px; flex-shrink: 0; }
+    .sidebar-bottom {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .user-chip {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background .12s;
+    }
+    .user-chip:hover { background: var(--surface-2); }
+    .user-avatar {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display);
+      font-size: 13px; font-weight: 600;
+      color: var(--fg);
+      flex-shrink: 0;
+    }
+    .user-info { flex: 1; min-width: 0; }
+    .user-name {
+      font-size: 13px; font-weight: 600;
+      color: var(--fg);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .user-plan {
+      font-size: 11px; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .settings-btn {
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 8px; flex-shrink: 0;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background .12s, color .12s;
+    }
+    .settings-btn:hover { background: var(--surface-2); color: var(--fg); }
+
+    /* ---- Main ---- */
+    .main {
+      margin-left: 248px;
+      flex: 1;
+      min-height: 100vh;
+      background: var(--bg);
+      padding: 32px;
+    }
+    .main-inner { max-width: 1200px; }
+
+    /* ---- Top bar ---- */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 28px;
+    }
+    .topbar h1 { font-size: 28px; font-weight: 700; }
+
+    /* ---- Mode toggle ---- */
+    .mode-toggle {
+      display: inline-flex;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 4px;
+      gap: 2px;
+    }
+    .mode-btn {
+      font-family: var(--font-body);
+      font-size: 14px; font-weight: 500;
+      padding: 8px 18px;
+      border-radius: 9px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .mode-btn.active {
+      background: var(--surface-2);
+      color: var(--fg);
+    }
+
+    /* ---- Mode panels ---- */
+    .mode-panel { display: none; }
+    .mode-panel.visible { display: block; }
+
+    /* ================================================
+       MODE A — ASISTENTE (conversational)
+       ================================================ */
+    .asistente-layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 16px;
+      height: calc(100vh - 160px);
+      min-height: 520px;
+    }
+
+    /* Chat column */
+    .chat-col {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .chat-header {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .chat-coach-mark {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .chat-coach-mark svg { width: 16px; height: 16px; color: var(--accent); }
+    .chat-coach-name { font-size: 14px; font-weight: 600; }
+    .chat-coach-status { font-size: 12px; color: var(--muted); }
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .msg { display: flex; gap: 10px; max-width: 88%; }
+    .msg.ai { align-self: flex-start; }
+    .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+    .msg-avatar {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600;
+    }
+    .msg-avatar.ai-av {
+      background: var(--accent-dim);
+      border: 1px solid var(--border);
+    }
+    .msg-avatar.ai-av svg { width: 14px; height: 14px; color: var(--accent); }
+    .msg-avatar.user-av {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--fg);
+    }
+    .msg-bubble {
+      padding: 10px 14px;
+      border-radius: 14px;
+      font-size: 14px; line-height: 1.5;
+    }
+    .msg.ai .msg-bubble {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-top-left-radius: 4px;
+    }
+    .msg.user .msg-bubble {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-top-right-radius: 4px;
+      color: var(--fg);
+    }
+    .chat-input-row {
+      padding: 14px 16px;
+      border-top: 1px solid var(--border);
+      display: flex; gap: 10px; align-items: flex-end;
+    }
+    .chat-input {
+      flex: 1;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-family: var(--font-body);
+      font-size: 14px;
+      color: var(--fg);
+      resize: none;
+      min-height: 42px; max-height: 120px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .chat-input:focus { border-color: var(--muted); }
+    .chat-input::placeholder { color: var(--muted); }
+    .chat-send {
+      width: 42px; height: 42px;
+      border-radius: 10px;
+      background: var(--accent);
+      border: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: filter .15s, transform .05s;
+    }
+    .chat-send:hover { filter: brightness(1.08); }
+    .chat-send:active { transform: translateY(1px); }
+    .chat-send svg { color: var(--accent-fg); }
+
+    /* Data panel */
+    .data-col {
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .data-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      padding: 20px;
+      flex: 1;
+      display: flex; flex-direction: column;
+    }
+    .data-card-title {
+      font-family: var(--font-display);
+      font-size: 15px; font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .data-fields { display: flex; flex-direction: column; gap: 2px; }
+    .data-field {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .data-field:last-child { border-bottom: none; }
+    .data-field-label { font-size: 13px; color: var(--muted); }
+    .data-field-right { display: flex; align-items: center; gap: 8px; }
+    .data-field-value { font-size: 14px; font-weight: 500; }
+    .data-field-value.captured { color: var(--fg); }
+    .data-field-value.empty { color: var(--border); font-style: italic; font-size: 13px; }
+    .data-edit-btn {
+      width: 26px; height: 26px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 6px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background .12s, color .12s;
+    }
+    .data-edit-btn:hover { background: var(--surface-2); color: var(--fg); }
+    .data-field-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+    .data-field-dot.empty { background: var(--border); }
+    .data-actions { margin-top: 16px; }
+
+    /* ================================================
+       MODE B — FORMULARIO (card-based)
+       ================================================ */
+    .form-layout {
+      display: flex; flex-direction: column; gap: 16px;
+    }
+
+    .form-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      padding: 24px;
+    }
+    .form-section-label {
+      font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--muted); font-weight: 600;
+      margin-bottom: 14px;
+    }
+    .form-section-title {
+      font-family: var(--font-display);
+      font-size: 16px; font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    /* Selectable cards */
+    .option-cards {
+      display: grid;
+      gap: 10px;
+    }
+    .option-cards.cols-2 { grid-template-columns: 1fr 1fr; }
+    .option-cards.cols-4 { grid-template-columns: repeat(4, 1fr); }
+    .option-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .option-card:hover { border-color: var(--muted); }
+    .option-card.selected {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+    .option-card-icon {
+      width: 28px; height: 28px;
+      color: var(--muted);
+      margin-bottom: 2px;
+      transition: color .15s;
+    }
+    .option-card.selected .option-card-icon { color: var(--accent); }
+    .option-card-name {
+      font-size: 14px; font-weight: 600;
+      color: var(--fg);
+    }
+    .option-card-desc { font-size: 12px; color: var(--muted); }
+
+    /* Days segmented control */
+    .days-control {
+      display: flex; gap: 6px;
+    }
+    .day-pill {
+      flex: 1;
+      height: 44px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      font-family: var(--font-display);
+      font-size: 16px; font-weight: 600;
+      cursor: pointer;
+      transition: border-color .15s, background .15s, color .15s;
+      color: var(--muted);
+      user-select: none;
+    }
+    .day-pill:hover { border-color: var(--muted); color: var(--fg); }
+    .day-pill.selected {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    /* Level cards (horizontal) */
+    .level-cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .level-card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      cursor: pointer;
+      display: flex; align-items: center; gap: 12px;
+      transition: border-color .15s, background .15s;
+      background: var(--surface-2);
+    }
+    .level-card:hover { border-color: var(--muted); }
+    .level-card.selected {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+    .level-indicator {
+      display: flex; gap: 3px;
+    }
+    .level-bar {
+      width: 5px; border-radius: 2px;
+    }
+    .level-card-info { flex: 1; }
+    .level-card-name { font-size: 14px; font-weight: 600; }
+    .level-card-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* Equipment chips (multi-select) */
+    .chips-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .equip-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; font-weight: 500;
+      padding: 8px 14px;
+      border-radius: var(--r-pill);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: border-color .15s, background .15s, color .15s;
+      color: var(--muted);
+      user-select: none;
+    }
+    .equip-chip:hover { border-color: var(--muted); color: var(--fg); }
+    .equip-chip.selected {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+    .equip-chip-check {
+      width: 14px; height: 14px; opacity: 0; transition: opacity .12s;
+    }
+    .equip-chip.selected .equip-chip-check { opacity: 1; }
+
+    /* Duration slider */
+    .duration-row { display: flex; align-items: center; gap: 16px; }
+    .duration-slider {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      outline: none;
+      cursor: pointer;
+    }
+    .duration-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      border: 2px solid var(--bg);
+      box-shadow: 0 0 0 2px var(--accent);
+    }
+    .duration-slider::-moz-range-thumb {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      border: 2px solid var(--bg);
+    }
+    .duration-val {
+      font-family: var(--font-display);
+      font-size: 18px; font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      min-width: 72px;
+    }
+
+    /* Form summary + submit */
+    .form-footer {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      padding: 20px 24px;
+      display: flex; align-items: center; gap: 20px;
+    }
+    .form-summary { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .summary-tag {
+      font-size: 12px; font-weight: 500;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      padding: 4px 10px;
+      color: var(--muted);
+    }
+    .summary-tag.filled { color: var(--fg); }
+    .summary-empty { font-size: 13px; color: var(--muted); font-style: italic; }
+  </style>
+</head>
+<body>
+
+<!-- ============================
+     SIDEBAR
+     ============================ -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-mark"></div>
+    <span class="brand-name">kInorA</span>
+  </div>
+
+  <nav class="sidebar-nav">
+    <a href="#" class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 10L9 3l7 7"/>
+        <path d="M4 8.5V15h3.5v-3.5h3V15H14V8.5"/>
+      </svg>
+      Inicio
+    </a>
+    <a href="#" class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="3" width="14" height="13" rx="2"/>
+        <path d="M6 3V1M12 3V1M2 7h14"/>
+      </svg>
+      Mi plan
+    </a>
+    <a href="#" class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="2,13 6,9 9,11 13,6 16,8"/>
+        <path d="M13 6h3v3"/>
+      </svg>
+      Estadísticas
+    </a>
+    <a href="#" class="nav-item active">
+      <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="9" cy="9" r="7"/>
+        <path d="M9 6v3l2 2"/>
+      </svg>
+      Crear plan
+    </a>
+    <a href="#" class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 14s0-5 5-5 5 5 5 5"/>
+        <circle cx="9" cy="5" r="2.5"/>
+      </svg>
+      Ejercicios
+    </a>
+  </nav>
+
+  <div class="sidebar-bottom">
+    <div class="user-chip">
+      <div class="user-avatar">LF</div>
+      <div class="user-info">
+        <div class="user-name">Lucía Fernández</div>
+        <div class="user-plan">Plan Pro</div>
+      </div>
+      <div class="settings-btn" title="Ajustes">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="8" r="2.5"/>
+          <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ============================
+     MAIN
+     ============================ -->
+<main class="main">
+  <div class="main-inner">
+
+    <!-- Top bar -->
+    <div class="topbar">
+      <h1>Crear plan</h1>
+      <!-- Mode toggle -->
+      <div class="mode-toggle" role="group" aria-label="Modo de creación">
+        <button class="mode-btn active" id="btn-asistente" onclick="setMode('asistente')">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px;margin-right:5px"><path d="M2 10.5c0-2.5 1.5-4 5-4s5 1.5 5 4"/><circle cx="7" cy="4" r="2"/><path d="M11 7.5l2-1M3 7.5l-2-1"/></svg>
+          Asistente
+        </button>
+        <button class="mode-btn" id="btn-formulario" onclick="setMode('formulario')">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px;margin-right:5px"><rect x="1" y="2" width="12" height="10" rx="2"/><path d="M4 5h6M4 7.5h4"/></svg>
+          Formulario
+        </button>
+      </div>
+    </div>
+
+    <!-- =============================
+         MODE A — ASISTENTE
+         ============================= -->
+    <div class="mode-panel visible" id="panel-asistente">
+      <div class="asistente-layout">
+
+        <!-- Chat thread -->
+        <div class="chat-col">
+          <div class="chat-header">
+            <div class="chat-coach-mark">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 2a4 4 0 0 1 4 4c0 3-2 5-2 5H6S4 9 4 6a4 4 0 0 1 4-4z"/>
+                <path d="M6 14h4"/>
+                <path d="M8 11v3"/>
+              </svg>
+            </div>
+            <div>
+              <div class="chat-coach-name">Entrenador kInorA</div>
+              <div class="chat-coach-status">IA · Disponible ahora</div>
+            </div>
+          </div>
+
+          <div class="chat-messages" id="chat-messages">
+            <!-- AI message 1 -->
+            <div class="msg ai">
+              <div class="msg-avatar ai-av">
+                <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M7 1a3.5 3.5 0 0 1 3.5 3.5c0 2.5-1.8 4.5-1.8 4.5H5.3S3.5 7 3.5 4.5A3.5 3.5 0 0 1 7 1z"/>
+                  <path d="M5.5 12h3M7 9v3"/>
+                </svg>
+              </div>
+              <div class="msg-bubble">
+                ¡Hola, Lucía! Soy tu entrenador personal de kInorA. Vamos a diseñar un plan de entrenamiento totalmente a tu medida. Para empezar, ¿cuál es tu objetivo principal ahora mismo?
+              </div>
+            </div>
+
+            <!-- User message 1 -->
+            <div class="msg user">
+              <div class="msg-avatar user-av">LF</div>
+              <div class="msg-bubble">
+                Quiero ganar masa muscular, sobre todo en tren superior. Llevo unos meses entrenando pero siento que no progreso bien.
+              </div>
+            </div>
+
+            <!-- AI message 2 -->
+            <div class="msg ai">
+              <div class="msg-avatar ai-av">
+                <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M7 1a3.5 3.5 0 0 1 3.5 3.5c0 2.5-1.8 4.5-1.8 4.5H5.3S3.5 7 3.5 4.5A3.5 3.5 0 0 1 7 1z"/>
+                  <path d="M5.5 12h3M7 9v3"/>
+                </svg>
+              </div>
+              <div class="msg-bubble">
+                Perfecto — hipertrofia de tren superior con énfasis en progresión. Anotado.<br><br>
+                ¿Cuántos días a la semana puedes entrenar? Y, ¿tienes acceso a un gimnasio completo o entrenas en casa?
+              </div>
+            </div>
+
+            <!-- User message 2 -->
+            <div class="msg user">
+              <div class="msg-avatar user-av">LF</div>
+              <div class="msg-bubble">
+                Puedo ir 4 días. Tengo gimnasio completo con barras, mancuernas y poleas. Sin restricciones de horario.
+              </div>
+            </div>
+
+            <!-- AI message 3 -->
+            <div class="msg ai">
+              <div class="msg-avatar ai-av">
+                <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M7 1a3.5 3.5 0 0 1 3.5 3.5c0 2.5-1.8 4.5-1.8 4.5H5.3S3.5 7 3.5 4.5A3.5 3.5 0 0 1 7 1z"/>
+                  <path d="M5.5 12h3M7 9v3"/>
+                </svg>
+              </div>
+              <div class="msg-bubble">
+                Genial — con 4 días y gimnasio completo tenemos mucha flexibilidad. Te plantearé una estructura Upper/Lower con progresión lineal doble.<br><br>
+                ¿Te consideras principiante, intermedia o avanzada? Y, ¿tienes alguna lesión o molestia que deba tener en cuenta?
+              </div>
+            </div>
+
+            <!-- User message 3 -->
+            <div class="msg user">
+              <div class="msg-avatar user-av">LF</div>
+              <div class="msg-bubble">
+                Intermedia, creo. Llevo 8 meses entrenando seguido. No tengo lesiones, aunque a veces me molesta un poco el hombro derecho en press por encima de la cabeza.
+              </div>
+            </div>
+
+            <!-- AI message 4 -->
+            <div class="msg ai">
+              <div class="msg-avatar ai-av">
+                <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M7 1a3.5 3.5 0 0 1 3.5 3.5c0 2.5-1.8 4.5-1.8 4.5H5.3S3.5 7 3.5 4.5A3.5 3.5 0 0 1 7 1z"/>
+                  <path d="M5.5 12h3M7 9v3"/>
+                </svg>
+              </div>
+              <div class="msg-bubble">
+                Perfecto. Sustituiré el press militar estricto por press en banco inclinado a 60° y elevaciones laterales con cable — menor impacto en el manguito rotador.<br><br>
+                Ya tengo suficiente información para generar tu plan. Cuando quieras, pulsa <strong>Generar plan</strong> en el panel de la derecha.
+              </div>
+            </div>
+          </div>
+
+          <!-- Input row -->
+          <div class="chat-input-row">
+            <textarea
+              class="chat-input"
+              id="chat-input"
+              placeholder="Escribe tu mensaje..."
+              rows="1"
+              onkeydown="handleChatKey(event)"
+            ></textarea>
+            <button class="chat-send" onclick="sendMessage()" title="Enviar">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2L2 7l5 2 2 5 5-12z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Extracted data panel -->
+        <div class="data-col">
+          <div class="data-card">
+            <div class="data-card-title">Datos extraídos</div>
+            <div class="data-fields" id="data-fields">
+              <div class="data-field">
+                <span class="data-field-label">Objetivo</span>
+                <div class="data-field-right">
+                  <span class="data-field-value captured">Hipertrofia</span>
+                  <div class="data-field-dot"></div>
+                  <div class="data-edit-btn" title="Editar">
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M9 2l2 2-7 7H2V9l7-7z"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <div class="data-field">
+                <span class="data-field-label">Días / semana</span>
+                <div class="data-field-right">
+                  <span class="data-field-value captured">4 días</span>
+                  <div class="data-field-dot"></div>
+                  <div class="data-edit-btn" title="Editar">
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M9 2l2 2-7 7H2V9l7-7z"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <div class="data-field">
+                <span class="data-field-label">Nivel</span>
+                <div class="data-field-right">
+                  <span class="data-field-value captured">Intermedio</span>
+                  <div class="data-field-dot"></div>
+                  <div class="data-edit-btn" title="Editar">
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M9 2l2 2-7 7H2V9l7-7z"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <div class="data-field">
+                <span class="data-field-label">Equipo</span>
+                <div class="data-field-right">
+                  <span class="data-field-value captured">Gimnasio completo</span>
+                  <div class="data-field-dot"></div>
+                  <div class="data-edit-btn" title="Editar">
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M9 2l2 2-7 7H2V9l7-7z"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <div class="data-field">
+                <span class="data-field-label">Lesiones</span>
+                <div class="data-field-right">
+                  <span class="data-field-value captured">Hombro derecho (leve)</span>
+                  <div class="data-field-dot"></div>
+                  <div class="data-edit-btn" title="Editar">
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M9 2l2 2-7 7H2V9l7-7z"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <div class="data-field">
+                <span class="data-field-label">Estructura</span>
+                <div class="data-field-right">
+                  <span class="data-field-value captured">Upper / Lower</span>
+                  <div class="data-field-dot"></div>
+                  <div class="data-edit-btn" title="Editar">
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M9 2l2 2-7 7H2V9l7-7z"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="data-actions">
+              <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px">
+                <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 8l3.5 3.5L13 4"/>
+                </svg>
+                Generar plan
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- =============================
+         MODE B — FORMULARIO
+         ============================= -->
+    <div class="mode-panel" id="panel-formulario">
+      <div class="form-layout">
+
+        <!-- Objetivo -->
+        <div class="form-section">
+          <div class="form-section-label">Paso 1</div>
+          <div class="form-section-title">¿Cuál es tu objetivo principal?</div>
+          <div class="option-cards cols-2" id="objetivo-cards">
+            <div class="option-card" data-group="objetivo" data-value="grasa" onclick="selectCard(this)">
+              <svg class="option-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2C8 2 4 6 4 10c0 5 4 8 8 12 4-4 8-7 8-12 0-4-4-8-8-8z"/>
+              </svg>
+              <div class="option-card-name">Perder grasa</div>
+              <div class="option-card-desc">Déficit calórico, cardio metabolico y preservación muscular</div>
+            </div>
+            <div class="option-card selected" data-group="objetivo" data-value="musculo" onclick="selectCard(this)">
+              <svg class="option-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 12a6 6 0 0 0 12 0"/>
+                <path d="M4 12H2M22 12h-2"/>
+                <path d="M6.34 6.34L4.93 4.93M19.07 4.93l-1.41 1.41"/>
+              </svg>
+              <div class="option-card-name">Ganar músculo</div>
+              <div class="option-card-desc">Hipertrofia progresiva con sobrecarga y volumen estructurado</div>
+            </div>
+            <div class="option-card" data-group="objetivo" data-value="fuerza" onclick="selectCard(this)">
+              <svg class="option-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9H2v6h4M18 9h4v6h-4M6 12h12M9 6l-3 6 3 6M15 6l3 6-3 6"/>
+              </svg>
+              <div class="option-card-name">Fuerza</div>
+              <div class="option-card-desc">Movimientos compuestos pesados, bajas repeticiones, máxima carga</div>
+            </div>
+            <div class="option-card" data-group="objetivo" data-value="salud" onclick="selectCard(this)">
+              <svg class="option-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402C1 4.05 4.066 2 6.5 2c1.94 0 3.5.75 5.5 2.777C14 2.75 15.56 2 17.5 2 19.934 2 23 4.05 23 7.19c0 4.105-5.37 8.863-11 14.402z"/>
+              </svg>
+              <div class="option-card-name">Salud general</div>
+              <div class="option-card-desc">Equilibrio entre fuerza, cardio y movilidad articular</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Días -->
+        <div class="form-section">
+          <div class="form-section-label">Paso 2</div>
+          <div class="form-section-title">¿Cuántos días a la semana puedes entrenar?</div>
+          <div class="days-control" id="days-control">
+            <div class="day-pill" data-value="2" onclick="selectDay(this)">2</div>
+            <div class="day-pill" data-value="3" onclick="selectDay(this)">3</div>
+            <div class="day-pill selected" data-value="4" onclick="selectDay(this)">4</div>
+            <div class="day-pill" data-value="5" onclick="selectDay(this)">5</div>
+            <div class="day-pill" data-value="6" onclick="selectDay(this)">6</div>
+          </div>
+        </div>
+
+        <!-- Nivel -->
+        <div class="form-section">
+          <div class="form-section-label">Paso 3</div>
+          <div class="form-section-title">¿Cuál es tu nivel de experiencia?</div>
+          <div class="level-cards" id="level-cards">
+            <div class="level-card" data-group="nivel" data-value="principiante" onclick="selectCard(this)">
+              <div class="level-indicator">
+                <div class="level-bar" style="height:8px;background:var(--muted)"></div>
+                <div class="level-bar" style="height:12px;background:var(--border)"></div>
+                <div class="level-bar" style="height:16px;background:var(--border)"></div>
+              </div>
+              <div class="level-card-info">
+                <div class="level-card-name">Principiante</div>
+                <div class="level-card-desc">0–6 meses de entrenamiento continuo</div>
+              </div>
+            </div>
+            <div class="level-card selected" data-group="nivel" data-value="intermedio" onclick="selectCard(this)">
+              <div class="level-indicator">
+                <div class="level-bar" style="height:8px;background:var(--accent)"></div>
+                <div class="level-bar" style="height:12px;background:var(--accent)"></div>
+                <div class="level-bar" style="height:16px;background:var(--border)"></div>
+              </div>
+              <div class="level-card-info">
+                <div class="level-card-name">Intermedio</div>
+                <div class="level-card-desc">6 meses – 2 años, progresión regular</div>
+              </div>
+            </div>
+            <div class="level-card" data-group="nivel" data-value="avanzado" onclick="selectCard(this)">
+              <div class="level-indicator">
+                <div class="level-bar" style="height:8px;background:var(--muted)"></div>
+                <div class="level-bar" style="height:12px;background:var(--muted)"></div>
+                <div class="level-bar" style="height:16px;background:var(--muted)"></div>
+              </div>
+              <div class="level-card-info">
+                <div class="level-card-name">Avanzado</div>
+                <div class="level-card-desc">+2 años, técnica sólida, periodización propia</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Equipamiento -->
+        <div class="form-section">
+          <div class="form-section-label">Paso 4</div>
+          <div class="form-section-title">¿Con qué equipo cuentas? <span style="font-size:13px;font-weight:400;color:var(--muted)">(puedes marcar varios)</span></div>
+          <div class="chips-row" id="equip-chips">
+            <div class="equip-chip selected" data-value="gimnasio" onclick="toggleChip(this)">
+              <svg class="equip-chip-check" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="2,7 6,11 12,3"/>
+              </svg>
+              Gimnasio completo
+            </div>
+            <div class="equip-chip" data-value="mancuernas" onclick="toggleChip(this)">
+              <svg class="equip-chip-check" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="2,7 6,11 12,3"/>
+              </svg>
+              Mancuernas
+            </div>
+            <div class="equip-chip" data-value="bandas" onclick="toggleChip(this)">
+              <svg class="equip-chip-check" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="2,7 6,11 12,3"/>
+              </svg>
+              Bandas elásticas
+            </div>
+            <div class="equip-chip" data-value="peso-corporal" onclick="toggleChip(this)">
+              <svg class="equip-chip-check" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="2,7 6,11 12,3"/>
+              </svg>
+              Peso corporal
+            </div>
+            <div class="equip-chip" data-value="barras" onclick="toggleChip(this)">
+              <svg class="equip-chip-check" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="2,7 6,11 12,3"/>
+              </svg>
+              Barras libres
+            </div>
+            <div class="equip-chip" data-value="maquinas" onclick="toggleChip(this)">
+              <svg class="equip-chip-check" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="2,7 6,11 12,3"/>
+              </svg>
+              Máquinas / poleas
+            </div>
+          </div>
+        </div>
+
+        <!-- Duración por sesión -->
+        <div class="form-section">
+          <div class="form-section-label">Paso 5</div>
+          <div class="form-section-title">Duración por sesión</div>
+          <div class="duration-row">
+            <input
+              type="range"
+              class="duration-slider"
+              id="duration-slider"
+              min="30" max="120" step="5" value="60"
+              oninput="updateDuration(this.value)"
+            >
+            <div class="duration-val num"><span id="duration-display">60</span> min</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px">
+            <span style="font-size:12px;color:var(--muted)">30 min</span>
+            <span style="font-size:12px;color:var(--muted)">120 min</span>
+          </div>
+        </div>
+
+        <!-- Footer: summary + CTA -->
+        <div class="form-footer">
+          <div class="form-summary" id="form-summary">
+            <span class="summary-tag filled" id="sum-objetivo">Ganar músculo</span>
+            <span class="summary-tag filled" id="sum-dias">4 días/sem</span>
+            <span class="summary-tag filled" id="sum-nivel">Intermedio</span>
+            <span class="summary-tag filled" id="sum-equipo">Gimnasio</span>
+            <span class="summary-tag filled" id="sum-duracion">60 min/sesión</span>
+          </div>
+          <button class="btn btn-primary" style="white-space:nowrap;flex-shrink:0">
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 8l3.5 3.5L13 4"/>
+            </svg>
+            Generar plan
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- /main-inner -->
+</main>
+
+<script>
+  /* ================================================
+     MODE TOGGLE
+     ================================================ */
+  function setMode(mode) {
+    var panels = document.querySelectorAll('.mode-panel');
+    var btns = document.querySelectorAll('.mode-btn');
+    panels.forEach(function(p) { p.classList.remove('visible'); });
+    btns.forEach(function(b) { b.classList.remove('active'); });
+    document.getElementById('panel-' + mode).classList.add('visible');
+    document.getElementById('btn-' + mode).classList.add('active');
+  }
+
+  /* ================================================
+     CHAT
+     ================================================ */
+  function handleChatKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  function sendMessage() {
+    var input = document.getElementById('chat-input');
+    var text = input.value.trim();
+    if (!text) return;
+
+    var messages = document.getElementById('chat-messages');
+
+    // User bubble
+    var userMsg = document.createElement('div');
+    userMsg.className = 'msg user';
+    userMsg.innerHTML =
+      '<div class="msg-avatar user-av">LF</div>' +
+      '<div class="msg-bubble">' + escapeHtml(text) + '</div>';
+    messages.appendChild(userMsg);
+
+    input.value = '';
+    input.style.height = 'auto';
+    messages.scrollTop = messages.scrollHeight;
+
+    // AI typing indicator, then reply
+    setTimeout(function() {
+      var aiMsg = document.createElement('div');
+      aiMsg.className = 'msg ai';
+      aiMsg.innerHTML =
+        '<div class="msg-avatar ai-av">' +
+          '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M7 1a3.5 3.5 0 0 1 3.5 3.5c0 2.5-1.8 4.5-1.8 4.5H5.3S3.5 7 3.5 4.5A3.5 3.5 0 0 1 7 1z"/>' +
+            '<path d="M5.5 12h3M7 9v3"/>' +
+          '</svg>' +
+        '</div>' +
+        '<div class="msg-bubble" style="color:var(--muted);font-style:italic">Analizando tu mensaje...</div>';
+      messages.appendChild(aiMsg);
+      messages.scrollTop = messages.scrollHeight;
+
+      setTimeout(function() {
+        aiMsg.querySelector('.msg-bubble').innerHTML =
+          'Entendido. He actualizado tu perfil con esa información. ¿Hay algo más que quieras ajustar antes de generar el plan?';
+        aiMsg.querySelector('.msg-bubble').style.cssText = '';
+        messages.scrollTop = messages.scrollHeight;
+      }, 1200);
+    }, 400);
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ================================================
+     FORM INTERACTIONS
+     ================================================ */
+
+  // Single-select cards (by data-group)
+  function selectCard(el) {
+    var group = el.dataset.group;
+    document.querySelectorAll('[data-group="' + group + '"]').forEach(function(c) {
+      c.classList.remove('selected');
+    });
+    el.classList.add('selected');
+    updateSummary();
+  }
+
+  // Day pills (single select)
+  function selectDay(el) {
+    document.querySelectorAll('#days-control .day-pill').forEach(function(p) {
+      p.classList.remove('selected');
+    });
+    el.classList.add('selected');
+    updateSummary();
+  }
+
+  // Equipment chips (multi-select toggle)
+  function toggleChip(el) {
+    el.classList.toggle('selected');
+    updateSummary();
+  }
+
+  // Duration slider
+  function updateDuration(val) {
+    document.getElementById('duration-display').textContent = val;
+    document.getElementById('sum-duracion').textContent = val + ' min/sesión';
+  }
+
+  // Summary tags
+  var objetivoLabels = {
+    grasa: 'Perder grasa', musculo: 'Ganar músculo',
+    fuerza: 'Fuerza', salud: 'Salud general'
+  };
+  var nivelLabels = {
+    principiante: 'Principiante', intermedio: 'Intermedio', avanzado: 'Avanzado'
+  };
+
+  function updateSummary() {
+    // Objetivo
+    var selObj = document.querySelector('[data-group="objetivo"].selected');
+    var sumObj = document.getElementById('sum-objetivo');
+    if (selObj) { sumObj.textContent = objetivoLabels[selObj.dataset.value]; sumObj.className = 'summary-tag filled'; }
+    else { sumObj.textContent = 'Sin objetivo'; sumObj.className = 'summary-tag'; }
+
+    // Días
+    var selDay = document.querySelector('#days-control .day-pill.selected');
+    var sumDias = document.getElementById('sum-dias');
+    if (selDay) { sumDias.textContent = selDay.dataset.value + ' días/sem'; sumDias.className = 'summary-tag filled'; }
+    else { sumDias.textContent = 'Días sin definir'; sumDias.className = 'summary-tag'; }
+
+    // Nivel
+    var selNiv = document.querySelector('[data-group="nivel"].selected');
+    var sumNiv = document.getElementById('sum-nivel');
+    if (selNiv) { sumNiv.textContent = nivelLabels[selNiv.dataset.value]; sumNiv.className = 'summary-tag filled'; }
+    else { sumNiv.textContent = 'Nivel sin definir'; sumNiv.className = 'summary-tag'; }
+
+    // Equipo
+    var selEquip = Array.from(document.querySelectorAll('#equip-chips .equip-chip.selected'));
+    var sumEquipo = document.getElementById('sum-equipo');
+    if (selEquip.length > 0) {
+      var labels = selEquip.map(function(c) { return c.dataset.value === 'gimnasio' ? 'Gimnasio' : c.dataset.value === 'mancuernas' ? 'Mancuernas' : c.dataset.value === 'bandas' ? 'Bandas' : c.dataset.value === 'peso-corporal' ? 'Peso corporal' : c.dataset.value === 'barras' ? 'Barras' : 'Máquinas'; });
+      sumEquipo.textContent = labels.slice(0, 2).join(', ') + (labels.length > 2 ? ' +' + (labels.length - 2) : '');
+      sumEquipo.className = 'summary-tag filled';
+    } else {
+      sumEquipo.textContent = 'Sin equipo'; sumEquipo.className = 'summary-tag';
+    }
+  }
+
+  // Auto-resize textarea
+  document.getElementById('chat-input').addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  });
+</script>
+</body>
+</html>

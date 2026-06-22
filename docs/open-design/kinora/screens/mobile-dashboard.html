@@ -1,0 +1,809 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>kInorA — Inicio</title>
+  <style>
+/* ============================================================
+   kInorA — shared design system
+   Reconstructed from v0 chat `kinora-eOTftpCTxTX` (see DESIGN.md)
+   Dark-only · near-black canvas · single lime accent
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
+:root {
+  /* surfaces */
+  --bg:        oklch(5% 0.006 270);
+  --surface:   oklch(11% 0.006 270);
+  --surface-2: oklch(15% 0.006 270);
+  --border:    oklch(24% 0.006 270);
+  --fg:        oklch(96% 0.002 270);
+  --muted:     oklch(66% 0.006 270);
+
+  /* brand accent (lime) */
+  --accent:    oklch(89% 0.20 128);
+  --accent-fg: oklch(5% 0.006 270);
+  --accent-dim: oklch(89% 0.20 128 / 0.12);
+
+  /* states */
+  --success: oklch(89% 0.20 128);
+  --warning: oklch(84% 0.14 90);
+  --danger:  oklch(68% 0.19 25);
+  --info:    oklch(72% 0.13 250);
+
+  /* type */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body:    'DM Sans', -apple-system, system-ui, sans-serif;
+
+  /* radii */
+  --r-card: 18px;
+  --r-btn: 12px;
+  --r-pill: 999px;
+
+  /* rhythm */
+  --sp-1: 8px;  --sp-2: 12px; --sp-3: 16px;
+  --sp-4: 24px; --sp-5: 32px; --sp-6: 48px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-weight: 600;
+}
+
+.num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.accent { color: var(--accent); }
+
+a { color: inherit; text-decoration: none; }
+
+/* ---- primitives ---- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: var(--sp-4);
+}
+.card-2 { background: var(--surface-2); }
+
+.btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 15px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  border-radius: var(--r-btn);
+  padding: 12px 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background .15s, border-color .15s, transform .05s;
+}
+.btn:hover { background: var(--border); }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.btn-primary:hover { filter: brightness(1.05); background: var(--accent); }
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--surface-2); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.pill-active {
+  background: var(--accent-dim);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 6px 12px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.divider { height: 1px; background: var(--border); border: 0; }
+
+.progress-track {
+  height: 8px; border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.progress-fill { height: 100%; background: var(--accent); border-radius: 999px; }
+
+::selection { background: var(--accent); color: var(--accent-fg); }
+
+/* thin scrollbars on dark */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+</style>
+  <style>
+    html, body {
+      width: 390px;
+      min-height: 844px;
+      margin: 0 auto;
+      overflow-x: hidden;
+      background: var(--bg);
+    }
+
+    .screen {
+      width: 390px;
+      min-height: 844px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Scrollable content area above fixed tab bar */
+    .scroll-area {
+      flex: 1;
+      overflow-y: auto;
+      padding-top: 16px; /* safe area for status bar */
+      padding-bottom: calc(64px + 24px + 16px); /* tab bar + home indicator + breathing room */
+      padding-left: 20px;
+      padding-right: 20px;
+    }
+
+    /* ---- Header ---- */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .header-left {}
+    .header-greeting {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--fg);
+    }
+    .header-date {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .avatar-initials {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--fg);
+      letter-spacing: -0.01em;
+    }
+
+    /* ---- Hero card ---- */
+    .hero-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      padding: 20px;
+      margin-bottom: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 60% 80% at 100% -10%, oklch(89% 0.20 128 / 0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .hero-title {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--fg);
+      margin-bottom: 6px;
+    }
+    .hero-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .hero-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .hero-meta-item svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .btn-start {
+      width: 100%;
+      background: var(--accent);
+      color: var(--accent-fg);
+      border: none;
+      border-radius: var(--r-btn);
+      padding: 14px 20px;
+      font-family: var(--font-body);
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: filter .15s, transform .05s;
+      min-height: 52px;
+    }
+    .btn-start:hover { filter: brightness(1.06); }
+    .btn-start:active { transform: translateY(1px); }
+    .btn-start svg { width: 18px; height: 18px; }
+
+    /* ---- Section header ---- */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--fg);
+    }
+    .section-action {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* ---- Racha module ---- */
+    .racha-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .racha-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .racha-label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .racha-count {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--accent);
+    }
+    .racha-count span {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--muted);
+      font-family: var(--font-body);
+      margin-left: 2px;
+    }
+    .day-dots {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .day-dot-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+    }
+    .day-dot-label {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .day-dot {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .15s, border-color .15s;
+    }
+    .day-dot.completed {
+      background: oklch(89% 0.20 128 / 0.15);
+      border-color: oklch(89% 0.20 128 / 0.35);
+    }
+    .day-dot.completed svg { color: var(--accent); }
+    .day-dot.today {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .day-dot.today svg { color: var(--accent-fg); }
+    .day-dot.rest {
+      background: var(--surface-2);
+      border-color: var(--border);
+    }
+    .day-dot svg { width: 14px; height: 14px; }
+
+    /* ---- Metric cards ---- */
+    .metrics-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .metric-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      padding: 16px;
+    }
+    .metric-eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .metric-value {
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--fg);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .metric-value .unit {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--muted);
+      margin-left: 2px;
+    }
+    .metric-sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .metric-progress {
+      margin-top: 10px;
+    }
+
+    /* ---- Proximos list ---- */
+    .proximos-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .proximo-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 44px;
+    }
+    .proximo-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .proximo-day-badge {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .proximo-day-name {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .proximo-day-num {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--fg);
+      line-height: 1;
+    }
+    .proximo-info {}
+    .proximo-focus {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--fg);
+      margin-bottom: 2px;
+    }
+    .proximo-duration {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .proximo-chevron {
+      color: var(--border);
+    }
+    .proximo-chevron svg { width: 16px; height: 16px; }
+
+    /* ---- Bottom Tab Bar ---- */
+    .tab-bar {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 390px;
+      height: calc(64px + 24px);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-around;
+      padding-top: 8px;
+      z-index: 100;
+    }
+
+    .tab-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      min-width: 44px;
+      min-height: 44px;
+      cursor: pointer;
+      color: var(--muted);
+      transition: color .15s;
+      text-decoration: none;
+    }
+    .tab-item.active { color: var(--accent); }
+    .tab-item svg { width: 22px; height: 22px; }
+    .tab-item-label { font-size: 10px; font-weight: 500; }
+
+    /* FAB tab */
+    .tab-fab {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 0 8px;
+      min-width: 44px;
+      cursor: pointer;
+      color: var(--muted);
+      text-decoration: none;
+      margin-top: -14px;
+    }
+    .tab-fab-circle {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px oklch(89% 0.20 128 / 0.25);
+    }
+    .tab-fab-circle svg { width: 22px; height: 22px; color: var(--accent-fg); }
+    .tab-fab-label { font-size: 10px; font-weight: 500; color: var(--muted); }
+  </style>
+</head>
+<body>
+<div class="screen">
+  <div class="scroll-area">
+
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <div class="header-greeting">Hola, Lucía</div>
+        <div class="header-date">Viernes, 20 de junio</div>
+      </div>
+      <div class="avatar">
+        <span class="avatar-initials">LG</span>
+      </div>
+    </div>
+
+    <!-- Hero: Entrenamiento de hoy -->
+    <div class="hero-card">
+      <div class="hero-eyebrow">Entrenamiento de hoy</div>
+      <div class="hero-title">Tren superior — Empuje</div>
+      <div class="hero-meta">
+        <div class="hero-meta-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 3v4M18 3v4M3 9h18M5 20h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2 2v9a2 2 0 002 2z"/>
+          </svg>
+          6 ejercicios
+        </div>
+        <div class="hero-meta-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>
+          </svg>
+          ~50 min
+        </div>
+      </div>
+      <button class="btn-start">
+        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <path d="M8 5.14v14l11-7-11-7z"/>
+        </svg>
+        Empezar entrenamiento
+      </button>
+    </div>
+
+    <!-- Racha -->
+    <div class="racha-card">
+      <div class="racha-header">
+        <div>
+          <div class="eyebrow" style="margin-bottom:4px;">Racha actual</div>
+          <div class="racha-count"><span class="num">12</span><span>días</span></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:8px 12px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2z"/>
+            <path d="M8.5 14s1.5 2 3.5 2 3.5-2 3.5-2"/>
+            <line x1="9" y1="9" x2="9.01" y2="9"/>
+            <line x1="15" y1="9" x2="15.01" y2="9"/>
+          </svg>
+          <span style="font-size:13px;font-weight:600;color:var(--warning);font-family:var(--font-display);">Personal mejor</span>
+        </div>
+      </div>
+      <div class="day-dots">
+        <!-- Lun - completado -->
+        <div class="day-dot-wrap">
+          <div class="day-dot completed">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 13l4 4L19 7"/>
+            </svg>
+          </div>
+          <div class="day-dot-label">Lun</div>
+        </div>
+        <!-- Mar - completado -->
+        <div class="day-dot-wrap">
+          <div class="day-dot completed">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 13l4 4L19 7"/>
+            </svg>
+          </div>
+          <div class="day-dot-label">Mar</div>
+        </div>
+        <!-- Mie - completado -->
+        <div class="day-dot-wrap">
+          <div class="day-dot completed">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 13l4 4L19 7"/>
+            </svg>
+          </div>
+          <div class="day-dot-label">Mié</div>
+        </div>
+        <!-- Jue - completado -->
+        <div class="day-dot-wrap">
+          <div class="day-dot completed">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 13l4 4L19 7"/>
+            </svg>
+          </div>
+          <div class="day-dot-label">Jue</div>
+        </div>
+        <!-- Vie - HOY, activo lime -->
+        <div class="day-dot-wrap">
+          <div class="day-dot today">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
+            </svg>
+          </div>
+          <div class="day-dot-label" style="color:var(--accent);">Vie</div>
+        </div>
+        <!-- Sab - descanso -->
+        <div class="day-dot-wrap">
+          <div class="day-dot rest"></div>
+          <div class="day-dot-label">Sáb</div>
+        </div>
+        <!-- Dom - descanso -->
+        <div class="day-dot-wrap">
+          <div class="day-dot rest"></div>
+          <div class="day-dot-label">Dom</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metrics row -->
+    <div class="metrics-row">
+      <div class="metric-card">
+        <div class="metric-eyebrow">Sesiones</div>
+        <div class="metric-value"><span class="num">4</span><span class="unit">/ 5</span></div>
+        <div class="metric-sub">Esta semana</div>
+        <div class="metric-progress">
+          <div class="progress-track">
+            <div class="progress-fill" style="width: 80%;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-eyebrow">Volumen semanal</div>
+        <div class="metric-value"><span class="num">8.340</span><span class="unit">kg</span></div>
+        <div class="metric-sub">+12% vs semana ant.</div>
+      </div>
+    </div>
+
+    <!-- Proximos -->
+    <div class="section-header">
+      <div class="section-title">Próximos días</div>
+      <div class="section-action">Ver plan</div>
+    </div>
+    <div class="proximos-list">
+      <div class="proximo-item">
+        <div class="proximo-left">
+          <div class="proximo-day-badge">
+            <div class="proximo-day-name">Sáb</div>
+            <div class="proximo-day-num num">21</div>
+          </div>
+          <div class="proximo-info">
+            <div class="proximo-focus">Tren inferior — Sentadillas</div>
+            <div class="proximo-duration">7 ejercicios · ~55 min</div>
+          </div>
+        </div>
+        <div class="proximo-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+        </div>
+      </div>
+      <div class="proximo-item">
+        <div class="proximo-left">
+          <div class="proximo-day-badge">
+            <div class="proximo-day-name">Lun</div>
+            <div class="proximo-day-num num">23</div>
+          </div>
+          <div class="proximo-info">
+            <div class="proximo-focus">Espalda y bíceps</div>
+            <div class="proximo-duration">6 ejercicios · ~50 min</div>
+          </div>
+        </div>
+        <div class="proximo-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+        </div>
+      </div>
+      <div class="proximo-item">
+        <div class="proximo-left">
+          <div class="proximo-day-badge">
+            <div class="proximo-day-name">Mar</div>
+            <div class="proximo-day-num num">24</div>
+          </div>
+          <div class="proximo-info">
+            <div class="proximo-focus">Core + Cardio HIIT</div>
+            <div class="proximo-duration">5 ejercicios · ~40 min</div>
+          </div>
+        </div>
+        <div class="proximo-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /scroll-area -->
+
+  <!-- Bottom Tab Bar -->
+  <nav class="tab-bar">
+    <a class="tab-item active" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+        <polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+      <span class="tab-item-label">Inicio</span>
+    </a>
+    <a class="tab-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+      <span class="tab-item-label">Plan</span>
+    </a>
+    <a class="tab-fab" href="#">
+      <div class="tab-fab-circle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </div>
+      <span class="tab-fab-label">Crear</span>
+    </a>
+    <a class="tab-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="20" x2="18" y2="10"/>
+        <line x1="12" y1="20" x2="12" y2="4"/>
+        <line x1="6" y1="20" x2="6" y2="14"/>
+      </svg>
+      <span class="tab-item-label">Stats</span>
+    </a>
+    <a class="tab-item" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+      <span class="tab-item-label">Perfil</span>
+    </a>
+  </nav>
+</div>
+</body>
+</html>
