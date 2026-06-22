@@ -50,4 +50,16 @@ describe("assertPlanSpecShape", () => {
       /confirmed must be a boolean/i
     );
   });
+
+  it.each([
+    [null, /must be an object/i],
+    ["not-an-object", /must be an object/i],
+    [{ goal: "strength", daysPerWeek: "3", sessionDurationMinutes: 45, location: "gym", equipment: [], limitations: [], confirmed: false }, /daysPerWeek must be a number/i],
+    [{ goal: "strength", daysPerWeek: 3, sessionDurationMinutes: "45", location: "gym", equipment: [], limitations: [], confirmed: false }, /sessionDurationMinutes must be a number/i],
+    [{ goal: "strength", daysPerWeek: 3, sessionDurationMinutes: 45, location: 123, equipment: [], limitations: [], confirmed: false }, /location must be a string/i],
+    [{ goal: "strength", daysPerWeek: 3, sessionDurationMinutes: 45, location: "gym", equipment: "barbell", limitations: [], confirmed: false }, /equipment must be an array/i],
+    [{ goal: "strength", daysPerWeek: 3, sessionDurationMinutes: 45, location: "gym", equipment: [], limitations: "none", confirmed: false }, /limitations must be an array/i],
+  ])("rejects invalid PlanSpec shape %#", (invalid, expectedError) => {
+    expect(() => assertPlanSpecShape(invalid)).toThrow(expectedError);
+  });
 });
