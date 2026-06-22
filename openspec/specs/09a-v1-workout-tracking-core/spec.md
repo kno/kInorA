@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Provide online workout session tracking, set records, RPE validation, and notes before offline sync is added.
+Provide live workout/session tracking, exercise execution surfaces, set records, RPE validation, and notes before offline sync is added.
 
 ## Dependencies
 
@@ -20,6 +20,26 @@ The system MUST allow authenticated users to create workout sessions and record 
 - GIVEN a user performing a workout session
 - WHEN they submit weight, reps, RPE, completion status, and notes
 - THEN the set is stored and appears in the active session
+
+### Requirement: Live Session Tracker Surface
+
+The tracker MUST provide a focused live workout surface for the current session, including current exercise context, set progress, rest/status controls, and completion state.
+
+#### Scenario: User tracks an active workout
+
+- GIVEN a user starts a workout session
+- WHEN the tracker renders
+- THEN it shows the active exercise, planned sets, logged progress, and the next available tracking action
+
+### Requirement: Exercise Execution Surface
+
+Exercise execution screens MUST show enough exercise context for safe session execution without becoming a progress analytics surface.
+
+#### Scenario: User views current exercise details
+
+- GIVEN a user opens an exercise during a live session
+- WHEN the exercise detail surface renders
+- THEN it shows instructions, planned sets or rest context, status, and session-specific controls
 
 ### Requirement: RPE Validation
 

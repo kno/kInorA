@@ -57,6 +57,17 @@ Use the project name or id when querying MCP tools. Prefer `get_artifact` for a 
 | Mobile session tracker | `screens/mobile-tracker.html` | Live workout tracking controls and progress |
 | Brand proposals | `kinora-brand-proposals.html`, `brand-proposals.html` | Historical brand exploration only; do not override `DESIGN.md` without approval |
 
+## Roadmap mapping
+
+| Open Design area | Canonical spec |
+|---|---|
+| Orbit design system, landing page, app shell, navigation, screen scaffolds | `06b-v1-orbit-ui-shell` |
+| Web/mobile card-based create plan | `07-v1-plan-wizard` |
+| Live workout tracker and exercise execution | `09a-v1-workout-tracking-core` |
+| Dashboard, statistics, weekly plan/progress overview, exercise progress references | `09c-v1-progress-dashboard-stats` |
+| Conversational create-plan assistant and extracted-data panel | `12-v1.1-interactive-text-chat` |
+| Mobile voice assistant | `13-v1.1-interactive-voice-chat` |
+
 ## Brand contract
 
 The Open Design brand exploration contains three proposals: `Kinetic K`, `Orbit`, and `Ascend`. The selected brand direction for this repository is **Orbit**. Future UI and brand asset work must use Orbit as the canonical direction unless a later accepted SDD decision changes it.

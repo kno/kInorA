@@ -2,7 +2,9 @@
 
 ## Purpose
 
-Enable voice-based plan definition and conversational interaction via Whisper STT and OpenAI TTS, complementing text chat.
+Enable voice-assistant screens for voice-based plan definition and conversational interaction via Whisper STT and OpenAI TTS, complementing text chat.
+
+This spec maps to the mobile voice assistant Open Design screen and remains v1.1 scope.
 
 ## Requirements
 

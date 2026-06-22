@@ -2,7 +2,9 @@
 
 ## Purpose
 
-Provide conversational plan definition via text chat, allowing users to describe goals, constraints, and preferences in natural language to co-create workout plans.
+Provide conversational create-plan screens via text chat, allowing users to describe goals, constraints, and preferences in natural language to co-create workout plans.
+
+This spec maps to the conversational assistant and extracted-data panel from Open Design. It is v1.1 scope and does not replace the v1 card-mode create-plan flow.
 
 ## Requirements
 
