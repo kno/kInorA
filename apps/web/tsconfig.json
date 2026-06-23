@@ -8,6 +8,8 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"]
