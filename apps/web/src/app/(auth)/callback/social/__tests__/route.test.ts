@@ -152,6 +152,7 @@ describe("GET route handler", () => {
 
     try {
       const request = {
+        url: "http://localhost:3000/callback/social?code=c&state=s",
         nextUrl: { searchParams: new URLSearchParams({ code: "c", state: "s" }) },
       } as never;
 
@@ -174,6 +175,7 @@ describe("GET route handler", () => {
 
     try {
       const request = {
+        url: "http://localhost:3000/callback/social",
         nextUrl: { searchParams: new URLSearchParams() },
       } as never;
 

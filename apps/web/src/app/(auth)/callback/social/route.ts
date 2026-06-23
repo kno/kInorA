@@ -24,8 +24,9 @@ function apiBaseUrl(): string {
   return process.env.API_BASE_URL ?? "http://localhost:4000";
 }
 
-function redirectWithError(error: string): NextResponse {
-  const url = new URL(LOGIN_PATH, "http://placeholder.invalid");
+function redirectToLogin(error: string, origin?: string): NextResponse {
+  const base = origin ?? "http://localhost";
+  const url = new URL(LOGIN_PATH, base);
   url.searchParams.set("error", error);
   return NextResponse.redirect(url, { status: 303 });
 }
@@ -34,16 +35,25 @@ function redirectWithError(error: string): NextResponse {
  * Pure orchestration of the callback proxy — extracted from the route handler
  * so it can be unit-tested with a mock `fetch` without constructing a real
  * NextRequest. Returns the NextResponse the route should return.
+ *
+ * @param searchParams - The incoming request query params (code + state).
+ * @param options.fetchImpl - Mock fetch for tests (defaults to global fetch).
+ * @param options.apiBaseUrl - API base for the callback POST (defaults to env).
+ * @param options.origin - App origin for redirect URLs (defaults to http://localhost for tests).
  */
 export async function proxySocialCallback(
   searchParams: URLSearchParams,
-  options: { fetchImpl?: typeof fetch; apiBaseUrl?: string } = {}
+  options: {
+    fetchImpl?: typeof fetch;
+    apiBaseUrl?: string;
+    origin?: string;
+  } = {}
 ): Promise<NextResponse> {
   const code = searchParams.get("code");
   const state = searchParams.get("state");
 
   if (!code || !state) {
-    return redirectWithError("missing_params");
+    return redirectToLogin("missing_params", options.origin);
   }
 
   const base = options.apiBaseUrl ?? apiBaseUrl();
@@ -57,18 +67,18 @@ export async function proxySocialCallback(
       body: JSON.stringify({ code, state }),
     });
   } catch {
-    return redirectWithError("api_unreachable");
+    return redirectToLogin("api_unreachable", options.origin);
   }
 
   if (!res.ok) {
     const payload = (await res.json().catch(() => ({}))) as { error?: string };
-    return redirectWithError(payload.error ?? "social_login_failed");
+    return redirectToLogin(payload.error ?? "social_login_failed", options.origin);
   }
 
   const session = (await res.json().catch(() => ({}))) as { token?: string };
 
-  const home = new URL(HOME_PATH, "http://placeholder.invalid");
-  const next = NextResponse.redirect(home, { status: 303 });
+  const url = new URL(HOME_PATH, options.origin ?? "http://localhost");
+  const next = NextResponse.redirect(url, { status: 303 });
 
   if (session.token) {
     next.cookies.set(SESSION_COOKIE, session.token, {
@@ -82,5 +92,6 @@ export async function proxySocialCallback(
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  return proxySocialCallback(request.nextUrl.searchParams);
+  const origin = new URL(request.url).origin;
+  return proxySocialCallback(request.nextUrl.searchParams, { origin });
 }
