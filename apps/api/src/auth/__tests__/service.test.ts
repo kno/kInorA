@@ -7,8 +7,9 @@ vi.mock("../../tenant/provisioning.js", () => ({
   provisionTenantForUser: vi.fn(),
 }));
 
-import { AuthService } from "../service.js";
+import { AuthService, SESSION_TTL_MS } from "../service.js";
 import { provisionTenantForUser } from "../../tenant/provisioning.js";
+import { hashPassword } from "@kinora/domain";
 
 const mockProvision = vi.mocked(provisionTenantForUser);
 
@@ -150,5 +151,106 @@ describe("AuthService.register", () => {
     ).rejects.toThrow();
 
     expect(mockProvision).not.toHaveBeenCalled();
+  });
+});
+
+// --- Login tests (task 1.2 + 4.2) ---
+
+describe("AuthService.login", () => {
+  let service: AuthService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns a session response for valid credentials", async () => {
+    const realHash = hashPassword("SecurePass123!");
+    const db = createMockDb({
+      userRows: [{ id: "user-uuid-1", email: "user@example.com" }],
+      credentialRows: [{ userId: "user-uuid-1", passwordHash: realHash }],
+      membershipRows: [
+        { id: "m-1", tenantId: "tenant-uuid-1", userId: "user-uuid-1", role: "owner", status: "active" },
+      ],
+      tenantRows: [{ id: "tenant-uuid-1", name: "user's workspace" }],
+      insertRows: [
+        {
+          tokenHash: "hash",
+          userId: "user-uuid-1",
+          tenantId: "tenant-uuid-1",
+          createdAt: new Date(),
+          expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+        },
+      ],
+    });
+    service = new AuthService(db);
+
+    const result = await service.login({
+      email: "user@example.com",
+      password: "SecurePass123!",
+    });
+
+    expect(result.token).toHaveLength(64);
+    expect(result.token).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.user).toEqual({ id: expect.any(String), email: "user@example.com" });
+    expect(result.tenant).toEqual({ id: expect.any(String), name: "user's workspace" });
+  });
+
+  // --- Triangle: edge cases ---
+
+  it("rejects login with a wrong password", async () => {
+    const realHash = hashPassword("CorrectPass123!");
+    const db = createMockDb({
+      userRows: [{ id: "user-uuid-1", email: "user@example.com" }],
+      credentialRows: [{ userId: "user-uuid-1", passwordHash: realHash }],
+      membershipRows: [{ id: "m-1", tenantId: "t-1", userId: "user-uuid-1", role: "owner", status: "active" }],
+      tenantRows: [{ id: "t-1", name: "ws" }],
+    });
+    service = new AuthService(db);
+
+    await expect(
+      service.login({ email: "user@example.com", password: "WrongPass456!" })
+    ).rejects.toThrow();
+  });
+
+  it("rejects login with an unknown email", async () => {
+    const db = createMockDb({
+      userRows: [], // no user found
+    });
+    service = new AuthService(db);
+
+    await expect(
+      service.login({ email: "nobody@example.com", password: "AnyPassword123!" })
+    ).rejects.toThrow();
+  });
+
+  it("rejects login for a social-only account with no password credentials", async () => {
+    const db = createMockDb({
+      userRows: [{ id: "social-uuid-1", email: "social@example.com" }],
+      credentialRows: [], // no credentials (social-only)
+    });
+    service = new AuthService(db);
+
+    await expect(
+      service.login({ email: "social@example.com", password: "SomePassword123!" })
+    ).rejects.toThrow();
+  });
+});
+
+// --- Logout tests (task 1.3) ---
+
+describe("AuthService.logout", () => {
+  let service: AuthService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("deletes a session by its token hash (sessionId)", async () => {
+    const db = createMockDb();
+    service = new AuthService(db);
+
+    await service.logout("a".repeat(64));
+
+    expect((db as unknown as { delete: ReturnType<typeof vi.fn> }).delete).toHaveBeenCalledTimes(1);
   });
 });
