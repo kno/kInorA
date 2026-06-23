@@ -1,13 +1,10 @@
-import Fastify from "fastify";
-import { healthRoute } from "./routes/health.js";
+import { buildApp } from "./app.js";
 
 const PORT = Number(process.env.PORT ?? 4000);
 const HOST = process.env.HOST ?? "0.0.0.0";
 
 async function main() {
-  const app = Fastify();
-
-  await app.register(healthRoute);
+  const app = await buildApp();
 
   try {
     await app.listen({ port: PORT, host: HOST });

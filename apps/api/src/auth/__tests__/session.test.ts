@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateToken, hashToken, verifyToken } from "../session.js";
+import { generateToken, hashToken, verifyToken, computeTokenHash } from "../session.js";
 import { isValidTokenFormat } from "@kinora/domain";
 
 describe("session token infrastructure", () => {
@@ -57,5 +57,32 @@ describe("session token infrastructure", () => {
   it("rejects verification against a malformed stored hash", () => {
     expect(verifyToken("a".repeat(64), "")).toBe(false);
     expect(verifyToken("a".repeat(64), "not-a-valid-hash")).toBe(false);
+  });
+});
+
+describe("computeTokenHash (deterministic hash for db lookup)", () => {
+  it("returns the same hash for the same token on every call", () => {
+    const token = generateToken();
+    const a = computeTokenHash(token);
+    const b = computeTokenHash(token);
+    expect(a).toBe(b);
+  });
+
+  it("returns a 64-char hex string (SHA-256)", () => {
+    const token = generateToken();
+    const hash = computeTokenHash(token);
+    expect(hash).toHaveLength(64);
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("returns a different hash for a different token", () => {
+    const tokenA = generateToken();
+    const tokenB = generateToken();
+    expect(computeTokenHash(tokenA)).not.toBe(computeTokenHash(tokenB));
+  });
+
+  it("throws for an invalid token format", () => {
+    expect(() => computeTokenHash("not-a-valid-token")).toThrow();
+    expect(() => computeTokenHash("")).toThrow();
   });
 });
