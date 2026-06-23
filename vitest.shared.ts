@@ -13,7 +13,7 @@ export const coverageConfig = {
   thresholds: {
     statements: 80,
     branches: 80,
-    functions: 80,
-    lines: 80,
-  },
+    functions: 100, // Every exported function must be covered. Per-package
+    lines: 80,      // overrides in vitest.config.ts for framework glue.
+  },                // Pre-push hook enforces these at push time.
 } satisfies NonNullable<NonNullable<UserConfig["test"]>["coverage"]>;
