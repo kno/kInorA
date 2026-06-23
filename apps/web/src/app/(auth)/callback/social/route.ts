@@ -11,9 +11,9 @@ import { NextResponse, type NextRequest } from "next/server";
  * session token in an httpOnly cookie; on any failure it redirects to the login
  * page with an `error` query param.
  *
- * The session cookie name is `kinora_session` — PR4's middleware reads the same
- * cookie to gate protected routes. Keeping the cookie write here (not in PR4)
- * is intentional: the callback is where the API-issued token arrives.
+ * The session cookie name is `kinora_session` — the proxy reads the same
+ * cookie to gate protected routes. Keeping the cookie write here (not in
+ * the proxy) is intentional: the callback is where the API-issued token arrives.
  */
 
 export const SESSION_COOKIE = "kinora_session";

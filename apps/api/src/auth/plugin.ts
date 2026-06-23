@@ -63,7 +63,6 @@ const rawPlugin: FastifyPluginAsync<AuthPluginOptions> = async (
   });
 
   // Expose reply.authError as a response header for observability.
-  // 05b will intercept this to return 401/403; v1 (05a) only marks it.
   fastify.addHook("onSend", async (_request: FastifyRequest, reply: FastifyReply) => {
     if (reply.authError) {
       reply.header("x-auth-error", reply.authError);
@@ -80,15 +79,34 @@ Object.assign(rawPlugin, { [Symbol.for("skip-override")]: true });
 export const authPlugin = rawPlugin;
 
 /**
+ * Send a 401 response and tag reply.authError for observability.
+ *
+ * This is the single place that translates auth failures into HTTP 401.
+ * The onSend hook in the plugin reads reply.authError to set the
+ * `x-auth-error` response header.
+ */
+function sendUnauthorized(
+  reply: FastifyReply,
+  reason: string
+): void {
+  reply.authError = reason;
+  reply.code(401).send({ error: "unauthorized" });
+}
+
+/**
  * requireAuth preHandler — checks that request.authContext is present.
  *
- * Sets `reply.authError = 'missing_session'` when the context is null but
- * does NOT return 401/403. The reject policy is owned by 05b.
+ * Uses `sendUnauthorized` so there is exactly one place that emits 401
+ * responses. The onSend hook in the plugin reads `reply.authError` to
+ * expose it as the `x-auth-error` header for observability.
+ *
+ * This is NOT a throw — it uses reply.send() so Fastify short-circuits
+ * the request lifecycle cleanly and the onSend hook still fires.
  */
 export function requireAuth() {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     if (!request.authContext) {
-      reply.authError = "missing_session";
+      sendUnauthorized(reply, "missing_session");
     }
   };
 }
