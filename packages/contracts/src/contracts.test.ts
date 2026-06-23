@@ -2,12 +2,20 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import * as contracts from "./index";
 import type {
   HealthResponse,
+  LoginRequest,
   MembershipRole,
   MembershipStatus,
+  OidcCallbackParams,
   PlanGoal,
   PlanSpec,
+  RegisterRequest,
+  SessionContext,
+  SessionId,
+  SessionResponse,
+  TenantId,
   TenantQueryContextDTO,
   TrainingLocation,
+  UserId,
 } from "./index";
 
 describe("shared contracts boundary", () => {
@@ -42,5 +50,32 @@ describe("shared contracts boundary", () => {
     >();
     expectTypeOf<MembershipRole>().toEqualTypeOf<"owner" | "member">();
     expectTypeOf<MembershipStatus>().toEqualTypeOf<"invited" | "active" | "suspended">();
+  });
+
+  it("defines auth session contracts with branded session id", () => {
+    // SessionId is a branded string: assignable to string, but a plain
+    // string is NOT assignable to SessionId (prevents accidental mixing).
+    expectTypeOf<SessionId>().toMatchTypeOf<string>();
+    expectTypeOf<string>().not.toMatchTypeOf<SessionId>();
+
+    expectTypeOf<SessionContext>().toEqualTypeOf<{
+      userId: UserId;
+      tenantId: TenantId;
+      sessionId: SessionId;
+    }>();
+  });
+
+  it("defines auth request DTOs crossing app boundaries", () => {
+    expectTypeOf<LoginRequest>().toEqualTypeOf<{ email: string; password: string }>();
+    expectTypeOf<RegisterRequest>().toEqualTypeOf<{ email: string; password: string }>();
+    expectTypeOf<OidcCallbackParams>().toEqualTypeOf<{ code: string; state: string }>();
+  });
+
+  it("defines the session response contract returned by auth flows", () => {
+    expectTypeOf<SessionResponse>().toEqualTypeOf<{
+      token: string;
+      user: { id: UserId; email: string };
+      tenant: { id: TenantId; name: string };
+    }>();
   });
 });
