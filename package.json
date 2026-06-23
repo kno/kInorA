@@ -2,7 +2,7 @@
   "name": "kinora",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n web,api -c blue,green \"pnpm --filter web dev\" \"pnpm --filter api dev\"",
+    "dev": "concurrently --kill-others --success first -n web,api -c blue,green \"pnpm --filter web dev\" \"pnpm --filter api dev\"",
     "start": "node scripts/start-production.mjs",
     "start:api": "pnpm --filter api start",
     "start:web": "pnpm --filter web start",
