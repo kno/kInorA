@@ -121,22 +121,22 @@ Chain strategy: stacked-to-main
 
 ### Phase 1: Web Auth Pages
 
-- [ ] [PR4][WEB] 1.1 Create `apps/web/src/app/(auth)/login/page.tsx` — email/password login form + "Sign in with Google" button. On success redirects to app home.
-- [ ] [PR4][WEB] 1.2 Create `apps/web/src/app/(auth)/sign-up/page.tsx` — email/password sign-up form + "Sign up with Google" button. On success redirects to app home.
+- [x] [PR4][WEB] 1.1 Create `apps/web/src/app/(auth)/login/page.tsx` — email/password login form + "Sign in with Google" button. On success redirects to app home.
+- [x] [PR4][WEB] 1.2 Create `apps/web/src/app/(auth)/sign-up/page.tsx` — email/password sign-up form + "Sign up with Google" button. On success redirects to app home.
 
 ### Phase 2: Web Middleware
 
-- [ ] [PR4][WEB] 2.1 Create `apps/web/src/middleware.ts` — checks for session cookie/token on protected routes (path-based matcher), redirects to `/login` when no session detected. Uses `request.authContext` presence only (no 401/403 — 05b owns that).
+- [x] [PR4][WEB] 2.1 Create `apps/web/src/middleware.ts` — checks for session cookie/token on protected routes (path-based matcher), redirects to `/login` when no session detected. Uses `request.authContext` presence only (no 401/403 — 05b owns that).
 
 ### Phase 3: Mobile Auth
 
-- [ ] [PR4][MOB] 3.1 Initialize `apps/mobile/` with Expo project structure + navigation setup.
-- [ ] [PR4][MOB] 3.2 Create mobile login and sign-up screens — email/password forms + Google Sign-In button using Google Sign-In SDK.
-- [ ] [PR4][MOB] 3.3 Create mobile OAuth deep-link handler with redirect allowlist validation — receives `code` + `state`, proxies to `POST /auth/social/callback`, stores session token, navigates to home.
-- [ ] [PR4][MOB] 3.4 Create mobile navigation guard — checks for stored session token, redirects unauthenticated users to login screen.
+- [x] [PR4][MOB] 3.1 Initialize `apps/mobile/` with Expo project structure + navigation setup.
+- [x] [PR4][MOB] 3.2 Create mobile login and sign-up screens — email/password forms + Google Sign-In button using Google Sign-In SDK.
+- [x] [PR4][MOB] 3.3 Create mobile OAuth deep-link handler with redirect allowlist validation — receives `code` + `state`, proxies to `POST /auth/social/callback`, stores session token, navigates to home.
+- [x] [PR4][MOB] 3.4 Create mobile navigation guard — checks for stored session token, redirects unauthenticated users to login screen.
 
 ### Phase 4: Testing
 
-- [ ] [PR4][TST] 4.1 Test web auth pages render correctly with Vitest (Next.js testing utilities).
-- [ ] [PR4][TST] 4.2 Test web middleware redirect — authenticated user passes through, unauthenticated user redirected to `/login`.
-- [ ] [PR4][TST] 4.3 Verify `pnpm type-check` + `pnpm test` + `pnpm architecture` + `pnpm deps-guard` pass across all workspaces.
+- [x] [PR4][TST] 4.1 Test web auth pages render correctly with Vitest (Next.js testing utilities).
+- [x] [PR4][TST] 4.2 Test web middleware redirect — authenticated user passes through, unauthenticated user redirected to `/login`.
+- [x] [PR4][TST] 4.3 Verify `pnpm type-check` + `pnpm test` + `pnpm architecture` + `pnpm deps-guard` pass across all workspaces.
