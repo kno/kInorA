@@ -62,8 +62,24 @@ const rawPlugin: FastifyPluginAsync<AuthPluginOptions> = async (
     };
   });
 
+  // Global 401 enforcement — defense-in-depth safety net.
+  //
+  // If ANY hook running before this one (onRequest, preValidation, or an
+  // earlier preHandler) sets reply.authError, this preHandler converts it
+  // into a 401 response before the route handler runs.
+  //
+  // Note: requireAuth (added AFTER the plugin) sets reply.authError in its
+  // own preHandler and sends the 401 directly — this hook cannot catch that
+  // because Fastify runs instance-level hooks registered during plugin init
+  // before hooks added later. This hook covers the remaining lifecycle phases.
+  fastify.addHook("preHandler", async (_request: FastifyRequest, reply: FastifyReply) => {
+    if (reply.authError && !reply.sent) {
+      reply.code(401).send({ error: "unauthorized" });
+    }
+  });
+
   // Expose reply.authError as a response header for observability.
-  // 05b will intercept this to return 401/403; v1 (05a) only marks it.
+  // Runs after the 401 is sent so the header is present on error responses.
   fastify.addHook("onSend", async (_request: FastifyRequest, reply: FastifyReply) => {
     if (reply.authError) {
       reply.header("x-auth-error", reply.authError);
@@ -82,13 +98,22 @@ export const authPlugin = rawPlugin;
 /**
  * requireAuth preHandler — checks that request.authContext is present.
  *
- * Sets `reply.authError = 'missing_session'` when the context is null but
- * does NOT return 401/403. The reject policy is owned by 05b.
+ * Sets `reply.authError = 'missing_session'` for observability (the onSend
+ * hook exposes it as the `x-auth-error` header) AND sends a 401 response
+ * with `{ error: "unauthorized" }` so the route handler never runs.
+ *
+ * This is NOT a throw — it uses reply.send() so Fastify short-circuits the
+ * request lifecycle cleanly and the onSend hook still fires for the header.
+ *
+ * The global preHandler in the plugin covers errors set in earlier lifecycle
+ * phases (onRequest/preValidation); requireAuth covers the per-route opt-in
+ * case since it runs after the plugin's instance-level hooks.
  */
 export function requireAuth() {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     if (!request.authContext) {
       reply.authError = "missing_session";
+      reply.code(401).send({ error: "unauthorized" });
     }
   };
 }

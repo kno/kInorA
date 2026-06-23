@@ -63,3 +63,76 @@ describe("evaluateAuthGate", () => {
     expect(result.kind).toBe("redirect");
   });
 });
+
+// --- 05b: hybrid 401/redirect based on request headers ---
+
+describe("evaluateAuthGate with API/XHR header detection (05b)", () => {
+  const baseInput = {
+    cookieValue: undefined,
+    pathname: "/dashboard",
+    origin: "http://localhost:3000",
+  };
+
+  it("redirects to /login for HTML requests without API headers", () => {
+    const result = evaluateAuthGate({
+      ...baseInput,
+      acceptHeader: "text/html,application/xhtml+xml",
+      requestedWithHeader: null,
+    });
+
+    expect(result.kind).toBe("redirect");
+    if (result.kind !== "redirect") return;
+    expect(result.location).toContain("/login");
+  });
+
+  it("returns unauthorized for API requests with Accept: application/json", () => {
+    const result = evaluateAuthGate({
+      ...baseInput,
+      acceptHeader: "application/json",
+      requestedWithHeader: null,
+    });
+
+    expect(result).toEqual({ kind: "unauthorized" });
+  });
+
+  it("returns unauthorized for XHR requests with x-requested-with: XMLHttpRequest", () => {
+    const result = evaluateAuthGate({
+      ...baseInput,
+      acceptHeader: null,
+      requestedWithHeader: "XMLHttpRequest",
+    });
+
+    expect(result).toEqual({ kind: "unauthorized" });
+  });
+
+  // Triangle: Accept header containing application/json among other types
+  it("returns unauthorized when Accept includes application/json among other types", () => {
+    const result = evaluateAuthGate({
+      ...baseInput,
+      acceptHeader: "application/json, text/javascript, */*",
+      requestedWithHeader: null,
+    });
+
+    expect(result).toEqual({ kind: "unauthorized" });
+  });
+
+  // Triangle: session present + API headers → pass (auth takes priority over 401)
+  it("passes through when a session cookie is present, even with API headers", () => {
+    const result = evaluateAuthGate({
+      cookieValue: "valid-session-token",
+      pathname: "/dashboard",
+      origin: "http://localhost:3000",
+      acceptHeader: "application/json",
+      requestedWithHeader: "XMLHttpRequest",
+    });
+
+    expect(result).toEqual({ kind: "pass" });
+  });
+
+  // Triangle: no headers at all → redirect (backward compat with 05a)
+  it("redirects to /login when no headers are provided", () => {
+    const result = evaluateAuthGate(baseInput);
+
+    expect(result.kind).toBe("redirect");
+  });
+});
