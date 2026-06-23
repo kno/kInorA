@@ -1,0 +1,27 @@
+#!/bin/sh
+#
+# Pre-push hook: enforce coverage thresholds before push.
+# Runs `pnpm test:coverage` — Vitest fails the push if any
+# package's coverage drops below its configured thresholds.
+#
+# The coverage thresholds live in:
+#   vitest.shared.ts          — global baseline
+#   apps/*/vitest.config.ts   — per-package override
+#   packages/*/vitest.config.ts
+#
+# To skip: git push --no-verify
+
+echo "=== Pre-push: checking coverage thresholds ==="
+pnpm test:coverage
+status=$?
+
+if [ $status -ne 0 ]; then
+  echo ""
+  echo "❌ Coverage thresholds not met. Push blocked."
+  echo "   Run 'pnpm test:coverage' locally to see the details."
+  echo "   To skip (not recommended): git push --no-verify"
+  exit 1
+fi
+
+echo "✅ Coverage thresholds met. Push allowed."
+exit 0

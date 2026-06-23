@@ -14,10 +14,6 @@ export type SocialLoginProxyResult =
   | { kind: "redirect"; location: string }
   | { kind: "error"; location: string };
 
-function apiBaseUrl(): string {
-  return process.env.API_BASE_URL ?? "http://localhost:4000";
-}
-
 export async function proxySocialLogin(
   provider: string,
   options: {
@@ -34,7 +30,7 @@ export async function proxySocialLogin(
     return { kind: "error", location: url.toString() };
   }
 
-  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const base = options.apiBaseUrl ?? process.env.API_BASE_URL ?? "http://localhost:4000";
   const fetchImpl = options.fetchImpl ?? fetch;
 
   let res: Response;

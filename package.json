@@ -2,7 +2,7 @@
   "name": "kinora",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n web,api -c blue,green \"pnpm --filter web dev\" \"pnpm --filter api dev\"",
+    "dev": "concurrently --kill-others --success first -n web,api -c blue,green \"pnpm --filter web dev\" \"pnpm --filter api dev\"",
     "start": "node scripts/start-production.mjs",
     "start:api": "pnpm --filter api start",
     "start:web": "pnpm --filter web start",
@@ -12,7 +12,8 @@
     "test:coverage": "pnpm -r --if-present test:coverage",
     "test:e2e": "playwright test",
     "deps-guard": "node scripts/deps-guard.mjs",
-    "architecture": "depcruise --config .dependency-cruiser.cjs packages/domain/src packages/contracts/src apps/api/src && node scripts/architecture-negative-test.mjs"
+    "architecture": "depcruise --config .dependency-cruiser.cjs packages/domain/src packages/contracts/src apps/api/src && node scripts/architecture-negative-test.mjs",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0",

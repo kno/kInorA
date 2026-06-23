@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   assertTenantContext,
   assertTenantIdMatchesContext,
+  extractTenantQueryContext,
   type TenantQueryContext,
 } from "../tenant-context.js";
+import type { SessionContext } from "@kinora/contracts";
 
 // --- Scenario: Query without tenant rejected (Spec Req 6) ---
 
@@ -118,5 +120,58 @@ describe("assertTenantIdMatchesContext", () => {
     expect(() => assertTenantIdMatchesContext(emptyCtx, "")).toThrow(
       /tenant context.*required/i
     );
+  });
+});
+
+// --- Scenario: extractTenantQueryContext (05b) ---
+// Derives a TenantQueryContext from the request's authContext so repository
+// guards receive tenant + actor identity without re-reading the session.
+
+describe("extractTenantQueryContext", () => {
+  function makeSessionContext(
+    userId: string,
+    tenantId: string,
+    sessionId: string = "a".repeat(64)
+  ): SessionContext {
+    return {
+      userId: userId as unknown as SessionContext["userId"],
+      tenantId: tenantId as unknown as SessionContext["tenantId"],
+      sessionId: sessionId as unknown as SessionContext["sessionId"],
+    };
+  }
+
+  it("extracts TenantQueryContext from a valid authContext", () => {
+    const authContext = makeSessionContext("user-uuid-1", "tenant-uuid-1");
+
+    const result = extractTenantQueryContext({ authContext });
+
+    expect(result.tenantId).toBe("tenant-uuid-1");
+    expect(result.actorUserId).toBe("user-uuid-1");
+  });
+
+  it("throws when authContext is null", () => {
+    expect(() => extractTenantQueryContext({ authContext: null })).toThrow(
+      "Cannot extract tenant context: authContext is null"
+    );
+  });
+
+  // Triangle: different tenant/user values produce different contexts
+  it("extracts correct fields for a different tenant and user", () => {
+    const authContext = makeSessionContext("user-uuid-2", "tenant-uuid-2");
+
+    const result = extractTenantQueryContext({ authContext });
+
+    expect(result.tenantId).toBe("tenant-uuid-2");
+    expect(result.actorUserId).toBe("user-uuid-2");
+  });
+
+  // Triangle: sessionId is NOT included in TenantQueryContext (only tenant + actor)
+  it("does not include sessionId in the returned context", () => {
+    const authContext = makeSessionContext("user-1", "tenant-1", "b".repeat(64));
+
+    const result = extractTenantQueryContext({ authContext });
+
+    expect(result).not.toHaveProperty("sessionId");
+    expect(Object.keys(result).sort()).toEqual(["actorUserId", "tenantId"]);
   });
 });
