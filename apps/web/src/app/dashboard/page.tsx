@@ -3,7 +3,7 @@ import { logoutAction } from "./actions";
 /**
  * Dashboard — protected page only accessible with a valid session.
  *
- * The middleware (`middleware.ts`) gates this route: no `kinora_session`
+ * The proxy (`proxy.ts`) gates this route: no `kinora_session`
  * cookie → redirect to `/login`. If you can see this page you are
  * authenticated (cookie present — full session validation delegated
  * to the API, 05b owns 401/403 reject policy).

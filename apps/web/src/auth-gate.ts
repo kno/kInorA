@@ -1,10 +1,10 @@
 /**
- * Pure auth-gate decision logic for the Next.js middleware.
+ * Pure auth-gate decision logic for the Next.js proxy.
  *
  * Extracted so the redirect-vs-pass-vs-401 decision can be unit-tested without
- * constructing real NextRequest objects. The middleware wraps this: it
- * reads the cookie, pathname, and headers from the request, calls
- * `evaluateAuthGate`, and returns the appropriate NextResponse.
+ * constructing real NextRequest objects. The proxy wraps this: it reads the
+ * cookie, pathname, and headers from the request, calls `evaluateAuthGate`,
+ * and returns the appropriate NextResponse.
  *
  * 05b: unauthenticated requests now fail closed. API/XHR clients (detected
  * via `Accept: application/json` or `x-requested-with: XMLHttpRequest`) get

@@ -3,8 +3,8 @@ import { evaluateAuthGate } from "./auth-gate";
 import { SESSION_COOKIE } from "./auth/session-cookie";
 
 /**
- * Next.js middleware — gates protected routes by checking for the
- * `kinora_session` cookie.
+ * Next.js proxy (formerly middleware) — gates protected routes by
+ * checking for the `kinora_session` cookie.
  *
  * 05b: unauthenticated API/XHR requests (detected via `Accept: application/json`
  * or `x-requested-with: XMLHttpRequest`) get a 401 JSON response. HTML
@@ -16,7 +16,7 @@ import { SESSION_COOKIE } from "./auth/session-cookie";
  * intentionally NOT protected — users must reach them without a session.
  */
 
-export function middleware(request: NextRequest): NextResponse | Response {
+export function proxy(request: NextRequest): NextResponse | Response {
   const result = evaluateAuthGate({
     cookieValue: request.cookies.get(SESSION_COOKIE)?.value,
     pathname: request.nextUrl.pathname,
