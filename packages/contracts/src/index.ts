@@ -69,3 +69,60 @@ export type MembershipRole = "owner" | "member";
  * Membership status enum values — mirrors the database pgEnum.
  */
 export type MembershipStatus = "invited" | "active" | "suspended";
+
+// ---------------------------------------------------------------------------
+// Auth contract types — session identity and auth request/response DTOs
+// These types cross app boundaries without leaking database schema details.
+// No Drizzle or pg imports are permitted here.
+// ---------------------------------------------------------------------------
+
+/**
+ * Branded type for Session IDs.
+ * Prevents accidental mixing with other string IDs.
+ */
+export type SessionId = string & { readonly __brand: unique symbol };
+
+/**
+ * Authenticated request context attached to `request.authContext`.
+ * Carries the session's user and tenant identity across boundaries.
+ */
+export interface SessionContext {
+  userId: UserId;
+  tenantId: TenantId;
+  sessionId: SessionId;
+}
+
+/**
+ * Email/password login request crossing the api boundary.
+ */
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+/**
+ * Email/password registration request crossing the api boundary.
+ */
+export interface RegisterRequest {
+  email: string;
+  password: string;
+}
+
+/**
+ * Provider-agnostic OIDC callback params received from an OAuth redirect.
+ */
+export interface OidcCallbackParams {
+  code: string;
+  state: string;
+}
+
+/**
+ * Session response returned by register, login, and social callback flows.
+ * `token` is the opaque bearer token; `user` and `tenant` describe the
+ * authenticated identity for the issued session.
+ */
+export interface SessionResponse {
+  token: string;
+  user: { id: UserId; email: string };
+  tenant: { id: TenantId; name: string };
+}
