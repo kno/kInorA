@@ -1,12 +1,16 @@
-import { eq } from "drizzle-orm";
 import type { Database } from "../db/client.js";
-import { users, credentials, memberships, tenants, sessions } from "../db/schema.js";
 import { provisionTenantForUser } from "../tenant/provisioning.js";
+import { CredentialsRepository } from "../db/repositories/credentials.js";
+import {
+  UserRepository,
+  MembershipRepository,
+  TenantLookupRepository,
+} from "../db/repositories/auth-context.js";
+import { SessionRepository } from "../db/repositories/session.js";
 import {
   validatePasswordPolicy,
   hashPassword,
   verifyPassword,
-  PasswordPolicyError,
 } from "@kinora/domain";
 import { generateToken, computeTokenHash } from "./session.js";
 import type {
@@ -40,7 +44,19 @@ function deriveTenantName(email: string): string {
 }
 
 export class AuthService {
-  constructor(private db: Database) {}
+  private credRepo: CredentialsRepository;
+  private userRepo: UserRepository;
+  private memberRepo: MembershipRepository;
+  private tenantRepo: TenantLookupRepository;
+  private sessionRepo: SessionRepository;
+
+  constructor(private db: Database) {
+    this.credRepo = new CredentialsRepository(db);
+    this.userRepo = new UserRepository(db);
+    this.memberRepo = new MembershipRepository(db);
+    this.tenantRepo = new TenantLookupRepository(db);
+    this.sessionRepo = new SessionRepository(db);
+  }
 
   /**
    * Register a new user: provision tenant + user + membership,
@@ -61,7 +77,7 @@ export class AuthService {
 
     // 4. Hash password and create credentials
     const passwordHash = hashPassword(validPassword);
-    await this.db.insert(credentials).values({
+    await this.credRepo.create({
       userId: provisioned.userId,
       passwordHash,
     });
@@ -70,7 +86,7 @@ export class AuthService {
     const token = generateToken();
     const tokenHash = computeTokenHash(token);
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
-    await this.db.insert(sessions).values({
+    await this.sessionRepo.create({
       tokenHash,
       userId: provisioned.userId,
       tenantId: provisioned.tenantId,
@@ -98,15 +114,13 @@ export class AuthService {
    */
   async login(input: LoginRequest): Promise<SessionResponse> {
     // 1. Find user by email
-    const userRows = await this.db.select().from(users).where(eq(users.email, input.email));
-    const user = userRows[0];
+    const user = await this.userRepo.findByEmail(input.email);
     if (!user) {
       throw new AuthError("Invalid email or password");
     }
 
     // 2. Find password credentials
-    const credRows = await this.db.select().from(credentials).where(eq(credentials.userId, user.id));
-    const cred = credRows[0];
+    const cred = await this.credRepo.findByUserId(user.id);
     if (!cred) {
       // Social-only account — no password set
       throw new AuthError("Invalid email or password");
@@ -118,18 +132,13 @@ export class AuthService {
     }
 
     // 4. Find an active membership to get the tenant context
-    const memberRows = await this.db
-      .select()
-      .from(memberships)
-      .where(eq(memberships.userId, user.id));
-    const membership = memberRows[0];
+    const membership = await this.memberRepo.findFirstByUserId(user.id);
     if (!membership) {
       throw new AuthError("No active tenant membership found for user");
     }
 
     // 5. Find tenant by id for the response
-    const tenantRows = await this.db.select().from(tenants).where(eq(tenants.id, membership.tenantId));
-    const tenant = tenantRows[0];
+    const tenant = await this.tenantRepo.findById(membership.tenantId);
     if (!tenant) {
       throw new AuthError("Tenant not found");
     }
@@ -138,7 +147,7 @@ export class AuthService {
     const token = generateToken();
     const tokenHash = computeTokenHash(token);
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
-    await this.db.insert(sessions).values({
+    await this.sessionRepo.create({
       tokenHash,
       userId: user.id,
       tenantId: membership.tenantId,
@@ -164,6 +173,6 @@ export class AuthService {
    * `sessionId` is the deterministic token hash stored on the session record.
    */
   async logout(sessionId: string): Promise<void> {
-    await this.db.delete(sessions).where(eq(sessions.tokenHash, sessionId));
+    await this.sessionRepo.delete(sessionId);
   }
 }
