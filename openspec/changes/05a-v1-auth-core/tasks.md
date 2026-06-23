@@ -66,27 +66,27 @@ Chain strategy: stacked-to-main
 
 ### Phase 1: Auth Service
 
-- [ ] [PR2][API] 1.1 Create `apps/api/src/auth/service.ts` — `register(input: RegisterRequest)` → provisions tenant + creates credentials + creates session + returns token. Uses `provisionTenantForUser` from tenant/provisioning.ts.
-- [ ] [PR2][API] 1.2 Add `login(input: LoginRequest)` — verifies password against hash in credentials table, creates session, returns token.
-- [ ] [PR2][API] 1.3 Add `logout(sessionId)` — deletes session from DB.
+- [x] [PR2][API] 1.1 Create `apps/api/src/auth/service.ts` — `register(input: RegisterRequest)` → provisions tenant + creates credentials + creates session + returns token. Uses `provisionTenantForUser` from tenant/provisioning.ts.
+- [x] [PR2][API] 1.2 Add `login(input: LoginRequest)` — verifies password against hash in credentials table, creates session, returns token.
+- [x] [PR2][API] 1.3 Add `logout(sessionId)` — deletes session from DB.
 
 ### Phase 2: Fastify Plugin
 
-- [ ] [PR2][API] 2.1 Create `apps/api/src/auth/plugin.ts` — Fastify plugin that adds `request.authContext` decorator: extracts `Authorization: Bearer <token>`, hashes token, looks up session + user + membership. Sets `request.authContext: SessionContext | null`.
-- [ ] [PR2][API] 2.2 Add `requireAuth` preHandler to `plugin.ts` — checks `authContext` is non-null, sets `reply.authError = 'missing_session'` but does NOT return 401 (05b owns reject policy).
+- [x] [PR2][API] 2.1 Create `apps/api/src/auth/plugin.ts` — Fastify plugin that adds `request.authContext` decorator: extracts `Authorization: Bearer <token>`, hashes token, looks up session + user + membership. Sets `request.authContext: SessionContext | null`.
+- [x] [PR2][API] 2.2 Add `requireAuth` preHandler to `plugin.ts` — checks `authContext` is non-null, sets `reply.authError = 'missing_session'` but does NOT return 401 (05b owns reject policy).
 
 ### Phase 3: Auth Routes
 
-- [ ] [PR2][API] 3.1 Create `apps/api/src/routes/auth.ts` — Fastify plugin with `POST /auth/register` (body: RegisterRequest) and `POST /auth/login` (body: LoginRequest). Each returns `SessionResponse`.
-- [ ] [PR2][API] 3.2 Register auth plugin + auth routes in `apps/api/src/index.ts`.
+- [x] [PR2][API] 3.1 Create `apps/api/src/routes/auth.ts` — Fastify plugin with `POST /auth/register` (body: RegisterRequest) and `POST /auth/login` (body: LoginRequest). Each returns `SessionResponse`.
+- [x] [PR2][API] 3.2 Register auth plugin + auth routes in `apps/api/src/index.ts`.
 
 ### Phase 4: Testing
 
-- [ ] [PR2][TST] 4.1 RED: Write failing tests for auth service register (new account creates tenant + credentials + session). GREEN: Implement register. Triangle: duplicate email rejected, invalid password format, missing fields.
-- [ ] [PR2][TST] 4.2 RED: Write failing tests for auth service login (valid credentials return session, wrong password rejected). GREEN: Implement login. Triangle: wrong password, unknown email, account with no credentials (social-only).
-- [ ] [PR2][TST] 4.3 Integration test: `POST /auth/register` via `app.inject()` returns 200 with `SessionResponse` + token. `POST /auth/login` with valid creds returns session. Missing fields return 422.
-- [ ] [PR2][TST] 4.4 Integration test: session extraction plugin — valid bearer token sets `request.authContext`, missing token sets null, invalid token sets null. `requireAuth` preHandler marks error but does NOT return 401.
-- [ ] [PR2][TST] 4.5 Verify `pnpm type-check` + `pnpm test` + `pnpm architecture` + `pnpm deps-guard` pass.
+- [x] [PR2][TST] 4.1 RED: Write failing tests for auth service register (new account creates tenant + credentials + session). GREEN: Implement register. Triangle: duplicate email rejected, invalid password format, missing fields.
+- [x] [PR2][TST] 4.2 RED: Write failing tests for auth service login (valid credentials return session, wrong password rejected). GREEN: Implement login. Triangle: wrong password, unknown email, account with no credentials (social-only).
+- [x] [PR2][TST] 4.3 Integration test: `POST /auth/register` via `app.inject()` returns 200 with `SessionResponse` + token. `POST /auth/login` with valid creds returns session. Missing fields return 422.
+- [x] [PR2][TST] 4.4 Integration test: session extraction plugin — valid bearer token sets `request.authContext`, missing token sets null, invalid token sets null. `requireAuth` preHandler marks error but does NOT return 401.
+- [x] [PR2][TST] 4.5 Verify `pnpm type-check` + `pnpm test` + `pnpm architecture` + `pnpm deps-guard` pass.
 
 ## PR 3 — Social Login: OIDC + Google + Routes + Web Callback
 
