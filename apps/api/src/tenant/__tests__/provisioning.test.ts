@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { provisionTenantForUser } from "../provisioning.js";
+import { provisionTenantForUser, linkOauthToExistingUser } from "../provisioning.js";
 
 // --- Scenario: New tenant creation (Spec Req 4) ---
 
@@ -185,5 +185,65 @@ describe("provisionTenantForUser", () => {
         userEmail: "test@example.com",
       })
     ).rejects.toThrow(expectedError);
+  });
+});
+
+// --- Scenario: OAuth account linking to an existing user (Spec Req: Google-only) ---
+// linkOauthToExistingUser MUST NOT create a user or tenant — it only inserts the
+// oauth_account row linked to an existing userId. Race-safety relies on the
+// (provider_id, provider_account_id) + (provider_id, email) unique indexes.
+
+describe("linkOauthToExistingUser", () => {
+  it("inserts an oauth_account row linked to the existing userId and does not create a user/tenant", async () => {
+    const values = vi.fn().mockResolvedValue(undefined);
+    const insert = vi.fn().mockReturnValue({ values });
+
+    const mockDb = { insert } as unknown as Parameters<
+      typeof linkOauthToExistingUser
+    >[0];
+
+    await linkOauthToExistingUser(
+      mockDb,
+      "existing-user-1",
+      "google",
+      "google-acc-1",
+      "owner@example.com"
+    );
+
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(values).toHaveBeenCalledTimes(1);
+    // The values payload links the account to the existing user (a real Drizzle
+    // query passes the table as insert target — assert the inserted payload shape).
+    expect(values.mock.calls[0][0]).toMatchObject({
+      providerId: "google",
+      providerAccountId: "google-acc-1",
+      email: "owner@example.com",
+      userId: "existing-user-1",
+    });
+  });
+
+  // Triangulation: a distinct identity links to a different existing user
+  it("links a distinct OAuth identity to a second existing user without cross-contamination", async () => {
+    const values = vi.fn().mockResolvedValue(undefined);
+    const insert = vi.fn().mockReturnValue({ values });
+
+    const mockDb = { insert } as unknown as Parameters<
+      typeof linkOauthToExistingUser
+    >[0];
+
+    await linkOauthToExistingUser(
+      mockDb,
+      "existing-user-2",
+      "google",
+      "google-acc-2",
+      "second@example.com"
+    );
+
+    expect(values.mock.calls[0][0]).toMatchObject({
+      providerId: "google",
+      providerAccountId: "google-acc-2",
+      email: "second@example.com",
+      userId: "existing-user-2",
+    });
   });
 });

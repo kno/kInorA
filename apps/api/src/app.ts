@@ -5,20 +5,26 @@ import { AuthService, AuthError } from "./auth/service.js";
 import { authPlugin } from "./auth/plugin.js";
 import { authRoutes } from "./routes/auth.js";
 import { healthRoute } from "./routes/health.js";
+import { socialRoutes } from "./routes/social.js";
+import type { SocialAuthService } from "./auth/social.js";
 
 /**
  * Build the Fastify application with all plugins, routes, and error handlers.
  *
- * Accepts an optional db override for testing with mock or test databases.
- * In production, called without arguments — a real db client is created from
- * environment variables.
+ * Accepts an optional db override for testing with mock or test databases,
+ * and an optional socialAuthService for social login routes. In production,
+ * called from index.ts which creates both.
  */
-export async function buildApp(db?: Database): Promise<FastifyInstance> {
+export async function buildApp(
+  db?: Database,
+  socialAuthService?: SocialAuthService
+): Promise<FastifyInstance> {
   const database = db ?? createDbClient().db;
   const app = Fastify();
 
-  // Validation errors → 422, Auth errors → 401, everything else → 500.
-  // Must be set before registering route plugins so child scopes inherit.
+  // Validation errors → 422, Auth errors → 401, social auth errors → 400,
+  // everything else → 500. Must be set before registering route plugins so
+  // child scopes inherit.
   app.setErrorHandler((error: unknown, _request, reply) => {
     if (
       typeof error === "object" &&
@@ -43,6 +49,11 @@ export async function buildApp(db?: Database): Promise<FastifyInstance> {
 
   // Auth routes (register + login)
   await app.register(authRoutes, { authService: new AuthService(database) });
+
+  // Social login routes (OIDC provider abstraction + Google)
+  if (socialAuthService) {
+    await app.register(socialRoutes, { socialAuthService });
+  }
 
   return app;
 }

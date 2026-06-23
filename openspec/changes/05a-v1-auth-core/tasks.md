@@ -92,30 +92,30 @@ Chain strategy: stacked-to-main
 
 ### Phase 1: OIDC Provider Infrastructure
 
-- [ ] [PR3][API] 1.1 Create `apps/api/src/auth/providers.ts` — OIDC provider registry: interface `OidcProvider { getAuthorizationUrl(params): string; exchangeCode(code, state): ProviderUser }`. Configurable per provider via env vars. Register providers at startup.
-- [ ] [PR3][API] 1.2 Add `openid-client` to `apps/api/package.json`.
-- [ ] [PR3][API] 1.3 Implement Google OIDC provider — reads issuer metadata from `https://accounts.google.com/.well-known/openid-configuration`, validates `email_verified === true`, returns `{ providerId: 'google', providerAccountId, email, emailVerified }`.
+- [x] [PR3][API] 1.1 Create `apps/api/src/auth/providers.ts` — OIDC provider registry: interface `OidcProvider { getAuthorizationUrl(params): string; exchangeCode(code, state): ProviderUser }`. Configurable per provider via env vars. Register providers at startup.
+- [x] [PR3][API] 1.2 Add `openid-client` to `apps/api/package.json`.
+- [x] [PR3][API] 1.3 Implement Google OIDC provider — reads issuer metadata from `https://accounts.google.com/.well-known/openid-configuration`, validates `email_verified === true`, returns `{ providerId: 'google', providerAccountId, email, emailVerified }`.
 
 ### Phase 2: Social Login Routes
 
-- [ ] [PR3][API] 2.1 Add `GET /auth/social/login?provider=google` — initiates OIDC flow, returns authorization URL with PKCE + state.
-- [ ] [PR3][API] 2.2 Add `POST /auth/social/callback` — exchanges code for tokens, validates `email_verified`, handles linking: existing user by email → link OAuth account (transactional locked lookup/upsert with unique indexes). New verified user → provision tenant + create oauth_account + session (Google-only sign-up). Unverified email → error.
+- [x] [PR3][API] 2.1 Add `GET /auth/social/login?provider=google` — initiates OIDC flow, returns authorization URL with PKCE + state.
+- [x] [PR3][API] 2.2 Add `POST /auth/social/callback` — exchanges code for tokens, validates `email_verified`, handles linking: existing user by email → link OAuth account (transactional locked lookup/upsert with unique indexes). New verified user → provision tenant + create oauth_account + session (Google-only sign-up). Unverified email → error.
 
 ### Phase 3: Web OIDC Callback Proxy
 
-- [ ] [PR3][WEB] 3.1 Create `apps/web/src/app/(auth)/callback/social/route.ts` — Next.js route handler that captures OIDC callback params (code, state), proxies to `POST /auth/social/callback`. On success, redirects to app home. On error, redirects to login with error param.
+- [x] [PR3][WEB] 3.1 Create `apps/web/src/app/(auth)/callback/social/route.ts` — Next.js route handler that captures OIDC callback params (code, state), proxies to `POST /auth/social/callback`. On success, redirects to app home. On error, redirects to login with error param.
 
 ### Phase 4: Tenant Provisioning Update
 
-- [ ] [PR3][API] 4.1 Modify `apps/api/src/tenant/provisioning.ts` — add `linkOauthToExistingUser(db, userId, providerId, providerAccountId, email)` for the OAuth linking case (does not create new user/tenant, only links).
+- [x] [PR3][API] 4.1 Modify `apps/api/src/tenant/provisioning.ts` — add `linkOauthToExistingUser(db, userId, providerId, providerAccountId, email)` for the OAuth linking case (does not create new user/tenant, only links).
 
 ### Phase 5: Testing
 
-- [ ] [PR3][TST] 5.1 RED: Write failing tests for OIDC provider registry + Google provider (mock OIDC issuer). GREEN: Implement. Triangle: unverified email rejected, missing email in claims, unknown provider id.
-- [ ] [PR3][TST] 5.2 RED: Write failing tests for social callback — new Google user creates account + session, existing user links OAuth account. GREEN: Implement. Triangle: unverified email rejected, race condition on concurrent callback, provider mismatch.
-- [ ] [PR3][TST] 5.3 Integration test: `POST /auth/social/callback` via `app.inject()` with mocked OIDC exchange. Verify session returned for new users, linking for existing. Verify unverified email returns error.
-- [ ] [PR3][TST] 5.4 Test web callback proxy handler — valid code/state proxies to API, missing params return error redirect.
-- [ ] [PR3][TST] 5.5 Verify `pnpm type-check` + `pnpm test` + `pnpm architecture` + `pnpm deps-guard` pass.
+- [x] [PR3][TST] 5.1 RED: Write failing tests for OIDC provider registry + Google provider (mock OIDC issuer). GREEN: Implement. Triangle: unverified email rejected, missing email in claims, unknown provider id.
+- [x] [PR3][TST] 5.2 RED: Write failing tests for social callback — new Google user creates account + session, existing user links OAuth account. GREEN: Implement. Triangle: unverified email rejected, race condition on concurrent callback, provider mismatch.
+- [x] [PR3][TST] 5.3 Integration test: `POST /auth/social/callback` via `app.inject()` with mocked OIDC exchange. Verify session returned for new users, linking for existing. Verify unverified email returns error.
+- [x] [PR3][TST] 5.4 Test web callback proxy handler — valid code/state proxies to API, missing params return error redirect.
+- [x] [PR3][TST] 5.5 Verify `pnpm type-check` + `pnpm test` + `pnpm architecture` + `pnpm deps-guard` pass.
 
 ## PR 4 — UI: Web Auth Pages + Middleware + Mobile
 

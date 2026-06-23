@@ -1,5 +1,5 @@
 import type { Database } from "../db/client.js";
-import { tenants, users, memberships } from "../db/schema.js";
+import { tenants, users, memberships, oauth_accounts } from "../db/schema.js";
 
 /**
  * Input for the tenant provisioning primitive.
@@ -80,5 +80,36 @@ export async function provisionTenantForUser(
       userId: userRow.id,
       membershipId: membershipRow.id,
     };
+  });
+}
+
+/**
+ * Link an existing user to an OAuth account.
+ *
+ * Unlike {@link provisionTenantForUser}, this does NOT create a user or
+ * tenant — it only inserts an `oauth_accounts` row bound to an existing user.
+ * Race-safety on concurrent callbacks relies on the
+ * `(provider_id, provider_account_id)` and `(provider_id, email)` unique indexes;
+ * a duplicate insert is rejected by the database and the caller treats it as
+ * "already linked".
+ *
+ * @param db Database handle.
+ * @param userId Existing user id to link the OAuth account to.
+ * @param providerId OIDC provider id (e.g. `"google"`).
+ * @param providerAccountId Provider-scoped account id (`sub` claim).
+ * @param email The verified email returned by the provider.
+ */
+export async function linkOauthToExistingUser(
+  db: Database,
+  userId: string,
+  providerId: string,
+  providerAccountId: string,
+  email: string
+): Promise<void> {
+  await db.insert(oauth_accounts).values({
+    providerId,
+    providerAccountId,
+    email,
+    userId,
   });
 }
