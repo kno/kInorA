@@ -25,6 +25,10 @@ export default defineConfig({
         "src/app/auth/social/login/route.ts",
         "src/**/actions.ts",
       ],
+      thresholds: {
+        ...coverageConfig.thresholds,
+        functions: 90, // Framework excl. limits max; current is 94.44%.
+      },
     },
   },
 });

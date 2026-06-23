@@ -12,7 +12,8 @@
     "test:coverage": "pnpm -r --if-present test:coverage",
     "test:e2e": "playwright test",
     "deps-guard": "node scripts/deps-guard.mjs",
-    "architecture": "depcruise --config .dependency-cruiser.cjs packages/domain/src packages/contracts/src apps/api/src && node scripts/architecture-negative-test.mjs"
+    "architecture": "depcruise --config .dependency-cruiser.cjs packages/domain/src packages/contracts/src apps/api/src && node scripts/architecture-negative-test.mjs",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0",
