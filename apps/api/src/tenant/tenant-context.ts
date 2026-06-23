@@ -6,6 +6,8 @@
  * This guarantees unscoped queries never reach the database.
  */
 
+import type { SessionContext } from "@kinora/contracts";
+
 export interface TenantQueryContext {
   tenantId: string;
   actorUserId?: string;
@@ -58,4 +60,28 @@ export function assertTenantIdMatchesContext(
       `Tenant context scope mismatch: ctx.tenantId=${ctx.tenantId} but requested id=${requested}`
     );
   }
+}
+
+/**
+ * Extracts a `TenantQueryContext` from the request's `authContext`.
+ *
+ * Future protected routes call this to derive the tenant + actor identity
+ * before passing it to repository guards. Throws when `authContext` is null
+ * (i.e. the request is unauthenticated) so unscoped queries can never
+ * reach persistence.
+ *
+ * Spec requirement: "Every authenticated request MUST be scoped to the
+ * active tenant" — this utility is the bridge from the auth context to the
+ * repository contract.
+ */
+export function extractTenantQueryContext(request: {
+  authContext: SessionContext | null;
+}): TenantQueryContext {
+  if (request.authContext === null) {
+    throw new Error("Cannot extract tenant context: authContext is null");
+  }
+  return {
+    tenantId: request.authContext.tenantId,
+    actorUserId: request.authContext.userId,
+  };
 }
