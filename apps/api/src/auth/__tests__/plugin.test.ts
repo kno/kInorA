@@ -131,7 +131,7 @@ describe("auth plugin session extraction", () => {
   });
 });
 
-describe("requireAuth preHandler + global 401 enforcement", () => {
+describe("requireAuth preHandler + 401 enforcement", () => {
   let app: FastifyInstance;
 
   beforeEach(() => {

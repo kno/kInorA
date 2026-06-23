@@ -36,14 +36,14 @@ packages/contracts, packages/domain: build skipped (no target)
 
 **Dependency Guard**: ✅ Passed (no prohibited dependencies in any package)
 
-**Tests**: ✅ 218 passed / 0 failed / 0 skipped
+**Tests**: ✅ 281 passed / 0 failed / 0 skipped
 ```
 apps/api:   17 files, 158 tests passed
 apps/web:   10 files,  60 tests passed
 apps/mobile: 5 files,  34 tests passed
 packages/contracts: 1 file,   7 tests passed
 packages/domain:    3 files,  22 tests passed
-Total: 218 tests, all green
+Total: 281 tests, all green
 ```
 
 **Coverage (changed files)**:
@@ -103,7 +103,7 @@ The `middleware.ts` 0% coverage is expected — it imports `next/server` which c
 | TDD Evidence reported | ✅ | Found in apply-progress Engram `sdd/05b-v1-security-tenant-validation/apply-progress` |
 | All tasks have tests | ✅ | 4/4 task groups have associated test files |
 | RED confirmed (tests exist) | ✅ | 4/4 test files verified in codebase |
-| GREEN confirmed (tests pass) | ✅ | All 218 tests pass on execution |
+| GREEN confirmed (tests pass) | ✅ | All 281 tests pass on execution |
 | Triangulation adequate | ✅ | 4 cases (plugin) + 4 cases (tenant-context) + 6 cases (auth-gate) |
 | Safety Net for modified files | ✅ | 26/26 existing tests preserved (6 plugin + 15 tenant-context + 5 auth-gate) |
 
@@ -165,4 +165,4 @@ Audit findings:
 
 **PASS WITH WARNINGS**
 
-Spec compliance: 5/6 scenarios compliant (1 partial — tenant isolation is future-proofing, building blocks exist but no routes use them yet). All guards pass. 218 tests pass with 0 failures. TDD evidence is complete and verified. The single design deviation (Fastify hook ordering) is documented, doesn't break spec intent, and has a working resolution. No critical issues found.
+Spec compliance: 5/6 scenarios compliant (1 partial — tenant isolation is future-proofing, building blocks exist but no routes use them yet). All guards pass. 281 tests pass with 0 failures. TDD evidence is complete and verified. The single design deviation (Fastify hook ordering) is documented, doesn't break spec intent, and has a working resolution. No critical issues found.
