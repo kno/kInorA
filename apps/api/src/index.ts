@@ -26,6 +26,14 @@ async function main() {
 
   const app = await buildApp(db, socialAuthService);
 
+  const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
+  for (const signal of signals) {
+    process.on(signal, async () => {
+      await app.close();
+      process.exit(0);
+    });
+  }
+
   try {
     await app.listen({ port: PORT, host: HOST });
     console.log(`API server listening on http://${HOST}:${PORT}`);
