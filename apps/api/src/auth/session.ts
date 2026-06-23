@@ -1,4 +1,4 @@
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 import { assertValidToken, TOKEN_BYTES } from "@kinora/domain";
 
 /**
@@ -20,6 +20,19 @@ const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 128 * 1024 * 1024 };
  */
 export function generateToken(): string {
   return randomBytes(TOKEN_BYTES).toString("hex");
+}
+
+/**
+ * Compute a deterministic hash of a session token for DB storage and lookup.
+ *
+ * Uses SHA-256 because session tokens are already 256 bits of random entropy —
+ * a fast hash is secure against brute-force and enables O(1) exact-match lookup
+ * via the `tokenHash` unique index. The scrypt-based {@link hashToken} uses a
+ * random salt and is for token *verification*, not db lookup.
+ */
+export function computeTokenHash(token: string): string {
+  assertValidToken(token);
+  return createHash("sha256").update(token).digest("hex");
 }
 
 /**
