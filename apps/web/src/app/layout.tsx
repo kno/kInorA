@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import { resolveLocale } from "@/i18n/locale";
 import { SerwistProvider } from "@serwist/next/react";
 
+import "./globals.css";
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
