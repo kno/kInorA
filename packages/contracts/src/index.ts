@@ -117,6 +117,16 @@ export interface OidcCallbackParams {
 }
 
 /**
+ * Response to initiating a social (OIDC) login: the authorization URL the
+ * caller should redirect the user-agent to, plus the opaque state the API
+ * recorded to recover the provider on callback.
+ */
+export interface SocialLoginResponse {
+  authorizationUrl: string;
+  state: string;
+}
+
+/**
  * Session response returned by register, login, and social callback flows.
  * `token` is the opaque bearer token; `user` and `tenant` describe the
  * authenticated identity for the issued session.
