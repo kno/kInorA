@@ -139,12 +139,18 @@ export class SocialAuthService {
    * Complete an OIDC login given the callback `code` + `state`.
    * Resolves (provisioning, linking, or reusing an existing oauth account),
    * then issues a session and returns the {@link SessionResponse}.
+   *
+   * Cleans up the state→providerId map regardless of success or error to
+   * prevent unbounded memory growth (each login call adds one entry).
    */
   async callback(input: {
     code: string;
     state: string;
   }): Promise<SessionResponse> {
     const providerId = this.stateToProvider.get(input.state);
+    // Clean up the state entry immediately — it is single-use.
+    this.stateToProvider.delete(input.state);
+
     if (!providerId) {
       throw new SocialAuthError("Unknown or expired social login state");
     }
@@ -173,12 +179,31 @@ export class SocialAuthService {
       throw new SocialAuthError("Provider email is not verified");
     }
 
+    const context = await this.resolveUserTenantContext(providerUser);
+    return this.issueSession(context);
+  }
+
+  /**
+   * Normalize the three callback branches into a single user/tenant context.
+   *
+   * 1. OAuth account already exists → reuse it (any previous linking).
+   * 2. User exists with same verified email → link OAuth account.
+   * 3. New verified user (Google-only sign-up) → provision tenant + user + oauth_account.
+   */
+  private async resolveUserTenantContext(
+    providerUser: ProviderUser
+  ): Promise<{
+    userId: string;
+    tenantId: string;
+    tenantName: string;
+    email: string | undefined;
+  }> {
     const existingOauth = await this.deps.findOauthByProviderAccount(
       providerUser.providerId,
       providerUser.providerAccountId
     );
-    if (existingOauth && existingOauth.userId) {
-      return this.issueSessionFor(existingOauth.userId);
+    if (existingOauth?.userId) {
+      return this.tenantContextFor(existingOauth.userId);
     }
 
     const existingUser = await this.deps.findUserByEmail(providerUser.email);
@@ -189,7 +214,7 @@ export class SocialAuthService {
         providerUser.providerAccountId,
         providerUser.email
       );
-      return this.issueSessionFor(existingUser.id);
+      return this.tenantContextFor(existingUser.id);
     }
 
     const provisioned = await this.deps.provisionNewGoogleOnlyUser(
@@ -197,20 +222,24 @@ export class SocialAuthService {
       providerUser.providerAccountId,
       providerUser.email
     );
-    return this.issueSession({
+    return {
       userId: provisioned.userId,
       tenantId: provisioned.tenantId,
-      email: providerUser.email,
-      tenantIdValue: provisioned.tenantId,
       tenantName: provisioned.tenantName,
-    });
+      email: providerUser.email,
+    };
   }
 
   /**
-   * Issue a session for a user that already has a membership (linked or
-   * already-linked oauth account). Resolves the tenant via membership + lookup.
+   * Resolve tenantId + tenantName for a user that already has a membership
+   * (reused or linked OAuth account path).
    */
-  private async issueSessionFor(userId: string): Promise<SessionResponse> {
+  private async tenantContextFor(userId: string): Promise<{
+    userId: string;
+    tenantId: string;
+    tenantName: string;
+    email: string | undefined;
+  }> {
     const membership = await this.deps.findMembershipByUserId(userId);
     if (!membership) {
       throw new SocialAuthError("No active tenant membership found for user");
@@ -219,13 +248,12 @@ export class SocialAuthService {
     if (!tenant) {
       throw new SocialAuthError("Tenant not found");
     }
-    return this.issueSession({
+    return {
       userId,
-      tenantId: membership.tenantId,
-      email: undefined,
-      tenantIdValue: tenant.id,
+      tenantId: tenant.id,
       tenantName: tenant.name,
-    });
+      email: undefined,
+    };
   }
 
   /**
@@ -236,9 +264,8 @@ export class SocialAuthService {
   private async issueSession(args: {
     userId: string;
     tenantId: string;
-    email: string | undefined;
-    tenantIdValue: string;
     tenantName: string;
+    email: string | undefined;
   }): Promise<SessionResponse> {
     const token = generateToken();
     const tokenHash = hashTokenForLookup(token);
@@ -257,7 +284,7 @@ export class SocialAuthService {
         email: args.email ?? "",
       },
       tenant: {
-        id: args.tenantIdValue as unknown as TenantId,
+        id: args.tenantId as unknown as TenantId,
         name: args.tenantName,
       },
     };

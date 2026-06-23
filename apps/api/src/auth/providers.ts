@@ -252,20 +252,23 @@ export class GoogleProvider implements OidcProvider {
     callbackUrl.searchParams.set("code", code);
     callbackUrl.searchParams.set("state", state);
 
-    const tokens = await authorizationCodeGrant(configuration, callbackUrl, {
-      expectedState: state,
-      pkceCodeVerifier: codeVerifier,
-    });
+    try {
+      const tokens = await authorizationCodeGrant(configuration, callbackUrl, {
+        expectedState: state,
+        pkceCodeVerifier: codeVerifier,
+      });
 
-    // Verifier is single-use; drop it after redemption.
-    this.verifiers.delete(state);
+      const claims = tokens.claims();
+      if (!claims) {
+        throw new OidcClaimsError("OIDC token response missing ID Token claims");
+      }
 
-    const claims = tokens.claims();
-    if (!claims) {
-      throw new OidcClaimsError("OIDC token response missing ID Token claims");
+      return googleClaimsToProviderUser(claims as Record<string, unknown>);
+    } finally {
+      // Verifier is single-use; always delete once the state has been consumed,
+      // regardless of success or error, to prevent unbounded memory growth.
+      this.verifiers.delete(state);
     }
-
-    return googleClaimsToProviderUser(claims as Record<string, unknown>);
   }
 }
 

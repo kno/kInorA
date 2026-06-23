@@ -58,48 +58,50 @@ export const socialRoutes: FastifyPluginAsync<SocialRoutesOptions> = async (
 ) => {
   const { socialAuthService } = options;
 
-  // Scoped error handler: validation failures (missing/invalid fields) → 422,
-  // social auth errors → 400, anything else → 500. Self-scope keeps the routes
-  // plugin testable without an app-level error handler dependency.
-  fastify.setErrorHandler((error: unknown, _request, reply) => {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "validation" in error &&
-      Boolean((error as { validation: unknown }).validation)
-    ) {
-      return reply.code(422).send({ error: "Validation Error" });
-    }
-    if (error instanceof SocialAuthError || error instanceof UnknownProviderError) {
-      return reply.code(400).send({ error: error.message });
-    }
-    fastify.log.error(error as Error);
-    return reply.code(500).send({ error: "Internal Server Error" });
+  // Register routes on a child instance so the scoped error handler only covers
+  // social routes, not the parent app. Errors that do not match the social-auth
+  // patterns fall through to the app-level handler.
+  await fastify.register(async (scoped) => {
+    scoped.setErrorHandler((error: unknown, _request, reply) => {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "validation" in error &&
+        Boolean((error as { validation: unknown }).validation)
+      ) {
+        return reply.code(422).send({ error: "Validation Error" });
+      }
+      if (error instanceof SocialAuthError || error instanceof UnknownProviderError) {
+        return reply.code(400).send({ error: error.message });
+      }
+      // Let unknown errors propagate to the parent (app-level) error handler.
+      throw error;
+    });
+
+    scoped.get(
+      "/auth/social/login",
+      { schema: loginSchema },
+      async (
+        request: FastifyRequest<{ Querystring: { provider: string } }>,
+      ) => {
+        const result: SocialLoginResponse = await socialAuthService.login(
+          request.query.provider
+        );
+        return result;
+      }
+    );
+
+    scoped.post(
+      "/auth/social/callback",
+      { schema: callbackSchema },
+      async (
+        request: FastifyRequest<{ Body: OidcCallbackParams }>,
+      ) => {
+        const result: SessionResponse = await socialAuthService.callback(
+          request.body
+        );
+        return result;
+      }
+    );
   });
-
-  fastify.get(
-    "/auth/social/login",
-    { schema: loginSchema },
-    async (
-      request: FastifyRequest<{ Querystring: { provider: string } }>,
-    ) => {
-      const result: SocialLoginResponse = await socialAuthService.login(
-        request.query.provider
-      );
-      return result;
-    }
-  );
-
-  fastify.post(
-    "/auth/social/callback",
-    { schema: callbackSchema },
-    async (
-      request: FastifyRequest<{ Body: OidcCallbackParams }>,
-    ) => {
-      const result: SessionResponse = await socialAuthService.callback(
-        request.body
-      );
-      return result;
-    }
-  );
 };
