@@ -1,3 +1,12 @@
+import { config } from "dotenv";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Load .env from the project root (apps/api/src/ → ../../../.env).
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const envPath = resolve(__dirname, "../../../.env");
+config({ path: envPath });
+
 import { buildApp } from "./app.js";
 import { createDbClient } from "./db/client.js";
 import { createProvidersFromEnv } from "./auth/providers.js";
