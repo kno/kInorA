@@ -15,6 +15,7 @@
   "dependencies": {
     "@kinora/contracts": "workspace:*",
     "@kinora/domain": "workspace:*",
+    "dotenv": "^17.4.2",
     "drizzle-orm": "^0.44.2",
     "fastify": "5.8.5",
     "openid-client": "^6.8.4",

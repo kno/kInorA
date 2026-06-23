@@ -72,6 +72,7 @@ export const socialRoutes: FastifyPluginAsync<SocialRoutesOptions> = async (
         return reply.code(422).send({ error: "Validation Error" });
       }
       if (error instanceof SocialAuthError || error instanceof UnknownProviderError) {
+        fastify.log.error(error, "Social auth error");
         return reply.code(400).send({ error: error.message });
       }
       // Let unknown errors propagate to the parent (app-level) error handler.
