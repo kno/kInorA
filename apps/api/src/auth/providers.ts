@@ -248,9 +248,11 @@ export class GoogleProvider implements OidcProvider {
       );
     }
 
+    const issuer = this.config.issuer ?? GOOGLE_ISSUER;
     const callbackUrl = new URL(this.config.redirectUri);
     callbackUrl.searchParams.set("code", code);
     callbackUrl.searchParams.set("state", state);
+    callbackUrl.searchParams.set("iss", issuer);
 
     try {
       const tokens = await authorizationCodeGrant(configuration, callbackUrl, {

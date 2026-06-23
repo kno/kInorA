@@ -163,9 +163,9 @@ export class SocialAuthService {
       if (err instanceof UnverifiedEmailError) {
         throw new SocialAuthError("Provider email is not verified");
       }
-      throw new SocialAuthError(
-        err instanceof Error ? err.message : "OIDC code exchange failed"
-      );
+      const msg = err instanceof Error ? `${err.name}: ${err.message}` : "OIDC code exchange failed";
+      console.error("[social] exchangeCode failed:", msg, err instanceof Error ? err.stack : "");
+      throw new SocialAuthError(msg);
     }
 
     // Defensive: the resolved account MUST come from the same provider.
