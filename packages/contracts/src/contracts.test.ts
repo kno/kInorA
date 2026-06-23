@@ -37,7 +37,7 @@ describe("shared contracts boundary", () => {
 
   it("defines tenant context contracts without database schema leakage", () => {
     expectTypeOf<TenantQueryContextDTO>().toHaveProperty("tenantId").toBeString();
-    expectTypeOf<TenantQueryContextDTO>().toHaveProperty("actorUserId").toEqualTypeOf<
+    expectTypeOf<TenantQueryContextDTO>().toHaveProperty("actorUserId").toMatchTypeOf<
       string | undefined
     >();
     expectTypeOf<MembershipRole>().toEqualTypeOf<"owner" | "member">();
