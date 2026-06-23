@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { NextResponse } from "next/server";
-import { proxySocialCallback, SESSION_COOKIE } from "../route";
+import { proxySocialCallback, SESSION_COOKIE } from "../callback-proxy";
 
 function fakeJsonResponse(
   init: {
