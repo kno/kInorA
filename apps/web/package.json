@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
@@ -12,9 +12,11 @@
   },
   "dependencies": {
     "@kinora/contracts": "workspace:*",
+    "@serwist/next": "9.5.11",
     "next": "16.2.9",
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "serwist": "9.5.11"
   },
   "devDependencies": {
     "@types/node": "22.19.21",
