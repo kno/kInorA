@@ -1,0 +1,31 @@
+/* AppShell — responsive layout wrapper.
+ *
+ * Desktop (≥768px): sidebar fixed 248px left, main content offset.
+ * Mobile (<768px): full-width content with bottom nav clearance.
+ */
+
+/* Root shell — fills viewport, provides layout context. */
+.shell {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Main content area — grows to fill remaining space.
+ * On desktop, left margin makes room for the fixed sidebar.
+ * On mobile, full width with bottom padding for nav bar.
+ */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0; /* Prevent flex overflow */
+  padding-left: 0;
+  transition: padding-left 0.2s ease;
+}
+
+@media (min-width: 768px) {
+  .main {
+    padding-left: 248px;
+  }
+}

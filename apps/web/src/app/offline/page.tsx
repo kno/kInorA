@@ -1,25 +1,26 @@
-import React from 'react';
+import React from "react";
 
+/**
+ * Offline fallback page — shown by the service worker when the user
+ * navigates without a network connection.
+ *
+ * Uses `kin-*` design token classes from globals.css instead of
+ * inline styles.
+ */
 export default function OfflinePage() {
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      height: '100vh',
-      backgroundColor: '#09090c',
-      color: '#ffffff',
-      fontFamily: 'sans-serif',
-      textAlign: 'center',
-      padding: '20px'
-    }}>
-      <h1 style={{ fontSize: '3rem', marginBottom: '1rem' }}>You're Offline</h1>
-      <p style={{ fontSize: '1.2rem', marginBottom: '2rem', maxWidth: '400px' }}>
-        It looks like you're currently disconnected from the internet. Please check your connection and try again.
-      </p>
-      <div style={{ border: '1px solid #ffffff', padding: '20px', borderRadius: '18px' }}>
-        <p>Your data will be synced once you're back online.</p>
+    <div className="kin-offline">
+      <div className="kin-offline__card">
+        <h1 className="kin-offline__title">You&apos;re Offline</h1>
+        <p className="kin-offline__text">
+          It looks like you&apos;re currently disconnected from the internet.
+          Please check your connection and try again.
+        </p>
+        <div className="kin-card">
+          <p className="kin-offline__text">
+            Your data will be synced once you&apos;re back online.
+          </p>
+        </div>
       </div>
     </div>
   );

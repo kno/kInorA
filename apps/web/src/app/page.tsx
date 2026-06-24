@@ -1,6 +1,15 @@
 import { resolveLocale, loadMessages } from "@/i18n/locale";
 import { headers } from "next/headers";
-import type { SupportedLocale } from "@/i18n/locale";
+import type { SupportedLocale, Messages } from "@/i18n/locale";
+import { LandingNav } from "@/components/landing/LandingNav";
+import { LandingHero } from "@/components/landing/LandingHero";
+import { LandingTrust } from "@/components/landing/LandingTrust";
+import type { TrustItem } from "@/components/landing/LandingTrust";
+import { LandingHowItWorks } from "@/components/landing/LandingHowItWorks";
+import { LandingFeatures } from "@/components/landing/LandingFeatures";
+import { LandingPricing } from "@/components/landing/LandingPricing";
+import { LandingCTA } from "@/components/landing/LandingCTA";
+import { LandingFooter } from "@/components/landing/LandingFooter";
 
 export default async function HomePage({
   searchParams,
@@ -19,17 +28,25 @@ export default async function HomePage({
   const acceptLanguage = requestHeaders.get("accept-language");
 
   const locale: SupportedLocale = resolveLocale(acceptLanguage, langParam);
-  const messages = loadMessages(locale);
+  const messages = loadMessages(locale) as unknown as Record<string, string>;
+
+  const trustItems: TrustItem[] = [
+    { icon: "clock", title: messages.trust_title ?? "", desc: messages.trust_desc_schedule ?? "" },
+    { icon: "chart", title: messages.trust_title_level ?? "", desc: messages.trust_desc_level ?? "" },
+    { icon: "check", title: messages.trust_title_equipment ?? "", desc: messages.trust_desc_equipment ?? "" },
+    { icon: "mic", title: messages.trust_title_hands ?? "", desc: messages.trust_desc_hands ?? "" },
+  ];
 
   return (
-    <main className="kin-page">
-      <div className="kin-hero">
-        <h1 className="kin-hero__title">{messages.title}</h1>
-        <p className="kin-hero__subtitle">{messages.subtitle}</p>
-        <a href="#" className="kin-btn kin-btn--accent">
-          {messages.cta}
-        </a>
-      </div>
+    <main>
+      <LandingNav messages={messages} />
+      <LandingHero messages={messages} />
+      <LandingTrust items={trustItems} />
+      <LandingHowItWorks messages={messages} />
+      <LandingFeatures messages={messages} />
+      <LandingPricing messages={messages} />
+      <LandingCTA messages={messages} />
+      <LandingFooter messages={messages} />
     </main>
   );
 }

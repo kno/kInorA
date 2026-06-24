@@ -7,6 +7,8 @@ import { logoutAction } from "./actions";
  * cookie → redirect to `/login`. If you can see this page you are
  * authenticated (cookie present — full session validation delegated
  * to the API, 05b owns 401/403 reject policy).
+ *
+ * This page renders inside the AppShell provided by `(app)/layout.tsx`.
  */
 export default function DashboardPage() {
   return (
