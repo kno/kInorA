@@ -27,7 +27,10 @@ test.describe("Landing page responsive (06B-TST 1.8)", () => {
       expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
 
       // Hero section is visible and readable
-      await expect(page.getByText("AI Coach")).toBeVisible();
+      // "AI Coach" appears twice by design: the hero eyebrow badge and the
+      // footer tagline ("The AI coach that builds your plan..."). Match the
+      // first (hero badge), consistent with "Start free"/"kInorA" below.
+      await expect(page.getByText("AI Coach").first()).toBeVisible();
       await expect(page.getByText("Start free").first()).toBeVisible();
 
       // Navigation brand is visible
@@ -47,17 +50,31 @@ test.describe("Landing page responsive (06B-TST 1.8)", () => {
       await page.goto("/?lang=en");
       await page.waitForLoadState("networkidle");
 
+      // Audit the app's own VISIBLE interactive elements. Two refinements vs.
+      // a raw document-wide query, neither of which weakens the 44px contract:
+      //   1. Scope to <main> (the page wraps the whole landing — nav, hero,
+      //      footer — in <main>) so we skip the Next.js dev-tools button.
+      //      Playwright's shadow-DOM-piercing locator would otherwise pick it
+      //      up; it lives in a dev-only shadow root (absent from production
+      //      builds) and cannot be removed via next.config `devIndicators` or
+      //      app CSS, so it is harness noise, not a kInorA UI element.
+      //   2. Skip elements that are not rendered (display:none), e.g. the
+      //      desktop nav links which are intentionally hidden on mobile and
+      //      replaced by a menu toggle. A non-rendered element is not a tap
+      //      target. Every VISIBLE interactive element must still be >= 44px.
       const interactive = "button, a[href], [role='button']";
-      const boxes = await page.locator(interactive).evaluateAll((els) =>
-        els.map((el) => {
-          const r = el.getBoundingClientRect();
-          return {
-            w: Math.round(r.width),
-            h: Math.round(r.height),
-            tag: el.tagName,
-            label: (el.textContent ?? "").trim().slice(0, 32),
-          };
-        }),
+      const boxes = await page.locator("main").locator(interactive).evaluateAll((els) =>
+        els
+          .filter((el) => (el as HTMLElement).offsetParent !== null)
+          .map((el) => {
+            const r = el.getBoundingClientRect();
+            return {
+              w: Math.round(r.width),
+              h: Math.round(r.height),
+              tag: el.tagName,
+              label: (el.textContent ?? "").trim().slice(0, 32),
+            };
+          }),
       );
 
       expect(boxes.length).toBeGreaterThan(0);

@@ -41,10 +41,20 @@ export default async function RootLayout({
   const acceptLanguage = requestHeaders.get("accept-language");
   const locale = resolveLocale(acceptLanguage, undefined);
 
+  // Serwist only emits `sw.js` in production builds (it is disabled in
+  // development via next.config). Registering the worker outside production
+  // requests a non-existent `/sw.js`, which 404s and surfaces as an
+  // unhandledRejection that breaks the page. Gate registration to match.
+  const serviceWorkerEnabled = process.env.NODE_ENV === "production";
+
   return (
     <html lang={locale}>
       <body>
-        <SerwistProvider swUrl="/sw.js">{children}</SerwistProvider>
+        {serviceWorkerEnabled ? (
+          <SerwistProvider swUrl="/sw.js">{children}</SerwistProvider>
+        ) : (
+          children
+        )}
       </body>
     </html>
   );
