@@ -20,7 +20,10 @@
     "@vitest/coverage-v8": "3.2.4",
     "concurrently": "9.2.3",
     "dependency-cruiser": "^17.4.3",
-    "typescript": "5.8.3",
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/ios": "^6.0.0",
     "vitest": "3.2.4"
   },
   "engines": {
