@@ -10,6 +10,11 @@ const withSerwist = withSerwistInit({
 });
 
 const nextConfig: NextConfig = {
+  // Next.js 16 defaults to Turbopack. @serwist/next injects a webpack config
+  // (used only for the production SW build, since Serwist is disabled in dev),
+  // which trips Next's "webpack config + no turbopack config" guard. An empty
+  // turbopack config opts dev into Turbopack explicitly and silences the error.
+  turbopack: {},
   async rewrites() {
     return [
       {
