@@ -26,3 +26,7 @@ coverage/
 
 # User scripts
 branches.sh
+
+# Temporary test/bisect artifacts
+tmp-app-test/
+tmp-test-next-app/
