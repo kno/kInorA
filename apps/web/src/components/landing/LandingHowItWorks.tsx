@@ -1,7 +1,7 @@
 export function LandingHowItWorks({ messages }: { messages: Record<string, string> }) {
   const steps = [
     {
-      num: messages.hiw_step1_title ? "01" : "",
+      num: "01",
       title: messages.hiw_step1_title,
       desc: messages.hiw_step1_desc,
       icon: (
@@ -35,8 +35,8 @@ export function LandingHowItWorks({ messages }: { messages: Record<string, strin
           <p>{messages.hiw_subtitle}</p>
         </div>
         <div className="kin-landing-steps">
-          {steps.map((step, i) => (
-            <article className="kin-card kin-landing-step" key={i}>
+          {steps.map((step) => (
+            <article className="kin-card kin-landing-step" key={step.num}>
               <div className="kin-landing-step__num"><b>{step.num}</b></div>
               <h3>{step.title}</h3>
               <p>{step.desc}</p>

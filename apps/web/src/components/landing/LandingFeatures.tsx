@@ -39,8 +39,8 @@ export function LandingFeatures({ messages }: { messages: Record<string, string>
           <p>{messages.features_subtitle}</p>
         </div>
         <div className="kin-landing-features">
-          {features.map((f, i) => (
-            <article className="kin-card kin-landing-feature" key={i}>
+          {features.map((f) => (
+            <article className="kin-card kin-landing-feature" key={f.title}>
               <span className="kin-landing-feature__icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" width="21" height="21" aria-hidden="true">
                   {f.icon}

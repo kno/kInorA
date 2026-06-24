@@ -19,6 +19,8 @@ import { NextResponse } from "next/server";
  */
 
 export const SESSION_COOKIE = "kinora_session";
+/** Session cookie lifetime: 7 days. */
+const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
 const HOME_PATH = "/";
 const LOGIN_PATH = "/login";
 
@@ -79,16 +81,21 @@ export async function proxySocialCallback(
 
   const session = (await res.json().catch(() => ({}))) as { token?: string };
 
+  // The API responded ok but issued no token — treat as a failed login
+  // instead of silently redirecting home with no session (redirect loop).
+  if (!session.token) {
+    return redirectToLogin("missing_token", options.origin);
+  }
+
   const url = new URL(HOME_PATH, options.origin ?? "http://localhost");
   const next = NextResponse.redirect(url, { status: 303 });
 
-  if (session.token) {
-    next.cookies.set(SESSION_COOKIE, session.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-    });
-  }
+  next.cookies.set(SESSION_COOKIE, session.token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_MAX_AGE,
+  });
   return next;
 }

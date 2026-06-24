@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { isActivePath } from "./nav-utils";
 import styles from "./SidebarNav.module.css";
 
 /** Navigation item descriptor: label, href, and icon name. */
@@ -11,6 +12,20 @@ interface NavItem {
   icon: "home" | "plan" | "stats" | "create" | "exercises";
 }
 
+/** Minimal identity shape for the sidebar user area. */
+export interface SidebarUser {
+  initials: string;
+  name: string;
+  plan: string;
+}
+
+/** Fallback identity shown until a real profile endpoint exists. */
+const FALLBACK_USER: SidebarUser = {
+  initials: "JD",
+  name: "User",
+  plan: "Free",
+};
+
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "home" },
   { label: "Plan", href: "/plan", icon: "plan" },
@@ -19,23 +34,20 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Exercises", href: "/exercises", icon: "exercises" },
 ];
 
-/** Check if a pathname matches a nav href (works for exact and sub-paths). */
-function isActivePath(pathname: string, href: string): boolean {
-  if (href === "/dashboard") return pathname === "/dashboard" || pathname.startsWith("/dashboard/");
-  return pathname === href || pathname.startsWith(href + "/");
-}
-
 /**
  * Desktop sidebar navigation — fixed 248px panel.
  *
  * Renders the kInorA wordmark, 5 nav items with SVG icons, and a user
- * area at the bottom with initials placeholder avatar.
+ * area at the bottom. The user identity is supplied via the optional
+ * `user` prop; when absent it falls back to a placeholder until a real
+ * profile endpoint exists.
  *
  * Active route detection via `usePathname()`. Active items get a subtle
  * `--accent-dim` background with a 3px left accent indicator.
  */
-export function SidebarNav() {
+export function SidebarNav({ user }: { user?: SidebarUser } = {}) {
   const pathname = usePathname();
+  const identity = user ?? FALLBACK_USER;
 
   return (
     <aside className={styles.sidebar} aria-label="Main navigation">
@@ -63,14 +75,14 @@ export function SidebarNav() {
         })}
       </nav>
 
-      {/* User area — placeholder initials until profile endpoint exists */}
+      {/* User area — uses the `user` prop, or a placeholder fallback. */}
       <div className={styles.userArea}>
         <div className={styles.avatar} aria-hidden="true">
-          JD
+          {identity.initials}
         </div>
         <div className={styles.userInfo}>
-          <span className={styles.userName}>User</span>
-          <span className={styles.planBadge}>Free</span>
+          <span className={styles.userName}>{identity.name}</span>
+          <span className={styles.planBadge}>{identity.plan}</span>
         </div>
       </div>
     </aside>

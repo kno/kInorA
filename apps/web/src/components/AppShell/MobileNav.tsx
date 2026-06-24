@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { isActivePath } from "./nav-utils";
 import styles from "./MobileNav.module.css";
 
 interface TabItem {
@@ -16,14 +17,6 @@ const TABS: TabItem[] = [
   { label: "Statistics", href: "/stats", icon: "stats" },
   { label: "Exercises", href: "/exercises", icon: "exercises" },
 ];
-
-/** Check if a pathname matches a tab href. */
-function isActivePath(pathname: string, href: string): boolean {
-  if (href === "/dashboard") {
-    return pathname === "/dashboard" || pathname.startsWith("/dashboard/");
-  }
-  return pathname === href || pathname.startsWith(href + "/");
-}
 
 /**
  * Mobile bottom navigation bar — 4 tabs + centered FAB for Create Plan.

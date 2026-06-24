@@ -10,7 +10,10 @@ export function LandingHero({ messages }: { messages: Record<string, string> }) 
             </svg>
             {messages.hero_eyebrow}
           </span>
-          <h1 dangerouslySetInnerHTML={{ __html: messages.hero_title ?? "" }} />
+          <h1>
+            {messages.hero_title}
+            <em>{messages.hero_title_accent}</em>
+          </h1>
           <p className="kin-landing-hero__sub">{messages.hero_subtitle}</p>
           <div className="kin-landing-hero__cta">
             <a className="kin-btn kin-btn--accent" href="/sign-up">

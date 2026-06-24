@@ -9,8 +9,8 @@ export function LandingTrust({ items }: { items: TrustItem[] }) {
     <section className="kin-landing-section kin-landing-section--no-top">
       <div className="kin-landing-wrap">
         <div className="kin-landing-strip">
-          {items.map((item, i) => (
-            <div key={i}>
+          {items.map((item) => (
+            <div key={item.title}>
               <svg className="kin-landing-strip__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
                 {item.icon === "clock" && (
                   <path d="M12 3a9 9 0 1 0 9-9M12 7v5l3 3" strokeLinecap="round" />
