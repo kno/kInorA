@@ -8,7 +8,8 @@ type AnyElement = ReactElement<AnyProps>;
 describe("LandingHero", () => {
   const defaultMessages = {
     hero_eyebrow: "AI Coach",
-    hero_title: "Your personal trainer, <em>powered by AI</em>",
+    hero_title: "Your personal trainer, ",
+    hero_title_accent: "powered by AI",
     hero_subtitle: "kInorA listens to you, builds your routine, and adjusts it every week.",
     hero_cta_primary: "Start free",
     hero_cta_secondary: "See how it works",
@@ -22,14 +23,17 @@ describe("LandingHero", () => {
     expect(textOf(el)).toContain("AI Coach");
   });
 
-  it("renders the heading with dangerouslySetInnerHTML for accent text", () => {
+  it("renders the heading with a real <em> accent segment (no raw HTML injection)", () => {
     const el = LandingHero({ messages: defaultMessages });
-    const result = findFirst(el, (n) => n.type === "h1");
-    expect(result).toBeDefined();
-    // The heading uses dangerouslySetInnerHTML to render <em> tags
-    const dh = (result as AnyElement).props.dangerouslySetInnerHTML as { __html: string } | undefined;
-    expect(dh).toBeDefined();
-    expect(dh!.__html).toContain("powered by AI");
+    const heading = findFirst(el, (n) => n.type === "h1");
+    expect(heading).toBeDefined();
+    // No dangerouslySetInnerHTML — the accent is a real React <em> element.
+    expect((heading as AnyElement).props.dangerouslySetInnerHTML).toBeUndefined();
+    expect(textOf(heading)).toContain("Your personal trainer,");
+    expect(textOf(heading)).toContain("powered by AI");
+    const em = findFirst(heading, (n) => n.type === "em");
+    expect(em).toBeDefined();
+    expect(textOf(em)).toBe("powered by AI");
   });
 
   it("renders the subtitle", () => {

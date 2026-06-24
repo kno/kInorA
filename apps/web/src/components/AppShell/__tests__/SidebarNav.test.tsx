@@ -50,9 +50,21 @@ describe("SidebarNav", () => {
     }
   });
 
-  it("renders a user area with initials placeholder", () => {
+  it("renders a user area with initials placeholder when no user prop is given", () => {
     const el = SidebarNav();
     expect(textOf(el)).toContain("JD");
+    expect(textOf(el)).toContain("User");
+    expect(textOf(el)).toContain("Free");
+  });
+
+  it("renders the provided user identity when the user prop is supplied", () => {
+    const el = SidebarNav({ user: { initials: "AR", name: "Ada Rivera", plan: "Pro" } });
+    const text = textOf(el);
+    expect(text).toContain("AR");
+    expect(text).toContain("Ada Rivera");
+    expect(text).toContain("Pro");
+    // Fallback placeholders must NOT leak through when a user is provided.
+    expect(text).not.toContain("JD");
   });
 
   it("highlights a different nav item when pathname changes", () => {

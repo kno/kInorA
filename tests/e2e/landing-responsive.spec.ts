@@ -35,9 +35,8 @@ test.describe("Landing page responsive (06B-TST 1.8)", () => {
 
       // Scroll to verify lower sections render
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(200);
 
-      // Footer content is visible after scrolling
+      // Footer content is visible after scrolling (auto-waits, no fixed timeout)
       await expect(page.getByText(/all rights reserved/i)).toBeVisible();
     });
 

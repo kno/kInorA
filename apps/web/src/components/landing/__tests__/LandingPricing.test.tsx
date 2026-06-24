@@ -62,6 +62,15 @@ describe("LandingPricing", () => {
     expect(textOf(el)).toContain("Start with Pro");
     expect(textOf(el)).toContain("Talk to sales");
   });
+
+  it("renders the Pro and Team prices", () => {
+    const el = LandingPricing({ messages });
+    const text = textOf(el);
+    // Free amount from messages, plus the module-level Pro/Team prices.
+    expect(text).toContain("0");
+    expect(text).toContain("9");
+    expect(text).toContain("29");
+  });
 });
 
 function findFirst(

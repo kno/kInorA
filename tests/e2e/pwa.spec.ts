@@ -56,7 +56,7 @@ test.describe("Offline fallback (06-TST 2.9)", () => {
     await page.goto("/offline");
     await expect(page.getByRole("heading", { name: /offline/i })).toBeVisible();
     await expect(
-      page.getByText(/can’t reach the network right now/i),
+      page.getByText(/disconnected from the internet/i),
     ).toBeVisible();
     // Branded dark surface: background resolves to a dark color, not white.
     const bg = await page.evaluate(() =>

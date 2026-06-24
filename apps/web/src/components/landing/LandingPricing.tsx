@@ -1,4 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
+/** Monthly price in EUR for the Pro tier. */
+const PRO_PRICE_EUR = "9";
+/** Monthly price in EUR for the Teams tier. */
+const TEAM_PRICE_EUR = "29";
 
 interface PricingTier {
   tier: string;
@@ -31,7 +34,7 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
     {
       tier: messages.pricing_pro_tier ?? "",
       desc: messages.pricing_pro_desc ?? "",
-      amount: "9",
+      amount: PRO_PRICE_EUR,
       per: messages.pricing_pro_per ?? "",
       currency: "€",
       pro: true,
@@ -47,7 +50,7 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
     {
       tier: messages.pricing_team_tier ?? "",
       desc: messages.pricing_team_desc ?? "",
-      amount: "29",
+      amount: TEAM_PRICE_EUR,
       per: messages.pricing_team_per ?? "",
       currency: "€",
       features: [
@@ -69,10 +72,10 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
           <p>{messages.pricing_subtitle}</p>
         </div>
         <div className="kin-landing-prices">
-          {tiers.map((tier, i) => (
+          {tiers.map((tier) => (
             <article
               className={`kin-card kin-landing-price${tier.pro ? " kin-landing-price--pro" : ""}`}
-              key={i}
+              key={tier.tier}
             >
               {tier.badge && (
                 <span className="pill pill-active kin-landing-price__badge">{tier.badge}</span>
@@ -87,8 +90,8 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
                 <span className="kin-landing-price__per">{tier.per}</span>
               </div>
               <ul>
-                {tier.features.map((feat, j) => (
-                  <li key={j} className={feat.muted ? "kin-muted" : ""}>
+                {tier.features.map((feat) => (
+                  <li key={`${tier.tier}-${feat.label}`} className={feat.muted ? "kin-muted" : ""}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={feat.muted ? "2" : "2.4"} width="17" height="17" aria-hidden="true">
                       {feat.muted ? (
                         <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />

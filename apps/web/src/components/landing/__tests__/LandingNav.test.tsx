@@ -34,12 +34,12 @@ describe("LandingNav", () => {
     expect(textOf(el)).toContain("Start free");
   });
 
-  it("includes a mobile menu toggle button", () => {
+  it("does not render a non-functional hamburger menu button", () => {
+    // The mobile menu is out of scope for this slice; a dead button with no
+    // handler / aria-expanded was removed to avoid an a11y-breaking control.
     const el = LandingNav({ messages: defaultMessages });
-    const hamburger = findFirst(el, (n) =>
-      n.type === "button" && textOf(n) === ""
-    );
-    expect(hamburger).toBeDefined();
+    const anyButton = findFirst(el, (n) => n.type === "button");
+    expect(anyButton).toBeUndefined();
   });
 });
 

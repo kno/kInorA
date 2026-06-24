@@ -10,7 +10,8 @@
   "nav_signup": "Start free",
 
   "hero_eyebrow": "AI Coach",
-  "hero_title": "Your personal trainer, <em>powered by AI</em>",
+  "hero_title": "Your personal trainer, ",
+  "hero_title_accent": "powered by AI",
   "hero_subtitle": "kInorA listens to you, builds your routine, and adjusts it every week based on your progress. Train with a plan that evolves with you, not a generic one.",
   "hero_cta_primary": "Start free",
   "hero_cta_secondary": "See how it works",

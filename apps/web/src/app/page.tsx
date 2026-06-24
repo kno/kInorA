@@ -1,6 +1,6 @@
 import { resolveLocale, loadMessages } from "@/i18n/locale";
 import { headers } from "next/headers";
-import type { SupportedLocale, Messages } from "@/i18n/locale";
+import type { SupportedLocale } from "@/i18n/locale";
 import { LandingNav } from "@/components/landing/LandingNav";
 import { LandingHero } from "@/components/landing/LandingHero";
 import { LandingTrust } from "@/components/landing/LandingTrust";
@@ -28,7 +28,7 @@ export default async function HomePage({
   const acceptLanguage = requestHeaders.get("accept-language");
 
   const locale: SupportedLocale = resolveLocale(acceptLanguage, langParam);
-  const messages = loadMessages(locale) as unknown as Record<string, string>;
+  const messages = loadMessages(locale);
 
   const trustItems: TrustItem[] = [
     { icon: "clock", title: messages.trust_title ?? "", desc: messages.trust_desc_schedule ?? "" },
