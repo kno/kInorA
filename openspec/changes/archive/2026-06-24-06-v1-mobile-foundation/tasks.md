@@ -45,7 +45,7 @@ Estimated ~430 changed lines across 17 files. Three natural slices per design's 
 
 ## Phase 4: Capacitor Shell
 
-- [ ] [06-INFRA 4.1] Add `@capacitor/core`, `@capacitor/cli`, `@capacitor/ios`, `@capacitor/android` to root `package.json` devDependencies
-- [ ] [06-INFRA 4.2] Create `capacitor.config.ts` — appId: `com.kinora.app`, appName: `kInorA`, webDir: `apps/web/.next`
+- [x] [06-INFRA 4.1] Add `@capacitor/core`, `@capacitor/cli`, `@capacitor/ios`, `@capacitor/android` to root `package.json` devDependencies
+- [x] [06-INFRA 4.2] Create `capacitor.config.ts` — appId: `com.kinora.app`, appName: `kInorA`, webDir: `apps/web/.next`
 - [ ] [06-TST 4.3] Manual verify: `npx cap sync ios` generates `ios/` Xcode project
-- [ ] [06-TST 4.4] Manual verify: `npx cap sync android` generates `android/` Android Studio project
+- [x] [06-TST 4.4] Manual verify: `npx cap sync android` generates `android/` Android Studio project
