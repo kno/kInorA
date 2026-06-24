@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Network Security Configuration
+  - Cleartext (HTTP) is denied globally.
+  - Localhost and the Android emulator loopback (10.0.2.2) are explicitly
+    allowed so that the Capacitor live-reload dev server can be reached.
+  - All production traffic must use HTTPS.
+-->
+<network-security-config>
+    <!-- Global baseline: no cleartext traffic to any host -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Dev-only exception: localhost (device) -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- Dev-only exception: 10.0.2.2 = host machine as seen from the emulator -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>
