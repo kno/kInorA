@@ -186,6 +186,9 @@ importers:
         specifier: workspace:*
         version: link:../contracts
     devDependencies:
+      '@types/node':
+        specifier: 22.19.21
+        version: 22.19.21
       '@vitest/coverage-v8':
         specifier: 3.2.4
         version: 3.2.4(vitest@3.2.4(@types/node@22.19.21)(jsdom@29.1.1)(lightningcss@1.27.0)(terser@5.48.0)(tsx@4.22.4))
