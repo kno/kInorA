@@ -5,7 +5,9 @@
  *
  * Capability categories per the 01c spec:
  *   - DB packages: ALLOWED in apps/api only; BLOCKED from domain, contracts, web
- *   - Auth, Stripe, AI, Docker, CI/CD, PWA, Capacitor: BLOCKED everywhere
+ *   - PWA packages: ALLOWED in apps/web only; BLOCKED everywhere else
+ *   - Capacitor/native packages: ALLOWED at root and apps/mobile only; BLOCKED elsewhere
+ *   - Auth, Stripe, AI, Docker, CI/CD: BLOCKED everywhere
  *
  * Exits 0 if clean, 1 with a descriptive error listing any violations.
  */
@@ -39,15 +41,9 @@ const PROHIBITED_EVERYWHERE = [
   /dockerode/i,
   // CI/CD
   /github-actions/i,
-  // PWA
-  /workbox/i,
-  /next-pwa/i,
-  // Capacitor/native
-  /@capacitor/i,
-  /capacitor/i,
 ];
 
-// DB packages: allowed ONLY in apps/api; banned from domain, contracts, web.
+// DB packages: allowed ONLY in apps/api; banned from domain, contracts, web, mobile.
 const DB_PATTERNS = [
   /pg/i,
   /mysql/i,
@@ -64,13 +60,43 @@ const DB_PATTERNS = [
 // Workspaces where DB packages are permitted (API infrastructure).
 const DB_ALLOWED_WORKSPACES = ["apps/api"];
 
-// Full list of workspace package files to check.
+// PWA packages: allowed ONLY in apps/web; banned from every other workspace.
+const PWA_PATTERNS = [
+  /workbox/i,
+  /next-pwa/i,
+  /@serwist/i,
+];
+
+// Workspaces where PWA packages are permitted (web delivery layer).
+const PWA_ALLOWED_WORKSPACES = ["apps/web"];
+
+// Capacitor/native packages: allowed ONLY at root and apps/mobile; banned elsewhere.
+const CAPACITOR_PATTERNS = [
+  /@capacitor/i,
+  /capacitor/i,
+];
+
+// Workspaces where Capacitor packages are permitted.
+// "ROOT" denotes the repository root package.json (native shell lives at root).
+const CAPACITOR_ALLOWED_WORKSPACES = ["apps/mobile", "ROOT"];
+
+// Full list of workspace package files to check (includes root + mobile so
+// the scoped allowlists are enforced across the whole monorepo).
 const WORKSPACE_PACKAGE_FILES = [
+  join(ROOT, "package.json"),
   join(ROOT, "apps/web/package.json"),
   join(ROOT, "apps/api/package.json"),
+  join(ROOT, "apps/mobile/package.json"),
   join(ROOT, "packages/contracts/package.json"),
   join(ROOT, "packages/domain/package.json"),
 ];
+
+function isAllowedWorkspace(filepath, allowedWorkspaces) {
+  return allowedWorkspaces.some((allowed) => {
+    if (allowed === "ROOT") return filepath === join(ROOT, "package.json");
+    return filepath.includes(allowed);
+  });
+}
 
 function collectDependencies(pkg) {
   return [
@@ -78,12 +104,6 @@ function collectDependencies(pkg) {
     ...Object.keys(pkg.devDependencies || {}),
     ...Object.keys(pkg.peerDependencies || {}),
   ];
-}
-
-function isDbAllowed(filepath) {
-  return DB_ALLOWED_WORKSPACES.some((allowed) =>
-    filepath.includes(allowed)
-  );
 }
 
 let hasViolations = false;
@@ -111,8 +131,28 @@ for (const filePath of WORKSPACE_PACKAGE_FILES) {
     }
 
     // Check DB packages — prohibited unless in an allowed workspace
-    if (!isDbAllowed(filePath)) {
+    if (!isAllowedWorkspace(filePath, DB_ALLOWED_WORKSPACES)) {
       for (const pattern of DB_PATTERNS) {
+        if (pattern.test(dep)) {
+          violations.push(dep);
+          break;
+        }
+      }
+    }
+
+    // Check PWA packages — prohibited unless in an allowed workspace
+    if (!isAllowedWorkspace(filePath, PWA_ALLOWED_WORKSPACES)) {
+      for (const pattern of PWA_PATTERNS) {
+        if (pattern.test(dep)) {
+          violations.push(dep);
+          break;
+        }
+      }
+    }
+
+    // Check Capacitor/native packages — prohibited unless in an allowed workspace
+    if (!isAllowedWorkspace(filePath, CAPACITOR_ALLOWED_WORKSPACES)) {
+      for (const pattern of CAPACITOR_PATTERNS) {
         if (pattern.test(dep)) {
           violations.push(dep);
           break;

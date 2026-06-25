@@ -1,6 +1,6 @@
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
-import { coverageConfig } from "../../vitest.shared";
+import { coverageConfig, testConfig } from "../../vitest.shared";
 
 export default defineConfig({
   esbuild: {
@@ -12,6 +12,7 @@ export default defineConfig({
     },
   },
   test: {
+    ...testConfig,
     globals: true,
     coverage: {
       ...coverageConfig,

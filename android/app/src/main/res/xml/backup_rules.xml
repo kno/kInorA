@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Full Backup Content Rules (API 23–30)
+  Excludes session-sensitive storage from cloud/device backups so that
+  WebView cookies, shared preferences, and app databases are never
+  transferred to another device via Google Backup or local ADB backup.
+-->
+<full-backup-content>
+    <!-- Exclude all shared preferences (may contain tokens / session state) -->
+    <exclude domain="sharedpref" path="." />
+    <!-- Exclude all databases (may contain cached auth data) -->
+    <exclude domain="database" path="." />
+    <!-- Exclude Capacitor/WebView local storage and IndexedDB -->
+    <exclude domain="root" path="app_webview" />
+    <!-- Exclude the external cache used by the FileProvider -->
+    <exclude domain="external" path="." />
+</full-backup-content>

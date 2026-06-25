@@ -135,4 +135,66 @@ describe("evaluateAuthGate with API/XHR header detection (05b)", () => {
 
     expect(result.kind).toBe("redirect");
   });
+
+  // Triangle: new protected routes from 06b scaffold — /stats
+  it("redirects /stats to login when no session cookie is present", () => {
+    const result = evaluateAuthGate({
+      cookieValue: undefined,
+      pathname: "/stats",
+      origin: "http://localhost:3000",
+    });
+
+    expect(result.kind).toBe("redirect");
+    if (result.kind !== "redirect") return;
+    expect(result.location).toContain("from=%2Fstats");
+  });
+
+  // Triangle: new protected routes from 06b scaffold — /create-plan
+  it("redirects /create-plan to login when no session cookie is present", () => {
+    const result = evaluateAuthGate({
+      cookieValue: undefined,
+      pathname: "/create-plan",
+      origin: "http://localhost:3000",
+    });
+
+    expect(result.kind).toBe("redirect");
+    if (result.kind !== "redirect") return;
+    expect(result.location).toContain("from=%2Fcreate-plan");
+  });
+
+  // Triangle: new protected routes from 06b scaffold — /exercises
+  it("redirects /exercises to login when no session cookie is present", () => {
+    const result = evaluateAuthGate({
+      cookieValue: undefined,
+      pathname: "/exercises",
+      origin: "http://localhost:3000",
+    });
+
+    expect(result.kind).toBe("redirect");
+    if (result.kind !== "redirect") return;
+    expect(result.location).toContain("from=%2Fexercises");
+  });
+
+  // Triangle: session present on new routes → pass
+  it("allows /stats through when a session cookie is present", () => {
+    const result = evaluateAuthGate({
+      cookieValue: "valid-session-token",
+      pathname: "/stats",
+      origin: "http://localhost:3000",
+    });
+
+    expect(result).toEqual({ kind: "pass" });
+  });
+
+  // Triangle: session present on /create-plan with API headers → pass
+  it("allows /create-plan through with session even with API headers", () => {
+    const result = evaluateAuthGate({
+      cookieValue: "valid-session-token",
+      pathname: "/create-plan",
+      origin: "http://localhost:3000",
+      acceptHeader: "application/json",
+    });
+
+    expect(result).toEqual({ kind: "pass" });
+  });
 });

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider paths.
+  - external-path is scoped to Pictures/kInorA/ instead of the root (".") to
+    avoid exposing the entire external storage tree through the provider.
+  - cache-path remains at "." (internal cache only — not shared storage).
+  If the app captures photos to a different directory, update the path below
+  to match and adjust any corresponding Camera plugin configuration.
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="my_images" path="Pictures/kInorA/" />
+    <cache-path name="my_cache_images" path="." />
+</paths>

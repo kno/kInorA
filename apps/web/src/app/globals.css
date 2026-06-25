@@ -1,0 +1,1163 @@
+/* =========================================================================
+ * kInorA design system — Open Design tokens (DESIGN.md)
+ * Dark-only theme. OKLch colors, Space Grotesk / DM Sans typography.
+ * Mobile-first; responsive breakpoints from 320px up to 1920px.
+ * ========================================================================= */
+
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap");
+
+:root {
+  /* Surfaces */
+  --bg: oklch(5% 0.006 270);
+  --surface: oklch(11% 0.006 270);
+  --surface-2: oklch(15% 0.006 270);
+  --border: oklch(24% 0.006 270);
+  --fg: oklch(96% 0.002 270);
+  --muted: oklch(66% 0.006 270);
+
+  /* Brand accent (verde lima) */
+  --accent: oklch(89% 0.2 128);
+  --accent-fg: oklch(5% 0.006 270);
+  --accent-dim: oklch(89% 0.20 128 / 0.12);
+
+  /* States */
+  --success: oklch(89% 0.2 128);
+  --warning: oklch(84% 0.14 90);
+  --danger: oklch(68% 0.19 25);
+  --info: oklch(72% 0.13 250);
+
+  /* Typography */
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "DM Sans", -apple-system, system-ui, sans-serif;
+
+  /* Type scale */
+  --fs-display: clamp(2.5rem, 6vw, 4.5rem);
+  --fs-h1: clamp(1.75rem, 4vw, 2rem);
+  --fs-h2: 1.5rem;
+  --fs-h3: 1.125rem;
+  --fs-body: 1rem;
+  --fs-sm: 0.875rem;
+
+  /* Spacing rhythm (8px base) */
+  --sp-1: 8px;
+  --sp-2: 12px;
+  --sp-3: 16px;
+  --sp-4: 24px;
+  --sp-5: 32px;
+  --sp-6: 48px;
+
+  /* Radii */
+  --r-card: 18px;
+  --r-btn: 12px;
+  --r-pill: 999px;
+
+  /* Layout */
+  --maxw-card: 24rem;
+  --tap: 44px;
+}
+
+/* -------------------------------------------------------------------------
+ * Reset / base
+ * ------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* -------------------------------------------------------------------------
+ * Layout primitives
+ * ------------------------------------------------------------------------- */
+
+/* Full-viewport centered page shell — used by landing, auth, dashboard. */
+.kin-page {
+  max-width: 100%;
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4) var(--sp-3);
+  overflow-x: hidden;
+}
+
+/* Constrained card container. */
+.kin-card {
+  width: 100%;
+  max-width: var(--maxw-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.kin-card--center {
+  text-align: center;
+}
+
+/* -------------------------------------------------------------------------
+ * Hero (landing)
+ * ------------------------------------------------------------------------- */
+
+.kin-hero {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.kin-hero__title {
+  font-size: var(--fs-display);
+  margin: 0;
+}
+
+.kin-hero__subtitle {
+  font-size: var(--fs-h3);
+  color: var(--muted);
+  max-width: 32rem;
+}
+
+/* -------------------------------------------------------------------------
+ * Landing page (full section classes)
+ * ------------------------------------------------------------------------- */
+
+/* Nav — sticky brand bar */
+.kin-landing-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid transparent;
+  background: color-mix(in oklab, var(--bg) 78%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+  padding-block: 18px;
+  transition: padding .25s ease;
+}
+
+.kin-landing-nav__inner {
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: var(--sp-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.kin-landing-nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  text-decoration: none;
+  /* 44px tap target (06B-TST 1.8) */
+  min-height: var(--tap);
+  min-width: var(--tap);
+}
+
+.kin-landing-nav__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 14px 1px color-mix(in oklab, var(--accent) 60%, transparent);
+  flex: none;
+}
+
+.kin-landing-nav__links {
+  display: flex;
+  gap: 4px;
+}
+
+.kin-landing-nav__links a {
+  color: var(--muted);
+  font-size: 14.5px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: var(--r-btn);
+  transition: color .15s, background .15s;
+  text-decoration: none;
+  /* 44px tap target (06B-TST 1.8) */
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+}
+
+.kin-landing-nav__links a:hover {
+  color: var(--fg);
+  background: var(--surface);
+}
+
+.kin-landing-nav__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kin-landing-nav__toggle {
+  display: none;
+}
+
+/* Section wrapper */
+.kin-landing-section {
+  padding-block: clamp(56px, 8vw, 96px);
+}
+
+.kin-landing-section--no-top {
+  padding-top: 0;
+}
+
+/* Section heading group */
+.kin-landing-head {
+  max-width: 620px;
+  margin-bottom: clamp(32px, 5vw, 56px);
+}
+
+.kin-landing-head--center {
+  margin-inline: auto;
+  text-align: center;
+}
+
+.kin-landing-head__eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kin-landing-head h2 {
+  font-size: clamp(28px, 3.6vw, 40px);
+  margin-top: 14px;
+}
+
+.kin-landing-head p {
+  color: var(--muted);
+  margin-top: 14px;
+  font-size: 16.5px;
+  line-height: 1.6;
+}
+
+/* Wrap — max-width container for landing content */
+.kin-landing-wrap {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: var(--sp-4);
+}
+
+/* Hero */
+.kin-landing-hero {
+  position: relative;
+  padding-top: clamp(48px, 8vw, 96px);
+  padding-bottom: clamp(56px, 8vw, 110px);
+}
+
+.kin-landing-hero__grid {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: clamp(32px, 5vw, 72px);
+  align-items: center;
+}
+
+.kin-landing-hero h1 {
+  font-size: clamp(40px, 7vw, 72px);
+  margin-top: 18px;
+  margin-bottom: 22px;
+  max-width: 13ch;
+}
+
+.kin-landing-hero h1 em {
+  font-style: normal;
+  color: var(--accent);
+}
+
+.kin-landing-hero__sub {
+  color: var(--muted);
+  font-size: clamp(16px, 1.4vw, 18px);
+  max-width: 46ch;
+  line-height: 1.6;
+}
+
+.kin-landing-hero__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: var(--sp-5);
+}
+
+.kin-landing-hero__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 30px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.kin-landing-hero__meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kin-landing-hero__visual {
+  position: relative;
+}
+
+.kin-landing-hero__glow {
+  position: absolute;
+  /* Vertical bleed keeps the atmospheric halo; horizontal insets stay >= 0
+     so the decorative glow never extends past the viewport (no h-overflow). */
+  inset: -10% 0;
+  background: radial-gradient(60% 55% at 65% 40%, color-mix(in oklab, var(--accent) 22%, transparent), transparent 70%);
+  filter: blur(8px);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Hero phone mock */
+.kin-landing-phone {
+  position: relative;
+  z-index: 1;
+  width: min(340px, 100%);
+  margin-inline: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 34px;
+  padding: 14px;
+  box-shadow: 0 40px 80px -40px rgba(0,0,0,.9), inset 0 1px 0 color-mix(in oklab, var(--fg) 6%, transparent);
+}
+
+.kin-landing-phone__screen {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.kin-landing-phone__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kin-landing-phone__who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kin-landing-phone__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+
+.kin-landing-phone__avatar svg {
+  width: 18px;
+  height: 18px;
+}
+
+.kin-landing-phone__label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.kin-landing-phone__name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Progress ring card */
+.kin-landing-phone__ring-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 16px;
+}
+
+.kin-landing-phone__ring {
+  width: 76px;
+  height: 76px;
+  flex: none;
+  position: relative;
+}
+
+.kin-landing-phone__pct {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.kin-landing-phone__ring-meta .kin-landing-phone__ring-h {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.kin-landing-phone__ring-meta .kin-landing-phone__ring-v {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  margin-top: 2px;
+}
+
+/* Workout card inside phone */
+.kin-landing-phone__workout {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 16px;
+}
+
+.kin-landing-phone__work-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.kin-landing-phone__work-t {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.kin-landing-phone__work-dur {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.kin-landing-phone__ex-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+
+.kin-landing-phone__ex-row:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.kin-landing-phone__ex-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1.5px solid var(--border);
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+
+.kin-landing-phone__ex-row--done .kin-landing-phone__ex-check {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.kin-landing-phone__ex-name {
+  font-size: 13.5px;
+  flex: 1;
+}
+
+.kin-landing-phone__ex-row--done .kin-landing-phone__ex-name {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--border);
+}
+
+.kin-landing-phone__ex-set {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* card-2 variant — elevated surface */
+.kin-card-2 {
+  background: var(--surface-2);
+}
+
+/* Trust strip (4-column) */
+.kin-landing-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+
+.kin-landing-strip__item {
+  background: var(--surface);
+  padding: 22px;
+  display: grid;
+  gap: 10px;
+}
+
+.kin-landing-strip__icon {
+  width: 26px;
+  height: 26px;
+  color: var(--fg);
+}
+
+.kin-landing-strip__title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15.5px;
+}
+
+.kin-landing-strip__desc {
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+/* How it works (3-step) */
+.kin-landing-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.kin-landing-step {
+  padding: 28px 24px;
+  position: relative;
+}
+
+.kin-landing-step__num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(40px, 5vw, 56px);
+  color: var(--surface-2);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.kin-landing-step__num b {
+  color: var(--fg);
+}
+
+.kin-landing-step h3 {
+  font-size: 19px;
+  margin-top: 14px;
+  margin-bottom: 8px;
+}
+
+.kin-landing-step p {
+  color: var(--muted);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+.kin-landing-step__icon {
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+  margin-top: 16px;
+}
+
+/* Features grid (2×2) */
+.kin-landing-features {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+}
+
+.kin-landing-feature {
+  display: grid;
+  gap: 12px;
+}
+
+.kin-landing-feature__icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  color: var(--fg);
+}
+
+.kin-landing-feature h3 {
+  font-size: 18px;
+}
+
+.kin-landing-feature p {
+  color: var(--muted);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+/* Pricing tiers (3-tier) */
+.kin-landing-prices {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.kin-landing-price {
+  display: grid;
+  gap: 18px;
+  position: relative;
+}
+
+.kin-landing-price--pro {
+  border-color: var(--accent);
+}
+
+.kin-landing-price__badge {
+  position: absolute;
+  top: -11px;
+  left: 24px;
+}
+
+.kin-landing-price__tier {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.kin-landing-price__desc {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin-top: 4px;
+}
+
+.kin-landing-price__amount {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.kin-landing-price__cur {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+.kin-landing-price__num {
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.kin-landing-price__per {
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.kin-landing-price ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 11px;
+}
+
+.kin-landing-price li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--fg);
+}
+
+.kin-landing-price li svg {
+  width: 17px;
+  height: 17px;
+  color: var(--accent);
+  flex: none;
+  margin-top: 2px;
+}
+
+.kin-landing-price li.kin-muted {
+  color: var(--muted);
+}
+
+.kin-landing-price li.kin-muted svg {
+  color: var(--muted);
+}
+
+.kin-landing-price .kin-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+/* CTA band */
+.kin-landing-cta {
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  padding: clamp(48px, 7vw, 80px) 28px;
+}
+
+.kin-landing-cta__glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(50% 120% at 50% 0%, color-mix(in oklab, var(--accent) 14%, transparent), transparent 60%);
+  pointer-events: none;
+}
+
+.kin-landing-cta h2 {
+  font-size: clamp(30px, 4.5vw, 50px);
+  position: relative;
+  max-width: 18ch;
+  margin-inline: auto;
+}
+
+.kin-landing-cta p {
+  color: var(--muted);
+  margin-top: 16px;
+  position: relative;
+  font-size: 16.5px;
+}
+
+.kin-landing-cta .kin-landing-hero__cta {
+  justify-content: center;
+}
+
+/* Footer */
+.kin-landing-footer {
+  border-top: 1px solid var(--border);
+  padding-block: 56px 36px;
+}
+
+.kin-landing-footer__grid {
+  display: grid;
+  grid-template-columns: 1.6fr repeat(3, 1fr);
+  gap: 32px;
+}
+
+.kin-landing-footer__brand p {
+  color: var(--muted);
+  font-size: 14px;
+  max-width: 30ch;
+  margin-top: 14px;
+  line-height: 1.6;
+}
+
+.kin-landing-footer__col h4 {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  margin-bottom: 14px;
+}
+
+.kin-landing-footer__col a {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 14px;
+  transition: color .15s;
+  text-decoration: none;
+  /* 44px tap target (06B-TST 1.8) */
+  min-height: var(--tap);
+}
+
+.kin-landing-footer__col a:hover {
+  color: var(--fg);
+}
+
+.kin-landing-footer__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 44px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.kin-landing-footer__social {
+  display: flex;
+  gap: 6px;
+}
+
+.kin-landing-footer__social a {
+  /* 44px tap target (06B-TST 1.8) */
+  width: var(--tap);
+  height: var(--tap);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  transition: color .15s, border-color .15s;
+}
+
+.kin-landing-footer__social a:hover {
+  color: var(--fg);
+  border-color: var(--fg);
+}
+
+/* Responsive: landing sections */
+@media (max-width: 980px) {
+  .kin-landing-hero__grid {
+    grid-template-columns: 1fr;
+  }
+  .kin-landing-hero__visual {
+    order: -1;
+  }
+  .kin-landing-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .kin-landing-prices {
+    grid-template-columns: 1fr;
+    max-width: 460px;
+    margin-inline: auto;
+  }
+  .kin-landing-price--pro {
+    order: -1;
+  }
+  .kin-landing-footer__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .kin-landing-footer__brand {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .kin-landing-nav__links {
+    display: none;
+  }
+  .kin-landing-nav__toggle {
+    display: inline-flex;
+  }
+  .kin-landing-steps {
+    grid-template-columns: 1fr;
+  }
+  .kin-landing-features {
+    grid-template-columns: 1fr;
+  }
+  .kin-landing-hero h1 {
+    max-width: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .kin-landing-strip {
+    grid-template-columns: 1fr;
+  }
+  .kin-landing-footer__grid {
+    grid-template-columns: 1fr;
+  }
+  .kin-landing-nav__actions .kin-btn--ghost {
+    display: none;
+  }
+}
+
+/* -------------------------------------------------------------------------
+ * Typography helpers
+ * ------------------------------------------------------------------------- */
+
+.kin-title {
+  font-size: var(--fs-h1);
+}
+
+.kin-title--center {
+  text-align: center;
+}
+
+.kin-text {
+  font-size: var(--fs-body);
+}
+
+.kin-muted {
+  color: var(--muted);
+}
+
+/* -------------------------------------------------------------------------
+ * Forms
+ * ------------------------------------------------------------------------- */
+
+.kin-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.kin-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.kin-label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.kin-input {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  color: var(--fg);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  padding: var(--sp-2) var(--sp-3);
+  min-height: var(--tap);
+  width: 100%;
+}
+
+.kin-input::placeholder {
+  color: var(--muted);
+}
+
+.kin-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.kin-error {
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-btn);
+  background-color: color-mix(in oklch, var(--danger) 18%, var(--surface));
+  color: var(--danger);
+  font-size: var(--fs-sm);
+}
+
+/* -------------------------------------------------------------------------
+ * Buttons & anchor-buttons (tap targets >= 44px)
+ * ------------------------------------------------------------------------- */
+
+.kin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.5;
+  text-decoration: none;
+  padding: var(--sp-2) var(--sp-4);
+  min-height: var(--tap);
+  min-width: var(--tap);
+  border: 1px solid transparent;
+  border-radius: var(--r-btn);
+  cursor: pointer;
+  text-align: center;
+}
+
+.kin-btn--accent {
+  background-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.kin-btn--accent:hover {
+  background-color: color-mix(in oklch, var(--accent) 88%, white 12%);
+}
+
+.kin-btn--danger {
+  background-color: var(--danger);
+  color: var(--fg);
+}
+
+.kin-btn--ghost {
+  background-color: var(--surface);
+  color: var(--fg);
+  border-color: var(--border);
+}
+
+.kin-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* -------------------------------------------------------------------------
+ * Inline links / switch text
+ * ------------------------------------------------------------------------- */
+
+.kin-link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+}
+
+.kin-link:hover {
+  text-decoration: underline;
+}
+
+.kin-switch {
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+}
+
+.kin-switch-link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  /* Tap target >= 44px (spec: all interactive elements reachable by touch). */
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 var(--sp-1);
+}
+
+/* -------------------------------------------------------------------------
+ * Offline fallback page
+ * ------------------------------------------------------------------------- */
+
+.kin-offline {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4) var(--sp-3);
+  background-color: var(--bg);
+  color: var(--fg);
+}
+
+.kin-offline__card {
+  max-width: var(--maxw-card);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  align-items: center;
+}
+
+.kin-offline__title {
+  font-size: var(--fs-h1);
+}
+
+.kin-offline__text {
+  color: var(--muted);
+  font-size: var(--fs-body);
+}
+
+/* -------------------------------------------------------------------------
+ * Responsive breakpoints (mobile-first)
+ * ------------------------------------------------------------------------- */
+
+@media (min-width: 640px) {
+  /* sm — large phone */
+  .kin-page {
+    padding: var(--sp-5) var(--sp-4);
+  }
+}
+
+@media (min-width: 768px) {
+  /* md — tablet */
+  :root {
+    --maxw-card: 26rem;
+  }
+  .kin-page {
+    padding: var(--sp-6) var(--sp-5);
+  }
+}
+
+@media (min-width: 1024px) {
+  /* lg — small desktop */
+  :root {
+    --maxw-card: 28rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  /* xl — desktop */
+}
+
+@media (min-width: 1920px) {
+  /* 2xl — large desktop */
+  :root {
+    --maxw-card: 30rem;
+  }
+}
+
+/* Respect reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
