@@ -13,7 +13,7 @@
     "test:e2e": "playwright test",
     "deps-guard": "node scripts/deps-guard.mjs",
     "architecture": "depcruise --config .dependency-cruiser.cjs packages/domain/src packages/contracts/src apps/api/src && node scripts/architecture-negative-test.mjs",
-    "prepare": "git config core.hooksPath .githooks"
+    "prepare": "git rev-parse --git-dir > /dev/null 2>&1 && git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0",
