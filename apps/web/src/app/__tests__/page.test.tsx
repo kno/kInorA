@@ -1,13 +1,23 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { renderToString } from "react-dom/server";
 import { headers } from "next/headers";
+import { loadMessages } from "@/i18n/locale";
 import HomePage from "../page";
 
 vi.mock("next/headers", () => ({
   headers: vi.fn(),
 }));
 
+// Wrap the real loadMessages so individual tests can force an empty catalogue
+// (the production merge guarantees full English, so a missing-translation
+// scenario must be injected) without affecting the other tests.
+vi.mock("@/i18n/locale", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/i18n/locale")>();
+  return { ...actual, loadMessages: vi.fn(actual.loadMessages) };
+});
+
 const mockedHeaders = vi.mocked(headers);
+const mockedLoadMessages = vi.mocked(loadMessages);
 
 describe("HomePage", () => {
   beforeEach(() => {
@@ -52,5 +62,18 @@ describe("HomePage", () => {
 
     // Should detect es-ES from accept-language mock
     expect(html).toContain("kInorA");
+  });
+
+  it("degrades gracefully when the message catalogue is empty", async () => {
+    // Force a catalogue with no keys so every `messages.x ?? ""` fallback is
+    // exercised; the page must still render (non-i18n content like the Pro
+    // price and currency symbol remains) instead of throwing.
+    mockedLoadMessages.mockReturnValueOnce({});
+
+    const page = await HomePage({ searchParams: Promise.resolve({ lang: "en" }) });
+    const html = renderToString(page);
+
+    expect(typeof html).toBe("string");
+    expect(html).toContain("€");
   });
 });

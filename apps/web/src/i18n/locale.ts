@@ -70,7 +70,7 @@ export function loadMessages(locale: SupportedLocale): Messages {
     ? locale
     : "en";
 
-  return MESSAGE_CATALOGUES[safeLocale] ?? FALLBACK_MESSAGES;
+  return { ...MESSAGE_CATALOGUES.en, ...MESSAGE_CATALOGUES[safeLocale] };
 }
 
 /**
