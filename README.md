@@ -223,7 +223,7 @@ kinora/
 
 ## Roadmap
 
-- **v1** — MVP: Orbit UI shell, card mode, AI plan generation, tracker, progress surfaces, Free/Pro tiers
+- **v1** — MVP: Orbit UI shell, Open Design component foundation, card mode, AI plan generation, tracker, progress surfaces, Free/Pro tiers
 - **v1.1** — Conversational create-plan flow with voice assistant, dynamic plan adaptation
 - **v2** — Trainer tier: client management, branded plans
 - **v3** — B2B Gyms: white label, multi-tenant integration
@@ -243,6 +243,7 @@ Mandatory principles throughout execution:
 - **Strict TDD**: RED → GREEN → Triangle for edge cases.
 - Mobile support from v1: **PWA/mobile-first + Capacitor preparation**.
 - UI work uses the local Open Design snapshot in `docs/open-design/kinora/` and the selected **Orbit** brand direction.
+- Before feature screens, refresh Open Design and establish shared icon/component primitives so implementation stays pixel-aligned instead of inventing UI per screen.
 - Physical limitations generate **warnings and suggested substitutions**, never medical diagnosis or clinical blocking.
 
 ### v1 — Launchable MVP
@@ -259,6 +260,7 @@ Mandatory principles throughout execution:
 | 05b | `05b-v1-security-tenant-validation` | Tenant isolation, authorization, and input validation. |
 | 06 | `06-v1-mobile-foundation` | PWA, responsive baseline, and Capacitor shell. |
 | 06b | `06b-v1-orbit-ui-shell` | Apply the Orbit design system, landing page, responsive shell, navigation, and non-functional screen scaffolds from Open Design. |
+| 06c | `06c-v1-opendesign-component-foundation` | Refresh Open Design via MCP and establish shared icons and standard components for pixel-perfect feature work. |
 | 07 | `07-v1-plan-wizard` | Card-based create-plan screens that produce `PlanSpec`. |
 | 08 | `08-v1-ai-plan-generation` | AI plan generation with safe substitutions. |
 | 09a | `09a-v1-workout-tracking-core` | Live workout/session tracker and exercise execution surfaces. |
