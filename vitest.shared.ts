@@ -1,5 +1,16 @@
 import type { UserConfig } from "vitest/config";
 
+/**
+ * Shared `test` config defaults applied across packages.
+ *
+ * `allowOnly: !process.env.CI` fails the run when a focused `it.only` /
+ * `test.only` is left in the suite under CI, while still allowing focus
+ * locally. Packages spread this into their own `test` block.
+ */
+export const testConfig = {
+  allowOnly: !process.env.CI,
+} satisfies UserConfig["test"];
+
 export const coverageConfig = {
   provider: "v8",
   reporter: ["text", "lcov"],

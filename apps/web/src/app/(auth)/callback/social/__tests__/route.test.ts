@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { NextResponse } from "next/server";
-import { proxySocialCallback, SESSION_COOKIE } from "../route";
+import { proxySocialCallback, SESSION_COOKIE } from "../callback-proxy";
 
 function fakeJsonResponse(
   init: {
@@ -44,6 +44,27 @@ describe("social callback proxy", () => {
     expect(location).not.toContain("login");
     // Session cookie set with the API-issued token
     expect(res.cookies.get(SESSION_COOKIE)?.value).toBe("session-tok");
+    // Cookie persists across browser restarts (positive maxAge, 7 days).
+    expect(res.cookies.get(SESSION_COOKIE)?.maxAge).toBe(60 * 60 * 24 * 7);
+    expect(res.cookies.get(SESSION_COOKIE)?.maxAge).toBeGreaterThan(0);
+  });
+
+  it("redirects to login with an error when the API responds ok but without a token", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(fakeJsonResponse({ ok: true, status: 200, jsonValue: {} }));
+
+    const res = await proxySocialCallback(
+      new URLSearchParams({ code: "the-code", state: "the-state" }),
+      { fetchImpl, apiBaseUrl: "http://api.test" }
+    );
+
+    expect(res.status).toBe(303);
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("login");
+    expect(location).toContain("error=missing_token");
+    // No session cookie when there is no token.
+    expect(res.cookies.get(SESSION_COOKIE)).toBeUndefined();
   });
 
   // Triangle: missing params → error redirect, NO API call

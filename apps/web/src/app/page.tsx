@@ -1,6 +1,15 @@
 import { resolveLocale, loadMessages } from "@/i18n/locale";
 import { headers } from "next/headers";
 import type { SupportedLocale } from "@/i18n/locale";
+import { LandingNav } from "@/components/landing/LandingNav";
+import { LandingHero } from "@/components/landing/LandingHero";
+import { LandingTrust } from "@/components/landing/LandingTrust";
+import type { TrustItem } from "@/components/landing/LandingTrust";
+import { LandingHowItWorks } from "@/components/landing/LandingHowItWorks";
+import { LandingFeatures } from "@/components/landing/LandingFeatures";
+import { LandingPricing } from "@/components/landing/LandingPricing";
+import { LandingCTA } from "@/components/landing/LandingCTA";
+import { LandingFooter } from "@/components/landing/LandingFooter";
 
 export default async function HomePage({
   searchParams,
@@ -21,58 +30,23 @@ export default async function HomePage({
   const locale: SupportedLocale = resolveLocale(acceptLanguage, langParam);
   const messages = loadMessages(locale);
 
+  const trustItems: TrustItem[] = [
+    { icon: "clock", title: messages.trust_title ?? "", desc: messages.trust_desc_schedule ?? "" },
+    { icon: "chart", title: messages.trust_title_level ?? "", desc: messages.trust_desc_level ?? "" },
+    { icon: "check", title: messages.trust_title_equipment ?? "", desc: messages.trust_desc_equipment ?? "" },
+    { icon: "mic", title: messages.trust_title_hands ?? "", desc: messages.trust_desc_hands ?? "" },
+  ];
+
   return (
-    <main
-      style={{
-        maxWidth: "100%",
-        overflowX: "hidden",
-        boxSizing: "border-box",
-        padding: "2rem 1rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        fontFamily: "system-ui, -apple-system, sans-serif",
-      }}
-    >
-      <h1
-        style={{
-          fontSize: "clamp(1.75rem, 5vw, 3rem)",
-          margin: "0 0 0.5rem",
-          textAlign: "center",
-          lineHeight: 1.2,
-        }}
-      >
-        {messages.title}
-      </h1>
-      <p
-        style={{
-          fontSize: "clamp(1rem, 2.5vw, 1.25rem)",
-          margin: "0 0 1.5rem",
-          textAlign: "center",
-          lineHeight: 1.4,
-          color: "#555",
-        }}
-      >
-        {messages.subtitle}
-      </p>
-      <a
-        href="#"
-        style={{
-          display: "inline-block",
-          padding: "0.75rem 1.5rem",
-          fontSize: "clamp(0.875rem, 2vw, 1rem)",
-          backgroundColor: "#0070f3",
-          color: "#fff",
-          textDecoration: "none",
-          borderRadius: "0.5rem",
-          fontWeight: 600,
-          lineHeight: 1.5,
-        }}
-      >
-        {messages.cta}
-      </a>
+    <main>
+      <LandingNav messages={messages} />
+      <LandingHero messages={messages} />
+      <LandingTrust items={trustItems} />
+      <LandingHowItWorks messages={messages} />
+      <LandingFeatures messages={messages} />
+      <LandingPricing messages={messages} />
+      <LandingCTA messages={messages} />
+      <LandingFooter messages={messages} />
     </main>
   );
 }
