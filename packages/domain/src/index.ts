@@ -5,8 +5,8 @@
  * No framework, database, or infrastructure imports allowed.
  */
 
-export { createPlanDraft } from "./plan/plan-draft";
-export type { PlanDraft } from "./plan/plan-draft";
+export { createPlanDraft } from "./plan/plan-draft.js";
+export type { PlanDraft } from "./plan/plan-draft.js";
 
 export {
   MIN_PASSWORD_LENGTH,
@@ -15,7 +15,7 @@ export {
   verifyPassword,
   PasswordPolicyError,
   type ScryptOptions,
-} from "./auth/password";
+} from "./auth/password.js";
 
 export {
   TOKEN_BYTES,
@@ -25,4 +25,4 @@ export {
   isSessionExpired,
   assertSessionNotExpired,
   InvalidSessionTokenError,
-} from "./auth/session";
+} from "./auth/session.js";
