@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>kInorA — Librería de iconos</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='13' fill='none' stroke='%23696964' stroke-width='6'/%3E%3Ccircle cx='24' cy='11' r='9' fill='%23A8F060'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:        oklch(5% 0.006 270);
+    --surface:   oklch(11% 0.006 270);
+    --surface-2: oklch(15% 0.006 270);
+    --border:    oklch(24% 0.006 270);
+    --fg:        oklch(96% 0.002 270);
+    --muted:     oklch(66% 0.006 270);
+    --accent:    oklch(89% 0.20 128);
+    --accent-fg: oklch(5% 0.006 270);
+    --font-display:'Space Grotesk', system-ui, sans-serif;
+    --font-body:'DM Sans', -apple-system, system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);color:var(--fg);
+    font-family:var(--font-body);line-height:1.5;
+    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:64px 32px 120px}
+
+  /* ---- header ---- */
+  .eyebrow{font-family:var(--font-display);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  .page-h{font-family:var(--font-display);font-size:clamp(34px,5vw,52px);font-weight:700;letter-spacing:-.02em;margin:14px 0;line-height:1.05}
+  .lede{color:var(--muted);font-size:17px;max-width:64ch}
+  .tokens{display:flex;flex-wrap:wrap;gap:10px;margin-top:30px;align-items:center}
+  .swatch{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px 14px 8px 8px}
+  .chip{width:32px;height:32px;border-radius:8px;flex:none}
+  .swatch b{font-family:var(--font-display);font-size:13px;font-weight:600}
+  .swatch span{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+  .type-token{font-family:var(--font-display);font-size:13px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 14px}
+  .type-token b{color:var(--fg)}
+  hr.div{border:0;border-top:1px solid var(--border);margin:56px 0}
+
+  /* ---- section ---- */
+  .sec-h{font-family:var(--font-display);font-size:13px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:20px;display:flex;align-items:center;gap:12px}
+  .sec-h::after{content:"";flex:1;height:1px;background:var(--border)}
+
+  /* ---- animated logo block ---- */
+  .logo-block{display:grid;grid-template-columns:minmax(0,360px) 1fr;gap:24px;align-items:stretch}
+  @media(max-width:780px){.logo-block{grid-template-columns:1fr}}
+  .logo-stage{background:radial-gradient(120% 120% at 50% 30%, color-mix(in oklab, var(--accent) 7%, var(--surface)) 0%, var(--surface) 60%);border:1px solid var(--border);border-radius:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;gap:24px}
+  .orbit-wrap{position:relative;width:200px;height:200px;display:grid;place-items:center}
+  .orbit-wrap svg{width:200px;height:200px;overflow:visible}
+  .orbit-track{stroke:var(--border)}
+  .orbit-arc{stroke:var(--muted);stroke-linecap:round;transition:none}
+  .orbit-dot-g{transform-box:view-box;transform-origin:24px 24px}
+  .orbit-dot{fill:var(--accent);filter:drop-shadow(0 0 6px color-mix(in oklab, var(--accent) 55%, transparent))}
+  .orbit-readout{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  .orbit-pct{font-family:var(--font-display);font-size:42px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1}
+  .orbit-pct b{color:var(--accent)}
+  .orbit-pct .u{font-size:20px;color:var(--muted);margin-left:1px}
+  .orbit-label{font-size:11px;color:var(--muted);letter-spacing:.18em;text-transform:uppercase;margin-top:8px}
+  .logo-ctrls{display:flex;flex-direction:column;gap:14px;width:100%;max-width:260px}
+  .ctrl-row{display:flex;align-items:center;gap:12px}
+  .btn{font-family:var(--font-body);font-weight:600;font-size:14px;border-radius:12px;border:1px solid var(--border);background:var(--surface-2);color:var(--fg);padding:10px 16px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:border-color .15s,background .15s}
+  .btn:hover{border-color:var(--muted)}
+  .btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+  .btn.primary:hover{filter:brightness(1.05)}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:999px;background:var(--border);outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;border:3px solid var(--bg);box-shadow:0 0 0 1px var(--accent)}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;border:3px solid var(--bg)}
+
+  .logo-notes{background:var(--surface);border:1px solid var(--border);border-radius:24px;padding:30px;display:flex;flex-direction:column}
+  .logo-notes h3{font-family:var(--font-display);font-size:20px;font-weight:600;letter-spacing:-.01em;margin-bottom:8px}
+  .logo-notes p{color:var(--muted);font-size:14.5px;margin-bottom:16px;max-width:60ch}
+  .logo-notes ul{list-style:none;display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
+  .logo-notes li{display:flex;gap:10px;align-items:flex-start;color:var(--muted);font-size:14px}
+  .logo-notes li b{color:var(--fg);font-weight:600}
+  .logo-notes li svg{flex:none;margin-top:3px}
+  .fav-row{display:flex;gap:18px;align-items:flex-end;margin-top:auto;padding-top:20px;border-top:1px solid var(--border)}
+  .fav-row .fv{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .fav-row .fv svg{display:block;background:var(--bg);border:1px solid var(--border);border-radius:6px}
+  .fav-row .fv span{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+  /* ---- icon grid ---- */
+  .cat{margin-bottom:40px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:14px}
+  .tile{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 14px 14px;display:flex;flex-direction:column;align-items:center;gap:14px;cursor:pointer;position:relative;transition:border-color .15s,background .15s,transform .15s}
+  .tile:hover{border-color:var(--muted);background:var(--surface-2);transform:translateY(-2px)}
+  .tile .ico{width:30px;height:30px;color:var(--fg)}
+  .tile.accent .ico{color:var(--accent)}
+  .tile .nm{font-size:12px;color:var(--muted);text-align:center;font-family:var(--font-display);letter-spacing:.02em}
+  .tile .copy-hint{position:absolute;top:8px;right:8px;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);opacity:0;transition:opacity .15s;font-family:var(--font-display)}
+  .tile:hover .copy-hint{opacity:.7}
+  .tile.copied{border-color:var(--accent)}
+  .tile.copied .copy-hint{opacity:1;color:var(--accent)}
+
+  /* ---- toast ---- */
+  .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--accent);color:var(--accent-fg);font-family:var(--font-display);font-weight:600;font-size:13px;padding:10px 18px;border-radius:999px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50;display:flex;align-items:center;gap:8px}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  footer{margin-top:64px;color:var(--muted);font-size:13px;border-top:1px solid var(--border);padding-top:24px;line-height:1.7}
+  footer code{font-family:var(--font-display);color:var(--fg);background:var(--surface);padding:2px 7px;border-radius:6px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">kInorA · Sistema de iconos</p>
+    <h1 class="page-h">Librería de iconos&nbsp;e&nbsp;implementación</h1>
+    <p class="lede">Todos los iconos usados en las pantallas de kInorA, en un solo estilo de trazo (2px, cap redondo, viewBox 24×24, <code style="font-family:var(--font-display);background:var(--surface);padding:1px 6px;border-radius:5px;font-size:13px">stroke="currentColor"</code>). Haz clic en cualquier tile para copiar su SVG. Arriba, el logotipo Orbit animado como anillo de progreso.</p>
+
+    <div class="tokens">
+      <div class="swatch"><span class="chip" style="background:var(--bg);border:1px solid var(--border)"></span><div><b>Fondo</b><br><span>#09090C</span></div></div>
+      <div class="swatch"><span class="chip" style="background:var(--muted)"></span><div><b>Trazo</b><br><span>currentColor</span></div></div>
+      <div class="swatch"><span class="chip" style="background:var(--accent)"></span><div><b>Acento</b><br><span>#A8F060</span></div></div>
+      <div class="type-token">Trazo · <b>2px round</b></div>
+      <div class="type-token">Grid · <b>24 × 24</b></div>
+    </div>
+  </header>
+
+  <hr class="div" />
+
+  <!-- ============ LOGOTIPO ANIMADO ============ -->
+  <section>
+    <p class="sec-h">Logotipo · anillo de progreso</p>
+    <div class="logo-block">
+
+      <div class="logo-stage">
+        <div class="orbit-wrap">
+          <svg viewBox="0 0 48 48" fill="none" role="img" aria-label="kInorA — anillo de progreso animado">
+            <!-- pista de fondo -->
+            <circle class="orbit-track" cx="24" cy="24" r="16" stroke-width="4"/>
+            <!-- zona gris de progreso (se llena) -->
+            <circle id="orbitArc" class="orbit-arc" cx="24" cy="24" r="16" stroke-width="4"
+                    transform="rotate(-90 24 24)"/>
+            <!-- bola lima en la cabeza del progreso -->
+            <g id="orbitDotG" class="orbit-dot-g">
+              <circle class="orbit-dot" cx="24" cy="8" r="6"/>
+            </g>
+          </svg>
+          <div class="orbit-readout">
+            <div class="orbit-pct"><b id="orbitPct">0</b><span class="u">%</span></div>
+            <div class="orbit-label">Sesión</div>
+          </div>
+        </div>
+
+        <div class="logo-ctrls">
+          <input type="range" id="orbitRange" min="0" max="100" value="0" aria-label="Ajustar progreso manualmente" />
+          <div class="ctrl-row">
+            <button class="btn primary" id="orbitToggle" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              <span id="orbitToggleLabel">Pausar</span>
+            </button>
+            <button class="btn" id="orbitCopy" type="button">Copiar SVG</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="logo-notes">
+        <h3>Cómo comunica progreso</h3>
+        <p>La <b>zona gris</b> crece desde las 12 en sentido horario y la <b>bola lima</b> viaja en su cabeza: juntas marcan el avance. A 100% el aro queda completo con la bola de vuelta arriba. Es el mismo símbolo Orbit de la marca, ahora vivo.</p>
+        <ul>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"><path d="M5 13l4 4L19 7"/></svg><span><b>Un solo acento.</b> Solo la bola es lima; el aro de progreso es gris (<code style="font-family:var(--font-display);font-size:12px">--muted</code>). Respeta la regla de máx. 2 limas por vista.</span></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"><path d="M5 13l4 4L19 7"/></svg><span><b>Driven por dato.</b> El arrastre del slider mueve el aro, la bola y el número en sincronía — la misma API que conectarías a <code style="font-family:var(--font-display);font-size:12px">progress</code> real.</span></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"><path d="M5 13l4 4L19 7"/></svg><span><b>Usos:</b> loader de IA, progreso de sesión en el tracker, anillo de racha semanal, splash de carga.</span></li>
+        </ul>
+        <div class="fav-row">
+          <div class="fv"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="15" stroke="var(--border)" stroke-width="4"/><path d="M24 9 A15 15 0 0 1 38 19" stroke="var(--muted)" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="9" r="5.5" fill="var(--accent)"/></svg><span>48</span></div>
+          <div class="fv"><svg width="32" height="32" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="14" stroke="var(--muted)" stroke-width="4.5"/><circle cx="24" cy="10" r="7" fill="var(--accent)"/></svg><span>32</span></div>
+          <div class="fv"><svg width="16" height="16" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="13" stroke="var(--muted)" stroke-width="6"/><circle cx="24" cy="11" r="9" fill="var(--accent)"/></svg><span>16</span></div>
+          <span style="font-size:12px;color:var(--muted);max-width:18ch;line-height:1.5">Degradación de favicon: a 16px la órbita se vuelve anillo + punto sólido.</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <hr class="div" />
+
+  <!-- ============ ICONOS DE UI ============ -->
+  <section id="iconLib"></section>
+
+  <footer>
+    Sistema kInorA · iconos de trazo a juego con el símbolo Orbit. Todos en <code>viewBox 0 0 24 24</code>, <code>stroke="currentColor"</code>, <code>stroke-width 2</code>, caps y joins redondos — colorea con CSS (<code>color: var(--fg)</code> / <code>--accent</code>). El logotipo Orbit usa <code>--muted</code> + <code>--accent</code>. Para favicon e iconos de app, exporta los SVG de esta página a <code>.svg</code> / <code>.ico</code> / PNG.
+  </footer>
+
+</div>
+
+<div class="toast" id="toast">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+  <span id="toastMsg">SVG copiado</span>
+</div>
+
+<script>
+/* ============================================================
+   Catálogo de iconos — extraído del uso real en las pantallas.
+   Cada entrada: { name, label, accent, body }
+   body = el contenido interno del <svg> (paths/shapes).
+   ============================================================ */
+const STROKE = 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+
+const CATEGORIES = [
+  { title: 'Navegación', icons: [
+    { name:'home',     label:'Inicio',    body:'<path d="M3 11 L12 4 L21 11"/><path d="M5 10 V20 H19 V10"/>' },
+    { name:'calendar', label:'Plan',      body:'<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 9 H20 M9 3 V7 M15 3 V7"/>' },
+    { name:'dumbbell', label:'Ejercicios',body:'<path d="M3 9 V15 M21 9 V15 M6 7 V17 M18 7 V17 M6 12 H18"/>' },
+    { name:'bars',     label:'Estadísticas', accent:true, body:'<path d="M4 20 V13 M10 20 V8 M16 20 V4"/>' },
+    { name:'mic',      label:'Asistente voz', body:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11 A7 7 0 0 0 19 11 M12 18 V21"/>' },
+    { name:'user',     label:'Perfil',    body:'<circle cx="12" cy="8" r="4"/><path d="M4.5 20 c0-4 3.5-6 7.5-6 s7.5 2 7.5 6"/>' },
+  ]},
+  { title: 'Acciones', icons: [
+    { name:'plus',    label:'Añadir / Crear', body:'<path d="M12 5 V19 M5 12 H19"/>' },
+    { name:'minus',   label:'Reducir',   body:'<path d="M5 12 H19"/>' },
+    { name:'check',   label:'Completar', body:'<path d="M4 12 l5 5 L20 6"/>' },
+    { name:'close',   label:'Cerrar',    body:'<path d="M6 6 L18 18 M18 6 L6 18"/>' },
+    { name:'play',    label:'Iniciar',   body:'<path d="M7 5 L19 12 L7 19 Z"/>' },
+    { name:'pause',   label:'Pausar',    body:'<path d="M9 5 V19 M15 5 V19"/>' },
+    { name:'skip',    label:'Saltar descanso', body:'<path d="M5 5 L15 12 L5 19 Z"/><path d="M18 5 V19"/>' },
+    { name:'send',    label:'Enviar',    body:'<path d="M4 12 L20 4 L13.5 20 L11 13 Z"/><path d="M11 13 L20 4"/>' },
+    { name:'edit',    label:'Editar',    body:'<path d="M5 19 h4 L19 9 l-4-4 L5 15 Z"/><path d="M14 6 l4 4"/>' },
+    { name:'search',  label:'Buscar',    body:'<circle cx="11" cy="11" r="6"/><path d="M16 16 L21 21"/>' },
+  ]},
+  { title: 'Sistema', icons: [
+    { name:'settings', label:'Ajustes', body:'<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5 V5 M12 19 V21.5 M21.5 12 H19 M5 12 H2.5 M18.7 5.3 l-1.8 1.8 M7.1 16.9 l-1.8 1.8 M18.7 18.7 l-1.8-1.8 M7.1 7.1 L5.3 5.3"/>' },
+    { name:'bell',     label:'Notificaciones', body:'<path d="M6 9 a6 6 0 0 1 12 0 c0 5 2 6.5 2 6.5 H4 s2-1.5 2-6.5"/><path d="M10 20 a2 2 0 0 0 4 0"/>' },
+    { name:'back',     label:'Volver',  body:'<path d="M15 5 L8 12 L15 19"/>' },
+    { name:'forward',  label:'Siguiente', body:'<path d="M9 5 L16 12 L9 19"/>' },
+    { name:'target',   label:'Objetivo', body:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.6" fill="currentColor" stroke="none"/>' },
+    { name:'info',     label:'Info',    body:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11 V16 M12 8 V8.2"/>' },
+  ]},
+  { title: 'Métricas y estado', icons: [
+    { name:'flame',   label:'Racha', accent:true, body:'<path d="M12 3 c2.5 3.5 5 5.5 5 9.5 a5 5 0 0 1-10 0 c0-1.8 .8-3 2-4 c.6 1.8 1.8 2 3 1.2 c-1-1.8-1-4 0-6.7 Z"/>' },
+    { name:'timer',   label:'Descanso', body:'<circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5 V13.5 L15 15.5"/><path d="M9 3 H15"/>' },
+    { name:'trophy',  label:'Récord', body:'<path d="M7 4 H17 V9 a5 5 0 0 1-10 0 Z"/><path d="M7 6 H4.2 a2 2 0 0 0 2.4 3.6 M17 6 H19.8 a2 2 0 0 1-2.4 3.6"/><path d="M12 14 V17 M9.5 21 H14.5 M10 17 H14 V21 H10 Z"/>' },
+    { name:'trend',   label:'Volumen', body:'<path d="M3 17 L9 11 L13 15 L21 7"/><path d="M21 7 H15.5 M21 7 V12.5"/>' },
+    { name:'clock',   label:'Tiempo', body:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7 V12 L15.5 14"/>' },
+    { name:'heart',   label:'Esfuerzo', body:'<path d="M12 20 C5 15 3 11 3 8 a4.5 4.5 0 0 1 9-1 a4.5 4.5 0 0 1 9 1 c0 3-2 7-9 12 Z"/>' },
+  ]},
+];
+
+function svgString(body){
+  return '<svg width="24" height="24" viewBox="0 0 24 24" '+STROKE+'>'+body+'</svg>';
+}
+
+/* render library */
+const lib = document.getElementById('iconLib');
+CATEGORIES.forEach(cat=>{
+  const wrap = document.createElement('div');
+  wrap.className = 'cat';
+  const h = document.createElement('p');
+  h.className = 'sec-h';
+  h.textContent = cat.title;
+  wrap.appendChild(h);
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+  cat.icons.forEach(ic=>{
+    const tile = document.createElement('button');
+    tile.className = 'tile' + (ic.accent ? ' accent' : '');
+    tile.type = 'button';
+    tile.innerHTML =
+      '<span class="copy-hint">copiar</span>' +
+      '<span class="ico">'+svgString(ic.body)+'</span>' +
+      '<span class="nm">'+ic.label+'</span>';
+    tile.addEventListener('click', ()=>{
+      copy(svgString(ic.body), 'Icono "'+ic.name+'" copiado');
+      tile.classList.add('copied');
+      setTimeout(()=>tile.classList.remove('copied'), 1200);
+    });
+    grid.appendChild(tile);
+  });
+  wrap.appendChild(grid);
+  lib.appendChild(wrap);
+});
+
+/* ---- toast + clipboard ---- */
+const toast = document.getElementById('toast');
+const toastMsg = document.getElementById('toastMsg');
+let toastT = null;
+function copy(text, msg){
+  const done = ()=>{ toastMsg.textContent = msg; toast.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(()=>toast.classList.remove('show'), 1600); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text, done));
+  } else { fallbackCopy(text, done); }
+}
+function fallbackCopy(text, done){
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta); done();
+}
+
+/* ============================================================
+   Logotipo Orbit — anillo de progreso
+   ============================================================ */
+(function(){
+  const R = 16;
+  const C = 2 * Math.PI * R;                 // circunferencia ≈ 100.53
+  const arc = document.getElementById('orbitArc');
+  const dotG = document.getElementById('orbitDotG');
+  const pct = document.getElementById('orbitPct');
+  const range = document.getElementById('orbitRange');
+  const toggle = document.getElementById('orbitToggle');
+  const toggleLabel = document.getElementById('orbitToggleLabel');
+  const copyBtn = document.getElementById('orbitCopy');
+
+  arc.style.strokeDasharray = C.toFixed(2);
+
+  function setProgress(p){                    // p: 0..1
+    p = Math.max(0, Math.min(1, p));
+    arc.style.strokeDashoffset = (C * (1 - p)).toFixed(2);
+    dotG.style.transform = 'rotate(' + (p * 360).toFixed(1) + 'deg)';
+    pct.textContent = Math.round(p * 100);
+  }
+
+  // easing suave (easeInOutCubic)
+  function ease(t){ return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2; }
+
+  let auto = true, startTs = null;
+  const DUR = 3200;
+  function frame(ts){
+    if(auto){
+      if(startTs === null) startTs = ts;
+      const e = ((ts - startTs) % DUR) / DUR;
+      const p = ease(e);
+      setProgress(p);
+      range.value = Math.round(p * 100);
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  range.addEventListener('input', ()=>{
+    auto = false;
+    setPlayUI(false);
+    setProgress(range.value / 100);
+  });
+
+  function setPlayUI(playing){
+    toggleLabel.textContent = playing ? 'Pausar' : 'Reproducir';
+    toggle.querySelector('svg').innerHTML = playing
+      ? '<path d="M8 5v14M16 5v14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>'
+      : '<path d="M8 5v14l11-7z"/>';
+  }
+  toggle.addEventListener('click', ()=>{
+    auto = !auto;
+    if(auto) startTs = null;     // reanuda desde donde corresponde
+    setPlayUI(auto);
+  });
+  setPlayUI(true);
+
+  copyBtn.addEventListener('click', ()=>{
+    const markup =
+'<svg viewBox="0 0 48 48" fill="none" style="--p:.65">\n' +
+'  <circle cx="24" cy="24" r="16" stroke="#26262C" stroke-width="4"/>\n' +
+'  <circle cx="24" cy="24" r="16" stroke="#9A9AA2" stroke-width="4" stroke-linecap="round"\n' +
+'          transform="rotate(-90 24 24)"\n' +
+'          stroke-dasharray="100.53" stroke-dashoffset="calc(100.53 * (1 - var(--p)))"/>\n' +
+'  <g style="transform:rotate(calc(var(--p) * 360deg));transform-origin:24px 24px;transform-box:view-box">\n' +
+'    <circle cx="24" cy="8" r="6" fill="#A8F060"/>\n' +
+'  </g>\n' +
+'</svg>\n' +
+'<!-- Cambia --p (0..1) para fijar el progreso. Para animar, anima --p con CSS/JS. -->';
+    copy(markup, 'SVG del logo copiado');
+  });
+})();
+</script>
+</body>
+</html>
