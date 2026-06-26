@@ -1,7 +1,7 @@
 ## Implementation Progress
 
 **Change**: `06c-v1-opendesign-component-foundation`
-**Slice**: PR 2 — shared icon foundation and Orbit primitives
+**Slice**: PR 3 — proof wiring, tests, and guidance
 **Mode**: Strict TDD
 **Workload mode**: stacked PR slice (`stacked-to-main`)
 
@@ -12,6 +12,12 @@
 - [x] 2.1 Create `apps/web/src/components/icons/` with a typed registry and shared accessibility defaults.
 - [x] 2.2 Create `apps/web/src/components/orbit/` primitives for cards, section headers, metric blocks, nav affordances, empty states, and CTA surfaces.
 - [x] 2.3 Keep primitive styling isolated to component styles so `globals.css` needs no PR 2 changes.
+- [x] 3.1 Replace AppShell inline SVGs with shared icons while preserving routes and active states.
+- [x] 3.2 Reuse the shared icons/primitives in the assigned landing proof consumers only.
+- [x] 3.3 Update affected imports/exports so AppShell and landing builds stay clean.
+- [x] 4.1 Expand icon and orbit Vitest coverage for proof-wiring needs.
+- [x] 4.2 Update AppShell and landing tests so labels, links, and active states remain verified after wiring.
+- [x] 4.3 Expand `docs/open-design-kinora.md` with future-screen guidance, deviation rules, and manual visual verification steps.
 
 ### TDD Cycle Evidence
 | Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
@@ -19,27 +25,25 @@
 | 1.1 | N/A | Snapshot verification | N/A — artifact refresh only | ➖ Not applicable — no production behavior changed; task is a live artifact sync | ✅ `python3` snapshot metadata validation + byte-for-byte sync checks passed | ➖ Not applicable — no branching logic or behavior surface | ➖ None needed |
 | 1.2 | N/A | Documentation verification | N/A — docs-only change | ➖ Not applicable — docs/provenance update only | ✅ Traceability evidence recorded in `docs/open-design-kinora.md` and re-checked after edit | ➖ Not applicable — single documentation outcome | ➖ None needed |
 | 1.3 | N/A | Documentation verification | N/A — docs-only change | ➖ Not applicable — deviation note only | ✅ Deviation note recorded in `docs/open-design-kinora.md` | ➖ Not applicable — single documentation outcome | ➖ None needed |
-| 2.1 | `apps/web/src/components/icons/__tests__/KinIcon.test.tsx` | Unit | N/A (new files) | ✅ Wrote icon tests first; the initial targeted run failed because `components/icons/index.ts` did not exist | ✅ `pnpm --filter web exec vitest run src/components/icons/__tests__/KinIcon.test.tsx src/components/orbit/__tests__/orbit-primitives.test.tsx` passed with 4 icon assertions | ✅ Covered decorative defaults, semantic title mode, registry-label fallback, and typed registry exposure | ✅ Simplified title handling and aligned shared React typings after `pnpm --filter web type-check` |
-| 2.2 | `apps/web/src/components/orbit/__tests__/orbit-primitives.test.tsx` | Unit | N/A (new files) | ✅ Wrote primitive tests first; the initial targeted run failed because `components/orbit/index.ts` did not exist | ✅ `pnpm --filter web exec vitest run src/components/icons/__tests__/KinIcon.test.tsx src/components/orbit/__tests__/orbit-primitives.test.tsx` passed with 4 primitive assertions | ✅ Covered section header content, metric semantics, nav-link behavior, and empty/CTA rendering without product behavior | ✅ Tightened element prop contracts after `pnpm --filter web type-check` surfaced JSX typing mismatches |
-| 2.3 | `apps/web/src/components/orbit/__tests__/orbit-primitives.test.tsx` | Unit | N/A (new files) | ✅ The first primitive RED run established that isolated component styles had to exist before any global CSS change could be justified | ✅ Primitive tests pass and `apps/web/src/app/globals.css` stayed untouched because the components remain self-contained in CSS modules | ✅ Verified multiple primitives render correctly without any global CSS additions | ➖ Conditional task complete: no `globals.css` change was necessary |
+| 2.1 | `apps/web/src/components/icons/__tests__/KinIcon.test.tsx` | Unit | N/A (new files) | ✅ Initial targeted run failed because `components/icons/index.ts` did not exist | ✅ Targeted icon/orbit suite passed after the shared icon registry and component were added | ✅ Covered decorative defaults, semantic title mode, registry-label fallback, and typed registry exposure | ✅ Simplified title handling and aligned shared React typings |
+| 2.2 | `apps/web/src/components/orbit/__tests__/orbit-primitives.test.tsx` | Unit | N/A (new files) | ✅ Initial targeted run failed because `components/orbit/index.ts` did not exist | ✅ Targeted icon/orbit suite passed after the primitive exports were added | ✅ Covered section header content, metric semantics, nav-link behavior, and empty/CTA rendering | ✅ Tightened element prop contracts after type-check feedback |
+| 2.3 | `apps/web/src/components/orbit/__tests__/orbit-primitives.test.tsx` | Unit | N/A (new files) | ✅ Primitive RED run established that isolated component styles had to exist before any global CSS change could be justified | ✅ Primitive tests passed while `globals.css` stayed untouched | ✅ Verified multiple primitives render correctly without any global CSS additions | ➖ Conditional task complete: no `globals.css` change was necessary |
+| 3.1 | `apps/web/src/components/AppShell/__tests__/SidebarNav.test.tsx`, `apps/web/src/components/AppShell/__tests__/MobileNav.test.tsx` | Integration | ✅ Baseline targeted AppShell + landing + icon/orbit suite passed (49/49) before edits | ✅ Added shared-icon accessibility assertions first; targeted run failed because AppShell navs still rendered inline SVGs without `focusable="false"` | ✅ Targeted proof-wiring suite passed after `SidebarNav` and `MobileNav` switched to shared icons | ✅ Covered desktop nav items plus mobile tabs/FAB so the shared icon defaults could not pass on only one surface | ✅ Kept routes and `aria-current` behavior unchanged while removing duplicated SVG markup |
+| 3.2 | `apps/web/src/components/landing/__tests__/LandingFeatures.test.tsx`, `LandingHowItWorks.test.tsx`, `LandingCTA.test.tsx`, `LandingTrust.test.tsx`, `LandingFooter.test.tsx` | Integration | ✅ Baseline targeted AppShell + landing + icon/orbit suite passed (49/49) before edits | ✅ Added semantic-header / CTA-surface / proof-card / shared-icon assertions first; targeted run failed across the landing proof consumers | ✅ Targeted proof-wiring suite passed after the assigned landing consumers adopted shared icons and Orbit primitives | ✅ Covered section headers, CTA structure, footer/social icons, trust cards, and preserved text content across multiple landing sections | ✅ Fixed duplicate-key noise by switching unstable message-based keys to stable proof-surface keys without changing behavior |
+| 3.3 | `apps/web/src/components/AppShell/__tests__/SidebarNav.test.tsx`, `apps/web/src/components/AppShell/__tests__/MobileNav.test.tsx`, `apps/web/src/components/landing/__tests__/*.test.tsx` | Integration | ✅ Baseline targeted proof-wiring suite was already green before import/export cleanup | ✅ The same RED run from 3.1/3.2 would fail until the new shared imports compiled | ✅ Targeted suite and `pnpm --filter web type-check` passed after import/export cleanup | ➖ Triangulation skipped: structural import/export cleanup with one intended compilation outcome | ✅ Consolidated proof consumers on the existing shared surfaces only |
+| 4.1 | `apps/web/src/components/icons/__tests__/KinIcon.test.tsx`, `apps/web/src/components/orbit/__tests__/orbit-primitives.test.tsx` | Unit | ✅ Baseline targeted proof-wiring suite passed after consumer wiring | ✅ Added coverage for proof-only utility icons and CTA-surface child rendering before the final verification pass | ✅ Targeted suite passed after keeping the expanded icon registry and CTA child slot aligned with the primitive contract | ✅ Covered social/utility icon reuse plus CTA decorative-child ordering as separate cases | ✅ Expanded tests without broadening the primitive API beyond proof-wiring needs |
+| 4.2 | `apps/web/src/components/AppShell/__tests__/SidebarNav.test.tsx`, `MobileNav.test.tsx`, `LandingFeatures.test.tsx`, `LandingCTA.test.tsx`, `LandingFooter.test.tsx`, `LandingHowItWorks.test.tsx`, `LandingPricing.test.tsx`, `LandingTrust.test.tsx` | Integration | ✅ Baseline targeted proof-wiring suite passed before final assertion cleanup | ✅ Some updated landing assertions failed until they rendered through markup-aware checks compatible with Orbit primitives | ✅ Targeted suite passed after the tests asserted labels, links, active states, and semantic structure through rendered HTML where needed | ✅ Mixed tree-inspection and markup assertions so primitive-backed consumers and plain consumers are both covered | ✅ Removed the last warning-producing unstable list keys so verification stays clean |
+| 4.3 | N/A | Documentation verification | N/A — docs-only change | ➖ Not applicable — guidance/checklist update only | ✅ `docs/open-design-kinora.md` now includes future-screen usage guidance, deviation rules, and manual visual checklist | ➖ Not applicable — single documentation outcome | ➖ None needed |
 
 ### Verification Run
-- ✅ `python3` snapshot metadata validation passed (`snapshot-manifest.json`, `project.json`, `files.json`, required local files)
-- ✅ `python3` byte-for-byte sync verification passed for 15 copied live source files
-- ✅ Live source access verified through the sidecar stdio MCP path (`get_project` and `list_files`)
-- ✅ Corrective pass removed the stray `od:mcp` package script so PR 1 remains snapshot/docs only
-- ✅ Corrective pass aligned `snapshot-manifest.json` with `files.json` for `assets/kinora.css`
-- ✅ RED: `pnpm --filter web test -- src/components/icons/__tests__/KinIcon.test.tsx src/components/orbit/__tests__/orbit-primitives.test.tsx` failed because the new icon/orbit exports did not exist yet
-- ✅ GREEN: `pnpm --filter web exec vitest run src/components/icons/__tests__/KinIcon.test.tsx src/components/orbit/__tests__/orbit-primitives.test.tsx` passed
-- ✅ REFACTOR safety: `pnpm --filter web type-check` passed after aligning shared React prop typing
-- ✅ Broader feasible check: `pnpm --filter web test` passed (149 tests)
-- ✅ Corrective RED: `pnpm --filter web exec vitest run src/components/icons/__tests__/KinIcon.test.tsx src/components/orbit/__tests__/orbit-primitives.test.tsx` failed because `createLibraryIconEntry` was missing and `OrbitEmptyState` / `OrbitCtaSurface` rendered `<article>` instead of `<section>`
-- ✅ Corrective GREEN: `pnpm --filter web exec vitest run src/components/icons/__tests__/KinIcon.test.tsx src/components/orbit/__tests__/orbit-primitives.test.tsx` passed with the strengthened semantic and adapter-contract assertions (9 tests)
-- ✅ Corrective REFACTOR safety: `pnpm --filter web type-check` passed after exporting explicit library-adapter entry types and helpers
-- ✅ Corrective verification: `pnpm --filter web exec vitest run src/components/icons/__tests__/KinIcon.test.tsx src/components/orbit/__tests__/orbit-primitives.test.tsx` now passes with separate root-tag assertions for `OrbitEmptyState` and `OrbitCtaSurface` (11 tests)
-- ✅ Corrective verification safety: `pnpm --filter web type-check` passed after strengthening the Orbit primitive root-tag assertions
-- ⚠️ Existing unrelated warning remains in `src/app/__tests__/page.test.tsx`: React reports missing list keys in `LandingFeatures`, but the suite stays green and PR 2 did not touch that area
-- ➖ Root `pnpm test`, `pnpm architecture`, `pnpm deps-guard`, and `pnpm build` were not run in apply because this slice only adds isolated web components/tests; broader repository validation belongs in verify
+- ✅ Historical PR 1 verification retained: snapshot metadata validation passed; byte-for-byte sync verification passed for the refreshed Open Design files.
+- ✅ Historical PR 2 verification retained: targeted icon/orbit suite passed after shared foundations landed.
+- ✅ RED: `pnpm --filter web exec vitest run src/components/AppShell/__tests__/SidebarNav.test.tsx src/components/AppShell/__tests__/MobileNav.test.tsx src/components/landing/__tests__/LandingFeatures.test.tsx src/components/landing/__tests__/LandingCTA.test.tsx src/components/landing/__tests__/LandingFooter.test.tsx src/components/landing/__tests__/LandingHowItWorks.test.tsx src/components/landing/__tests__/LandingPricing.test.tsx src/components/landing/__tests__/LandingTrust.test.tsx` failed because AppShell and landing proof consumers still used inline SVGs / non-primitive structure.
+- ✅ GREEN: `pnpm --filter web exec vitest run src/components/AppShell/__tests__/SidebarNav.test.tsx src/components/AppShell/__tests__/MobileNav.test.tsx src/components/landing/__tests__/LandingHero.test.tsx src/components/landing/__tests__/LandingFeatures.test.tsx src/components/landing/__tests__/LandingCTA.test.tsx src/components/landing/__tests__/LandingFooter.test.tsx src/components/landing/__tests__/LandingHowItWorks.test.tsx src/components/landing/__tests__/LandingPricing.test.tsx src/components/landing/__tests__/LandingTrust.test.tsx src/components/icons/__tests__/KinIcon.test.tsx src/components/orbit/__tests__/orbit-primitives.test.tsx` passed (59 tests).
+- ✅ REFACTOR safety: `pnpm --filter web type-check` passed after widening `KinIcon` size support and hardening message/indexed-access fallbacks.
+- ✅ Broader feasible check: `pnpm --filter web test` passed (162 tests).
+- ✅ Follow-up regression check: `pnpm --filter web test` passed again after replacing unstable message-derived list keys in landing proof consumers.
+- ➖ Root `pnpm test`, `pnpm architecture`, `pnpm deps-guard`, and `pnpm build` were not run in apply; they remain verify-phase guards for the full repository.
 
 ### Files Changed
 | File | Action | Notes |
@@ -50,55 +54,52 @@
 | `docs/open-design/kinora/index.html` | Modified | Refreshed local overview artifact from live source |
 | `docs/open-design/kinora/icons.html` | Created | Added imported icon library and Orbit logo reference page from live source |
 | `docs/open-design/kinora/screens/*.html` | Modified | Refreshed all tracked screen snapshots from live source |
-| `docs/open-design-kinora.md` | Modified | Added refresh timestamp, sidecar evidence, traceability rules, and deviation note |
+| `docs/open-design-kinora.md` | Modified | Added future-screen guidance, deviation rules, and manual visual verification checklist |
 | `package.json` | Modified | Removed accidental `od:mcp` root package script so PR 1 scope stays snapshot/docs only |
-| `apps/web/src/components/icons/KinIcon.tsx` | Created | Added typed Open Design-backed icon registry, shared `KinIcon`, and named wrappers |
+| `apps/web/src/components/icons/KinIcon.tsx` | Modified | Expanded the shared icon registry for proof consumers and applied shared SVG class/default behavior |
 | `apps/web/src/components/icons/index.ts` | Created | Exported the shared icon foundation API |
-| `apps/web/src/components/icons/__tests__/KinIcon.test.tsx` | Created | Added strict-TDD coverage for icon sizing, semantics, and registry reuse |
-| `apps/web/src/components/orbit/OrbitCard.tsx` | Created | Added reusable Orbit card primitive |
-| `apps/web/src/components/orbit/OrbitSectionHeader.tsx` | Created | Added reusable Orbit section header primitive |
-| `apps/web/src/components/orbit/OrbitMetricBlock.tsx` | Created | Added reusable Orbit metric block primitive |
-| `apps/web/src/components/orbit/OrbitNavAffordance.tsx` | Created | Added reusable Orbit nav affordance primitive |
-| `apps/web/src/components/orbit/OrbitEmptyState.tsx` | Created | Added reusable Orbit empty-state primitive |
-| `apps/web/src/components/orbit/OrbitCtaSurface.tsx` | Created | Added reusable Orbit CTA surface primitive |
+| `apps/web/src/components/icons/__tests__/KinIcon.test.tsx` | Modified | Added proof-wiring coverage for utility/social icon reuse |
+| `apps/web/src/components/orbit/OrbitCard.tsx` | Created | Reusable Orbit card primitive |
+| `apps/web/src/components/orbit/OrbitSectionHeader.tsx` | Created | Reusable Orbit section header primitive |
+| `apps/web/src/components/orbit/OrbitMetricBlock.tsx` | Created | Reusable Orbit metric block primitive |
+| `apps/web/src/components/orbit/OrbitNavAffordance.tsx` | Created | Reusable Orbit nav affordance primitive |
+| `apps/web/src/components/orbit/OrbitEmptyState.tsx` | Created | Reusable Orbit empty-state primitive |
+| `apps/web/src/components/orbit/OrbitCtaSurface.tsx` | Modified | Added CTA child-slot support for decorative proof content |
 | `apps/web/src/components/orbit/orbit-primitives.module.css` | Created | Isolated primitive styling without touching global CSS |
-| `apps/web/src/components/orbit/index.ts` | Created | Exported the Orbit primitive surface for future proof wiring |
-| `apps/web/src/components/orbit/__tests__/orbit-primitives.test.tsx` | Created | Added strict-TDD coverage for Orbit primitive semantics and link behavior |
-| `openspec/changes/06c-v1-opendesign-component-foundation/tasks.md` | Modified | Marked Phase 2 tasks complete |
-| `openspec/changes/06c-v1-opendesign-component-foundation/apply-progress.md` | Modified | Merged cumulative PR 1 + PR 2 implementation evidence |
-
-### Corrective Pass TDD Evidence
-| Warning | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
-|---------|-----------|-------|------------|-----|-------|-------------|----------|
-| Orbit semantic mismatch | `apps/web/src/components/orbit/__tests__/orbit-primitives.test.tsx` | Unit | ✅ Baseline targeted orbit/icon suite passed (8/8) before edits | ✅ Added assertions for `<section>` wrappers before code changes; targeted run failed because both primitives still rendered `<article>` through `OrbitCard` defaults | ✅ `pnpm --filter web exec vitest run src/components/icons/__tests__/KinIcon.test.tsx src/components/orbit/__tests__/orbit-primitives.test.tsx` passed after forcing `as="section"` in `OrbitEmptyState` and `OrbitCtaSurface` | ✅ The same test still asserts `<article>` for the standalone card so section-only fixes could not pass trivially | ➖ No further refactor needed beyond preserving semantic intent |
-| Library-icon adapter capability explicit | `apps/web/src/components/icons/__tests__/KinIcon.test.tsx` | Unit | ✅ Baseline targeted orbit/icon suite passed (8/8) before edits | ✅ Added a future-adapter contract test first; targeted run failed because `createLibraryIconEntry` was not exported yet | ✅ `pnpm --filter web exec vitest run src/components/icons/__tests__/KinIcon.test.tsx src/components/orbit/__tests__/orbit-primitives.test.tsx` passed after exporting explicit `library` entry metadata and helper API | ➖ Triangulation skipped: this was a structural contract/export task with one intended metadata shape and no runtime branching | ✅ `pnpm --filter web type-check` confirmed the exported helper/types remain aligned |
-| Orbit root-tag assertion specificity | `apps/web/src/components/orbit/__tests__/orbit-primitives.test.tsx` | Unit | ✅ Baseline targeted orbit/icon suite passed (11/11) before edits | ✅ Replaced the shared combined section assertion with separate per-primitive root assertions before re-running verification | ✅ `pnpm --filter web exec vitest run src/components/icons/__tests__/KinIcon.test.tsx src/components/orbit/__tests__/orbit-primitives.test.tsx` passed with dedicated `<section>` checks for both primitives | ✅ Kept a standalone `OrbitCard` `<article>` assertion so the strengthened checks prove each primitive root independently | ➖ Test-only corrective pass; no production refactor needed |
+| `apps/web/src/components/orbit/index.ts` | Created | Exported the Orbit primitive surface for consumer wiring |
+| `apps/web/src/components/orbit/__tests__/orbit-primitives.test.tsx` | Modified | Added CTA child-slot coverage alongside semantic primitive assertions |
+| `apps/web/src/components/AppShell/SidebarNav.tsx` | Modified | Replaced inline nav SVGs with shared icons while preserving active-route behavior |
+| `apps/web/src/components/AppShell/MobileNav.tsx` | Modified | Replaced inline tab/FAB SVGs with shared icons while preserving tab routes and active states |
+| `apps/web/src/components/AppShell/__tests__/SidebarNav.test.tsx` | Modified | Added shared-icon accessibility regression coverage |
+| `apps/web/src/components/AppShell/__tests__/MobileNav.test.tsx` | Modified | Added shared-icon accessibility regression coverage for tabs and FAB |
+| `apps/web/src/components/landing/LandingHero.tsx` | Modified | Reused shared icons in hero eyebrow, CTA, metadata, avatar, and workout checks |
+| `apps/web/src/components/landing/LandingFeatures.tsx` | Modified | Reused `OrbitSectionHeader`, `OrbitCard`, and shared icons for the feature proof surface |
+| `apps/web/src/components/landing/LandingCTA.tsx` | Modified | Reused `OrbitCtaSurface` for the CTA proof surface |
+| `apps/web/src/components/landing/LandingFooter.tsx` | Modified | Reused shared Orbit/social icons in the footer proof surface |
+| `apps/web/src/components/landing/LandingHowItWorks.tsx` | Modified | Reused `OrbitSectionHeader`, `OrbitCard`, and shared icons for the step proof surface |
+| `apps/web/src/components/landing/LandingPricing.tsx` | Modified | Reused `OrbitSectionHeader`, `OrbitCard`, and shared icons for the pricing proof surface |
+| `apps/web/src/components/landing/LandingTrust.tsx` | Modified | Reused `OrbitCard` and shared icons for semantic trust proof cards |
+| `apps/web/src/components/landing/__tests__/LandingFeatures.test.tsx` | Modified | Added semantic section-header coverage |
+| `apps/web/src/components/landing/__tests__/LandingCTA.test.tsx` | Modified | Added semantic CTA-surface coverage |
+| `apps/web/src/components/landing/__tests__/LandingFooter.test.tsx` | Modified | Added shared footer-icon coverage |
+| `apps/web/src/components/landing/__tests__/LandingHowItWorks.test.tsx` | Modified | Added semantic section-header coverage |
+| `apps/web/src/components/landing/__tests__/LandingPricing.test.tsx` | Modified | Added semantic section-header coverage |
+| `apps/web/src/components/landing/__tests__/LandingTrust.test.tsx` | Modified | Added semantic proof-card coverage |
+| `openspec/changes/06c-v1-opendesign-component-foundation/tasks.md` | Modified | Marked Phase 3 and Phase 4 tasks complete |
+| `openspec/changes/06c-v1-opendesign-component-foundation/apply-progress.md` | Modified | Merged cumulative PR 1 + PR 2 + PR 3 implementation evidence |
 
 ### Deviations from Design
-None for PR 2. The foundation matches the design goal of Open Design-backed icons and isolated Orbit primitives; library-icon adapters were intentionally deferred because no approved icon library dependency exists in `apps/web/package.json`.
+None. The proof wiring stayed within the existing shared icon/orbit foundation and did not introduce new product behavior.
 
 ### Remaining Tasks
-- [ ] 3.1 Replace AppShell inline SVGs with shared icons
-- [ ] 3.2 Reuse primitives/icons in landing proof consumers only
-- [ ] 3.3 Update affected exports/imports so proof consumers build cleanly
-- [ ] 4.1 Add Vitest coverage for icons and orbit primitives
-- [ ] 4.2 Update existing AppShell and landing tests after proof wiring
-- [ ] 4.3 Expand `docs/open-design-kinora.md` with future-screen usage guidance and manual visual checklist
+- None — apply scope for PR 3 is complete.
 
 ### Rollback Notes
-- Revert PR 1 snapshot/docs files plus the new `apps/web/src/components/icons/` and `apps/web/src/components/orbit/` files, `tasks.md`, and this apply-progress artifact.
-- No product behavior changed in PR 2; removing the new shared foundations returns the app to its pre-foundation inline-icon/component state.
-
-### Corrective Pass Notes
-- Removed the accidental `od:mcp` root package script so this stacked PR slice stays within the approved snapshot/docs boundary.
-- Added `assets/kinora.css` to `snapshot-manifest.json` because it already exists in the local snapshot inventory (`files.json`) and should remain traceable with the rest of the imported artifact set.
-- Adjusted the new shared React prop types after `pnpm --filter web type-check` surfaced JSX namespace mismatches; no behavior changed and the targeted tests stayed green.
-- Resolved the verification warning about section semantics by forcing `OrbitEmptyState` and `OrbitCtaSurface` to render `OrbitCard` as `<section>` while leaving `OrbitCard` itself defaulted to `<article>`.
-- Made future approved library-icon adapters explicit in the icon API by exporting a `library` registry entry shape plus `createLibraryIconEntry`, without adding any third-party dependency.
-- Strengthened `orbit-primitives.test.tsx` so `OrbitEmptyState` and `OrbitCtaSurface` each prove their own `<section>` root independently instead of relying on a shared combined assertion.
+- Revert PR 3 consumer/test/doc updates to return AppShell and landing proof consumers to their pre-foundation inline/icon structure.
+- If a full rollback is needed, revert PR 1 snapshot/docs files plus the PR 2 foundation files and this artifact.
 
 ### PR Boundary
 - **Mode**: stacked PR slice
-- **Current unit**: PR 2 — shared icon foundation and Orbit primitives only
-- **Depends on**: PR 1 snapshot refresh commit `159c9cc docs(open-design): refresh kinora snapshot`
-- **Next slice**: PR 3 proof wiring, guidance, and follow-up verification/docs
+- **Current unit**: PR 3 — proof wiring, guidance, and verification cleanup
+- **Depends on**: PR 1 snapshot refresh commit `159c9cc docs(open-design): refresh kinora snapshot`; PR 2 foundation commit `050012d feat(web): add orbit component foundation`
+- **Next slice**: verify/archive only

@@ -50,6 +50,13 @@ describe("SidebarNav", () => {
     }
   });
 
+  it("uses shared icon accessibility defaults for every navigation item", () => {
+    const html = renderToString(SidebarNav());
+
+    const iconCount = (html.match(/focusable="false"/g) || []).length;
+    expect(iconCount).toBe(5);
+  });
+
   it("renders a user area with initials placeholder when no user prop is given", () => {
     const el = SidebarNav();
     expect(textOf(el)).toContain("JD");

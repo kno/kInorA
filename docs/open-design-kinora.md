@@ -143,9 +143,41 @@ Implementation notes:
 - If a new UI requirement conflicts with this file, record the decision in SDD and update this reference after approval.
 - Verify the computed app background resolves to `#09090c`; Open Design notes a prior gotcha where cached shadcn/Tailwind variables produced a white `:root` until the dev server restarted.
 
+## Future-screen usage guidance
+
+- Import icons only from `apps/web/src/components/icons`. Reuse the existing `KinIcon` surface before adding raw SVGs or direct library icon imports.
+- Prefer Orbit primitives for recurring structure before building ad-hoc wrappers:
+  - `OrbitSectionHeader` for eyebrow/title/description intros.
+  - `OrbitCard` for reusable content surfaces that must keep Orbit spacing/border/radius.
+  - `OrbitMetricBlock` for compact metric or trust summaries.
+  - `OrbitNavAffordance` for next-step/navigation cards.
+  - `OrbitEmptyState` for empty placeholders.
+  - `OrbitCtaSurface` for CTA panels that still need semantic section markup.
+- Use the proof consumers from this change as the first reference: AppShell navigation plus landing hero, features, how-it-works, pricing, CTA, footer, and trust sections.
+- Keep reuse visual only. Do not attach new product behavior, network flows, analytics, or feature logic while applying these primitives.
+
+## Deviation record rules
+
+When a future screen cannot mirror the Open Design reference exactly, record the deviation in the active SDD design/apply artifacts with:
+
+1. **Reason** — why the exact match is impractical.
+2. **Visual impact** — what reviewers/users will notice.
+3. **Follow-up** — whether the mismatch is accepted, temporary, or needs a later cleanup.
+
+Do not leave visual mismatches implicit.
+
 ## Current deviation note
 
 - No visual deviations were introduced in the 2026-06-26 snapshot refresh. The only non-visual gap is Open Design daemon metadata (for example sidecar-only preview/runtime details), which is preserved in `project.json` and `files.json` rather than mirrored as extra repo runtime files.
+
+## Manual visual-verification checklist
+
+- [ ] Compare the implemented landing hero, features, how-it-works, pricing, CTA, footer, and trust sections against `docs/open-design/kinora/screens/web-landing.html`.
+- [ ] Confirm AppShell desktop and mobile navigation still match `docs/open-design/kinora/screens/web-dashboard.html` for labels, routes, active states, and Create Plan affordance placement.
+- [ ] Confirm every shared icon still renders with `currentColor`, dark-theme contrast, and no unintended background fills.
+- [ ] Confirm the footer Orbit mark, social icons, and CTA surface remain decorative only and do not alter link behavior.
+- [ ] Confirm the app remains dark-only and the computed background still resolves to `#09090c` after any token/cache refresh.
+- [ ] Record any mismatch with the deviation rules above before approving the slice.
 
 ## Quick MCP examples
 

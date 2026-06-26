@@ -38,12 +38,12 @@ Chain strategy: stacked-to-main
 
 ## Phase 3: Proof Wiring
 
-- [ ] 3.1 Replace inline SVGs in `apps/web/src/components/AppShell/SidebarNav.tsx` and `apps/web/src/components/AppShell/MobileNav.tsx` with shared icons while preserving routes and active states.
-- [ ] 3.2 Reuse the new primitives/icons in `apps/web/src/components/landing/LandingHero.tsx`, `LandingFeatures.tsx`, `LandingCTA.tsx`, `LandingFooter.tsx`, `LandingHowItWorks.tsx`, `LandingPricing.tsx`, and `LandingTrust.tsx` only as proof consumers.
-- [ ] 3.3 Update any affected component exports/imports so AppShell and landing builds remain clean.
+- [x] 3.1 Replace inline SVGs in `apps/web/src/components/AppShell/SidebarNav.tsx` and `apps/web/src/components/AppShell/MobileNav.tsx` with shared icons while preserving routes and active states.
+- [x] 3.2 Reuse the new primitives/icons in `apps/web/src/components/landing/LandingHero.tsx`, `LandingFeatures.tsx`, `LandingCTA.tsx`, `LandingFooter.tsx`, `LandingHowItWorks.tsx`, `LandingPricing.tsx`, and `LandingTrust.tsx` only as proof consumers.
+- [x] 3.3 Update any affected component exports/imports so AppShell and landing builds remain clean.
 
 ## Phase 4: Testing, Guidance, Cleanup
 
-- [ ] 4.1 Add Vitest coverage for `components/icons/__tests__/` and `components/orbit/__tests__/` covering icon names, sizing, `currentColor`, `aria` defaults, and primitive semantics.
-- [ ] 4.2 Update existing AppShell and landing tests to verify labels, links, and active-state behavior still match after the proof wiring.
-- [ ] 4.3 Expand `docs/open-design-kinora.md` with future-screen usage guidance, deviation-record rules, and a manual visual-verification checklist.
+- [x] 4.1 Add Vitest coverage for `components/icons/__tests__/` and `components/orbit/__tests__/` covering icon names, sizing, `currentColor`, `aria` defaults, and primitive semantics.
+- [x] 4.2 Update existing AppShell and landing tests to verify labels, links, and active-state behavior still match after the proof wiring.
+- [x] 4.3 Expand `docs/open-design-kinora.md` with future-screen usage guidance, deviation-record rules, and a manual visual-verification checklist.

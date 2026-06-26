@@ -53,4 +53,19 @@ describe("KinIcon", () => {
     expect(adapter.library).toBe("approved-library");
     expect(adapter.icon).toBe("TrendUp");
   });
+
+  it("keeps proof-wiring utility icons available through the shared registry", () => {
+    const html = renderToStaticMarkup(
+      <>
+        <KinIcon name="clock" size={16} />
+        <KinIcon name="mic" size={16} />
+        <KinIcon name="instagram" size={16} />
+        <KinIcon name="youtube" size={16} />
+      </>,
+    );
+
+    expect(html).toContain('width="16"');
+    expect(kinIconRegistry.user.label).toBe("Profile");
+    expect(kinIconRegistry.close.label).toBe("Close");
+  });
 });

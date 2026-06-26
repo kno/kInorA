@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 import { LandingHowItWorks } from "../LandingHowItWorks";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
@@ -19,9 +20,9 @@ describe("LandingHowItWorks", () => {
   };
 
   it("renders the section heading", () => {
-    const el = LandingHowItWorks({ messages });
-    expect(textOf(el)).toContain("How it works");
-    expect(textOf(el)).toContain("From your goal to your routine in three steps");
+    const html = renderToStaticMarkup(LandingHowItWorks({ messages }));
+    expect(html).toContain("How it works");
+    expect(html).toContain("From your goal to your routine in three steps");
   });
 
   it("renders three steps with titles and descriptions", () => {
@@ -30,6 +31,12 @@ describe("LandingHowItWorks", () => {
     expect(textOf(el)).toContain("Speak or type: gain strength, lose fat, run farther.");
     expect(textOf(el)).toContain("AI builds your plan");
     expect(textOf(el)).toContain("Train and improve every week");
+  });
+
+  it("renders the reusable section heading as semantic header markup", () => {
+    const html = renderToStaticMarkup(LandingHowItWorks({ messages }));
+
+    expect(html).toContain("<header");
   });
 });
 

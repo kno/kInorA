@@ -1,3 +1,6 @@
+import { KinIcon } from "@/components/icons";
+import { OrbitCard, OrbitSectionHeader } from "@/components/orbit";
+
 /** Monthly price in EUR for the Pro tier. */
 const PRO_PRICE_EUR = "9";
 /** Monthly price in EUR for the Teams tier. */
@@ -66,16 +69,13 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
   return (
     <section className="kin-landing-section" id="pricing">
       <div className="kin-landing-wrap">
-        <div className="kin-landing-head">
-          <span className="kin-landing-head__eyebrow">{messages.pricing_eyebrow}</span>
-          <h2>{messages.pricing_title}</h2>
-          <p>{messages.pricing_subtitle}</p>
-        </div>
+        <OrbitSectionHeader className="kin-landing-head" eyebrow={messages.pricing_eyebrow ?? ""} title={messages.pricing_title ?? ""} description={messages.pricing_subtitle ?? ""} />
         <div className="kin-landing-prices">
-          {tiers.map((tier) => (
-            <article
-              className={`kin-card kin-landing-price${tier.pro ? " kin-landing-price--pro" : ""}`}
-              key={tier.tier}
+          {tiers.map((tier, index) => (
+            <OrbitCard
+              className={`kin-landing-price${tier.pro ? " kin-landing-price--pro" : ""}`}
+              key={`${tier.tier || "tier"}-${index}`}
+              tone={tier.pro ? "surface-2" : "surface"}
             >
               {tier.badge && (
                 <span className="pill pill-active kin-landing-price__badge">{tier.badge}</span>
@@ -89,24 +89,18 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
                 <span className="kin-landing-price__num">{tier.amount}</span>
                 <span className="kin-landing-price__per">{tier.per}</span>
               </div>
-              <ul>
-                {tier.features.map((feat) => (
-                  <li key={`${tier.tier}-${feat.label}`} className={feat.muted ? "kin-muted" : ""}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={feat.muted ? "2" : "2.4"} width="17" height="17" aria-hidden="true">
-                      {feat.muted ? (
-                        <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
-                      ) : (
-                        <path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
-                      )}
-                    </svg>
-                    {feat.label}
-                  </li>
-                ))}
-              </ul>
-              <a className={`kin-btn${tier.pro ? " kin-btn--accent" : ""}`} href={tier.pro ? "/sign-up" : tier.cta === "Talk to sales" ? "#" : "/sign-up"}>
-                {tier.cta}
-              </a>
-            </article>
+                <ul>
+                  {tier.features.map((feat) => (
+                    <li key={`${tier.tier}-${feat.label}`} className={feat.muted ? "kin-muted" : ""}>
+                      <KinIcon name={feat.muted ? "close" : "check"} size={17} />
+                      {feat.label}
+                    </li>
+                  ))}
+                </ul>
+                <a className={`kin-btn${tier.pro ? " kin-btn--accent" : ""}`} href={tier.pro ? "/sign-up" : tier.cta === "Talk to sales" ? "#" : "/sign-up"}>
+                  {tier.cta}
+                </a>
+            </OrbitCard>
           ))}
         </div>
       </div>
