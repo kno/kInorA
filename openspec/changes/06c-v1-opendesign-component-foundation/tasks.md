@@ -32,9 +32,9 @@ Chain strategy: stacked-to-main
 
 ## Phase 2: Shared Visual Foundation
 
-- [ ] 2.1 Create `apps/web/src/components/icons/` with a typed icon registry, imported Open Design SVG wrappers, and approved library-icon adapters with consistent size and accessibility defaults.
-- [ ] 2.2 Create `apps/web/src/components/orbit/` primitives for card, section header, metric block, nav affordance, empty state, and CTA surface.
-- [ ] 2.3 Add only minimal shared CSS in `apps/web/src/app/globals.css` if a primitive cannot stay fully isolated in component styles.
+- [x] 2.1 Create `apps/web/src/components/icons/` with a typed icon registry, imported Open Design SVG wrappers, and approved library-icon adapters with consistent size and accessibility defaults.
+- [x] 2.2 Create `apps/web/src/components/orbit/` primitives for card, section header, metric block, nav affordance, empty state, and CTA surface.
+- [x] 2.3 Add only minimal shared CSS in `apps/web/src/app/globals.css` if a primitive cannot stay fully isolated in component styles.
 
 ## Phase 3: Proof Wiring
 
