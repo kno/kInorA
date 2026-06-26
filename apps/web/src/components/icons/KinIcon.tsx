@@ -1,6 +1,6 @@
 import type * as React from "react";
 
-type KinIconSize = 16 | 20 | 24 | 32;
+type KinIconSize = number;
 
 type IconRendererProps = Pick<React.SVGProps<SVGSVGElement>, "className">;
 
@@ -83,8 +83,23 @@ export const kinIconRegistry = {
   check: createOpenDesignIcon("Complete", ({ className }) => (
     <path className={className} d="M4 12L9 17L20 6" />
   )),
+  close: createOpenDesignIcon("Close", ({ className }) => (
+    <path className={className} d="M6 6L18 18M18 6L6 18" />
+  )),
   play: createOpenDesignIcon("Start", ({ className }) => (
     <path className={className} d="M7 5L19 12L7 19Z" fill="currentColor" stroke="none" />
+  )),
+  clock: createOpenDesignIcon("Time", ({ className }) => (
+    <>
+      <circle className={className} cx="12" cy="12" r="8.5" />
+      <path className={className} d="M12 7V12L15.5 14" />
+    </>
+  )),
+  mic: createOpenDesignIcon("Voice", ({ className }) => (
+    <>
+      <rect className={className} x="9" y="3" width="6" height="11" rx="3" />
+      <path className={className} d="M5 11A7 7 0 0 0 19 11M12 18V21" />
+    </>
   )),
   forward: createOpenDesignIcon("Continue", ({ className }) => (
     <path className={className} d="M9 5L16 12L9 19" />
@@ -112,6 +127,28 @@ export const kinIconRegistry = {
     <>
       <circle className={className} cx="12" cy="12" r="8.5" />
       <path className={className} d="M12 11V16M12 8V8.2" />
+    </>
+  )),
+  user: createOpenDesignIcon("Profile", ({ className }) => (
+    <>
+      <circle className={className} cx="12" cy="8" r="4" />
+      <path className={className} d="M4.5 20C4.5 16 8 14 12 14S19.5 16 19.5 20" />
+    </>
+  )),
+  instagram: createOpenDesignIcon("Instagram", ({ className }) => (
+    <>
+      <rect className={className} x="3" y="3" width="18" height="18" rx="5" />
+      <circle className={className} cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+    </>
+  )),
+  x: createOpenDesignIcon("X", ({ className }) => (
+    <path className={className} d="M4 4L20 20M20 4L4 20" />
+  )),
+  youtube: createOpenDesignIcon("YouTube", ({ className }) => (
+    <>
+      <rect className={className} x="3" y="5" width="18" height="14" rx="4" />
+      <path d="M10 9L15 12L10 15Z" fill="currentColor" stroke="none" />
     </>
   )),
   orbitLogo: createOpenDesignIcon("Orbit logo", ({ className }) => (
@@ -149,6 +186,7 @@ export function KinIcon({
       viewBox={viewBox}
       width={size}
       height={size}
+      className={className}
       fill="none"
       stroke="currentColor"
       strokeWidth={2}

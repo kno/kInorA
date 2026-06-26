@@ -7,6 +7,7 @@ export interface OrbitCtaSurfaceProps extends React.ComponentPropsWithoutRef<"se
   title: string;
   description: string;
   actions: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 export function OrbitCtaSurface({
@@ -14,11 +15,13 @@ export function OrbitCtaSurface({
   title,
   description,
   actions,
+  children,
   className,
   ...props
 }: OrbitCtaSurfaceProps) {
   return (
     <OrbitCard as="section" tone="surface-2" className={className} {...props}>
+      {children}
       <div className={styles.stack}>
         {eyebrow ? <span className={styles.eyebrow}>{eyebrow}</span> : null}
         <h2 className={styles.title}>{title}</h2>

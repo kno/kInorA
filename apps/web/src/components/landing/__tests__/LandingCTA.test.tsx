@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 import { LandingCTA } from "../LandingCTA";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
@@ -14,15 +15,21 @@ describe("LandingCTA", () => {
   };
 
   it("renders the heading and subtitle", () => {
-    const el = LandingCTA({ messages });
-    expect(textOf(el)).toContain("Your next routine is waiting");
-    expect(textOf(el)).toContain("Create your plan in under a minute. Free, no credit card.");
+    const html = renderToStaticMarkup(LandingCTA({ messages }));
+    expect(html).toContain("Your next routine is waiting");
+    expect(html).toContain("Create your plan in under a minute. Free, no credit card.");
   });
 
   it("renders both CTA buttons", () => {
-    const el = LandingCTA({ messages });
-    expect(textOf(el)).toContain("Start free");
-    expect(textOf(el)).toContain("View plans");
+    const html = renderToStaticMarkup(LandingCTA({ messages }));
+    expect(html).toContain("Start free");
+    expect(html).toContain("View plans");
+  });
+
+  it("wraps the CTA content in a semantic proof surface", () => {
+    const html = renderToStaticMarkup(LandingCTA({ messages }));
+
+    expect((html.match(/<section\b/g) || []).length).toBe(2);
   });
 });
 

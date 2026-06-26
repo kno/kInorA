@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 import { LandingTrust } from "../LandingTrust";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
@@ -36,6 +37,12 @@ describe("LandingTrust", () => {
       n.props.className === "kin-landing-strip"
     );
     expect(strip).toBeDefined();
+  });
+
+  it("promotes each trust item into a semantic proof card", () => {
+    const html = renderToStaticMarkup(LandingTrust({ items }));
+
+    expect((html.match(/<article\b/g) || []).length).toBe(4);
   });
 });
 

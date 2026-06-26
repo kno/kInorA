@@ -78,6 +78,21 @@ describe("Orbit primitives", () => {
     expect(html).toContain('href="/create-plan"');
   });
 
+  it("renders CTA surface children before the content stack", () => {
+    const html = renderToStaticMarkup(
+      <OrbitCtaSurface
+        title="Create your next plan"
+        description="Keep the Orbit foundation focused on visual reuse."
+        actions={<a href="/create-plan">Start now</a>}
+      >
+        <div data-proof="glow" />
+      </OrbitCtaSurface>,
+    );
+
+    expect(html).toContain('data-proof="glow"');
+    expect(html.indexOf('data-proof="glow"')).toBeLessThan(html.indexOf("Create your next plan"));
+  });
+
   it("keeps OrbitCard defaulting to an article root", () => {
     const html = renderToStaticMarkup(
       <OrbitCard>

@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 import { LandingFeatures } from "../LandingFeatures";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
@@ -21,9 +22,9 @@ describe("LandingFeatures", () => {
   };
 
   it("renders the section heading", () => {
-    const el = LandingFeatures({ messages });
-    expect(textOf(el)).toContain("Product");
-    expect(textOf(el)).toContain("Everything you need, in one app");
+    const html = renderToStaticMarkup(LandingFeatures({ messages }));
+    expect(html).toContain("Product");
+    expect(html).toContain("Everything you need, in one app");
   });
 
   it("renders all four feature cards", () => {
@@ -38,6 +39,12 @@ describe("LandingFeatures", () => {
     const el = LandingFeatures({ messages });
     expect(textOf(el)).toContain("Routines that readjust each week.");
     expect(textOf(el)).toContain("Mark sets without touching the screen.");
+  });
+
+  it("renders the reusable section heading as semantic header markup", () => {
+    const html = renderToStaticMarkup(LandingFeatures({ messages }));
+
+    expect(html).toContain("<header");
   });
 });
 
