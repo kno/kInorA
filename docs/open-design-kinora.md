@@ -4,6 +4,17 @@ Future UI iterations in this repository must use the Open Design project `kiNorA
 
 The current design has been pulled into the repo at `docs/open-design/kinora/`. Use that local snapshot first so routine implementation tasks do not need live MCP access. Refresh from Open Design only when the source design changes or before a major visual redesign.
 
+## Latest refresh
+
+| Field | Value |
+|---|---|
+| Refreshed at | `2026-06-26T06:09:02Z` |
+| Refresh source | Live Open Design MCP via sidecar stdio |
+| Source project | `kiNorA` (`ceeff5f6-0930-4e48-a0b0-17a6a5c9b9ad`) |
+| Source evidence | `get_project` + `list_files` over `OD_SIDECAR_IPC_PATH=/tmp/open-design/ipc/release-stable/daemon.sock` |
+| Entry file | `index.html` |
+| Snapshot proof | `docs/open-design/kinora/snapshot-manifest.json`, `project.json`, `files.json` |
+
 ## Mandatory workflow
 
 1. Read the local snapshot in `docs/open-design/kinora/` before changing UI.
@@ -22,6 +33,7 @@ The current design has been pulled into the repo at `docs/open-design/kinora/`. 
 | `docs/open-design/kinora/DESIGN.md` | Local copy of the design-system guide |
 | `docs/open-design/kinora/assets/kinora.css` | Local copy of shared tokens and primitive CSS |
 | `docs/open-design/kinora/index.html` | Local overview artifact linking screens |
+| `docs/open-design/kinora/icons.html` | Local icon library and Orbit logo reference imported from Open Design |
 | `docs/open-design/kinora/screens/*.html` | Local screen snapshots for implementation reference |
 
 ## Open Design MCP reference
@@ -38,6 +50,8 @@ The current design has been pulled into the repo at `docs/open-design/kinora/`. 
 
 Use the project name or id when querying MCP tools. Prefer `get_artifact` for a complete screen bundle and `get_file` only when reading a specific file. For normal implementation, prefer the local snapshot paths above.
 
+The last successful live refresh used the configured `open-design` MCP server over the working sidecar stdio transport. Do not hardcode a local Open Design installation path in repository docs; use the active MCP server configuration for the current workstation.
+
 ## Source artifacts
 
 | Area | Open Design file | Implementation intent |
@@ -45,6 +59,7 @@ Use the project name or id when querying MCP tools. Prefer `get_artifact` for a 
 | Design system | `DESIGN.md` | Brand, color, typography, layout, app architecture, anti-patterns |
 | Shared CSS | `assets/kinora.css` | Canonical CSS tokens and primitive styling behavior |
 | Artifact index | `index.html` | Overview of all reconstructed screens |
+| Icon library | `icons.html` | Imported Orbit logo, icon names, SVG stroke conventions, and copy-ready icon source |
 | Web landing | `screens/web-landing.html` | Marketing hero, features, how-it-works, pricing, CTA, footer |
 | Web dashboard | `screens/web-dashboard.html` | Daily summary, streak, progress, today workout, quick actions |
 | Web weekly plan | `screens/web-plan.html` | Training agenda by day with expandable detail |
@@ -56,6 +71,14 @@ Use the project name or id when querying MCP tools. Prefer `get_artifact` for a 
 | Mobile exercise detail | `screens/mobile-exercise.html` | Exercise instructions, sets, rest, status |
 | Mobile session tracker | `screens/mobile-tracker.html` | Live workout tracking controls and progress |
 | Brand proposals | `kinora-brand-proposals.html`, `brand-proposals.html` | Historical brand exploration only; do not override `DESIGN.md` without approval |
+
+## Traceability rules for imported references
+
+- Treat `snapshot-manifest.json` as the audit entry for each refresh: source transport, project id, timestamp, and imported file list.
+- Treat `files.json` as the authoritative inventory for imported screens, `icons.html`, and any artifact-manifest metadata exposed by Open Design.
+- Treat `project.json` as the provenance record for project-level fields such as `entryFile`, `updatedAt`, `resolvedDir`, and preview URL evidence.
+- When reusing an icon or component idea in app code, cite the exact local snapshot file first (`icons.html`, `index.html`, or the relevant `screens/*.html`) in the SDD design/apply artifacts.
+- Do not add raw SVGs or new visual primitives without checking whether the same reference already exists in `icons.html` or the relevant screen snapshot.
 
 ## Roadmap mapping
 
@@ -120,6 +143,42 @@ Implementation notes:
 - If a new UI requirement conflicts with this file, record the decision in SDD and update this reference after approval.
 - Verify the computed app background resolves to `#09090c`; Open Design notes a prior gotcha where cached shadcn/Tailwind variables produced a white `:root` until the dev server restarted.
 
+## Future-screen usage guidance
+
+- Import icons only from `apps/web/src/components/icons`. Reuse the existing `KinIcon` surface before adding raw SVGs or direct library icon imports.
+- Prefer Orbit primitives for recurring structure before building ad-hoc wrappers:
+  - `OrbitSectionHeader` for eyebrow/title/description intros.
+  - `OrbitCard` for reusable content surfaces that must keep Orbit spacing/border/radius.
+  - `OrbitMetricBlock` for compact metric or trust summaries.
+  - `OrbitNavAffordance` for next-step/navigation cards.
+  - `OrbitEmptyState` for empty placeholders.
+  - `OrbitCtaSurface` for CTA panels that still need semantic section markup.
+- Use the proof consumers from this change as the first reference: AppShell navigation plus landing hero, features, how-it-works, pricing, CTA, footer, and trust sections.
+- Keep reuse visual only. Do not attach new product behavior, network flows, analytics, or feature logic while applying these primitives.
+
+## Deviation record rules
+
+When a future screen cannot mirror the Open Design reference exactly, record the deviation in the active SDD design/apply artifacts with:
+
+1. **Reason** — why the exact match is impractical.
+2. **Visual impact** — what reviewers/users will notice.
+3. **Follow-up** — whether the mismatch is accepted, temporary, or needs a later cleanup.
+
+Do not leave visual mismatches implicit.
+
+## Current deviation note
+
+- No visual deviations were introduced in the 2026-06-26 snapshot refresh. The only non-visual gap is Open Design daemon metadata (for example sidecar-only preview/runtime details), which is preserved in `project.json` and `files.json` rather than mirrored as extra repo runtime files.
+
+## Manual visual-verification checklist
+
+- [ ] Compare the implemented landing hero, features, how-it-works, pricing, CTA, footer, and trust sections against `docs/open-design/kinora/screens/web-landing.html`.
+- [ ] Confirm AppShell desktop and mobile navigation still match `docs/open-design/kinora/screens/web-dashboard.html` for labels, routes, active states, and Create Plan affordance placement.
+- [ ] Confirm every shared icon still renders with `currentColor`, dark-theme contrast, and no unintended background fills.
+- [ ] Confirm the footer Orbit mark, social icons, and CTA surface remain decorative only and do not alter link behavior.
+- [ ] Confirm the app remains dark-only and the computed background still resolves to `#09090c` after any token/cache refresh.
+- [ ] Record any mismatch with the deviation rules above before approving the slice.
+
 ## Quick MCP examples
 
 ```text
@@ -129,12 +188,4 @@ get_file(project: "kiNorA", path: "DESIGN.md")
 get_artifact(project: "kiNorA", entry: "screens/web-dashboard.html", include: "auto")
 ```
 
-If the packaged Open Design app is running but the OpenCode HTTP bridge reports `127.0.0.1:7456` as unavailable, use the configured stdio MCP command from the OpenCode MCP config. The working command is based on:
-
-```text
-/Applications/Open Design.app/Contents/Resources/open-design/bin/node \
-  /Applications/Open Design.app/Contents/Resources/app/prebundled/daemon/daemon-cli.mjs \
-  mcp
-```
-
-with `OD_DATA_DIR` and `OD_SIDECAR_IPC_PATH` from the `open-design` MCP server config.
+If the packaged Open Design app is running but the OpenCode HTTP bridge reports `127.0.0.1:7456` as unavailable, use the configured stdio command from the `open-design` MCP server entry. The command path, runtime, `OD_DATA_DIR`, and `OD_SIDECAR_IPC_PATH` are local environment details and must come from that MCP configuration, not from this repository.
