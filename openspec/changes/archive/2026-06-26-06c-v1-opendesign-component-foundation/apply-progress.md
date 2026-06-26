@@ -71,7 +71,7 @@
 | `apps/web/src/components/AppShell/SidebarNav.tsx` | Modified | Replaced inline nav SVGs with shared icons while preserving active-route behavior |
 | `apps/web/src/components/AppShell/MobileNav.tsx` | Modified | Replaced inline tab/FAB SVGs with shared icons while preserving tab routes and active states |
 | `apps/web/src/components/AppShell/__tests__/SidebarNav.test.tsx` | Modified | Added shared-icon accessibility regression coverage |
-| `apps/web/src/components/AppShell/__tests__/MobileNav.test.tsx` | Modified | Added shared-icon accessibility regression coverage for tabs and FAB |
+| `apps/web/src/components/AppShell/__tests__/MobileNav.test.tsx` | Added shared-icon accessibility regression coverage for tabs and FAB |
 | `apps/web/src/components/landing/LandingHero.tsx` | Modified | Reused shared icons in hero eyebrow, CTA, metadata, avatar, and workout checks |
 | `apps/web/src/components/landing/LandingFeatures.tsx` | Modified | Reused `OrbitSectionHeader`, `OrbitCard`, and shared icons for the feature proof surface |
 | `apps/web/src/components/landing/LandingCTA.tsx` | Modified | Reused `OrbitCtaSurface` for the CTA proof surface |
