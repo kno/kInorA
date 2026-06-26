@@ -10,74 +10,92 @@ This spec refreshes the local design reference, imports the standard icon set, a
 
 ### Requirement: Latest Open Design Refresh
 
-The project MUST refresh the local Open Design snapshot for the selected `kiNorA` project before implementing new product screens.
+The project MUST verify live Open Design access for `kiNorA` project `ceeff5f6-0930-4e48-a0b0-17a6a5c9b9ad` and refresh `docs/open-design/kinora/` from that source before new product-screen work proceeds. Stale local snapshots MUST NOT substitute for unavailable source access.
+(Previously: required refreshing the snapshot, but did not make live-source verification or stale-snapshot blocking explicit.)
 
 #### Scenario: Open Design source is synchronized
 
-- GIVEN the Open Design project contains newer Orbit screen updates
+- GIVEN the live Open Design source is reachable
 - WHEN this spec is implemented
-- THEN the implementation process interacts with the Open Design MCP to fetch the latest visual artifacts and updates the local snapshot under `docs/open-design/kinora/`
+- THEN the local snapshot is refreshed under `docs/open-design/kinora/`
+- AND the refresh records the source project and retrieval evidence
+
+#### Scenario: Design source is unavailable
+
+- GIVEN live Open Design source access cannot be verified
+- WHEN implementation attempts to refresh the snapshot
+- THEN implementation is blocked with the dependency documented
 
 #### Scenario: Design changes are traceable
 
-- GIVEN refreshed design artifacts are brought into the repository
+- GIVEN refreshed artifacts enter the repository
 - WHEN reviewers inspect the change
-- THEN the updated source files clearly show which Open Design screens, icons, or component references were imported
+- THEN imported screens, icons, and component references are identifiable
 
 ### Requirement: Standard Icon Foundation
 
-The web app MUST establish a standard icon foundation that matches the Open Design reference and avoids ad-hoc icon imports.
+The web app MUST expose shared icons through one app-level foundation that can include imported Open Design SVGs and wrapped approved library icons with consistent names, size, stroke/fill behavior, and accessibility defaults.
+(Previously: required a standard icon foundation, but did not allow both imported SVG and wrapped library sources explicitly.)
 
 #### Scenario: Icons are imported consistently
 
-- GIVEN Open Design defines icons for navigation, actions, status indicators, and feature surfaces
+- GIVEN navigation, action, status, or feature icons are needed
 - WHEN icons are brought into code
-- THEN they are imported through a shared app-level icon foundation with consistent sizing, stroke/fill behavior, accessibility defaults, and naming
+- THEN consumers import them only from the shared foundation
 
 #### Scenario: Icon import friction is removed
 
-- GIVEN future screens need icons from the design reference
+- GIVEN future screens need known design-reference icons
 - WHEN a developer implements those screens
-- THEN they can reuse existing icon exports rather than copying raw SVGs, inventing replacements, or importing icons directly from unrelated sources
+- THEN existing icon exports are reused before adding new raw SVGs or direct library imports
 
 ### Requirement: Reusable Visual Component Base
 
-The web app MUST provide reusable standard components for the recurring Orbit visual patterns used by upcoming screens.
+The web app MUST provide reusable Orbit primitives for recurring patterns visible across implemented screens and refreshed Open Design references, including cards, section headers, metric blocks, navigation affordances, empty states, and CTA surfaces.
+(Previously: listed upcoming patterns without tying scope to implemented screens plus refreshed references.)
 
 #### Scenario: Common visual patterns have primitives
 
-- GIVEN future v1 screens require cards, section headers, metric blocks, navigation affordances, empty states, and call-to-action surfaces
+- GIVEN a recurring Orbit pattern appears in source screens
 - WHEN this spec is implemented
-- THEN those patterns are available as reusable components aligned with the latest Open Design reference
+- THEN a reusable primitive or usage guide exists for that pattern
 
 #### Scenario: Feature screens do not invent visual primitives
 
-- GIVEN `07-v1-plan-wizard` and later specs build product behavior
-- WHEN they need standard Orbit UI elements
-- THEN they reuse this component base instead of creating visually similar one-off components
+- GIVEN later specs need standard Orbit UI elements
+- WHEN those screens are implemented
+- THEN they reuse the foundation or document a justified deviation
 
-### Requirement: Pixel-Perfect Design Alignment
+### Requirement: Design Guidance and Deviation Record
 
-The imported visual foundation MUST prioritize pixel-perfect alignment with the latest Open Design screens.
+The visual foundation MUST guide future screens toward pixel-aligned Orbit usage and MUST document any deviation with reason, impact, and follow-up.
+(Previously: focused on pixel-perfect alignment but did not require reusable guidance for future screens.)
 
-#### Scenario: Implementation matches design reference
+#### Scenario: Future screen guidance is available
 
-- GIVEN a refreshed Open Design screen is used as the visual source of truth
-- WHEN the corresponding component or icon foundation is implemented
-- THEN spacing, sizing, radii, typography, color usage, icon weight, and responsive behavior match the design reference as closely as the web platform allows
+- GIVEN a later screen uses Orbit primitives or icons
+- WHEN developers review the foundation
+- THEN guidance explains intended usage and source-design alignment
 
 #### Scenario: Deviations are explicit
 
-- GIVEN an exact design match is not technically practical
+- GIVEN an exact design match is impractical
 - WHEN a deviation is introduced
-- THEN it is documented with the reason, expected visual impact, and any follow-up needed to close the gap
+- THEN the deviation record states reason, visual impact, and follow-up
 
 ### Requirement: Scoped Foundation Only
 
-This spec MUST prepare the visual system for upcoming product screens without implementing the business behavior of those screens.
+This spec MUST prepare visual foundations only and MUST NOT implement product behavior for plan creation, AI generation, workout tracking, progress analytics, billing, memory, or conversational flows.
+(Previously: excluded product behavior, but less explicitly separated foundation proof from feature behavior.)
 
 #### Scenario: Product behavior remains in later specs
 
-- GIVEN this spec adds icons and reusable components
-- WHEN the implementation is complete
-- THEN it does not implement plan creation, AI generation, workout tracking, progress analytics, billing, or conversational flows beyond what is needed to prove the component foundation
+- GIVEN icons, primitives, or guidance are added
+- WHEN implementation is complete
+- THEN no later-spec product workflow is made functional
+
+#### Scenario: Foundation proof stays visual
+
+- GIVEN an existing screen is updated to prove the foundation
+- WHEN reviewers inspect behavior
+- THEN user-facing product capabilities remain unchanged

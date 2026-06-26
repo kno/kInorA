@@ -41,13 +41,13 @@ snapshot references ──> icons + primitives ──> AppShell / landing proof 
 export type KinIconName = "home" | "plan" | "stats" | "create" | "exercises" | string;
 export interface KinIconProps extends React.SVGProps<SVGSVGElement> {
   name: KinIconName;
-  size?: 16 | 20 | 24 | 32;
+  size?: 16 | 20 | 24 | 32 | number;
   decorative?: boolean;
   title?: string;
 }
 ```
 
-Icons default to `decorative: true`, `aria-hidden`, `currentColor`, consistent viewBox/sizing, and no direct screen-level third-party icon imports. Orbit primitives expose semantic React components with `className` escape hatches, not business-state props.
+Icons default to `decorative: true`, `aria-hidden`, `currentColor`, consistent viewBox/sizing, and no direct screen-level third-party icon imports. The `size` prop accepts the canonical Orbit sizes (`16 | 20 | 24 | 32`) as well as arbitrary `number` values to support existing AppShell and landing consumer styles — this widening is additive and does not break any spec constraint. Orbit primitives expose semantic React components with `className` escape hatches, not business-state props.
 
 ## Testing Strategy
 
@@ -64,5 +64,5 @@ No data migration required. Roll out as review slices if snapshot diff plus code
 
 ## Open Questions
 
-- [ ] Blocker: current Open Design details could not be fetched through available HTTP tools; implementation must use the working sidecar/stdio MCP before proceeding.
-- [ ] Exact recurring primitive list must be finalized from the refreshed live snapshot, not the stale local copy.
+- [x] Blocker: current Open Design details could not be fetched through available HTTP tools; implementation must use the working sidecar/stdio MCP before proceeding. **Resolved**: MCP sidecar/stdio path was used successfully in PR 1.
+- [x] Exact recurring primitive list must be finalized from the refreshed live snapshot, not the stale local copy. **Resolved**: Primitives (card, section header, metric block, nav affordance, empty state, CTA surface) confirmed from refreshed snapshot in PR 2.
