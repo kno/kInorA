@@ -1,3 +1,5 @@
+import { KinIcon, OrbitLogoIcon } from "@/components/icons";
+
 export function LandingFooter({ messages }: { messages: Record<string, string> }) {
   return (
     <footer className="kin-landing-footer">
@@ -5,7 +7,7 @@ export function LandingFooter({ messages }: { messages: Record<string, string> }
         <div className="kin-landing-footer__grid">
           <div className="kin-landing-footer__brand">
             <a className="kin-landing-nav__brand" href="#top">
-              <span className="kin-landing-nav__dot" aria-hidden="true"></span>
+              <OrbitLogoIcon size={16} decorative className="kin-landing-nav__dot" />
               kInorA
             </a>
             <p>{messages.footer_tagline}</p>
@@ -35,22 +37,13 @@ export function LandingFooter({ messages }: { messages: Record<string, string> }
           <span>{messages.footer_copyright}</span>
           <div className="kin-landing-footer__social">
             <a href="#" aria-label="Instagram">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" width="16" height="16">
-                <rect x="3" y="3" width="18" height="18" rx="5" />
-                <circle cx="12" cy="12" r="4" />
-                <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
-              </svg>
+              <KinIcon name="instagram" size={16} />
             </a>
             <a href="#" aria-label="X">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" width="16" height="16">
-                <path d="M4 4l16 16M20 4 4 20" strokeLinecap="round" />
-              </svg>
+              <KinIcon name="x" size={16} />
             </a>
             <a href="#" aria-label="YouTube">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" width="16" height="16">
-                <rect x="3" y="5" width="18" height="14" rx="4" />
-                <path d="M10 9l5 3-5 3z" fill="currentColor" stroke="none" />
-              </svg>
+              <KinIcon name="youtube" size={16} />
             </a>
           </div>
         </div>

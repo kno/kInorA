@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 import { LandingFooter } from "../LandingFooter";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
@@ -49,6 +50,13 @@ describe("LandingFooter", () => {
   it("renders the copyright notice", () => {
     const el = LandingFooter({ messages });
     expect(textOf(el)).toContain("© 2026 kInorA. All rights reserved.");
+  });
+
+  it("uses shared decorative icon defaults for social links", () => {
+    const html = renderToStaticMarkup(LandingFooter({ messages }));
+
+    const iconCount = (html.match(/focusable="false"/g) || []).length;
+    expect(iconCount).toBe(4);
   });
 });
 

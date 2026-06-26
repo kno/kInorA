@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='11' fill='%2309090C'/%3E%3Ccircle cx='24' cy='25' r='12.5' fill='none' stroke='%23696964' stroke-width='5'/%3E%3Ccircle cx='24' cy='11' r='8' fill='%23A8F060'/%3E%3C/svg%3E">
 <title>kInorA — Tu entrenador personal, impulsado por IA</title>
 <meta name="description" content="kInorA es la app de fitness con entrenador IA que arma tu plan, lo adapta cada semana y entrena contigo en tiempo real.">
 <style>
@@ -178,7 +179,7 @@ a { color: inherit; text-decoration: none; }
   }
   .nav-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
   .brand { display: inline-flex; align-items: center; gap: 9px; font-family: var(--font-display); font-weight: 700; font-size: 19px; letter-spacing: -0.02em; }
-  .brand .dot { width: 9px; height: 9px; border-radius: 999px; background: var(--accent); box-shadow: 0 0 14px 1px color-mix(in oklab, var(--accent) 60%, transparent); flex: none; }
+  .brand .dot { width: 22px; height: 22px; flex: none; }
   .nav-links { display: flex; gap: 4px; }
   .nav-links a { color: var(--muted); font-size: 14.5px; font-weight: 500; padding: 8px 14px; border-radius: var(--r-btn); transition: color .15s, background .15s; }
   .nav-links a:hover { color: var(--fg); background: var(--surface); }
@@ -366,7 +367,11 @@ a { color: inherit; text-decoration: none; }
 <header class="nav" id="nav">
   <div class="wrap nav-inner">
     <a class="brand" href="#top" aria-label="kInorA inicio">
-      <span class="dot" aria-hidden="true"></span>kInorA
+      <svg class="dot" width="22" height="22" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="background:none;border-radius:0">
+        <circle cx="24" cy="24" r="15" stroke="var(--border)" stroke-width="4"/>
+        <path d="M24 9 A15 15 0 0 1 38 19" stroke="var(--muted)" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="24" cy="9" r="5.5" fill="var(--accent)"/>
+      </svg>kInorA
     </a>
     <nav class="nav-links" aria-label="Principal">
       <a href="#producto">Producto</a>
@@ -660,7 +665,11 @@ a { color: inherit; text-decoration: none; }
   <div class="wrap">
     <div class="foot-grid">
       <div class="foot-brand">
-        <a class="brand" href="#top"><span class="dot" aria-hidden="true"></span>kInorA</a>
+        <a class="brand" href="#top"><svg class="dot" width="22" height="22" viewBox="0 0 48 48" fill="none" aria-hidden="true" style="background:none;border-radius:0">
+          <circle cx="24" cy="24" r="15" stroke="var(--border)" stroke-width="4"/>
+          <path d="M24 9 A15 15 0 0 1 38 19" stroke="var(--muted)" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="24" cy="9" r="5.5" fill="var(--accent)"/>
+        </svg>kInorA</a>
         <p>El entrenador con IA que arma tu plan, lo adapta cada semana y entrena contigo.</p>
       </div>
       <div class="foot-col">

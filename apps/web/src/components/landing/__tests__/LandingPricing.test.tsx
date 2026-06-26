@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 import { LandingPricing } from "../LandingPricing";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
@@ -39,9 +40,9 @@ describe("LandingPricing", () => {
   };
 
   it("renders the section heading", () => {
-    const el = LandingPricing({ messages });
-    expect(textOf(el)).toContain("Pricing");
-    expect(textOf(el)).toContain("Start free, grow when you're ready");
+    const html = renderToStaticMarkup(LandingPricing({ messages }));
+    expect(html).toContain("Pricing");
+    expect(html).toContain("Start free, grow when you&#x27;re ready");
   });
 
   it("renders all three pricing tiers", () => {
@@ -70,6 +71,12 @@ describe("LandingPricing", () => {
     expect(text).toContain("0");
     expect(text).toContain("9");
     expect(text).toContain("29");
+  });
+
+  it("renders the reusable section heading as semantic header markup", () => {
+    const html = renderToStaticMarkup(LandingPricing({ messages }));
+
+    expect(html).toContain("<header");
   });
 });
 

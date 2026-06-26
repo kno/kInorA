@@ -37,6 +37,13 @@ describe("MobileNav", () => {
     }
   });
 
+  it("uses shared icon accessibility defaults for tabs and the create action", () => {
+    const html = renderToString(MobileNav());
+
+    const iconCount = (html.match(/focusable="false"/g) || []).length;
+    expect(iconCount).toBe(5);
+  });
+
   it("marks the active tab with aria-current=\"page\"", () => {
     const html = renderToString(MobileNav());
 

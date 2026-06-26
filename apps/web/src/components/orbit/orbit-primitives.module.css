@@ -1,0 +1,87 @@
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: var(--sp-4);
+}
+
+.cardElevated {
+  background: var(--surface-2);
+}
+
+.stack {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.headerCenter {
+  text-align: center;
+  justify-content: center;
+}
+
+.eyebrow {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 2vw, 2rem);
+  letter-spacing: -0.02em;
+}
+
+.description,
+.hint,
+.meta {
+  color: var(--muted);
+}
+
+.metricValue {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.row {
+  display: flex;
+  align-items: start;
+  gap: var(--sp-3);
+}
+
+.icon {
+  color: var(--accent);
+  flex: none;
+}
+
+.navAffordance {
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.navAffordance:hover {
+  border-color: var(--muted);
+  transform: translateY(-1px);
+}
+
+.navArrow {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}

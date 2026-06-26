@@ -1,23 +1,282 @@
 {
   "files": [
     {
-      "name": "DESIGN.md",
-      "path": "DESIGN.md",
+      "name": "icons.html",
+      "path": "icons.html",
       "type": "file",
-      "size": 6421,
-      "mtime": 1782102094307.0144,
-      "kind": "text",
-      "mime": "text/markdown; charset=utf-8",
-      "artifactKind": "markdown-document",
+      "size": 23301,
+      "mtime": 1782390027119.1025,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
       "artifactManifest": {
         "version": 1,
-        "kind": "markdown-document",
-        "title": "DESIGN.md",
-        "entry": "DESIGN.md",
-        "renderer": "markdown",
+        "kind": "html",
+        "title": "icons.html",
+        "entry": "icons.html",
+        "renderer": "html",
         "status": "complete",
         "exports": [
-          "md",
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
+    },
+    {
+      "name": "screens/web-stats.html",
+      "path": "screens/web-stats.html",
+      "type": "file",
+      "size": 32989,
+      "mtime": 1782389189597.6653,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/web-stats.html",
+        "entry": "screens/web-stats.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
+    },
+    {
+      "name": "screens/web-dashboard.html",
+      "path": "screens/web-dashboard.html",
+      "type": "file",
+      "size": 33135,
+      "mtime": 1782389188620.735,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/web-dashboard.html",
+        "entry": "screens/web-dashboard.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
+    },
+    {
+      "name": "screens/mobile-tracker.html",
+      "path": "screens/mobile-tracker.html",
+      "type": "file",
+      "size": 28309,
+      "mtime": 1782389182883.0884,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/mobile-tracker.html",
+        "entry": "screens/mobile-tracker.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
+    },
+    {
+      "name": "screens/mobile-exercise.html",
+      "path": "screens/mobile-exercise.html",
+      "type": "file",
+      "size": 22565,
+      "mtime": 1782389180109.852,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/mobile-exercise.html",
+        "entry": "screens/mobile-exercise.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
+    },
+    {
+      "name": "screens/mobile-voice.html",
+      "path": "screens/mobile-voice.html",
+      "type": "file",
+      "size": 20317,
+      "mtime": 1782389177005.3142,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/mobile-voice.html",
+        "entry": "screens/mobile-voice.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
+    },
+    {
+      "name": "screens/web-plan.html",
+      "path": "screens/web-plan.html",
+      "type": "file",
+      "size": 43336,
+      "mtime": 1782389174417.8381,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/web-plan.html",
+        "entry": "screens/web-plan.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
+    },
+    {
+      "name": "screens/mobile-create-plan.html",
+      "path": "screens/mobile-create-plan.html",
+      "type": "file",
+      "size": 21270,
+      "mtime": 1782389173768.1543,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/mobile-create-plan.html",
+        "entry": "screens/mobile-create-plan.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
+    },
+    {
+      "name": "screens/web-landing.html",
+      "path": "screens/web-landing.html",
+      "type": "file",
+      "size": 38659,
+      "mtime": 1782389172426.7559,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/web-landing.html",
+        "entry": "screens/web-landing.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
+    },
+    {
+      "name": "screens/mobile-dashboard.html",
+      "path": "screens/mobile-dashboard.html",
+      "type": "file",
+      "size": 24242,
+      "mtime": 1782389170498.3984,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/mobile-dashboard.html",
+        "entry": "screens/mobile-dashboard.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
+    },
+    {
+      "name": "screens/web-create-plan.html",
+      "path": "screens/web-create-plan.html",
+      "type": "file",
+      "size": 50946,
+      "mtime": 1782389159166.8206,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/web-create-plan.html",
+        "entry": "screens/web-create-plan.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
           "html",
           "pdf",
           "zip"
@@ -31,8 +290,8 @@
       "name": "index.html",
       "path": "index.html",
       "type": "file",
-      "size": 13610,
-      "mtime": 1781945033032.3289,
+      "size": 14242,
+      "mtime": 1782389144771.9346,
       "kind": "html",
       "mime": "text/html; charset=utf-8",
       "artifactKind": "html",
@@ -57,8 +316,8 @@
       "name": "kinora-brand-proposals.html",
       "path": "kinora-brand-proposals.html",
       "type": "file",
-      "size": 27148,
-      "mtime": 1781944525741.8328,
+      "size": 27331,
+      "mtime": 1782102690741.4192,
       "kind": "html",
       "mime": "text/html; charset=utf-8",
       "artifactKind": "html",
@@ -87,8 +346,8 @@
       "name": "brand-proposals.html",
       "path": "brand-proposals.html",
       "type": "file",
-      "size": 27956,
-      "mtime": 1781944405121.481,
+      "size": 28139,
+      "mtime": 1782102683038.8354,
       "kind": "html",
       "mime": "text/html; charset=utf-8",
       "artifactKind": "html",
@@ -110,256 +369,23 @@
       }
     },
     {
-      "name": "screens/web-stats.html",
-      "path": "screens/web-stats.html",
+      "name": "DESIGN.md",
+      "path": "DESIGN.md",
       "type": "file",
-      "size": 32367,
-      "mtime": 1781942983682.0676,
-      "kind": "html",
-      "mime": "text/html; charset=utf-8",
-      "artifactKind": "html",
+      "size": 6421,
+      "mtime": 1782102094307.0144,
+      "kind": "text",
+      "mime": "text/markdown; charset=utf-8",
+      "artifactKind": "markdown-document",
       "artifactManifest": {
         "version": 1,
-        "kind": "html",
-        "title": "screens/web-stats.html",
-        "entry": "screens/web-stats.html",
-        "renderer": "html",
+        "kind": "markdown-document",
+        "title": "DESIGN.md",
+        "entry": "DESIGN.md",
+        "renderer": "markdown",
         "status": "complete",
         "exports": [
-          "html",
-          "pdf",
-          "zip"
-        ],
-        "metadata": {
-          "inferred": true
-        }
-      }
-    },
-    {
-      "name": "screens/web-plan.html",
-      "path": "screens/web-plan.html",
-      "type": "file",
-      "size": 42698,
-      "mtime": 1781942983676.5034,
-      "kind": "html",
-      "mime": "text/html; charset=utf-8",
-      "artifactKind": "html",
-      "artifactManifest": {
-        "version": 1,
-        "kind": "html",
-        "title": "screens/web-plan.html",
-        "entry": "screens/web-plan.html",
-        "renderer": "html",
-        "status": "complete",
-        "exports": [
-          "html",
-          "pdf",
-          "zip"
-        ],
-        "metadata": {
-          "inferred": true
-        }
-      }
-    },
-    {
-      "name": "screens/web-landing.html",
-      "path": "screens/web-landing.html",
-      "type": "file",
-      "size": 37760,
-      "mtime": 1781942983671.3594,
-      "kind": "html",
-      "mime": "text/html; charset=utf-8",
-      "artifactKind": "html",
-      "artifactManifest": {
-        "version": 1,
-        "kind": "html",
-        "title": "screens/web-landing.html",
-        "entry": "screens/web-landing.html",
-        "renderer": "html",
-        "status": "complete",
-        "exports": [
-          "html",
-          "pdf",
-          "zip"
-        ],
-        "metadata": {
-          "inferred": true
-        }
-      }
-    },
-    {
-      "name": "screens/web-dashboard.html",
-      "path": "screens/web-dashboard.html",
-      "type": "file",
-      "size": 32497,
-      "mtime": 1781942983664.9797,
-      "kind": "html",
-      "mime": "text/html; charset=utf-8",
-      "artifactKind": "html",
-      "artifactManifest": {
-        "version": 1,
-        "kind": "html",
-        "title": "screens/web-dashboard.html",
-        "entry": "screens/web-dashboard.html",
-        "renderer": "html",
-        "status": "complete",
-        "exports": [
-          "html",
-          "pdf",
-          "zip"
-        ],
-        "metadata": {
-          "inferred": true
-        }
-      }
-    },
-    {
-      "name": "screens/web-create-plan.html",
-      "path": "screens/web-create-plan.html",
-      "type": "file",
-      "size": 50324,
-      "mtime": 1781942983660.018,
-      "kind": "html",
-      "mime": "text/html; charset=utf-8",
-      "artifactKind": "html",
-      "artifactManifest": {
-        "version": 1,
-        "kind": "html",
-        "title": "screens/web-create-plan.html",
-        "entry": "screens/web-create-plan.html",
-        "renderer": "html",
-        "status": "complete",
-        "exports": [
-          "html",
-          "pdf",
-          "zip"
-        ],
-        "metadata": {
-          "inferred": true
-        }
-      }
-    },
-    {
-      "name": "screens/mobile-voice.html",
-      "path": "screens/mobile-voice.html",
-      "type": "file",
-      "size": 19999,
-      "mtime": 1781942983655.0054,
-      "kind": "html",
-      "mime": "text/html; charset=utf-8",
-      "artifactKind": "html",
-      "artifactManifest": {
-        "version": 1,
-        "kind": "html",
-        "title": "screens/mobile-voice.html",
-        "entry": "screens/mobile-voice.html",
-        "renderer": "html",
-        "status": "complete",
-        "exports": [
-          "html",
-          "pdf",
-          "zip"
-        ],
-        "metadata": {
-          "inferred": true
-        }
-      }
-    },
-    {
-      "name": "screens/mobile-tracker.html",
-      "path": "screens/mobile-tracker.html",
-      "type": "file",
-      "size": 27991,
-      "mtime": 1781942983647.2205,
-      "kind": "html",
-      "mime": "text/html; charset=utf-8",
-      "artifactKind": "html",
-      "artifactManifest": {
-        "version": 1,
-        "kind": "html",
-        "title": "screens/mobile-tracker.html",
-        "entry": "screens/mobile-tracker.html",
-        "renderer": "html",
-        "status": "complete",
-        "exports": [
-          "html",
-          "pdf",
-          "zip"
-        ],
-        "metadata": {
-          "inferred": true
-        }
-      }
-    },
-    {
-      "name": "screens/mobile-exercise.html",
-      "path": "screens/mobile-exercise.html",
-      "type": "file",
-      "size": 22247,
-      "mtime": 1781942983641.9395,
-      "kind": "html",
-      "mime": "text/html; charset=utf-8",
-      "artifactKind": "html",
-      "artifactManifest": {
-        "version": 1,
-        "kind": "html",
-        "title": "screens/mobile-exercise.html",
-        "entry": "screens/mobile-exercise.html",
-        "renderer": "html",
-        "status": "complete",
-        "exports": [
-          "html",
-          "pdf",
-          "zip"
-        ],
-        "metadata": {
-          "inferred": true
-        }
-      }
-    },
-    {
-      "name": "screens/mobile-dashboard.html",
-      "path": "screens/mobile-dashboard.html",
-      "type": "file",
-      "size": 23924,
-      "mtime": 1781942983636.5386,
-      "kind": "html",
-      "mime": "text/html; charset=utf-8",
-      "artifactKind": "html",
-      "artifactManifest": {
-        "version": 1,
-        "kind": "html",
-        "title": "screens/mobile-dashboard.html",
-        "entry": "screens/mobile-dashboard.html",
-        "renderer": "html",
-        "status": "complete",
-        "exports": [
-          "html",
-          "pdf",
-          "zip"
-        ],
-        "metadata": {
-          "inferred": true
-        }
-      }
-    },
-    {
-      "name": "screens/mobile-create-plan.html",
-      "path": "screens/mobile-create-plan.html",
-      "type": "file",
-      "size": 20952,
-      "mtime": 1781942983631.053,
-      "kind": "html",
-      "mime": "text/html; charset=utf-8",
-      "artifactKind": "html",
-      "artifactManifest": {
-        "version": 1,
-        "kind": "html",
-        "title": "screens/mobile-create-plan.html",
-        "entry": "screens/mobile-create-plan.html",
-        "renderer": "html",
-        "status": "complete",
-        "exports": [
+          "md",
           "html",
           "pdf",
           "zip"
