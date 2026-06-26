@@ -72,11 +72,12 @@ describe("AppShell", () => {
 
     // Desktop sidebar present. SidebarNav renders an <aside
     // aria-label="Main navigation"> (role=complementary).
-    expect(
-      screen.getByRole("complementary", { name: "Main navigation" }),
-    ).not.toBeNull();
+    const mainNavigation = screen.getByRole("complementary", {
+      name: "Main navigation",
+    });
+    expect(mainNavigation.tagName).toBe("ASIDE");
     // Mobile bottom nav (<nav aria-label="Mobile navigation">) must NOT render.
     expect(screen.queryByRole("navigation", { name: "Mobile navigation" })).toBeNull();
-    expect(screen.getByText("desktop child")).not.toBeNull();
+    expect(screen.getByText("desktop child").textContent).toBe("desktop child");
   });
 });
