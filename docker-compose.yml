@@ -27,11 +27,10 @@ services:
       NODE_ENV: production
       PORT: 4000
       HOST: 0.0.0.0
-      DATABASE_URL: ${DATABASE_URL:-postgres://kinora:kinora@postgres:5432/kinora}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-kinora}:${POSTGRES_PASSWORD:-kinora}@postgres:5432/${POSTGRES_DB:-kinora}}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
-      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI}
+      WEB_PUBLIC_ORIGIN: ${WEB_PUBLIC_ORIGIN}
     # No ports — web proxies /api/* through internal network
     command: ["pnpm", "--filter", "api", "start"]
     healthcheck:
@@ -53,6 +52,7 @@ services:
       PORT: 3000
       HOSTNAME: 0.0.0.0
       API_BASE_URL: ${API_BASE_URL}
+      WEB_PUBLIC_ORIGIN: ${WEB_PUBLIC_ORIGIN}
     # No ports — reverse proxy will expose it later
     command: ["pnpm", "--filter", "web", "start"]
 
