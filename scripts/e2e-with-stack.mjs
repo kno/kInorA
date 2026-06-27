@@ -34,7 +34,10 @@ const PG_DB = "kinora";
 const PG_USER = "kinora";
 const PG_PASSWORD = "kinora";
 const PG_PORT = process.env.E2E_PG_PORT ?? "5433";
-const API_PORT = process.env.PORT ?? "4000";
+// Dedicated var so an unrelated inherited PORT (e.g. a shell default) cannot
+// silently repoint the api server. The container name + these fixed ports
+// scope this to ONE E2E run per machine, which is all the suite needs.
+const API_PORT = process.env.E2E_API_PORT ?? "4000";
 const READY_TIMEOUT_MS = 30_000;
 const READY_POLL_MS = 1_000;
 
@@ -49,6 +52,10 @@ function run(cmd, args, opts = {}) {
  * (which child processes never see) cannot fool the detection.
  */
 function detectRuntime() {
+  // Explicit override wins (e.g. force one runtime in CI or odd setups).
+  if (process.env.CONTAINER_RUNTIME) {
+    return process.env.CONTAINER_RUNTIME;
+  }
   for (const candidate of ["docker", "podman"]) {
     const probe = run(candidate, ["--version"]);
     if (probe.status === 0) {
@@ -144,6 +151,12 @@ async function buildWorkspaceLibs(env) {
 function runInherit(cmd, args, env) {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, { stdio: "inherit", env });
+    // If the binary is missing from PATH, Node emits 'error' and never 'close';
+    // resolve with a non-zero code so the run fails fast instead of hanging.
+    child.on("error", (err) => {
+      console.error(`[e2e] Failed to spawn ${cmd}: ${err.message}`);
+      resolve(1);
+    });
     child.on("close", (code) => resolve(code ?? 1));
   });
 }
