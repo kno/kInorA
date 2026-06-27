@@ -6,8 +6,12 @@ eval "$(printf '%s' "$ENV_PAYLOAD" | base64 -d)"
 
 cd "$VPS_DEPLOY_DIR"
 
-# Persist the deployed image reference for SSH restarts without GitHub secrets.
-printf 'GHCR_IMAGE=%s\nIMAGE_TAG=%s\n' "$GHCR_IMAGE" "$IMAGE_TAG" > .env.deploy
+# Persist the deployed image reference and runtime env vars for SSH restarts without GitHub secrets.
+printf 'GHCR_IMAGE=%s\nIMAGE_TAG=%s\nGOOGLE_CLIENT_ID=%s\nGOOGLE_CLIENT_SECRET=%s\nGOOGLE_REDIRECT_URI=%s\nOIDC_REDIRECT_URI=%s\nAPI_BASE_URL=%s\n' \
+  "$GHCR_IMAGE" "$IMAGE_TAG" \
+  "${GOOGLE_CLIENT_ID:-}" "${GOOGLE_CLIENT_SECRET:-}" \
+  "${GOOGLE_REDIRECT_URI:-}" "${OIDC_REDIRECT_URI:-}" \
+  "${API_BASE_URL:-}" > .env.deploy
 
 # Stop and remove any previous containers before deploying
 docker compose down --remove-orphans 2>/dev/null || true
