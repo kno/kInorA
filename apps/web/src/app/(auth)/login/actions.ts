@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { submitLogin } from "./submit-login";
-import { SESSION_COOKIE } from "@/auth/session-cookie";
+import { SESSION_COOKIE, POST_LOGIN_PATH } from "@/auth/session-cookie";
 
 /**
  * Login Server Action.
@@ -35,5 +35,5 @@ export async function loginAction(formData: FormData): Promise<void> {
     maxAge: 60 * 60 * 24 * 7, // 7 days
   });
 
-  redirect("/");
+  redirect(POST_LOGIN_PATH);
 }

@@ -37,10 +37,10 @@ describe("social callback proxy", () => {
       code: "the-code",
       state: "the-state",
     });
-    // Redirects home (path-contains check — NextResponse.redirect emits a
-    // fully-qualified Location).
+    // Redirects to the post-login dashboard (path-contains check — NextResponse.redirect
+    // emits a fully-qualified Location).
     const location = res.headers.get("location") ?? "";
-    expect(location).toMatch(/\/$/);
+    expect(location).toContain("/dashboard");
     expect(location).not.toContain("login");
     // Session cookie set with the API-issued token
     expect(res.cookies.get(SESSION_COOKIE)?.value).toBe("session-tok");
