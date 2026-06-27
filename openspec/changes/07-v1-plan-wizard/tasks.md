@@ -86,46 +86,46 @@ Chain strategy: stacked-to-main
 
 ### Phase 7 — RED: `OrbitProgress` component
 
-- [ ] 7.1 **TEST (RED)** — Create `apps/web/src/components/orbit/__tests__/OrbitProgress.test.tsx`: arc `stroke-dashoffset` equals `C*(1-p)` for a given `value/max` (C≈100.53); ball `<g>` `transform` rotation equals `p*360°`; `showPercent` renders rounded `p*100`%; `children` overrides percent readout; `indeterminate` omits `aria-valuenow` and adds spin class; `size` prop sets `width` and `height` on svg; `aria-label` sets accessible name; reduced-motion path removes transitions. Confirm RED.
-- [ ] 7.2 **IMPLEMENT** — Create `apps/web/src/components/orbit/OrbitProgress.tsx`: SVG `viewBox="0 0 48 48"` scaled by `size` prop; track ring `<circle cx=24 cy=24 r=16 stroke-width=4>` stroke `var(--border)`; arc `<circle r=16 transform="rotate(-90 24 24)">` stroke `--muted` with `stroke-dasharray≈100.53`, `stroke-dashoffset=C*(1-p)`, `transition:.3s ease`; lime ball `<circle r=6 fill=var(--accent)>` in `<g transform-box=view-box transform-origin=24px 24px rotate(θ)>` with glow drop-shadow; center readout renders `children` else `showPercent` number (+ `label`) else nothing; `role="progressbar"` + `aria-valuemin=0 aria-valuemax={max} aria-valuenow={value}` (omitted when `indeterminate`); honor `prefers-reduced-motion`. Replicate `icons.html` mechanic exactly.
-- [ ] 7.3 **IMPLEMENT** — Export `OrbitProgress` from `apps/web/src/components/orbit/index.ts`.
-- [ ] 7.4 **VERIFY** — Run `pnpm --filter web test`; confirm GREEN.
+- [x] 7.1 **TEST (RED)** — Create `apps/web/src/components/orbit/__tests__/OrbitProgress.test.tsx`: arc `stroke-dashoffset` equals `C*(1-p)` for a given `value/max` (C≈100.53); ball `<g>` `transform` rotation equals `p*360°`; `showPercent` renders rounded `p*100`%; `children` overrides percent readout; `indeterminate` omits `aria-valuenow` and adds spin class; `size` prop sets `width` and `height` on svg; `aria-label` sets accessible name; reduced-motion path removes transitions. Confirm RED.
+- [x] 7.2 **IMPLEMENT** — Create `apps/web/src/components/orbit/OrbitProgress.tsx`: SVG `viewBox="0 0 48 48"` scaled by `size` prop; track ring `<circle cx=24 cy=24 r=16 stroke-width=4>` stroke `var(--border)`; arc `<circle r=16 transform="rotate(-90 24 24)">` stroke `--muted` with `stroke-dasharray≈100.53`, `stroke-dashoffset=C*(1-p)`, `transition:.3s ease`; lime ball `<circle r=6 fill=var(--accent)>` in `<g transform-box=view-box transform-origin=24px 24px rotate(θ)>` with glow drop-shadow; center readout renders `children` else `showPercent` number (+ `label`) else nothing; `role="progressbar"` + `aria-valuemin=0 aria-valuemax={max} aria-valuenow={value}` (omitted when `indeterminate`); honor `prefers-reduced-motion`. Replicate `icons.html` mechanic exactly.
+- [x] 7.3 **IMPLEMENT** — Export `OrbitProgress` from `apps/web/src/components/orbit/index.ts`.
+- [x] 7.4 **VERIFY** — Run `pnpm --filter web test`; confirm GREEN.
 
 ### Phase 8 — RED: `OrbitSelectableCard` component
 
-- [ ] 8.1 **TEST (RED)** — Create `apps/web/src/components/orbit/__tests__/OrbitSelectableCard.test.tsx`: renders children; `selected=true` sets `aria-pressed="true"`; `onSelect` called on click; `disabled=true` blocks click and sets `aria-disabled`; applies `.option-card` token class. Confirm RED.
-- [ ] 8.2 **IMPLEMENT** — Create `apps/web/src/components/orbit/OrbitSelectableCard.tsx`: props `{selected?, onSelect?, disabled?, className?, children}` + label; `role="button"`, `aria-pressed={selected}`, `aria-disabled={disabled}`; renders `.option-card`/`.obj-card` classes from design tokens; no hardcoded colors.
-- [ ] 8.3 **IMPLEMENT** — Export `OrbitSelectableCard` from `apps/web/src/components/orbit/index.ts`.
-- [ ] 8.4 **VERIFY** — Run `pnpm --filter web test`; confirm GREEN.
+- [x] 8.1 **TEST (RED)** — Create `apps/web/src/components/orbit/__tests__/OrbitSelectableCard.test.tsx`: renders children; `selected=true` sets `aria-pressed="true"`; `onSelect` called on click; `disabled=true` blocks click and sets `aria-disabled`; applies `.option-card` token class. Confirm RED.
+- [x] 8.2 **IMPLEMENT** — Create `apps/web/src/components/orbit/OrbitSelectableCard.tsx`: props `{selected?, onSelect?, disabled?, className?, children}` + label; `role="button"`, `aria-pressed={selected}`, `aria-disabled={disabled}`; renders `.option-card`/`.obj-card` classes from design tokens; no hardcoded colors.
+- [x] 8.3 **IMPLEMENT** — Export `OrbitSelectableCard` from `apps/web/src/components/orbit/index.ts`.
+- [x] 8.4 **VERIFY** — Run `pnpm --filter web test`; confirm GREEN.
 
 ### Phase 9 — RED: Six step components
 
-- [ ] 9.1 **TEST (RED)** — Create `apps/web/src/components/wizard/__tests__/GoalStep.test.tsx`: renders `OrbitSelectableCard` for each goal option; selecting one calls `onSelect` with the goal value; pre-selected value renders `aria-pressed="true"`. Confirm RED.
-- [ ] 9.2 **IMPLEMENT** — Create `apps/web/src/components/wizard/GoalStep.tsx`: props `{value?, onSelect}`, renders selectable cards for each `PlanGoal` value using `OrbitSelectableCard`, reuses design tokens from OD mobile-create-plan snapshot.
-- [ ] 9.3 **TEST (RED)** — Create `apps/web/src/components/wizard/__tests__/LocationStep.test.tsx`: renders three options (home/gym/outdoor); selection calls handler; pre-selected reflects. Confirm RED.
-- [ ] 9.4 **IMPLEMENT** — Create `apps/web/src/components/wizard/LocationStep.tsx`: props `{value?, onSelect}`, three `OrbitSelectableCard` options for `TrainingLocation`.
-- [ ] 9.5 **TEST (RED)** — Create `apps/web/src/components/wizard/__tests__/FrequencyStep.test.tsx`: renders day-count options; selection updates; pre-selected reflects. Confirm RED.
-- [ ] 9.6 **IMPLEMENT** — Create `apps/web/src/components/wizard/FrequencyStep.tsx`: props `{value?, onSelect}`, numeric card options for `daysPerWeek`.
-- [ ] 9.7 **TEST (RED)** — Create `apps/web/src/components/wizard/__tests__/DurationStep.test.tsx`: renders duration options; selection updates. Confirm RED.
-- [ ] 9.8 **IMPLEMENT** — Create `apps/web/src/components/wizard/DurationStep.tsx`: props `{value?, onSelect}`, options for `sessionDurationMinutes`.
-- [ ] 9.9 **TEST (RED)** — Create `apps/web/src/components/wizard/__tests__/EquipmentStep.test.tsx`: options filtered by selected `location` (home ≠ gym options); empty selection is valid; submitting with empty array is accepted. Confirm RED.
-- [ ] 9.10 **IMPLEMENT** — Create `apps/web/src/components/wizard/EquipmentStep.tsx`: props `{value?, location, onSelect}`, renders `OrbitSelectableCard` for each equipment option filtered by `location`; multi-select; empty array allowed.
-- [ ] 9.11 **TEST (RED)** — Create `apps/web/src/components/wizard/__tests__/LimitationsStep.test.tsx`: renders text input; added limitation appears as `{text, isWarning:true}`; empty list is valid. Confirm RED.
-- [ ] 9.12 **IMPLEMENT** — Create `apps/web/src/components/wizard/LimitationsStep.tsx`: props `{value?, onSelect}`, free-text input; each entry stored as `PlanLimitation{text, isWarning:true}`; no medical diagnosis logic.
-- [ ] 9.13 **VERIFY** — Run `pnpm --filter web test`; confirm all 6 step component tests GREEN.
+- [x] 9.1 **TEST (RED)** — Create `apps/web/src/components/wizard/__tests__/GoalStep.test.tsx`: renders `OrbitSelectableCard` for each goal option; selecting one calls `onSelect` with the goal value; pre-selected value renders `aria-pressed="true"`. Confirm RED.
+- [x] 9.2 **IMPLEMENT** — Create `apps/web/src/components/wizard/GoalStep.tsx`: props `{value?, onSelect}`, renders selectable cards for each `PlanGoal` value using `OrbitSelectableCard`, reuses design tokens from OD mobile-create-plan snapshot.
+- [x] 9.3 **TEST (RED)** — Create `apps/web/src/components/wizard/__tests__/LocationStep.test.tsx`: renders three options (home/gym/outdoor); selection calls handler; pre-selected reflects. Confirm RED.
+- [x] 9.4 **IMPLEMENT** — Create `apps/web/src/components/wizard/LocationStep.tsx`: props `{value?, onSelect}`, three `OrbitSelectableCard` options for `TrainingLocation`.
+- [x] 9.5 **TEST (RED)** — Create `apps/web/src/components/wizard/__tests__/FrequencyStep.test.tsx`: renders day-count options; selection updates; pre-selected reflects. Confirm RED.
+- [x] 9.6 **IMPLEMENT** — Create `apps/web/src/components/wizard/FrequencyStep.tsx`: props `{value?, onSelect}`, numeric card options for `daysPerWeek`.
+- [x] 9.7 **TEST (RED)** — Create `apps/web/src/components/wizard/__tests__/DurationStep.test.tsx`: renders duration options; selection updates. Confirm RED.
+- [x] 9.8 **IMPLEMENT** — Create `apps/web/src/components/wizard/DurationStep.tsx`: props `{value?, onSelect}`, options for `sessionDurationMinutes`.
+- [x] 9.9 **TEST (RED)** — Create `apps/web/src/components/wizard/__tests__/EquipmentStep.test.tsx`: options filtered by selected `location` (home ≠ gym options); empty selection is valid; submitting with empty array is accepted. Confirm RED.
+- [x] 9.10 **IMPLEMENT** — Create `apps/web/src/components/wizard/EquipmentStep.tsx`: props `{value?, location, onSelect}`, renders `OrbitSelectableCard` for each equipment option filtered by `location`; multi-select; empty array allowed.
+- [x] 9.11 **TEST (RED)** — Create `apps/web/src/components/wizard/__tests__/LimitationsStep.test.tsx`: renders text input; added limitation appears as `{text, isWarning:true}`; empty list is valid. Confirm RED.
+- [x] 9.12 **IMPLEMENT** — Create `apps/web/src/components/wizard/LimitationsStep.tsx`: props `{value?, onSelect}`, free-text input; each entry stored as `PlanLimitation{text, isWarning:true}`; no medical diagnosis logic.
+- [x] 9.13 **VERIFY** — Run `pnpm --filter web test`; confirm all 6 step component tests GREEN.
 
 ### Phase 10 — RED: Stepper shell + server actions
 
-- [ ] 10.1 **TEST (RED)** — Create `apps/web/src/app/(app)/create-plan/__tests__/stepper-shell.test.tsx`: renders current step component; Back preserves prior values; Continue is disabled when current step value is null (for required steps); Finish is disabled unless all required inputs present; `OrbitProgress` receives correct `value`/`max` props; resume: when `initialDraft` is provided shell starts at draft step with pre-filled values; overwrite: when existing draft, shows continue/overwrite option. Confirm RED.
-- [ ] 10.2 **IMPLEMENT** — Create `apps/web/src/app/(app)/create-plan/StepperShell.tsx` (client component): state `{step:number; spec:Partial<PlanSpec>}`; steps array `[GoalStep, LocationStep, FrequencyStep, DurationStep, EquipmentStep, LimitationsStep]`; `<OrbitProgress value={step-1} max={5} size={64} aria-label={"Step "+step+" of 6"}>{step} / 6</OrbitProgress>`; Back is local (no server call), preserves spec slice; Continue calls `saveDraftAction`; Finish enabled only when `goal, location, daysPerWeek, sessionDurationMinutes` non-null and `equipment` visited; Finish calls `confirmPlanSpecAction` then redirect. Replaces the placeholder scaffold.
-- [ ] 10.3 **IMPLEMENT** — Create `apps/web/src/app/(app)/create-plan/actions.ts`: `saveDraftAction(step, spec)` → `POST /plan-specs/drafts` with `Authorization: Bearer <kinora_session cookie>` (mirror `submit-login.ts` pattern); `confirmPlanSpecAction()` → `POST /plan-specs` → redirect on success, throw on 409.
-- [ ] 10.4 **IMPLEMENT** — Update `apps/web/src/app/(app)/create-plan/page.tsx`: server component calls `GET /plan-specs/drafts/current` to get `initialDraft`; renders `<StepperShell initialDraft={...} />`.
-- [ ] 10.5 **VERIFY** — Run `pnpm --filter web test`; run `pnpm tsc --noEmit`; confirm GREEN.
+- [x] 10.1 **TEST (RED)** — Create `apps/web/src/app/(app)/create-plan/__tests__/stepper-shell.test.tsx`: renders current step component; Back preserves prior values; Continue is disabled when current step value is null (for required steps); Finish is disabled unless all required inputs present; `OrbitProgress` receives correct `value`/`max` props; resume: when `initialDraft` is provided shell starts at draft step with pre-filled values; overwrite: when existing draft, shows continue/overwrite option. Confirm RED.
+- [x] 10.2 **IMPLEMENT** — Create `apps/web/src/app/(app)/create-plan/StepperShell.tsx` (client component): state `{step:number; spec:Partial<PlanSpec>}`; steps array `[GoalStep, LocationStep, FrequencyStep, DurationStep, EquipmentStep, LimitationsStep]`; `<OrbitProgress value={step-1} max={5} size={64} aria-label={"Step "+step+" of 6"}>{step} / 6</OrbitProgress>`; Back is local (no server call), preserves spec slice; Continue calls `saveDraftAction`; Finish enabled only when `goal, location, daysPerWeek, sessionDurationMinutes` non-null and `equipment` visited; Finish calls `confirmPlanSpecAction` then redirect. Replaces the placeholder scaffold.
+- [x] 10.3 **IMPLEMENT** — Create `apps/web/src/app/(app)/create-plan/actions.ts`: `saveDraftAction(step, spec)` → `POST /plan-specs/drafts` with `Authorization: Bearer <kinora_session cookie>` (mirror `submit-login.ts` pattern); `confirmPlanSpecAction()` → `POST /plan-specs` → redirect on success, throw on 409.
+- [x] 10.4 **IMPLEMENT** — Update `apps/web/src/app/(app)/create-plan/page.tsx`: server component calls `GET /plan-specs/drafts/current` to get `initialDraft`; renders `<StepperShell initialDraft={...} />`.
+- [x] 10.5 **VERIFY** — Run `pnpm --filter web test`; run `pnpm tsc --noEmit`; confirm GREEN.
 
 ### Phase 11 — E2E
 
-- [ ] 11.1 **TEST (RED)** — In `apps/web/src/e2e/` (or equivalent E2E directory): write authenticated E2E test: login → navigate to `/create-plan` → complete all 6 steps → exit (close tab / navigate away) → re-open `/create-plan` → resume at correct step with prior values → complete → Finish → assert redirect, assert `plan_specs` row exists in DB with correct spec (no workout program row). Confirm RED against `pnpm test:e2e` using `scripts/e2e-with-stack.mjs`.
-- [ ] 11.2 **VERIFY** — Run `pnpm test:e2e`; confirm GREEN. PR 3 is complete.
+- [x] 11.1 **TEST (RED)** — In `apps/web/src/e2e/` (or equivalent E2E directory): write authenticated E2E test: login → navigate to `/create-plan` → complete all 6 steps → exit (close tab / navigate away) → re-open `/create-plan` → resume at correct step with prior values → complete → Finish → assert redirect, assert `plan_specs` row exists in DB with correct spec (no workout program row). Confirm RED against `pnpm test:e2e` using `scripts/e2e-with-stack.mjs`.
+- [x] 11.2 **VERIFY** — Run `pnpm test:e2e`; confirm GREEN. PR 3 is complete.
 
 ---
 
