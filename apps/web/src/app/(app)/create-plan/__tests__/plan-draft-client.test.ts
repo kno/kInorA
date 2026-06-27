@@ -3,16 +3,8 @@ import type { PlanSpec } from "@kinora/contracts";
 import {
   submitDraft,
   promotePlanSpec,
-  enrichDraftSpec,
   isSpecComplete,
 } from "../plan-draft-client";
-
-const fakeScores = {
-  strength: 0.9,
-  hypertrophy: 0.6,
-  endurance: 0.2,
-  mobility: 0.3,
-};
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -83,31 +75,37 @@ describe("isSpecComplete", () => {
   });
 });
 
-describe("enrichDraftSpec", () => {
-  it("adds derived preferenceScores and confirmed:false when complete", () => {
-    const derive = vi.fn().mockReturnValue(fakeScores);
-    const out = enrichDraftSpec(
-      {
-        goal: "strength",
-        location: "gym",
-        daysPerWeek: 3,
-        sessionDurationMinutes: 60,
-        equipment: ["barbell"],
-        limitations: [],
-      },
-      derive,
-    );
-    expect(out.preferenceScores).toEqual(fakeScores);
-    expect(out.confirmed).toBe(false);
-    expect(derive).toHaveBeenCalledTimes(1);
-  });
+// saveDraftAction must send the raw partial spec unchanged — the server derives
+// preferenceScores on promote. The client must NOT inject preferenceScores or
+// confirmed into the draft body (web-side enrichment was a workaround that is
+// architecturally wrong and has been removed).
+describe("submitDraft — sends raw spec without client-side enrichment", () => {
+  it("sends the spec exactly as provided (no preferenceScores injected)", async () => {
+    const rawSpec: Partial<PlanSpec> = {
+      goal: "strength",
+      daysPerWeek: 3,
+      sessionDurationMinutes: 60,
+      location: "gym",
+      equipment: ["barbell"],
+      limitations: [{ text: "knee pain", isWarning: true }],
+    };
 
-  it("passes an incomplete spec through unchanged without deriving", () => {
-    const derive = vi.fn();
-    const input = { goal: "strength" as const, location: "gym" as const };
-    const out = enrichDraftSpec(input, derive);
-    expect(out).toBe(input);
-    expect(derive).not.toHaveBeenCalled();
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ step: 2, spec: rawSpec }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await submitDraft(2, rawSpec, "tok-abc", { fetchImpl, apiBaseUrl: "http://api.test" });
+
+    const sentBody = JSON.parse((fetchImpl.mock.calls[0]![1] as RequestInit).body as string);
+    // The spec sent to the API must NOT have preferenceScores or confirmed
+    expect(sentBody.spec).not.toHaveProperty("preferenceScores");
+    expect(sentBody.spec).not.toHaveProperty("confirmed");
+    // All original fields must be preserved
+    expect(sentBody.spec.goal).toBe("strength");
+    expect(sentBody.spec.daysPerWeek).toBe(3);
   });
 });
 
