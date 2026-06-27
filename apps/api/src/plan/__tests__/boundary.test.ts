@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { assertPlanSpecShape } from "../boundary.js";
+import { assertPlanSpecShape, assertPlanSpecInput } from "../boundary.js";
 import type { PlanSpec } from "@kinora/contracts";
 
 // Valid PlanSpec fixture using the new shape (limitations as PlanLimitation[], with preferenceScores)
@@ -268,4 +268,97 @@ describe("assertPlanSpecShape — updated for 07-v1-plan-wizard", () => {
     };
     expect(() => assertPlanSpecShape(spec08)).not.toThrow();
   });
+
+  // --- assertPlanSpecInput — input-only validator (no preferenceScores, no confirmed) ---
+
+describe("assertPlanSpecInput — wizard input validator", () => {
+  const VALID_INPUT = {
+    goal: "strength",
+    daysPerWeek: 3,
+    sessionDurationMinutes: 60,
+    location: "gym",
+    equipment: ["barbell"],
+    limitations: [{ text: "knee pain", isWarning: true }],
+  };
+
+  it("accepts a valid wizard input spec without preferenceScores or confirmed", () => {
+    expect(() => assertPlanSpecInput(VALID_INPUT)).not.toThrow();
+  });
+
+  it("accepts input with empty equipment and limitations arrays", () => {
+    expect(() =>
+      assertPlanSpecInput({ ...VALID_INPUT, equipment: [], limitations: [] })
+    ).not.toThrow();
+  });
+
+  it("does NOT require preferenceScores — accepts input without it", () => {
+    const { ...input } = VALID_INPUT;
+    expect(() => assertPlanSpecInput(input)).not.toThrow();
+  });
+
+  it("does NOT require confirmed — accepts input without it", () => {
+    expect(() => assertPlanSpecInput(VALID_INPUT)).not.toThrow();
+  });
+
+  it("rejects null input", () => {
+    expect(() => assertPlanSpecInput(null)).toThrow(/must be an object/i);
+  });
+
+  it("rejects missing goal", () => {
+    const { goal: _, ...invalid } = VALID_INPUT;
+    expect(() => assertPlanSpecInput(invalid)).toThrow(/goal.*string/i);
+  });
+
+  it("rejects goal as a number", () => {
+    expect(() => assertPlanSpecInput({ ...VALID_INPUT, goal: 42 })).toThrow(/goal.*string/i);
+  });
+
+  it("rejects missing daysPerWeek", () => {
+    const { daysPerWeek: _, ...invalid } = VALID_INPUT;
+    expect(() => assertPlanSpecInput(invalid)).toThrow(/daysPerWeek.*number/i);
+  });
+
+  it("rejects daysPerWeek as a string", () => {
+    expect(() => assertPlanSpecInput({ ...VALID_INPUT, daysPerWeek: "3" })).toThrow(/daysPerWeek.*number/i);
+  });
+
+  it("rejects missing sessionDurationMinutes", () => {
+    const { sessionDurationMinutes: _, ...invalid } = VALID_INPUT;
+    expect(() => assertPlanSpecInput(invalid)).toThrow(/sessionDurationMinutes.*number/i);
+  });
+
+  it("rejects missing location", () => {
+    const { location: _, ...invalid } = VALID_INPUT;
+    expect(() => assertPlanSpecInput(invalid)).toThrow(/location.*string/i);
+  });
+
+  it("rejects missing equipment (not an array)", () => {
+    const { equipment: _, ...invalid } = VALID_INPUT;
+    expect(() => assertPlanSpecInput(invalid)).toThrow(/equipment.*array/i);
+  });
+
+  it("rejects equipment containing a non-string element", () => {
+    expect(() => assertPlanSpecInput({ ...VALID_INPUT, equipment: [1] })).toThrow(
+      /equipment\[0\].*string/i
+    );
+  });
+
+  it("rejects missing limitations (not an array)", () => {
+    const { limitations: _, ...invalid } = VALID_INPUT;
+    expect(() => assertPlanSpecInput(invalid)).toThrow(/limitations.*array/i);
+  });
+
+  it("rejects limitations item missing text", () => {
+    expect(() =>
+      assertPlanSpecInput({ ...VALID_INPUT, limitations: [{ isWarning: true }] })
+    ).toThrow(/limitations\[0\].*text|text.*string/i);
+  });
+
+  it("rejects limitations item missing isWarning", () => {
+    expect(() =>
+      assertPlanSpecInput({ ...VALID_INPUT, limitations: [{ text: "knee pain" }] })
+    ).toThrow(/limitations\[0\].*isWarning|isWarning.*boolean/i);
+  });
+});
+
 });

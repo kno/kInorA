@@ -85,3 +85,89 @@
   flex-wrap: wrap;
   gap: var(--sp-2);
 }
+
+/* ---- OrbitProgress (Orbit-logo progress ring) ---- */
+.orbitWrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.orbitWrap svg {
+  overflow: visible;
+}
+
+.orbitTrack {
+  stroke: var(--border);
+}
+
+.orbitArc {
+  stroke: var(--muted);
+  stroke-linecap: round;
+}
+
+.orbitBallGroup {
+  transform-box: view-box;
+  transform-origin: 24px 24px;
+}
+
+.orbitBall {
+  fill: var(--accent);
+  filter: drop-shadow(0 0 6px color-mix(in oklab, var(--accent) 55%, transparent));
+}
+
+.orbitReadout {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.orbitValue {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--fg);
+}
+
+.orbitLabel {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-top: 8px;
+}
+
+.orbitSpin {
+  /*
+   * Indeterminate spin: the whole arc element rotates a full 360° continuously.
+   * The SVG attribute `transform="rotate(-90 24 24)"` on the element sets its
+   * start orientation; the CSS animation then adds a full turn on top of that,
+   * producing a continuous spin. The dasharray is fixed in the component at a
+   * partial arc (~75%) so a visible segment sweeps around the ring.
+   * transform-box:view-box + transform-origin:center keep the pivot stable.
+   */
+  animation: orbit-spin 1.2s linear infinite;
+  transform-box: view-box;
+  transform-origin: 24px 24px;
+}
+
+@keyframes orbit-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbitSpin {
+    animation: none;
+  }
+}

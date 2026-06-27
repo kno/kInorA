@@ -3,7 +3,7 @@ import type { Database } from "../db/client.js";
 import { requireAuth } from "../auth/plugin.js";
 import { PlanDraftRepository } from "../db/repositories/plan-draft.js";
 import { PlanSpecRepository } from "../db/repositories/plan-spec.js";
-import { assertPlanSpecShape } from "../plan/boundary.js";
+import { assertPlanSpecInput, assertPlanSpecShape } from "../plan/boundary.js";
 import { derivePreferenceScores } from "@kinora/domain";
 import type { PlanSpec } from "@kinora/contracts";
 
@@ -101,18 +101,28 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         return reply.code(409).send({ error: "no_active_draft" });
       }
 
-      // Validate and assert the spec shape — throws if invalid/incomplete
+      // Validate wizard input fields (goal, daysPerWeek, etc.) BEFORE deriving.
+      // A real wizard draft never has preferenceScores or confirmed — those are
+      // server-derived. assertPlanSpecInput does NOT require them.
       const rawSpec = draft.specJson as unknown;
       try {
-        assertPlanSpecShape(rawSpec);
+        assertPlanSpecInput(rawSpec);
       } catch {
         return reply.code(409).send({ error: "incomplete_spec" });
       }
 
-      // Re-derive preferenceScores server-side for confirmed output (source of truth)
-      const spec = rawSpec as PlanSpec;
-      const preferenceScores = derivePreferenceScores(spec);
-      const confirmedSpec: PlanSpec = { ...spec, preferenceScores, confirmed: true };
+      // Derive preferenceScores server-side (source of truth) and build the
+      // full confirmed spec from the validated input fields.
+      const inputSpec = rawSpec as Pick<
+        PlanSpec,
+        "goal" | "daysPerWeek" | "sessionDurationMinutes" | "location" | "equipment" | "limitations"
+      >;
+      const preferenceScores = derivePreferenceScores(inputSpec);
+      const confirmedSpec: PlanSpec = { ...inputSpec, preferenceScores, confirmed: true };
+
+      // Final integrity guard — confirmedSpec must now satisfy the full PlanSpec shape.
+      // This should always pass given correct derivation; if it throws, it is a server bug.
+      assertPlanSpecShape(confirmedSpec);
 
       // Insert the confirmed plan_specs row and delete the draft in a single
       // transaction so that either both succeed or neither does — no orphan

@@ -1,24 +1,13 @@
 import type { PlanSpec } from "@kinora/contracts";
 
 /**
- * Validates that an unknown input has the structural shape of a PlanSpec.
- * Throws if required fields are missing or have wrong types.
- * This is a boundary check — not full Zod validation.
+ * Validates the wizard input fields common to both assertPlanSpecInput and
+ * assertPlanSpecShape: goal, daysPerWeek, sessionDurationMinutes, location,
+ * equipment (string[]), and limitations (PlanLimitation[]).
  *
- * Updated (07-v1-plan-wizard): validates limitations as PlanLimitation[] (object array)
- * and preferenceScores as {strength, hypertrophy, endurance, mobility: number}.
- *
- * Atomic coupling note: change 08 (ai-plan-generation) reads PlanSpec.limitations as
- * PlanLimitation[] — this boundary validates the same shape for both 07 (wizard confirm)
- * and 08 (consumption). Both changes share this boundary file.
+ * Throws on the first violation. Extracted so both guards share one impl.
  */
-export function assertPlanSpecShape(input: unknown): asserts input is PlanSpec {
-  if (typeof input !== "object" || input === null) {
-    throw new Error("PlanSpec must be an object");
-  }
-
-  const obj = input as Record<string, unknown>;
-
+function assertInputFields(obj: Record<string, unknown>): void {
   if (typeof obj.goal !== "string") {
     throw new Error("PlanSpec.goal must be a string");
   }
@@ -49,7 +38,6 @@ export function assertPlanSpecShape(input: unknown): asserts input is PlanSpec {
     throw new Error("PlanSpec.limitations must be an array");
   }
 
-  // Validate each limitation is a PlanLimitation object {text: string, isWarning: boolean}
   for (let i = 0; i < obj.limitations.length; i++) {
     const limitation = obj.limitations[i] as unknown;
     if (typeof limitation !== "object" || limitation === null) {
@@ -59,18 +47,56 @@ export function assertPlanSpecShape(input: unknown): asserts input is PlanSpec {
     }
     const lim = limitation as Record<string, unknown>;
     if (typeof lim.text !== "string") {
-      throw new Error(
-        `PlanSpec.limitations[${i}].text must be a string`
-      );
+      throw new Error(`PlanSpec.limitations[${i}].text must be a string`);
     }
     if (typeof lim.isWarning !== "boolean") {
-      throw new Error(
-        `PlanSpec.limitations[${i}].isWarning must be a boolean`
-      );
+      throw new Error(`PlanSpec.limitations[${i}].isWarning must be a boolean`);
     }
   }
+}
 
-  // Validate preferenceScores shape
+/**
+ * Validates that an unknown input carries the wizard INPUT fields only:
+ * goal, daysPerWeek, sessionDurationMinutes, location, equipment, limitations.
+ *
+ * Does NOT require preferenceScores or confirmed — those are server-derived
+ * on promote. Use this in the promote handler BEFORE calling derivePreferenceScores.
+ *
+ * Returns without error when all input fields are present and correctly typed.
+ * Throws with a descriptive message on the first violation.
+ */
+export function assertPlanSpecInput(input: unknown): void {
+  if (typeof input !== "object" || input === null) {
+    throw new Error("PlanSpec must be an object");
+  }
+
+  const obj = input as Record<string, unknown>;
+  assertInputFields(obj);
+}
+
+/**
+ * Validates that an unknown input has the structural shape of a PlanSpec.
+ * Throws if required fields are missing or have wrong types.
+ * This is a boundary check — not full Zod validation.
+ *
+ * Updated (07-v1-plan-wizard): validates limitations as PlanLimitation[] (object array)
+ * and preferenceScores as {strength, hypertrophy, endurance, mobility: number}.
+ *
+ * Atomic coupling note: change 08 (ai-plan-generation) reads PlanSpec.limitations as
+ * PlanLimitation[] — this boundary validates the same shape for both 07 (wizard confirm)
+ * and 08 (consumption). Both changes share this boundary file.
+ */
+export function assertPlanSpecShape(input: unknown): asserts input is PlanSpec {
+  if (typeof input !== "object" || input === null) {
+    throw new Error("PlanSpec must be an object");
+  }
+
+  const obj = input as Record<string, unknown>;
+
+  // Validate the wizard input fields first (goal, daysPerWeek, etc.)
+  assertInputFields(obj);
+
+  // Validate preferenceScores shape — required on the full PlanSpec
   if (typeof obj.preferenceScores !== "object" || obj.preferenceScores === null) {
     throw new Error("PlanSpec.preferenceScores must be an object");
   }
