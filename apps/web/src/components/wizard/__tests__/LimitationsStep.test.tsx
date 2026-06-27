@@ -1,0 +1,66 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { LimitationsStep } from "../LimitationsStep";
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+describe("LimitationsStep", () => {
+  it("renders a free-text input for limitations", () => {
+    render(<LimitationsStep value={[]} onSelect={vi.fn()} />);
+    expect(screen.getByRole("textbox", { name: /limitation/i })).toBeTruthy();
+  });
+
+  it("adds a typed limitation as { text, isWarning: true }", () => {
+    const onSelect = vi.fn();
+    render(<LimitationsStep value={[]} onSelect={onSelect} />);
+    const input = screen.getByRole("textbox", { name: /limitation/i });
+    fireEvent.change(input, { target: { value: "knee pain" } });
+    fireEvent.click(screen.getByRole("button", { name: /add/i }));
+    expect(onSelect).toHaveBeenCalledWith([
+      { text: "knee pain", isWarning: true },
+    ]);
+  });
+
+  it("appends to existing limitations without dropping them", () => {
+    const onSelect = vi.fn();
+    render(
+      <LimitationsStep
+        value={[{ text: "shoulder", isWarning: true }]}
+        onSelect={onSelect}
+      />,
+    );
+    const input = screen.getByRole("textbox", { name: /limitation/i });
+    fireEvent.change(input, { target: { value: "back pain" } });
+    fireEvent.click(screen.getByRole("button", { name: /add/i }));
+    expect(onSelect).toHaveBeenCalledWith([
+      { text: "shoulder", isWarning: true },
+      { text: "back pain", isWarning: true },
+    ]);
+  });
+
+  it("does not add an empty or whitespace-only limitation", () => {
+    const onSelect = vi.fn();
+    render(<LimitationsStep value={[]} onSelect={onSelect} />);
+    const input = screen.getByRole("textbox", { name: /limitation/i });
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: /add/i }));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("renders the existing limitations as a list (empty list is valid)", () => {
+    const { rerender } = render(<LimitationsStep value={[]} onSelect={vi.fn()} />);
+    // empty list: no limitation entries shown
+    expect(screen.queryByText("knee pain")).toBeNull();
+    rerender(
+      <LimitationsStep
+        value={[{ text: "knee pain", isWarning: true }]}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("knee pain")).toBeTruthy();
+  });
+});
