@@ -10,7 +10,7 @@
     "type-check": "pnpm -r type-check",
     "test": "pnpm -r test",
     "test:coverage": "pnpm -r --if-present test:coverage",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/e2e-with-stack.mjs",
     "deps-guard": "node scripts/deps-guard.mjs",
     "architecture": "depcruise --config .dependency-cruiser.cjs packages/domain/src packages/contracts/src apps/api/src && node scripts/architecture-negative-test.mjs",
     "prepare": "git rev-parse --git-dir > /dev/null 2>&1 && git config core.hooksPath .githooks || true"
