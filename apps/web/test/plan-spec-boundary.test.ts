@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import { createPlanPayload } from "../src/lib/plan";
 import type { PlanSpec } from "@kinora/contracts";
 
+// Base preferenceScores for reuse in fixtures
+const SCORES = { strength: 0.6, hypertrophy: 0.9, endurance: 0.3, mobility: 0.3 };
+
 describe("createPlanPayload", () => {
   it("returns a PlanSpec with the same values as input", () => {
     const spec: PlanSpec = {
@@ -10,7 +13,8 @@ describe("createPlanPayload", () => {
       sessionDurationMinutes: 60,
       location: "gym",
       equipment: ["dumbbells", "cable machine"],
-      limitations: ["shoulder impingement"],
+      limitations: [{ text: "shoulder impingement", isWarning: true }],
+      preferenceScores: SCORES,
       confirmed: false,
     };
 
@@ -21,7 +25,7 @@ describe("createPlanPayload", () => {
     expect(result.sessionDurationMinutes).toBe(60);
     expect(result.location).toBe("gym");
     expect(result.equipment).toEqual(["dumbbells", "cable machine"]);
-    expect(result.limitations).toEqual(["shoulder impingement"]);
+    expect(result.limitations).toEqual([{ text: "shoulder impingement", isWarning: true }]);
     expect(result.confirmed).toBe(false);
   });
 
@@ -35,6 +39,7 @@ describe("createPlanPayload", () => {
       location: "outdoor",
       equipment: ["jump rope"],
       limitations: [],
+      preferenceScores: { strength: 0.4, hypertrophy: 0.5, endurance: 0.9, mobility: 0.4 },
       confirmed: false,
     };
 
