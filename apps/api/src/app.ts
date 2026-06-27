@@ -6,6 +6,7 @@ import { authPlugin } from "./auth/plugin.js";
 import { authRoutes } from "./routes/auth.js";
 import { healthRoute } from "./routes/health.js";
 import { socialRoutes } from "./routes/social.js";
+import { planRoutes } from "./routes/plan.js";
 import type { SocialAuthService } from "./auth/social.js";
 
 /**
@@ -54,6 +55,9 @@ export async function buildApp(
   if (socialAuthService) {
     await app.register(socialRoutes, { socialAuthService });
   }
+
+  // Plan wizard routes (draft + promote)
+  await app.register(planRoutes, { db: database });
 
   return app;
 }

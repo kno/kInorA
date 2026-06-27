@@ -15,6 +15,13 @@
       "when": 1782128466874,
       "tag": "0001_careless_thanos",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782558123248,
+      "tag": "0002_sharp_tag",
+      "breakpoints": true
     }
   ]
 }
