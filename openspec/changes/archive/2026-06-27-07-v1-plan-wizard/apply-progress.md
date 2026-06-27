@@ -226,7 +226,7 @@ pnpm --filter api db:migrate → [✓] migrations applied successfully!
 | 9.9–9.10 EquipmentStep | `wizard/__tests__/EquipmentStep.test.tsx` | Unit (jsdom) | ✅ | ✅ 5/5 | ✅ gym vs home filter + multi-toggle on/off + pressed | ➖ |
 | 9.11–9.12 LimitationsStep | `wizard/__tests__/LimitationsStep.test.tsx` | Unit (jsdom) | ✅ | ✅ 6/6 | ✅ add/append/Enter/empty-reject/list | ✅ |
 | 10.1–10.2 StepperShell | `create-plan/__tests__/StepperShell.test.tsx` | Unit (jsdom) | ✅ module missing | ✅ 12/12 | ✅ progress props + Continue/Back/Finish gating + resume + overwrite + equipment-default | ✅ |
-| 10.3 server actions (pure) | `create-plan/__tests__/plan-draft-client.test.ts` | Unit | ✅ module missing | ✅ 10/10 | ✅ Bearer/error/no-token + enrich complete/incomplete + isSpecComplete | ✅ extracted enrichDraftSpec |
+| 10.3 server actions (pure) | `create-plan/__tests__/plan-draft-client.test.ts` | Unit | ✅ module missing | ✅ 10/10 | ✅ Bearer/error/no-token + isSpecComplete | ✅ |
 | 10.4 page (server) | `create-plan/__tests__/page.test.tsx` | Unit (jsdom) | ✅ updated for async page | ✅ 3/3 | ✅ resume/no-draft/no-token | ➖ |
 | (page draft load) | `create-plan/__tests__/load-current-draft.test.ts` | Unit | ✅ export missing | ✅ 4/4 | ✅ draft/204/no-token/error | ➖ |
 | 11.1–11.2 E2E happy+resume | `tests/e2e/create-plan-wizard.spec.ts` | E2E (full stack) | ✅ failed pre-impl (no readout/route) | ✅ pass | ✅ exit→resume→finish→204+409 proof | ➖ |
@@ -292,7 +292,7 @@ Full suite: 27 passed, 1 failed (pwa.spec.ts — PRE-EXISTING: @serwist/next ser
 | `apps/web/src/components/wizard/wizard.module.css` | Created | Step grid + limitations input/chips |
 | `apps/web/src/components/wizard/__tests__/*.test.tsx` (+options.test.ts) | Created | 7 step/option test files (23 tests) |
 | `apps/web/src/app/(app)/create-plan/StepperShell.tsx` | Created | Client stepper shell ({step,spec}, OrbitProgress, Back/Continue/Finish, resume/overwrite) |
-| `apps/web/src/app/(app)/create-plan/plan-draft-client.ts` | Created | Pure orchestrators (submitDraft/promotePlanSpec/loadCurrentDraft/enrichDraftSpec/isSpecComplete) |
+| `apps/web/src/app/(app)/create-plan/plan-draft-client.ts` | Created | Pure orchestrators (submitDraft/promotePlanSpec/loadCurrentDraft/isSpecComplete) |
 | `apps/web/src/app/(app)/create-plan/actions.ts` | Created | "use server" Bearer-from-cookie glue (saveDraftAction/confirmPlanSpecAction) |
 | `apps/web/src/app/(app)/create-plan/stepper-shell.module.css` | Created | Stepper layout/actions |
 | `apps/web/src/app/(app)/create-plan/page.tsx` | Modified | Replaced scaffold with resume-hydrating server component |
@@ -312,15 +312,14 @@ Full suite: 27 passed, 1 failed (pwa.spec.ts — PRE-EXISTING: @serwist/next ser
 
 ### Deviation / Discovery (PR 3)
 
-- **PlanSpec boundary ordering bug (found + worked around in PR3 scope):** the PR2 promote endpoint runs `assertPlanSpecShape` BEFORE `derivePreferenceScores`, but `assertPlanSpecShape` (shared with 08) requires `preferenceScores` + `confirmed`. A wizard draft never has these, so promote always returned 409. PR3 fix: the web `saveDraftAction` server action enriches a *complete* draft with the client-mirrored `preferenceScores` (via `@kinora/domain/plan`) and `confirmed:false` before POST, so the boundary accepts it; the server still re-derives the scores authoritatively at promote (design §2). The cleaner long-term fix (reorder/validate-without-derived-fields in the API) is left to the API owner — noted for the fresh review.
-- **Domain subpath export:** to mirror `derivePreferenceScores` without dragging the crypto-dependent auth barrel into the Next bundle, added a `@kinora/domain/plan` subpath that resolves to built `dist` (Turbopack cannot resolve the `.js`→`.ts` source specifiers across the package boundary under the `development` condition).
+- **preferenceScores — final shipping approach**: The apply-progress contained an intermediate note describing a "client-mirrored preferenceScores" workaround where the web `saveDraftAction` would enrich the draft before posting. This approach was SUPERSEDED during PR 3 implementation. The final shipped code sends raw wizard input from the client (`plan-draft-client.ts` comment: "The client sends the raw wizard input to the API. preferenceScores and confirmed are derived server-side on promote — the client never computes them."). `derivePreferenceScores` is called server-side ONLY, in the `POST /plan-specs` promote handler in `apps/api/src/routes/plan.ts`. This is MORE correct than the workaround and fully consistent with design §2 (server is the source of truth). The intermediate note in this artifact was stale and was clarified at archive time.
+- **Domain subpath export:** to make `@kinora/domain/plan` importable from the Next.js app without dragging the crypto-dependent auth barrel into the Next bundle, added a `@kinora/domain/plan` subpath that resolves to built `dist`. Turbopack cannot resolve the `.js`→`.ts` source specifiers across the package boundary under the `development` condition. This subpath is a real package surface change relevant to change 08 (documented as SUGGESTION-01 in verify-report).
 
 ---
 
 ## Workload / PR Boundary
 
 - Mode: chained PR slice (stacked-to-main)
-- PR 1 work unit: Contracts + Domain (merged to main)
-- PR 2 work unit: API — DB schema, migration, repositories, routes (merged to main)
-- PR 3 work unit: Web — Orbit components, wizard steps, stepper shell, server actions, E2E (current branch `feat/07-plan-wizard-pr3-web`)
-- PR 3 review budget: ~2,000 added lines across 4 work-unit commits (UI-heavy: components + CSS + tests + 2 E2E specs). Within the stacked-to-main strategy; reviewer can review per work-unit commit. Do NOT push/PR — orchestrator runs fresh review then pushes.
+- PR 1 work unit: Contracts + Domain (merged to main) — PR #20
+- PR 2 work unit: API — DB schema, migration, repositories, routes (merged to main) — PR #24
+- PR 3 work unit: Web — Orbit components, wizard steps, stepper shell, server actions, E2E (merged to main) — PR #25
