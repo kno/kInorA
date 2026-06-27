@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { POST_LOGIN_PATH } from "@/auth/session-cookie";
 
 /**
  * Social OIDC callback proxy logic — extracted from the route handler so it
@@ -21,7 +22,6 @@ import { NextResponse } from "next/server";
 export const SESSION_COOKIE = "kinora_session";
 /** Session cookie lifetime: 7 days. */
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
-const HOME_PATH = "/";
 const LOGIN_PATH = "/login";
 
 function apiBaseUrl(): string {
@@ -87,7 +87,7 @@ export async function proxySocialCallback(
     return redirectToLogin("missing_token", options.origin);
   }
 
-  const url = new URL(HOME_PATH, options.origin ?? "http://localhost");
+  const url = new URL(POST_LOGIN_PATH, options.origin ?? "http://localhost");
   const next = NextResponse.redirect(url, { status: 303 });
 
   next.cookies.set(SESSION_COOKIE, session.token, {

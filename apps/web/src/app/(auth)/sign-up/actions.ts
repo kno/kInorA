@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { submitSignup } from "./submit-signup";
-import { SESSION_COOKIE } from "@/auth/session-cookie";
+import { SESSION_COOKIE, POST_LOGIN_PATH } from "@/auth/session-cookie";
 
 /**
  * Sign-up Server Action.
@@ -29,5 +29,5 @@ export async function signupAction(formData: FormData): Promise<void> {
     maxAge: 60 * 60 * 24 * 7, // 7 days
   });
 
-  redirect("/");
+  redirect(POST_LOGIN_PATH);
 }

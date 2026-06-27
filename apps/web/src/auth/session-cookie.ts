@@ -10,3 +10,10 @@
  * share it without cross-importing each other.
  */
 export const SESSION_COOKIE = "kinora_session";
+
+/**
+ * The destination path for all post-login redirects (login, sign-up, social
+ * callback). Defined here so all three auth flows stay in sync — change this
+ * one constant to reroute them all.
+ */
+export const POST_LOGIN_PATH = "/dashboard";
