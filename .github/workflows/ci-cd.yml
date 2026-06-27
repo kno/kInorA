@@ -44,6 +44,11 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: End-to-end tests
+        # `pnpm test:e2e` runs scripts/e2e-with-stack.mjs, which starts an
+        # ephemeral Postgres container (Docker on GitHub-hosted runners),
+        # applies migrations, then boots the api + web dev servers via
+        # Playwright's webServer array before running the specs. GitHub-hosted
+        # ubuntu runners ship with Docker, so no extra setup is required here.
         run: pnpm test:e2e
 
       - name: Architecture guard
