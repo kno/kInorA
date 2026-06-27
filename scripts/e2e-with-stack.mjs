@@ -121,6 +121,25 @@ function stackEnv() {
   };
 }
 
+/**
+ * Build the workspace libraries the api depends on. The api dev server (tsx)
+ * imports `@kinora/contracts` and `@kinora/domain` through their published
+ * `dist/` entry points, which only exist after a `tsc` build. CI runs the
+ * "Build" step AFTER e2e (and a fresh clone has no dist at all), so the api
+ * webServer would fail to start with "Cannot find module .../dist/index.js"
+ * unless we build these first. Keeps `pnpm test:e2e` self-contained.
+ */
+async function buildWorkspaceLibs(env) {
+  const code = await runInherit(
+    "pnpm",
+    ["--filter", "@kinora/contracts", "--filter", "@kinora/domain", "build"],
+    env,
+  );
+  if (code !== 0) {
+    throw new Error(`Workspace library build failed with exit code ${code}`);
+  }
+}
+
 /** Run a command, inheriting stdio, and resolve with its exit code. */
 function runInherit(cmd, args, env) {
   return new Promise((resolve) => {
@@ -177,6 +196,9 @@ async function main() {
     if (migrateCode !== 0) {
       throw new Error(`Migrations failed with exit code ${migrateCode}`);
     }
+
+    console.log("[e2e] Building workspace libraries (api dependencies)...");
+    await buildWorkspaceLibs(env);
 
     console.log("[e2e] Running Playwright...");
     const args = process.argv.slice(2);
