@@ -131,6 +131,106 @@ describe("assertPlanSpecShape — updated for 07-v1-plan-wizard", () => {
     );
   });
 
+  // --- preferenceScores range validation [0, 1] ---
+
+  it("rejects preferenceScores.strength above 1", () => {
+    const invalid = {
+      ...VALID_SPEC,
+      preferenceScores: { strength: 1.5, hypertrophy: 0.6, endurance: 0.2, mobility: 0.3 },
+    };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /preferenceScores\.strength.*\[0.*1\]|strength.*out of range|strength.*between/i
+    );
+  });
+
+  it("rejects preferenceScores.strength below 0", () => {
+    const invalid = {
+      ...VALID_SPEC,
+      preferenceScores: { strength: -0.1, hypertrophy: 0.6, endurance: 0.2, mobility: 0.3 },
+    };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /preferenceScores\.strength.*\[0.*1\]|strength.*out of range|strength.*between/i
+    );
+  });
+
+  it("rejects preferenceScores.hypertrophy out of range", () => {
+    const invalid = {
+      ...VALID_SPEC,
+      preferenceScores: { strength: 0.9, hypertrophy: 1.1, endurance: 0.2, mobility: 0.3 },
+    };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /preferenceScores\.hypertrophy.*\[0.*1\]|hypertrophy.*out of range|hypertrophy.*between/i
+    );
+  });
+
+  it("rejects preferenceScores.endurance out of range", () => {
+    const invalid = {
+      ...VALID_SPEC,
+      preferenceScores: { strength: 0.9, hypertrophy: 0.6, endurance: 2, mobility: 0.3 },
+    };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /preferenceScores\.endurance.*\[0.*1\]|endurance.*out of range|endurance.*between/i
+    );
+  });
+
+  it("rejects preferenceScores.mobility out of range", () => {
+    const invalid = {
+      ...VALID_SPEC,
+      preferenceScores: { strength: 0.9, hypertrophy: 0.6, endurance: 0.2, mobility: -1 },
+    };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /preferenceScores\.mobility.*\[0.*1\]|mobility.*out of range|mobility.*between/i
+    );
+  });
+
+  it("accepts preferenceScores at boundary values 0 and 1", () => {
+    const spec = {
+      ...VALID_SPEC,
+      preferenceScores: { strength: 0, hypertrophy: 1, endurance: 0, mobility: 1 },
+    };
+    expect(() => assertPlanSpecShape(spec as unknown as PlanSpec)).not.toThrow();
+  });
+
+  // --- equipment element type validation ---
+
+  it("rejects equipment array containing a number element", () => {
+    const invalid = { ...VALID_SPEC, equipment: [1] };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /equipment\[0\].*string/i
+    );
+  });
+
+  it("rejects equipment array containing null", () => {
+    const invalid = { ...VALID_SPEC, equipment: [null] };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /equipment\[0\].*string/i
+    );
+  });
+
+  it("rejects equipment array containing an object", () => {
+    const invalid = { ...VALID_SPEC, equipment: [{}] };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /equipment\[0\].*string/i
+    );
+  });
+
+  it("rejects equipment array with mixed valid and invalid elements", () => {
+    const invalid = { ...VALID_SPEC, equipment: ["barbell", 42, "dumbbells"] };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /equipment\[1\].*string/i
+    );
+  });
+
+  it("accepts equipment array with multiple string elements", () => {
+    const spec = { ...VALID_SPEC, equipment: ["barbell", "dumbbells", "kettlebell"] };
+    expect(() => assertPlanSpecShape(spec as unknown as PlanSpec)).not.toThrow();
+  });
+
+  it("accepts empty equipment array", () => {
+    const spec = { ...VALID_SPEC, equipment: [] };
+    expect(() => assertPlanSpecShape(spec as unknown as PlanSpec)).not.toThrow();
+  });
+
   // --- Existing validations still work ---
 
   it("rejects null input", () => {

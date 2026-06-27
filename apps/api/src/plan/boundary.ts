@@ -39,6 +39,12 @@ export function assertPlanSpecShape(input: unknown): asserts input is PlanSpec {
     throw new Error("PlanSpec.equipment must be an array");
   }
 
+  for (let i = 0; i < obj.equipment.length; i++) {
+    if (typeof obj.equipment[i] !== "string") {
+      throw new Error(`PlanSpec.equipment[${i}] must be a string`);
+    }
+  }
+
   if (!Array.isArray(obj.limitations)) {
     throw new Error("PlanSpec.limitations must be an array");
   }
@@ -71,20 +77,17 @@ export function assertPlanSpecShape(input: unknown): asserts input is PlanSpec {
 
   const scores = obj.preferenceScores as Record<string, unknown>;
 
-  if (typeof scores.strength !== "number") {
-    throw new Error("PlanSpec.preferenceScores.strength must be a number");
-  }
+  const scoreKeys = ["strength", "hypertrophy", "endurance", "mobility"] as const;
 
-  if (typeof scores.hypertrophy !== "number") {
-    throw new Error("PlanSpec.preferenceScores.hypertrophy must be a number");
-  }
-
-  if (typeof scores.endurance !== "number") {
-    throw new Error("PlanSpec.preferenceScores.endurance must be a number");
-  }
-
-  if (typeof scores.mobility !== "number") {
-    throw new Error("PlanSpec.preferenceScores.mobility must be a number");
+  for (const key of scoreKeys) {
+    if (typeof scores[key] !== "number") {
+      throw new Error(`PlanSpec.preferenceScores.${key} must be a number`);
+    }
+    if ((scores[key] as number) < 0 || (scores[key] as number) > 1) {
+      throw new Error(
+        `PlanSpec.preferenceScores.${key} must be in [0, 1], got ${scores[key]}`
+      );
+    }
   }
 
   if (typeof obj.confirmed !== "boolean") {
