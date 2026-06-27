@@ -5,6 +5,10 @@ import {
   timestamp,
   pgEnum,
   uniqueIndex,
+  integer,
+  jsonb,
+  boolean,
+  index,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -119,6 +123,62 @@ export const oauth_accounts = pgTable(
     providerEmailUnique: uniqueIndex("oauth_accounts_provider_id_email_unique").on(
       table.providerId,
       table.email
+    ),
+  })
+);
+
+/**
+ * Plan Drafts — one active draft per user per tenant.
+ * Stores the in-progress wizard answers so the user can exit and resume.
+ * The unique index on (tenant_id, user_id) enforces the single-active-draft invariant.
+ * Promoted to a plan_specs row on wizard completion.
+ */
+export const planDrafts = pgTable(
+  "plan_drafts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    step: integer("step").notNull(),
+    specJson: jsonb("spec_json").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantUserUnique: uniqueIndex("plan_drafts_tenant_user_unique").on(
+      table.tenantId,
+      table.userId
+    ),
+  })
+);
+
+/**
+ * Plan Specs — confirmed wizard requirements (NOT a workout program).
+ * Created when the user completes all wizard steps and clicks Finish.
+ * The actual workout program (exercises, sets, schedule) is owned by change 08
+ * (ai-plan-generation) and will live in a separate table referencing plan_specs(id).
+ */
+export const planSpecs = pgTable(
+  "plan_specs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    specJson: jsonb("spec_json").notNull(),
+    confirmed: boolean("confirmed").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantUserIdx: index("plan_specs_tenant_user_idx").on(
+      table.tenantId,
+      table.userId
     ),
   })
 );
