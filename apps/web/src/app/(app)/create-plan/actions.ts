@@ -2,9 +2,8 @@
 
 import { cookies } from "next/headers";
 import type { PlanSpec } from "@kinora/contracts";
-import { derivePreferenceScores } from "@kinora/domain/plan";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
-import { enrichDraftSpec, promotePlanSpec, submitDraft } from "./plan-draft-client";
+import { promotePlanSpec, submitDraft } from "./plan-draft-client";
 
 /**
  * Server Actions for the create-plan wizard.
@@ -20,14 +19,17 @@ async function sessionToken(): Promise<string | undefined> {
   return jar.get(SESSION_COOKIE)?.value;
 }
 
-/** Persist the current step + spec. Throws on failure so the client surfaces it. */
+/**
+ * Persist the current step + partial spec. Sends the raw wizard input to the
+ * API without enrichment — the server derives preferenceScores on promote.
+ * Throws on failure so the client surfaces it.
+ */
 export async function saveDraftAction(
   step: number,
   spec: Partial<PlanSpec>,
 ): Promise<void> {
   const token = await sessionToken();
-  const enriched = enrichDraftSpec(spec, derivePreferenceScores);
-  const result = await submitDraft(step, enriched, token);
+  const result = await submitDraft(step, spec, token);
   if (result.kind === "error") {
     throw new Error(result.message);
   }
