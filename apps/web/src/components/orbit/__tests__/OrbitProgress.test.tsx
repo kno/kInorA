@@ -110,6 +110,22 @@ describe("OrbitProgress", () => {
     expect(svg.getAttribute("height")).toBe("64");
   });
 
+  it("hides the ball when indeterminate is true", () => {
+    const { container } = render(
+      <OrbitProgress indeterminate aria-label="Loading" />,
+    );
+    const ball = container.querySelector('[data-orbit="ball"]');
+    expect(ball).toBeNull();
+  });
+
+  it("renders the ball when not indeterminate", () => {
+    const { container } = render(
+      <OrbitProgress value={50} max={100} aria-label="Half" />,
+    );
+    const ball = container.querySelector('[data-orbit="ball"]');
+    expect(ball).not.toBeNull();
+  });
+
   it("removes the arc/ball transitions under prefers-reduced-motion", () => {
     vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
       matches: query.includes("reduce"),

@@ -251,6 +251,24 @@ describe("assertPlanSpecShape — updated for 07-v1-plan-wizard", () => {
     );
   });
 
+  // --- 08 atomic coupling: PlanLimitation[] shape handled in boundary ---
+  // Coordinate comment: change 08 (ai-plan-generation) reads PlanSpec.limitations
+  // as PlanLimitation[] — this boundary.ts validates the same shape for both
+  // 07 (wizard confirm) and 08 (consumption). Both changes share this boundary file.
+  it("PlanLimitation[] shape accepted: 08 consumer coupling verified", () => {
+    const spec08: PlanSpec = {
+      goal: "hypertrophy",
+      daysPerWeek: 4,
+      sessionDurationMinutes: 60,
+      location: "home",
+      equipment: ["dumbbells"],
+      limitations: [{ text: "wrist injury", isWarning: true }],
+      preferenceScores: { strength: 0.6, hypertrophy: 0.9, endurance: 0.3, mobility: 0.3 },
+      confirmed: true,
+    };
+    expect(() => assertPlanSpecShape(spec08)).not.toThrow();
+  });
+
   // --- assertPlanSpecInput — input-only validator (no preferenceScores, no confirmed) ---
 
 describe("assertPlanSpecInput — wizard input validator", () => {
@@ -343,21 +361,4 @@ describe("assertPlanSpecInput — wizard input validator", () => {
   });
 });
 
-  // --- 08 atomic coupling: PlanLimitation[] shape handled in boundary ---
-  // Coordinate comment: change 08 (ai-plan-generation) reads PlanSpec.limitations
-  // as PlanLimitation[] — this boundary.ts validates the same shape for both
-  // 07 (wizard confirm) and 08 (consumption). Both changes share this boundary file.
-  it("PlanLimitation[] shape accepted: 08 consumer coupling verified", () => {
-    const spec08: PlanSpec = {
-      goal: "hypertrophy",
-      daysPerWeek: 4,
-      sessionDurationMinutes: 60,
-      location: "home",
-      equipment: ["dumbbells"],
-      limitations: [{ text: "wrist injury", isWarning: true }],
-      preferenceScores: { strength: 0.6, hypertrophy: 0.9, endurance: 0.3, mobility: 0.3 },
-      confirmed: true,
-    };
-    expect(() => assertPlanSpecShape(spec08)).not.toThrow();
-  });
 });
