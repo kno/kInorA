@@ -1,57 +1,69 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement, ReactNode } from "react";
-import { describe, expect, it } from "vitest";
-import CreatePlanPage from "../page";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
 
-describe("CreatePlanPage", () => {
-  it("renders the create plan heading", async () => {
-    const page = await CreatePlanPage();
-    expect(textOf(page)).toContain("Create Plan");
-  });
+const cookieGet = vi.fn();
+const loadCurrentDraft = vi.fn();
 
-  it("renders placeholder description text", async () => {
-    const page = await CreatePlanPage();
-    expect(textOf(page)).toContain("workout routine");
-  });
+vi.mock("next/headers", () => ({
+  cookies: vi.fn(async () => ({ get: cookieGet })),
+}));
 
-  it("renders inside a kin-page wrapper", async () => {
-    const page = await CreatePlanPage();
-    const main = findFirst(page, (el) => el.type === "main");
-    expect(main).toBeDefined();
-    expect(main?.props?.className).toContain("kin-page");
-  });
+vi.mock("../actions", () => ({
+  saveDraftAction: vi.fn(),
+  confirmPlanSpecAction: vi.fn(),
+}));
+
+vi.mock("../plan-draft-client", () => ({
+  loadCurrentDraft: (...args: unknown[]) => loadCurrentDraft(...args),
+}));
+
+// Stub StepperShell so the page test asserts wiring, not the shell internals.
+vi.mock("../StepperShell", () => ({
+  StepperShell: (props: AnyProps) => ({
+    type: "StepperShell",
+    props,
+    key: null,
+  }) as unknown as ReactElement,
+}));
+
+import CreatePlanPage from "../page";
+
+afterEach(() => {
+  vi.clearAllMocks();
 });
 
-// --- React tree inspection helpers ---
+describe("CreatePlanPage", () => {
+  it("hydrates the stepper with the current server draft when one exists", async () => {
+    cookieGet.mockReturnValue({ value: "tok-1" });
+    loadCurrentDraft.mockResolvedValue({ step: 3, spec: { goal: "strength" } });
 
-function findFirst(
-  node: ReactNode,
-  match: (el: AnyElement) => boolean,
-): AnyElement | undefined {
-  if (isReactElement(node)) {
-    if (match(node)) return node;
-    const inChildren = findFirst(node.props.children, match);
-    if (inChildren) return inChildren;
-  }
-  if (Array.isArray(node)) {
-    for (const child of node) {
-      const found = findFirst(child, match);
-      if (found) return found;
-    }
-  }
-  return undefined;
-}
+    const page = (await CreatePlanPage()) as AnyElement;
 
-function textOf(node: ReactNode): string {
-  if (typeof node === "string") return node;
-  if (typeof node === "number") return String(node);
-  if (Array.isArray(node)) return node.map(textOf).join("");
-  if (isReactElement(node)) return textOf(node.props.children);
-  return "";
-}
+    expect(loadCurrentDraft).toHaveBeenCalledWith("tok-1");
+    expect(page.props.initialDraft).toEqual({ step: 3, spec: { goal: "strength" } });
+    expect(page.props.saveDraftAction).toBeDefined();
+    expect(page.props.confirmPlanSpecAction).toBeDefined();
+  });
 
-function isReactElement(node: ReactNode): node is AnyElement {
-  return typeof node === "object" && node !== null && "props" in node;
-}
+  it("starts the stepper with no draft when the API has none", async () => {
+    cookieGet.mockReturnValue({ value: "tok-2" });
+    loadCurrentDraft.mockResolvedValue(null);
+
+    const page = (await CreatePlanPage()) as AnyElement;
+
+    expect(page.props.initialDraft).toBeUndefined();
+  });
+
+  it("passes an undefined token when no session cookie is present", async () => {
+    cookieGet.mockReturnValue(undefined);
+    loadCurrentDraft.mockResolvedValue(null);
+
+    await CreatePlanPage();
+
+    expect(loadCurrentDraft).toHaveBeenCalledWith(undefined);
+  });
+});

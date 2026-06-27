@@ -356,6 +356,70 @@ describe("Plan routes", () => {
       });
 
       expect(response.statusCode).toBe(409);
+      expect(response.json().error).toBe("incomplete_spec");
+    });
+
+    // Bug regression: a realistic wizard draft (input fields only, NO preferenceScores,
+    // NO confirmed) must promote successfully to 201 — the server derives the scores.
+    // Previously assertPlanSpecShape was called before deriving, causing 409 for every
+    // real draft.
+    it("returns 201 when draft is a realistic partial wizard spec (no preferenceScores, no confirmed)", async () => {
+      const partialWizardDraft = {
+        ...draftRow,
+        specJson: {
+          goal: "strength",
+          daysPerWeek: 3,
+          sessionDurationMinutes: 60,
+          location: "gym",
+          equipment: ["barbell"],
+          limitations: [{ text: "knee pain", isWarning: true }],
+          // NOTE: no preferenceScores, no confirmed — real wizard output
+        },
+      };
+      const db = buildMockDb({
+        draftOnSelect: [partialWizardDraft],
+        specOnInsert: [planSpecRow],
+        promoteOnly: true,
+      });
+      app = await buildTestApp(db);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/plan-specs",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.id).toBeDefined();
+      // The persisted spec must carry server-derived preferenceScores and confirmed:true
+      expect(body.spec).toBeDefined();
+    });
+
+    it("returns 409 incomplete_spec when draft is missing a required input field (no goal)", async () => {
+      const missingGoalDraft = {
+        ...draftRow,
+        specJson: {
+          // goal intentionally absent
+          daysPerWeek: 3,
+          sessionDurationMinutes: 60,
+          location: "gym",
+          equipment: [],
+          limitations: [],
+        },
+      };
+      app = await buildTestApp(buildMockDb({ draftOnSelect: [missingGoalDraft] }));
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/plan-specs",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error).toBe("incomplete_spec");
     });
 
     it("returns 201 {id, spec} when draft is complete and deletes the draft", async () => {

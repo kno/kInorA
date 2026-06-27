@@ -1,17 +1,26 @@
+import { cookies } from "next/headers";
+import { SESSION_COOKIE } from "@/auth/session-cookie";
+import { StepperShell } from "./StepperShell";
+import { loadCurrentDraft } from "./plan-draft-client";
+import { saveDraftAction, confirmPlanSpecAction } from "./actions";
+
 /**
- * Create Plan (scaffold) — protected page rendered inside the AppShell.
+ * Create Plan — protected server component.
  *
- * Placeholder content until the plan creation wizard is implemented.
+ * Hydrates the wizard from the user's current server draft (resume) when one
+ * exists, then renders the client stepper wired to the Server Actions. The
+ * wizard's only output is a confirmed PlanSpec — no workout program (08).
  */
-export default function CreatePlanPage() {
+export default async function CreatePlanPage() {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  const draft = await loadCurrentDraft(token);
+
   return (
-    <main className="kin-page">
-      <div className="kin-card kin-card--center">
-        <h1 className="kin-title">Create Plan</h1>
-        <p className="kin-text kin-muted">
-          Design a new workout routine tailored to your goals.
-        </p>
-      </div>
-    </main>
+    <StepperShell
+      initialDraft={draft ?? undefined}
+      saveDraftAction={saveDraftAction}
+      confirmPlanSpecAction={confirmPlanSpecAction}
+    />
   );
 }
