@@ -118,10 +118,9 @@ export function StepperShell({
     if (!isSpecComplete()) return;
     setBusy(true);
     try {
-      // Persist the final answers, then promote. The server action enriches
-      // the draft with the derived `preferenceScores` and `confirmed:false`
-      // so the API's PlanSpec boundary accepts it before promote re-derives
-      // the scores as the source of truth.
+      // Persist the final raw answers, then promote. The server derives
+      // preferenceScores on promote (source of truth); the client never
+      // computes them.
       await saveDraftAction(TOTAL_STEPS, spec);
       await confirmPlanSpecAction();
       router.push("/plan");

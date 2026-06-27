@@ -62,6 +62,25 @@ describe("LimitationsStep", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
+  it("removes the clicked chip and leaves the rest intact", () => {
+    const onSelect = vi.fn();
+    render(
+      <LimitationsStep
+        value={[
+          { text: "knee pain", isWarning: true },
+          { text: "wrist strain", isWarning: true },
+        ]}
+        onSelect={onSelect}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /remove knee pain/i }));
+    expect(onSelect).toHaveBeenCalledWith([
+      { text: "wrist strain", isWarning: true },
+    ]);
+    // The second chip's remove button should exist too
+    expect(screen.getByRole("button", { name: /remove wrist strain/i })).toBeTruthy();
+  });
+
   it("renders the existing limitations as a list (empty list is valid)", () => {
     const { rerender } = render(<LimitationsStep value={[]} onSelect={vi.fn()} />);
     // empty list: no limitation entries shown

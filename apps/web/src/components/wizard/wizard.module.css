@@ -69,3 +69,18 @@
   border: 1px solid var(--border);
   color: var(--fg);
 }
+
+.chipRemove {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  margin-left: 2px;
+}
+
+.chipRemove:hover {
+  color: var(--fg);
+}

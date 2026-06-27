@@ -82,7 +82,11 @@ export function OrbitProgress({
   const reducedMotion = usePrefersReducedMotion();
 
   const p = indeterminate || max <= 0 ? 0 : clamp01(value / max);
-  const dashoffset = (CIRCUMFERENCE * (1 - p)).toFixed(2);
+  // In indeterminate mode use a fixed ~75% arc so the spinning segment is visible.
+  // In determinate mode the offset is derived from progress as usual.
+  const dashoffset = indeterminate
+    ? (CIRCUMFERENCE * 0.25).toFixed(2)
+    : (CIRCUMFERENCE * (1 - p)).toFixed(2);
   const rotation = (p * 360).toFixed(0);
   const transition = reducedMotion ? "none" : "stroke-dashoffset .3s ease";
   const ballTransition = reducedMotion ? "none" : "transform .3s ease";
@@ -143,19 +147,22 @@ export function OrbitProgress({
             transition,
           }}
         />
-        {/* Lime ball at the arc head */}
-        <g
-          data-orbit="ball"
-          className={styles.orbitBallGroup}
-          style={{
-            transformBox: "view-box",
-            transformOrigin: "24px 24px",
-            transform: `rotate(${rotation}deg)`,
-            transition: ballTransition,
-          }}
-        >
-          <circle className={styles.orbitBall} cx={24} cy={8} r={6} />
-        </g>
+        {/* Lime ball at the arc head — hidden in indeterminate mode (ball position is
+            meaningless while the arc spins freely; only shown for determinate progress). */}
+        {!indeterminate && (
+          <g
+            data-orbit="ball"
+            className={styles.orbitBallGroup}
+            style={{
+              transformBox: "view-box",
+              transformOrigin: "24px 24px",
+              transform: `rotate(${rotation}deg)`,
+              transition: ballTransition,
+            }}
+          >
+            <circle className={styles.orbitBall} cx={24} cy={8} r={6} />
+          </g>
+        )}
       </svg>
 
       {center !== null && (

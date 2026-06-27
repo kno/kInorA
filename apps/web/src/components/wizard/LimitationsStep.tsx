@@ -51,6 +51,14 @@ export function LimitationsStep({ value = [], onSelect }: LimitationsStepProps) 
           {value.map((limitation, index) => (
             <li key={`${limitation.text}-${index}`} className={styles.chip}>
               {limitation.text}
+              <button
+                type="button"
+                className={styles.chipRemove}
+                aria-label={`Remove ${limitation.text}`}
+                onClick={() => onSelect(value.filter((_, i) => i !== index))}
+              >
+                ×
+              </button>
             </li>
           ))}
         </ul>
