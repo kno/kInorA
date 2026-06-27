@@ -2,6 +2,9 @@ import { planSpecs } from "../schema.js";
 import type { Database } from "../client.js";
 import type { PlanSpec } from "@kinora/contracts";
 
+/** A transaction executor compatible with Database — a subset of Database passed inside db.transaction(). */
+type DbOrTx = Pick<Database, "insert">;
+
 /**
  * Plan spec persistence repository.
  *
@@ -14,14 +17,18 @@ export class PlanSpecRepository {
 
   /**
    * Insert a confirmed plan_specs row for a given tenant + user.
+   * Accepts an optional transaction executor (tx) so callers can run this
+   * inside a db.transaction() alongside other statements atomically.
    * Returns the persisted id and the confirmed PlanSpec.
    */
   async create(
     tenantId: string,
     userId: string,
-    spec: PlanSpec
+    spec: PlanSpec,
+    tx?: DbOrTx
   ): Promise<{ id: string; spec: PlanSpec }> {
-    const rows = await this.db
+    const executor = tx ?? this.db;
+    const rows = await executor
       .insert(planSpecs)
       .values({ tenantId, userId, specJson: spec, confirmed: true })
       .returning();

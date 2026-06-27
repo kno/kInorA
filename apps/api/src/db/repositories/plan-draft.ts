@@ -3,6 +3,9 @@ import { planDrafts } from "../schema.js";
 import type { Database } from "../client.js";
 import type { PlanSpec } from "@kinora/contracts";
 
+/** A transaction executor compatible with Database — a subset of Database passed inside db.transaction(). */
+type DbOrTx = Pick<Database, "delete">;
+
 /**
  * A plan draft record as returned by persistence.
  */
@@ -68,9 +71,12 @@ export class PlanDraftRepository {
 
   /**
    * Delete the draft for a given tenant + user (called after promotion to plan_specs).
+   * Accepts an optional transaction executor (tx) so callers can run this
+   * inside a db.transaction() alongside other statements atomically.
    */
-  async delete(tenantId: string, userId: string): Promise<void> {
-    await this.db
+  async delete(tenantId: string, userId: string, tx?: DbOrTx): Promise<void> {
+    const executor = tx ?? this.db;
+    await executor
       .delete(planDrafts)
       .where(
         and(

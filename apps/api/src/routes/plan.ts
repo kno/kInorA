@@ -12,6 +12,24 @@ export interface PlanRoutesOptions {
 }
 
 /**
+ * JSON schema for POST /plan-specs/drafts body validation.
+ * Requires step (integer) and spec (object).
+ * Fastify uses ajv under the hood; missing or wrongly-typed fields cause a
+ * 400 (mapped in the app error handler) instead of a silent 500.
+ */
+const saveDraftSchema = {
+  body: {
+    type: "object",
+    required: ["step", "spec"],
+    properties: {
+      step: { type: "integer" },
+      spec: { type: "object" },
+    },
+    additionalProperties: true,
+  },
+};
+
+/**
  * Plan route plugin — implements the three plan wizard API endpoints.
  *
  * All routes require authentication via requireAuth() preHandler which reads
@@ -40,7 +58,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   // Returns: { step: number; spec: Partial<PlanSpec> }
   fastify.post(
     "/plan-specs/drafts",
-    { preHandler: requireAuth() },
+    { schema: saveDraftSchema, preHandler: requireAuth() },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { tenantId, userId } = request.authContext!;
       const body = request.body as { step: number; spec: Partial<PlanSpec> };
@@ -96,13 +114,14 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       const preferenceScores = derivePreferenceScores(spec);
       const confirmedSpec: PlanSpec = { ...spec, preferenceScores, confirmed: true };
 
-      // Insert the confirmed plan_specs row and delete the draft
-      // Note: drizzle does not expose a native multi-statement transaction in the
-      // mock-friendly API we use here. In production we do these sequentially;
-      // a DB-level outage between the two ops leaves an orphan draft which the
-      // resume flow handles gracefully (re-promotes on next attempt).
-      const result = await specRepo.create(tenantId, userId, confirmedSpec);
-      await draftRepo.delete(tenantId, userId);
+      // Insert the confirmed plan_specs row and delete the draft in a single
+      // transaction so that either both succeed or neither does — no orphan
+      // draft or duplicate spec row on partial failure.
+      const result = await db.transaction(async (tx) => {
+        const specResult = await specRepo.create(tenantId, userId, confirmedSpec, tx);
+        await draftRepo.delete(tenantId, userId, tx);
+        return specResult;
+      });
 
       return reply.code(201).send({ id: result.id, spec: result.spec });
     }
