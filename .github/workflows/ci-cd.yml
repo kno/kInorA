@@ -228,8 +228,9 @@ jobs:
             echo "Then store the output (pinned host key) as a GitHub secret."
             errors=$((errors + 1))
           fi
-          if [ -z "${{ secrets.PRODUCTION_BASE_URL }}" ]; then
-            echo "ERROR: PRODUCTION_BASE_URL secret is required (e.g. https://kinora.example.com)."
+          if [ -z "${{ secrets.WEB_PUBLIC_ORIGIN }}${{ secrets.PRODUCTION_BASE_URL }}" ]; then
+            echo "ERROR: WEB_PUBLIC_ORIGIN (or PRODUCTION_BASE_URL as fallback) secret is required (e.g. https://kinora.example.com)."
+            echo "The Google OAuth redirect URI is derived as <WEB_PUBLIC_ORIGIN>/callback/social."
             errors=$((errors + 1))
           fi
           if [ -z "${{ secrets.GOOGLE_CLIENT_ID }}" ]; then
@@ -238,10 +239,6 @@ jobs:
           fi
           if [ -z "${{ secrets.GOOGLE_CLIENT_SECRET }}" ]; then
             echo "ERROR: GOOGLE_CLIENT_SECRET secret is required for Google OAuth."
-            errors=$((errors + 1))
-          fi
-          if [ -z "${{ secrets.GOOGLE_REDIRECT_URI }}" ]; then
-            echo "ERROR: GOOGLE_REDIRECT_URI secret is required (e.g. https://kinora.aitsai.com/callback/social)."
             errors=$((errors + 1))
           fi
           if [ -z "${{ secrets.API_BASE_URL }}" ]; then
@@ -281,14 +278,12 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
-          OIDC_REDIRECT_URI: ${{ secrets.OIDC_REDIRECT_URI }}
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
         run: |
           # Build safe shell env script with printf %q to prevent injection.
-          ENV_SCRIPT=$(printf 'export GHCR_IMAGE=%q\nexport IMAGE_TAG=%q\nexport GHCR_USER=%q\nexport GHCR_TOKEN=%q\nexport VPS_DEPLOY_DIR=%q\nexport PRODUCTION_BASE_URL=%q\nexport GOOGLE_CLIENT_ID=%q\nexport GOOGLE_CLIENT_SECRET=%q\nexport GOOGLE_REDIRECT_URI=%q\nexport OIDC_REDIRECT_URI=%q\nexport API_BASE_URL=%q\nexport WEB_PUBLIC_ORIGIN=%q\n' \
-            "$GHCR_IMAGE" "$IMAGE_TAG" "$GHCR_USER" "$GHCR_TOKEN" "$VPS_DEPLOY_DIR" "$PRODUCTION_BASE_URL" \
-            "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$GOOGLE_REDIRECT_URI" "$OIDC_REDIRECT_URI" "$API_BASE_URL" \
+          ENV_SCRIPT=$(printf 'export GHCR_IMAGE=%q\nexport IMAGE_TAG=%q\nexport GHCR_USER=%q\nexport GHCR_TOKEN=%q\nexport VPS_DEPLOY_DIR=%q\nexport GOOGLE_CLIENT_ID=%q\nexport GOOGLE_CLIENT_SECRET=%q\nexport API_BASE_URL=%q\nexport WEB_PUBLIC_ORIGIN=%q\n' \
+            "$GHCR_IMAGE" "$IMAGE_TAG" "$GHCR_USER" "$GHCR_TOKEN" "$VPS_DEPLOY_DIR" \
+            "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$API_BASE_URL" \
             "$WEB_PUBLIC_ORIGIN")
           ENV_PAYLOAD=$(printf '%s' "$ENV_SCRIPT" | base64 -w0)
 
