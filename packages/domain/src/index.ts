@@ -8,6 +8,8 @@
 export { createPlanDraft } from "./plan/plan-draft.js";
 export type { PlanDraft } from "./plan/plan-draft.js";
 
+export { derivePreferenceScores } from "./plan/derive-preference-scores.js";
+
 export {
   MIN_PASSWORD_LENGTH,
   validatePasswordPolicy,
