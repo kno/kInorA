@@ -53,6 +53,7 @@ services:
       PORT: 3000
       HOSTNAME: 0.0.0.0
       API_BASE_URL: ${API_BASE_URL}
+      WEB_PUBLIC_ORIGIN: ${WEB_PUBLIC_ORIGIN}
     # No ports — reverse proxy will expose it later
     command: ["pnpm", "--filter", "web", "start"]
 
