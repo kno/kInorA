@@ -4,6 +4,13 @@ import type { PlanSpec } from "@kinora/contracts";
  * Validates that an unknown input has the structural shape of a PlanSpec.
  * Throws if required fields are missing or have wrong types.
  * This is a boundary check — not full Zod validation.
+ *
+ * Updated (07-v1-plan-wizard): validates limitations as PlanLimitation[] (object array)
+ * and preferenceScores as {strength, hypertrophy, endurance, mobility: number}.
+ *
+ * Atomic coupling note: change 08 (ai-plan-generation) reads PlanSpec.limitations as
+ * PlanLimitation[] — this boundary validates the same shape for both 07 (wizard confirm)
+ * and 08 (consumption). Both changes share this boundary file.
  */
 export function assertPlanSpecShape(input: unknown): asserts input is PlanSpec {
   if (typeof input !== "object" || input === null) {
@@ -32,8 +39,55 @@ export function assertPlanSpecShape(input: unknown): asserts input is PlanSpec {
     throw new Error("PlanSpec.equipment must be an array");
   }
 
+  for (let i = 0; i < obj.equipment.length; i++) {
+    if (typeof obj.equipment[i] !== "string") {
+      throw new Error(`PlanSpec.equipment[${i}] must be a string`);
+    }
+  }
+
   if (!Array.isArray(obj.limitations)) {
     throw new Error("PlanSpec.limitations must be an array");
+  }
+
+  // Validate each limitation is a PlanLimitation object {text: string, isWarning: boolean}
+  for (let i = 0; i < obj.limitations.length; i++) {
+    const limitation = obj.limitations[i] as unknown;
+    if (typeof limitation !== "object" || limitation === null) {
+      throw new Error(
+        `PlanSpec.limitations[${i}] must be an object with {text: string, isWarning: boolean}`
+      );
+    }
+    const lim = limitation as Record<string, unknown>;
+    if (typeof lim.text !== "string") {
+      throw new Error(
+        `PlanSpec.limitations[${i}].text must be a string`
+      );
+    }
+    if (typeof lim.isWarning !== "boolean") {
+      throw new Error(
+        `PlanSpec.limitations[${i}].isWarning must be a boolean`
+      );
+    }
+  }
+
+  // Validate preferenceScores shape
+  if (typeof obj.preferenceScores !== "object" || obj.preferenceScores === null) {
+    throw new Error("PlanSpec.preferenceScores must be an object");
+  }
+
+  const scores = obj.preferenceScores as Record<string, unknown>;
+
+  const scoreKeys = ["strength", "hypertrophy", "endurance", "mobility"] as const;
+
+  for (const key of scoreKeys) {
+    if (typeof scores[key] !== "number") {
+      throw new Error(`PlanSpec.preferenceScores.${key} must be a number`);
+    }
+    if ((scores[key] as number) < 0 || (scores[key] as number) > 1) {
+      throw new Error(
+        `PlanSpec.preferenceScores.${key} must be in [0, 1], got ${scores[key]}`
+      );
+    }
   }
 
   if (typeof obj.confirmed !== "boolean") {

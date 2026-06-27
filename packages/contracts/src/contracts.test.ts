@@ -7,6 +7,8 @@ import type {
   MembershipStatus,
   OidcCallbackParams,
   PlanGoal,
+  PlanLimitation,
+  PlanPreferenceScores,
   PlanSpec,
   RegisterRequest,
   SessionContext,
@@ -32,13 +34,21 @@ describe("shared contracts boundary", () => {
       "strength" | "hypertrophy" | "fat_loss" | "general_fitness"
     >();
     expectTypeOf<TrainingLocation>().toEqualTypeOf<"home" | "gym" | "outdoor">();
+    expectTypeOf<PlanLimitation>().toEqualTypeOf<{ text: string; isWarning: boolean }>();
+    expectTypeOf<PlanPreferenceScores>().toEqualTypeOf<{
+      strength: number;
+      hypertrophy: number;
+      endurance: number;
+      mobility: number;
+    }>();
     expectTypeOf<PlanSpec>().toEqualTypeOf<{
       goal: PlanGoal;
       daysPerWeek: number;
       sessionDurationMinutes: number;
       location: TrainingLocation;
       equipment: string[];
-      limitations: string[];
+      limitations: PlanLimitation[];
+      preferenceScores: PlanPreferenceScores;
       confirmed: boolean;
     }>();
   });
