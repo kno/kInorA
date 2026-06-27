@@ -42,6 +42,17 @@ describe("LimitationsStep", () => {
     ]);
   });
 
+  it("adds the limitation on Enter keypress", () => {
+    const onSelect = vi.fn();
+    render(<LimitationsStep value={[]} onSelect={onSelect} />);
+    const input = screen.getByRole("textbox", { name: /limitation/i });
+    fireEvent.change(input, { target: { value: "wrist strain" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSelect).toHaveBeenCalledWith([
+      { text: "wrist strain", isWarning: true },
+    ]);
+  });
+
   it("does not add an empty or whitespace-only limitation", () => {
     const onSelect = vi.fn();
     render(<LimitationsStep value={[]} onSelect={onSelect} />);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type {
   PlanGoal,
   PlanLimitation,
@@ -55,6 +56,7 @@ export function StepperShell({
   saveDraftAction,
   confirmPlanSpecAction,
 }: StepperShellProps) {
+  const router = useRouter();
   const [step, setStep] = useState(initialDraft?.step ?? 1);
   const [spec, setSpec] = useState<Partial<PlanSpec>>(initialDraft?.spec ?? {});
   const [resumed, setResumed] = useState(Boolean(initialDraft));
@@ -116,7 +118,13 @@ export function StepperShell({
     if (!isSpecComplete()) return;
     setBusy(true);
     try {
+      // Persist the final answers, then promote. The server action enriches
+      // the draft with the derived `preferenceScores` and `confirmed:false`
+      // so the API's PlanSpec boundary accepts it before promote re-derives
+      // the scores as the source of truth.
+      await saveDraftAction(TOTAL_STEPS, spec);
       await confirmPlanSpecAction();
+      router.push("/plan");
     } finally {
       setBusy(false);
     }
@@ -188,7 +196,7 @@ export function StepperShell({
           size={64}
           aria-label={`Step ${step} of ${TOTAL_STEPS}`}
         >
-          {step} / {TOTAL_STEPS}
+          {`${step} / ${TOTAL_STEPS}`}
         </OrbitProgress>
         <h1 className={styles.question}>{STEP_QUESTIONS[step - 1]}</h1>
         {resumed && (

@@ -4,9 +4,15 @@ import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/re
 import type { PlanSpec } from "@kinora/contracts";
 import { StepperShell } from "../StepperShell";
 
+const push = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+}));
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  push.mockReset();
 });
 
 function noopSave(): Promise<void> {
@@ -129,11 +135,15 @@ describe("StepperShell", () => {
     expect(finish.disabled).toBe(true);
   });
 
-  it("calls confirmPlanSpecAction on Finish when the spec is complete", async () => {
+  it("saves a complete draft then confirms and navigates on Finish", async () => {
+    const saveDraftAction =
+      vi.fn<(step: number, spec: Partial<PlanSpec>) => Promise<void>>().mockResolvedValue(
+        undefined,
+      );
     const confirmPlanSpecAction = vi.fn().mockResolvedValue(undefined);
     render(
       <StepperShell
-        saveDraftAction={noopSave}
+        saveDraftAction={saveDraftAction}
         confirmPlanSpecAction={confirmPlanSpecAction}
         initialDraft={{
           step: 6,
@@ -153,6 +163,16 @@ describe("StepperShell", () => {
     fireEvent.click(finish);
     await waitFor(() => {
       expect(confirmPlanSpecAction).toHaveBeenCalledTimes(1);
+    });
+    // The final answers are persisted before promote. The server action
+    // enriches the draft with preferenceScores; the shell forwards the spec.
+    const [step, finalSpec] = saveDraftAction.mock.calls[0]!;
+    expect(step).toBe(6);
+    expect(finalSpec.goal).toBe("strength");
+    expect(finalSpec.sessionDurationMinutes).toBe(60);
+    // On success the wizard navigates to the plan view.
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledWith("/plan");
     });
   });
 

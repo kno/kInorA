@@ -3,7 +3,16 @@ import type { PlanSpec } from "@kinora/contracts";
 import {
   submitDraft,
   promotePlanSpec,
+  enrichDraftSpec,
+  isSpecComplete,
 } from "../plan-draft-client";
+
+const fakeScores = {
+  strength: 0.9,
+  hypertrophy: 0.6,
+  endurance: 0.2,
+  mobility: 0.3,
+};
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -50,6 +59,55 @@ describe("submitDraft", () => {
     const result = await submitDraft(1, {}, undefined, { fetchImpl });
     expect(result.kind).toBe("error");
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("isSpecComplete", () => {
+  it("is true only when every required field is present", () => {
+    expect(
+      isSpecComplete({
+        goal: "strength",
+        location: "gym",
+        daysPerWeek: 3,
+        sessionDurationMinutes: 60,
+        equipment: [],
+        limitations: [],
+      }),
+    ).toBe(true);
+  });
+
+  it("is false when a required field is missing", () => {
+    expect(
+      isSpecComplete({ goal: "strength", location: "gym", daysPerWeek: 3 }),
+    ).toBe(false);
+  });
+});
+
+describe("enrichDraftSpec", () => {
+  it("adds derived preferenceScores and confirmed:false when complete", () => {
+    const derive = vi.fn().mockReturnValue(fakeScores);
+    const out = enrichDraftSpec(
+      {
+        goal: "strength",
+        location: "gym",
+        daysPerWeek: 3,
+        sessionDurationMinutes: 60,
+        equipment: ["barbell"],
+        limitations: [],
+      },
+      derive,
+    );
+    expect(out.preferenceScores).toEqual(fakeScores);
+    expect(out.confirmed).toBe(false);
+    expect(derive).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes an incomplete spec through unchanged without deriving", () => {
+    const derive = vi.fn();
+    const input = { goal: "strength" as const, location: "gym" as const };
+    const out = enrichDraftSpec(input, derive);
+    expect(out).toBe(input);
+    expect(derive).not.toHaveBeenCalled();
   });
 });
 
