@@ -201,7 +201,12 @@ export class GoogleProvider implements OidcProvider {
   /** Discovered OIDC configuration (discovery runs once, lazily). */
   private discovered?: Configuration;
 
-  constructor(private readonly config: GoogleProviderConfig) {}
+  /** Resolved redirect URI — exposed for testing and diagnostic logging. */
+  readonly redirectUri: string;
+
+  constructor(private readonly config: GoogleProviderConfig) {
+    this.redirectUri = config.redirectUri;
+  }
 
   private async ensureDiscovered(): Promise<Configuration> {
     if (this.discovered) {
@@ -275,11 +280,38 @@ export class GoogleProvider implements OidcProvider {
 }
 
 /**
+ * Derive the social-login OAuth callback URI from the application's public
+ * origin. Returns `undefined` when `origin` is falsy (so callers can gate
+ * on the result without additional null checks).
+ *
+ * The derived path is `<origin>/callback/social`, matching the web router's
+ * social-callback route. A single trailing slash on `origin` is stripped to
+ * avoid double-slash URIs.
+ *
+ * This URI must match what is registered in the Google Cloud Console.
+ */
+export function buildSocialRedirectUri(origin: string | undefined): string | undefined {
+  if (!origin) {
+    return undefined;
+  }
+  return `${origin.replace(/\/$/, "")}/callback/social`;
+}
+
+/**
  * Build a provider registry from environment variables.
  *
  * Google is registered only when its env vars are present (a missing provider
  * is simply not registered, so requesting it raises {@link UnknownProviderError}
  * rather than crashing startup). New providers are additive config entries.
+ *
+ * The Google redirect URI is resolved in priority order:
+ *   1. `GOOGLE_REDIRECT_URI` — explicit override (useful when the Google
+ *      Console path differs from `/callback/social`)
+ *   2. Derived from `WEB_PUBLIC_ORIGIN` as `<origin>/callback/social`
+ *
+ * Only `WEB_PUBLIC_ORIGIN`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET`
+ * are required for a working Google OAuth setup; `GOOGLE_REDIRECT_URI` is
+ * optional and only needed to override the derived URI.
  */
 export function createProvidersFromEnv(env: NodeJS.ProcessEnv = process.env): ProviderRegistry {
   const registry = new ProviderRegistry();
@@ -287,7 +319,7 @@ export function createProvidersFromEnv(env: NodeJS.ProcessEnv = process.env): Pr
   const googleClientId = env.GOOGLE_CLIENT_ID;
   const googleClientSecret = env.GOOGLE_CLIENT_SECRET;
   const googleRedirectUri =
-    env.GOOGLE_REDIRECT_URI ?? env.OIDC_REDIRECT_URI;
+    env.GOOGLE_REDIRECT_URI ?? buildSocialRedirectUri(env.WEB_PUBLIC_ORIGIN);
 
   if (googleClientId && googleClientSecret && googleRedirectUri) {
     registry.register(

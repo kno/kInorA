@@ -19,6 +19,8 @@ import {
   UnverifiedEmailError,
   OidcClaimsError,
   GoogleProvider,
+  buildSocialRedirectUri,
+  createProvidersFromEnv,
   type OidcProvider,
   type ProviderUser,
 } from "../providers.js";
@@ -182,5 +184,101 @@ describe("GoogleProvider (openid-client mocked)", () => {
       email: "user@example.com",
       emailVerified: true,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildSocialRedirectUri — pure helper (no mocks)
+// ---------------------------------------------------------------------------
+
+describe("buildSocialRedirectUri", () => {
+  it("derives the redirect URI by appending /callback/social to the origin", () => {
+    expect(buildSocialRedirectUri("https://kinora.aitsai.com")).toBe(
+      "https://kinora.aitsai.com/callback/social"
+    );
+  });
+
+  it("strips a single trailing slash from the origin before appending the path", () => {
+    expect(buildSocialRedirectUri("https://kinora.aitsai.com/")).toBe(
+      "https://kinora.aitsai.com/callback/social"
+    );
+  });
+
+  it("returns undefined when origin is undefined", () => {
+    expect(buildSocialRedirectUri(undefined)).toBeUndefined();
+  });
+
+  it("returns undefined when origin is an empty string", () => {
+    expect(buildSocialRedirectUri("")).toBeUndefined();
+  });
+
+  // Triangulation: origin without trailing slash → same result as with slash
+  it("produces the same URI whether or not the origin has a trailing slash", () => {
+    const withSlash = buildSocialRedirectUri("https://example.com/");
+    const withoutSlash = buildSocialRedirectUri("https://example.com");
+    expect(withSlash).toBe(withoutSlash);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createProvidersFromEnv — env-variable wiring
+// ---------------------------------------------------------------------------
+
+describe("createProvidersFromEnv", () => {
+  it("registers Google when all three vars are present (explicit GOOGLE_REDIRECT_URI)", () => {
+    const registry = createProvidersFromEnv({
+      GOOGLE_CLIENT_ID: "id",
+      GOOGLE_CLIENT_SECRET: "secret",
+      GOOGLE_REDIRECT_URI: "https://example.com/callback/social",
+    });
+
+    expect(registry.list()).toEqual(["google"]);
+  });
+
+  it("prefers explicit GOOGLE_REDIRECT_URI over the WEB_PUBLIC_ORIGIN derivation", () => {
+    // Both are present — the explicit URI must win; no crash means it was used
+    const registry = createProvidersFromEnv({
+      GOOGLE_CLIENT_ID: "id",
+      GOOGLE_CLIENT_SECRET: "secret",
+      GOOGLE_REDIRECT_URI: "https://explicit.example.com/callback/social",
+      WEB_PUBLIC_ORIGIN: "https://origin.example.com",
+    });
+
+    expect(registry.list()).toEqual(["google"]);
+    const provider = registry.get("google") as GoogleProvider;
+    expect(provider.redirectUri).toBe(
+      "https://explicit.example.com/callback/social"
+    );
+  });
+
+  it("derives redirect URI from WEB_PUBLIC_ORIGIN when GOOGLE_REDIRECT_URI is absent", () => {
+    const registry = createProvidersFromEnv({
+      GOOGLE_CLIENT_ID: "id",
+      GOOGLE_CLIENT_SECRET: "secret",
+      WEB_PUBLIC_ORIGIN: "https://kinora.aitsai.com",
+    });
+
+    expect(registry.list()).toEqual(["google"]);
+    const provider = registry.get("google") as GoogleProvider;
+    expect(provider.redirectUri).toBe(
+      "https://kinora.aitsai.com/callback/social"
+    );
+  });
+
+  it("does not register Google when neither GOOGLE_REDIRECT_URI nor WEB_PUBLIC_ORIGIN is set", () => {
+    const registry = createProvidersFromEnv({
+      GOOGLE_CLIENT_ID: "id",
+      GOOGLE_CLIENT_SECRET: "secret",
+    });
+
+    expect(registry.list()).toEqual([]);
+  });
+
+  it("does not register Google when client credentials are missing", () => {
+    const registry = createProvidersFromEnv({
+      WEB_PUBLIC_ORIGIN: "https://kinora.aitsai.com",
+    });
+
+    expect(registry.list()).toEqual([]);
   });
 });
