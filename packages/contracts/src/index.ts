@@ -16,13 +16,26 @@ export type PlanGoal = "strength" | "hypertrophy" | "fat_loss" | "general_fitnes
 
 export type TrainingLocation = "home" | "gym" | "outdoor";
 
+export interface PlanLimitation {
+  text: string;
+  isWarning: boolean;
+}
+
+export interface PlanPreferenceScores {
+  strength: number;
+  hypertrophy: number;
+  endurance: number;
+  mobility: number;
+}
+
 export interface PlanSpec {
   goal: PlanGoal;
   daysPerWeek: number;
   sessionDurationMinutes: number;
   location: TrainingLocation;
   equipment: string[];
-  limitations: string[];
+  limitations: PlanLimitation[];
+  preferenceScores: PlanPreferenceScores;
   confirmed: boolean;
 }
 
