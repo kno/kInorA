@@ -1,10 +1,10 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import type { PlanSpec } from "@kinora/contracts";
+import { derivePreferenceScores } from "@kinora/domain/plan";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
-import { promotePlanSpec, submitDraft } from "./plan-draft-client";
+import { enrichDraftSpec, promotePlanSpec, submitDraft } from "./plan-draft-client";
 
 /**
  * Server Actions for the create-plan wizard.
@@ -26,18 +26,23 @@ export async function saveDraftAction(
   spec: Partial<PlanSpec>,
 ): Promise<void> {
   const token = await sessionToken();
-  const result = await submitDraft(step, spec, token);
+  const enriched = enrichDraftSpec(spec, derivePreferenceScores);
+  const result = await submitDraft(step, enriched, token);
   if (result.kind === "error") {
     throw new Error(result.message);
   }
 }
 
-/** Promote the draft to a confirmed PlanSpec, then redirect to the plan view. */
+/**
+ * Promote the draft to a confirmed PlanSpec. Throws on failure so the client
+ * surfaces it; on success the client navigates to the plan view. Navigation is
+ * client-side (router.push) rather than a server `redirect()` so the call works
+ * from a plain onClick handler, not only inside a `<form action>`.
+ */
 export async function confirmPlanSpecAction(): Promise<void> {
   const token = await sessionToken();
   const result = await promotePlanSpec(token);
   if (result.kind === "error") {
     throw new Error(result.message);
   }
-  redirect("/plan");
 }

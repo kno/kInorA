@@ -8,7 +8,55 @@
  *
  * Mirrors the `submitLogin` pattern (login/submit-login.ts).
  */
-import type { PlanSpec } from "@kinora/contracts";
+import type { PlanPreferenceScores, PlanSpec } from "@kinora/contracts";
+
+/** True when every required PlanSpec field is present (equipment/limitations may be empty). */
+export function isSpecComplete(spec: Partial<PlanSpec>): boolean {
+  return (
+    spec.goal != null &&
+    spec.location != null &&
+    spec.daysPerWeek != null &&
+    spec.sessionDurationMinutes != null &&
+    spec.equipment != null &&
+    spec.limitations != null
+  );
+}
+
+type DeriveFn = (
+  spec: Pick<
+    PlanSpec,
+    "goal" | "daysPerWeek" | "sessionDurationMinutes" | "location" | "equipment" | "limitations"
+  >,
+) => PlanPreferenceScores;
+
+/**
+ * Enrich a draft spec with the derived `preferenceScores` and `confirmed:false`
+ * when (and only when) every required field is present, so the API's PlanSpec
+ * boundary accepts the draft before promote. The promote endpoint re-derives
+ * the scores as the source of truth. Incomplete specs pass through unchanged.
+ *
+ * `derive` is injected so this stays framework-free and unit-testable; the
+ * server action passes `@kinora/domain`'s `derivePreferenceScores`.
+ */
+export function enrichDraftSpec(
+  spec: Partial<PlanSpec>,
+  derive: DeriveFn,
+): Partial<PlanSpec> {
+  if (!isSpecComplete(spec)) return spec;
+  const base = {
+    goal: spec.goal!,
+    daysPerWeek: spec.daysPerWeek!,
+    sessionDurationMinutes: spec.sessionDurationMinutes!,
+    location: spec.location!,
+    equipment: spec.equipment ?? [],
+    limitations: spec.limitations ?? [],
+  };
+  return {
+    ...base,
+    preferenceScores: derive(base),
+    confirmed: false,
+  };
+}
 
 export function apiBaseUrl(): string {
   return process.env.API_BASE_URL ?? "http://localhost:4000";

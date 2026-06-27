@@ -127,6 +127,9 @@ importers:
       '@kinora/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@kinora/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@serwist/next':
         specifier: 9.5.11
         version: 9.5.11(next@16.2.9(@playwright/test@1.61.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react@19.2.7)(typescript@5.8.3)

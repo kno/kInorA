@@ -10,6 +10,10 @@
       "development": "./src/index.ts",
       "types": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./plan": {
+      "types": "./src/plan/index.ts",
+      "default": "./dist/plan/index.js"
     }
   },
   "scripts": {

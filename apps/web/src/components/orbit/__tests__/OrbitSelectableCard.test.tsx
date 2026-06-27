@@ -52,6 +52,13 @@ describe("OrbitSelectableCard", () => {
     expect(onSelect).toHaveBeenCalledTimes(2);
   });
 
+  it("ignores keys other than Enter/Space", () => {
+    const onSelect = vi.fn();
+    render(<OrbitSelectableCard label="Other" onSelect={onSelect} />);
+    fireEvent.keyDown(screen.getByRole("button", { name: /Other/ }), { key: "a" });
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
   it("does not call onSelect and marks aria-disabled when disabled", () => {
     const onSelect = vi.fn();
     render(
