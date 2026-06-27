@@ -162,6 +162,41 @@ describe("apiBaseUrl default fallback", () => {
 });
 
 describe("GET route handler", () => {
+  it("uses x-forwarded-host/proto origin for redirect when request.url host is localhost", async () => {
+    const { GET } = await import("../route");
+
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(fakeJsonResponse({ jsonValue: { token: "prod-tok" } }));
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = fetchImpl;
+
+    try {
+      const request = {
+        url: "http://localhost:3000/callback/social?code=c&state=s",
+        nextUrl: { searchParams: new URLSearchParams({ code: "c", state: "s" }) },
+        headers: {
+          get: (name: string) => {
+            const map: Record<string, string> = {
+              "x-forwarded-host": "kinora.aitsai.com",
+              "x-forwarded-proto": "https",
+            };
+            return map[name.toLowerCase()] ?? null;
+          },
+        },
+      } as never;
+
+      const res = await GET(request);
+      expect(res.status).toBe(303);
+      const location = res.headers.get("location") ?? "";
+      // Must redirect to the public domain, NOT localhost
+      expect(location).toMatch(/^https:\/\/kinora\.aitsai\.com/);
+      expect(location).not.toContain("localhost");
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
   it("extracts searchParams from the request and delegates to proxySocialCallback", async () => {
     const { GET } = await import("../route");
 
@@ -175,6 +210,7 @@ describe("GET route handler", () => {
       const request = {
         url: "http://localhost:3000/callback/social?code=c&state=s",
         nextUrl: { searchParams: new URLSearchParams({ code: "c", state: "s" }) },
+        headers: { get: () => null },
       } as never;
 
       const res = await GET(request);
@@ -198,6 +234,7 @@ describe("GET route handler", () => {
       const request = {
         url: "http://localhost:3000/callback/social",
         nextUrl: { searchParams: new URLSearchParams() },
+        headers: { get: () => null },
       } as never;
 
       const res = await GET(request);
