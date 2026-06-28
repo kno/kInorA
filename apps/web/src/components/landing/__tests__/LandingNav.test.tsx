@@ -28,6 +28,7 @@ const clientProps = {
   loginLabel: "Log in",
   signupLabel: "Start free",
   menuAriaLabel: "Open menu",
+  navAriaLabel: "Principal",
 };
 
 // Helper: render the hook-bearing client component safely via React.createElement
@@ -58,6 +59,14 @@ describe("LandingNavClient", () => {
     expect(renderClient()).toContain("kInorA");
   });
 
+  it("renders the Orbit logo SVG mark in the brand (not a CSS dot span)", () => {
+    // The nav brand must use OrbitLogoIcon (SVG) — kin-landing-nav__logo class,
+    // not the kin-landing-nav__dot span which applies background/border-radius to SVG.
+    const html = renderClient();
+    expect(html).toContain("kin-landing-nav__logo");
+    expect(html).not.toContain("kin-landing-nav__dot");
+  });
+
   it("renders all navigation links", () => {
     const html = renderClient();
     expect(html).toContain("Product");
@@ -82,6 +91,24 @@ describe("LandingNavClient", () => {
 
   it("renders the mobile menu nav with a stable id", () => {
     expect(renderClient()).toContain('id="kin-nav-mobile-menu"');
+  });
+
+  it("uses navAriaLabel prop as the <nav> landmark aria-label (not hardcoded)", () => {
+    // The <nav> element must use the navAriaLabel prop — previously hardcoded "Principal"
+    // breaking i18n. This asserts the attribute is driven by the prop.
+    const html = renderClient({ ...clientProps, navAriaLabel: "Navegación principal" });
+    expect(html).toContain('aria-label="Navegación principal"');
+  });
+
+  it("nav landmark aria-label is distinct from the hamburger button aria-label", () => {
+    // Confirm each accessible name comes from its own prop.
+    const html = renderClient({
+      ...clientProps,
+      navAriaLabel: "Nav landmark",
+      menuAriaLabel: "Toggle menu",
+    });
+    expect(html).toContain('aria-label="Nav landmark"');
+    expect(html).toContain('aria-label="Toggle menu"');
   });
 
   it("renders nav links with Spanish anchor hrefs", () => {

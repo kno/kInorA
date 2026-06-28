@@ -203,6 +203,12 @@ a {
   flex: none;
 }
 
+/* Orbit logo SVG mark in nav/footer brand — no background/border-radius override */
+.kin-landing-nav__logo {
+  flex: none;
+  display: block;
+}
+
 .kin-landing-nav__links {
   display: flex;
   gap: 4px;
@@ -919,7 +925,8 @@ a {
   .kin-landing-footer__grid {
     grid-template-columns: 1fr;
   }
-  .kin-landing-nav__actions .kin-btn--ghost {
+  /* Hide login link only — keep the sign-up accent CTA visible */
+  .kin-landing-nav__actions .kin-landing-nav__login {
     display: none;
   }
 }
@@ -1381,12 +1388,6 @@ a {
     grid-template-columns: 1fr;
   }
   .kin-landing-strength-img {
-    display: none;
-  }
-}
-
-@media (max-width: 480px) {
-  .kin-landing-nav__actions .kin-btn--ghost.kin-landing-nav__login {
     display: none;
   }
 }

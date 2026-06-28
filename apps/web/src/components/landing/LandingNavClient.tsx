@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { OrbitLogoIcon } from "@/components/icons";
 
 /** Returns true when the page has scrolled past the frost threshold. */
 export function shouldFrost(scrollY: number): boolean {
@@ -12,6 +13,8 @@ interface LandingNavClientProps {
   loginLabel: string;
   signupLabel: string;
   menuAriaLabel: string;
+  /** aria-label for the <nav> landmark. Comes from i18n (nav_aria_label). */
+  navAriaLabel: string;
 }
 
 export function LandingNavClient({
@@ -20,6 +23,7 @@ export function LandingNavClient({
   loginLabel,
   signupLabel,
   menuAriaLabel,
+  navAriaLabel,
 }: LandingNavClientProps) {
   const [frosted, setFrosted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -40,14 +44,14 @@ export function LandingNavClient({
     >
       <div className="kin-landing-nav__inner">
         <a className="kin-landing-nav__brand" href="#top" aria-label="kInorA home">
-          <span className="kin-landing-nav__dot" aria-hidden="true"></span>
+          <OrbitLogoIcon size={24} decorative className="kin-landing-nav__logo" />
           {brandLabel}
         </a>
 
         <nav
           id={menuId}
           className={`kin-landing-nav__links${menuOpen ? " kin-landing-nav__links--open" : ""}`}
-          aria-label="Principal"
+          aria-label={navAriaLabel}
         >
           {links.map((link) => (
             <a key={link.href} href={link.href} onClick={() => setMenuOpen(false)}>
