@@ -1,5 +1,6 @@
 import { KinIcon } from "@/components/icons";
 import { OrbitCard, OrbitSectionHeader } from "@/components/orbit";
+import { Reveal } from "./Reveal";
 
 /** Monthly price in EUR for the Pro tier. */
 const PRO_PRICE_EUR = "9";
@@ -11,6 +12,8 @@ interface PricingTier {
   desc: string;
   amount: string;
   per: string;
+  /** Destination href for the CTA link. Driven by data, never by copy text. */
+  href: string;
   features: { label: string; muted?: boolean }[];
   cta: string;
   pro?: boolean;
@@ -26,6 +29,7 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
       amount: messages.pricing_free_amount ?? "",
       per: messages.pricing_free_per ?? "",
       currency: "€",
+      href: "/sign-up",
       features: [
         { label: messages.pricing_free_feat1 ?? "" },
         { label: messages.pricing_free_feat2 ?? "" },
@@ -41,6 +45,7 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
       per: messages.pricing_pro_per ?? "",
       currency: "€",
       pro: true,
+      href: "/sign-up",
       badge: messages.pricing_pro_badge ?? "",
       features: [
         { label: messages.pricing_pro_feat1 ?? "" },
@@ -56,6 +61,7 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
       amount: TEAM_PRICE_EUR,
       per: messages.pricing_team_per ?? "",
       currency: "€",
+      href: "#",
       features: [
         { label: messages.pricing_team_feat1 ?? "" },
         { label: messages.pricing_team_feat2 ?? "" },
@@ -67,28 +73,32 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
   ];
 
   return (
-    <section className="kin-landing-section" id="pricing">
+    <section className="kin-landing-section" id="precios">
       <div className="kin-landing-wrap">
-        <OrbitSectionHeader className="kin-landing-head" eyebrow={messages.pricing_eyebrow ?? ""} title={messages.pricing_title ?? ""} description={messages.pricing_subtitle ?? ""} />
+        <Reveal>
+          <OrbitSectionHeader className="kin-landing-head" eyebrow={messages.pricing_eyebrow ?? ""} title={messages.pricing_title ?? ""} description={messages.pricing_subtitle ?? ""} />
+        </Reveal>
         <div className="kin-landing-prices">
           {tiers.map((tier, index) => (
-            <OrbitCard
-              className={`kin-landing-price${tier.pro ? " kin-landing-price--pro" : ""}`}
-              key={`${tier.tier || "tier"}-${index}`}
-              tone={tier.pro ? "surface-2" : "surface"}
-            >
-              {tier.badge && (
-                <span className="pill pill-active kin-landing-price__badge">{tier.badge}</span>
-              )}
-              <div>
-                <div className="kin-landing-price__tier">{tier.tier}</div>
-                <div className="kin-landing-price__desc">{tier.desc}</div>
-              </div>
-              <div className="kin-landing-price__amount">
-                {tier.currency && <span className="kin-landing-price__cur">{tier.currency}</span>}
-                <span className="kin-landing-price__num">{tier.amount}</span>
-                <span className="kin-landing-price__per">{tier.per}</span>
-              </div>
+            <Reveal key={`${tier.tier || "tier"}-${index}`}>
+              <OrbitCard
+                className={`kin-landing-price${tier.pro ? " kin-landing-price--pro" : ""}`}
+                tone={tier.pro ? "surface-2" : "surface"}
+              >
+                {tier.badge && (
+                  <span className="kin-landing-pill kin-landing-pill--active kin-landing-price__badge">
+                    {tier.badge}
+                  </span>
+                )}
+                <div>
+                  <div className="kin-landing-price__tier">{tier.tier}</div>
+                  <div className="kin-landing-price__desc">{tier.desc}</div>
+                </div>
+                <div className="kin-landing-price__amount">
+                  {tier.currency && <span className="kin-landing-price__cur">{tier.currency}</span>}
+                  <span className="kin-landing-price__num">{tier.amount}</span>
+                  <span className="kin-landing-price__per">{tier.per}</span>
+                </div>
                 <ul>
                   {tier.features.map((feat) => (
                     <li key={`${tier.tier}-${feat.label}`} className={feat.muted ? "kin-muted" : ""}>
@@ -97,10 +107,11 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
                     </li>
                   ))}
                 </ul>
-                <a className={`kin-btn${tier.pro ? " kin-btn--accent" : ""}`} href={tier.pro ? "/sign-up" : tier.cta === "Talk to sales" ? "#" : "/sign-up"}>
+                <a className={`kin-btn${tier.pro ? " kin-btn--accent" : ""}`} href={tier.href}>
                   {tier.cta}
                 </a>
-            </OrbitCard>
+              </OrbitCard>
+            </Reveal>
           ))}
         </div>
       </div>

@@ -151,12 +151,29 @@ export const kinIconRegistry = {
       <path d="M10 9L15 12L10 15Z" fill="currentColor" stroke="none" />
     </>
   )),
+  chart: createOpenDesignIcon("Chart", ({ className }) => (
+    <>
+      <path className={className} d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" strokeLinecap="round"/>
+      <circle className={className} cx="4" cy="12" r="2"/>
+      <circle className={className} cx="12" cy="6" r="2"/>
+      <circle className={className} cx="20" cy="14" r="2"/>
+    </>
+  )),
+  checkbox: createOpenDesignIcon("Checkbox", ({ className }) => (
+    <>
+      <rect className={className} x="3" y="3" width="18" height="18" rx="4"/>
+      <path className={className} d="M8 13l2.5 2.5L16 9" strokeLinecap="round" strokeLinejoin="round"/>
+    </>
+  )),
   orbitLogo: createOpenDesignIcon("Orbit logo", ({ className }) => (
     <>
       <circle className={className} cx="24" cy="24" r="15" strokeWidth="4" />
       <path className={className} d="M24 9A15 15 0 0 1 38 19" strokeWidth="4" />
       <circle cx="24" cy="9" r="5.5" fill="currentColor" stroke="none" />
     </>
+  )),
+  menu: createOpenDesignIcon("Menu", ({ className }) => (
+    <path className={className} d="M4 7h16M4 12h16M4 17h16" />
   )),
 } as const;
 

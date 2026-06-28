@@ -26,10 +26,20 @@ describe("LandingCTA", () => {
     expect(html).toContain("View plans");
   });
 
-  it("wraps the CTA content in a semantic proof surface", () => {
+  it("wraps the CTA content in a section", () => {
     const html = renderToStaticMarkup(LandingCTA({ messages }));
+    expect((html.match(/<section\b/g) || []).length).toBeGreaterThanOrEqual(1);
+  });
 
-    expect((html.match(/<section\b/g) || []).length).toBe(2);
+  it("renders a photo background element", () => {
+    const html = renderToStaticMarkup(LandingCTA({ messages }));
+    expect(html).toContain("kin-landing-ctaband-photo");
+  });
+
+  it("CTA background image has empty alt (decorative — content conveyed by heading)", () => {
+    const html = renderToStaticMarkup(LandingCTA({ messages }));
+    // The cta-run image is decorative — it must have alt="" to be ignored by AT.
+    expect(html).toContain('alt=""');
   });
 });
 

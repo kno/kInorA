@@ -46,6 +46,33 @@ describe("LandingFeatures", () => {
 
     expect(html).toContain("<header");
   });
+
+  it("renders the strength-split section with eyebrow, heading, and description", () => {
+    const messages_with_strength = {
+      ...messages,
+      features_strength_eyebrow: "Real progression",
+      features_strength_title: "Every kilo lifted, recorded",
+      features_strength_desc: "kInorA tracks your loads and adjusts progression intelligently.",
+      strength_img_alt: "Chalked hands gripping a barbell before a lift",
+    };
+    const html = renderToStaticMarkup(LandingFeatures({ messages: messages_with_strength }));
+    expect(html).toContain("Real progression");
+    expect(html).toContain("Every kilo lifted, recorded");
+    expect(html).toContain("kInorA tracks your loads");
+  });
+
+  it("renders the strength image with alt text", () => {
+    const messages_with_strength = {
+      ...messages,
+      features_strength_eyebrow: "Real progression",
+      features_strength_title: "Every kilo lifted, recorded",
+      features_strength_desc: "Track loads intelligently.",
+      strength_img_alt: "Chalked hands gripping a barbell before a lift",
+    };
+    const html = renderToStaticMarkup(LandingFeatures({ messages: messages_with_strength }));
+    expect(html).toContain('src="/landing/strength-1120.webp"');
+    expect(html).toContain("Chalked hands gripping a barbell");
+  });
 });
 
 function findFirst(
