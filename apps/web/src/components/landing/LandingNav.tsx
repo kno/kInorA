@@ -1,9 +1,11 @@
+import { OrbitLogoIcon } from "@/components/icons";
+
 export function LandingNav({ messages }: { messages: Record<string, string> }) {
   return (
     <header className="kin-landing-nav" role="banner">
       <div className="kin-landing-nav__inner">
         <a className="kin-landing-nav__brand" href="#top" aria-label="kInorA home">
-          <span className="kin-landing-nav__dot" aria-hidden="true"></span>
+          <OrbitLogoIcon size={16} decorative className="kin-landing-nav__logo" />
           {messages.title}
         </a>
         <nav className="kin-landing-nav__links" aria-label="Main">

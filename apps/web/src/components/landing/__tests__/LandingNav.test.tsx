@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 import { LandingNav } from "../LandingNav";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
@@ -40,6 +41,31 @@ describe("LandingNav", () => {
     const el = LandingNav({ messages: defaultMessages });
     const anyButton = findFirst(el, (n) => n.type === "button");
     expect(anyButton).toBeUndefined();
+  });
+
+  it("renders the Orbit logo SVG in the brand link, not a bare dot span", () => {
+    // The nav brand link must show the Orbit logo icon (an SVG) rather than
+    // the empty coloured dot span that was used as a placeholder.
+    const html = renderToStaticMarkup(LandingNav({ messages: defaultMessages }));
+
+    // Must contain an SVG (the OrbitLogoIcon)
+    expect(html).toContain("<svg");
+
+    // Must NOT contain an empty span used as the old CSS dot placeholder
+    expect(html).not.toContain('<span class="kin-landing-nav__dot"');
+  });
+
+  it("keeps the brand link accessible with the correct href and aria-label", () => {
+    const html = renderToStaticMarkup(LandingNav({ messages: defaultMessages }));
+    expect(html).toContain('href="#top"');
+    expect(html).toContain('aria-label="kInorA home"');
+  });
+
+  it("uses shared decorative icon defaults (focusable=false) for the Orbit logo", () => {
+    const html = renderToStaticMarkup(LandingNav({ messages: defaultMessages }));
+    // OrbitLogoIcon is decorative — the brand link text provides the accessible name
+    expect(html).toContain('focusable="false"');
+    expect(html).toContain('aria-hidden="true"');
   });
 });
 
