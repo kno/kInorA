@@ -14,9 +14,9 @@ export function LandingFooter({ messages }: { messages: Record<string, string> }
           </div>
           <div className="kin-landing-footer__col">
             <h4>{messages.footer_product}</h4>
-            <a href="#product">{messages.footer_features}</a>
-            <a href="#how-it-works">{messages.footer_how_it_works}</a>
-            <a href="#pricing">{messages.footer_pricing}</a>
+            <a href="#producto">{messages.footer_features}</a>
+            <a href="#como">{messages.footer_how_it_works}</a>
+            <a href="#precios">{messages.footer_pricing}</a>
             <a href="#">{messages.footer_download}</a>
           </div>
           <div className="kin-landing-footer__col">
