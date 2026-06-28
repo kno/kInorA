@@ -9,8 +9,8 @@ export interface TrustItem {
 }
 
 const trustIconMap: Record<string, KinIconName> = {
-  chart: "stats",
-  check: "check",
+  chart: "chart",
+  check: "checkbox",
   clock: "clock",
   mic: "mic",
 };
