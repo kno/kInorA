@@ -7,12 +7,12 @@ export function LandingNav({ messages }: { messages: Record<string, string> }) {
           {messages.title}
         </a>
         <nav className="kin-landing-nav__links" aria-label="Main">
-          <a href="#product">{messages.nav_products}</a>
-          <a href="#how-it-works">{messages.nav_how_it_works}</a>
-          <a href="#pricing">{messages.nav_pricing}</a>
+          <a href="#producto">{messages.nav_products}</a>
+          <a href="#como">{messages.nav_how_it_works}</a>
+          <a href="#precios">{messages.nav_pricing}</a>
         </nav>
         <div className="kin-landing-nav__actions">
-          <a className="kin-btn kin-btn--ghost" href="/login">
+          <a className="kin-btn kin-btn--ghost kin-landing-nav__login" href="/login">
             {messages.nav_login}
           </a>
           <a className="kin-btn kin-btn--accent" href="/sign-up">
