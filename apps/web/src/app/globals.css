@@ -164,11 +164,9 @@ a {
   top: 0;
   z-index: 50;
   border-bottom: 1px solid transparent;
-  background: color-mix(in oklab, var(--bg) 78%, transparent);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  backdrop-filter: blur(14px) saturate(140%);
+  background: transparent;
+  transition: background .25s ease, border-color .25s ease, backdrop-filter .25s ease, padding .25s ease;
   padding-block: 18px;
-  transition: padding .25s ease;
 }
 
 .kin-landing-nav__inner {
@@ -1168,6 +1166,9 @@ a {
 
 /* Nav scroll-frost state */
 .kin-landing-nav--scrolled {
+  background: color-mix(in oklab, var(--bg) 72%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
   border-bottom-color: var(--border);
   padding-block: 10px;
 }
@@ -1388,4 +1389,20 @@ a {
   .kin-landing-nav__actions .kin-btn--ghost.kin-landing-nav__login {
     display: none;
   }
+}
+
+/* Mobile nav menu open state */
+.kin-landing-nav__links--open {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: color-mix(in oklab, var(--bg) 92%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+  border-bottom: 1px solid var(--border);
+  padding: 8px var(--sp-4) 16px;
+  gap: 4px;
 }
