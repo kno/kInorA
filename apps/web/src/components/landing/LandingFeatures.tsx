@@ -1,6 +1,7 @@
 import type { KinIconName } from "@/components/icons";
 import { KinIcon } from "@/components/icons";
 import { OrbitCard, OrbitSectionHeader } from "@/components/orbit";
+import { Reveal } from "./Reveal";
 
 export function LandingFeatures({ messages }: { messages: Record<string, string> }) {
   const features = [
@@ -29,19 +30,23 @@ export function LandingFeatures({ messages }: { messages: Record<string, string>
   return (
     <section className="kin-landing-section kin-landing-section--no-top">
       <div className="kin-landing-wrap">
-        <OrbitSectionHeader className="kin-landing-head" eyebrow={messages.features_eyebrow ?? ""} title={messages.features_title ?? ""} description={messages.features_subtitle ?? ""} />
+        <Reveal>
+          <OrbitSectionHeader className="kin-landing-head" eyebrow={messages.features_eyebrow ?? ""} title={messages.features_title ?? ""} description={messages.features_subtitle ?? ""} />
+        </Reveal>
         <div className="kin-landing-features">
           {features.map((f) => (
-            <OrbitCard className="kin-landing-feature" key={f.icon}>
-              <span className="kin-landing-feature__icon">
-                <KinIcon name={f.icon} size={21} />
-              </span>
-              <h3>{f.title}</h3>
-              <p>{f.desc}</p>
-            </OrbitCard>
+            <Reveal key={f.icon}>
+              <OrbitCard className="kin-landing-feature">
+                <span className="kin-landing-feature__icon">
+                  <KinIcon name={f.icon} size={21} />
+                </span>
+                <h3>{f.title}</h3>
+                <p>{f.desc}</p>
+              </OrbitCard>
+            </Reveal>
           ))}
         </div>
-        <div className="kin-landing-strength-split">
+        <Reveal className="kin-landing-strength-split">
           <div>
             <OrbitSectionHeader
               className="kin-landing-head"
@@ -64,7 +69,7 @@ export function LandingFeatures({ messages }: { messages: Record<string, string>
               />
             </picture>
           </div>
-        </div>
+        </Reveal>
       </div>
     </section>
   );
