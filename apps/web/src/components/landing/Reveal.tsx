@@ -5,7 +5,7 @@ import type * as React from "react";
 interface RevealProps {
   children: React.ReactNode;
   className?: string;
-  as?: keyof JSX.IntrinsicElements;
+  as?: keyof React.JSX.IntrinsicElements;
 }
 
 export function Reveal({ children, className, as: Tag = "div" }: RevealProps) {
