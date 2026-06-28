@@ -1,45 +1,142 @@
+import React from "react";
 import type { ReactElement, ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { LandingNav } from "../LandingNav";
+import { LandingNavClient, shouldFrost } from "../LandingNavClient";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
 
-describe("LandingNav", () => {
-  const defaultMessages = {
-    title: "kInorA",
-    nav_products: "Product",
-    nav_how_it_works: "How it works",
-    nav_pricing: "Pricing",
-    nav_login: "Log in",
-    nav_signup: "Start free",
-  };
+const defaultMessages = {
+  title: "kInorA",
+  nav_products: "Product",
+  nav_how_it_works: "How it works",
+  nav_pricing: "Pricing",
+  nav_login: "Log in",
+  nav_signup: "Start free",
+  nav_menu_label: "Open menu",
+};
 
+const clientProps = {
+  brandLabel: "kInorA",
+  links: [
+    { href: "#producto", label: "Product" },
+    { href: "#como", label: "How it works" },
+    { href: "#precios", label: "Pricing" },
+  ],
+  loginLabel: "Log in",
+  signupLabel: "Start free",
+  menuAriaLabel: "Open menu",
+};
+
+// Helper: render the hook-bearing client component safely via React.createElement
+function renderClient(props = clientProps): string {
+  return renderToStaticMarkup(React.createElement(LandingNavClient, props));
+}
+
+describe("shouldFrost (pure helper)", () => {
+  it("returns false when scrollY is 0", () => {
+    expect(shouldFrost(0)).toBe(false);
+  });
+
+  it("returns false when scrollY is exactly 16", () => {
+    expect(shouldFrost(16)).toBe(false);
+  });
+
+  it("returns true when scrollY is 17", () => {
+    expect(shouldFrost(17)).toBe(true);
+  });
+
+  it("returns true for large scrollY values", () => {
+    expect(shouldFrost(1000)).toBe(true);
+  });
+});
+
+describe("LandingNavClient", () => {
   it("renders the brand name", () => {
-    const el = LandingNav({ messages: defaultMessages });
-    expect(textOf(el)).toContain("kInorA");
+    expect(renderClient()).toContain("kInorA");
   });
 
   it("renders all navigation links", () => {
-    const el = LandingNav({ messages: defaultMessages });
-    expect(textOf(el)).toContain("Product");
-    expect(textOf(el)).toContain("How it works");
-    expect(textOf(el)).toContain("Pricing");
+    const html = renderClient();
+    expect(html).toContain("Product");
+    expect(html).toContain("How it works");
+    expect(html).toContain("Pricing");
   });
 
-  it("renders login and sign-up CTA buttons", () => {
-    const el = LandingNav({ messages: defaultMessages });
-    // Two action buttons: Log in (ghost) and Start free (primary)
-    expect(textOf(el)).toContain("Log in");
-    expect(textOf(el)).toContain("Start free");
+  it("renders the login and sign-up actions", () => {
+    const html = renderClient();
+    expect(html).toContain("Log in");
+    expect(html).toContain("Start free");
   });
 
-  it("does not render a non-functional hamburger menu button", () => {
-    // The mobile menu is out of scope for this slice; a dead button with no
-    // handler / aria-expanded was removed to avoid an a11y-breaking control.
-    const el = LandingNav({ messages: defaultMessages });
-    const anyButton = findFirst(el, (n) => n.type === "button");
-    expect(anyButton).toBeUndefined();
+  it("renders the hamburger toggle button with accessible attributes", () => {
+    const html = renderClient();
+    expect(html).toContain('aria-label="Open menu"');
+    expect(html).toContain("kin-landing-nav__toggle");
+    // aria-expanded is false when menu is closed (SSR initial state)
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('aria-controls="kin-nav-mobile-menu"');
+  });
+
+  it("renders the mobile menu nav with a stable id", () => {
+    expect(renderClient()).toContain('id="kin-nav-mobile-menu"');
+  });
+
+  it("renders nav links with Spanish anchor hrefs", () => {
+    const html = renderClient();
+    expect(html).toContain('href="#producto"');
+    expect(html).toContain('href="#como"');
+    expect(html).toContain('href="#precios"');
+  });
+
+  it("renders login link to /login and signup link to /sign-up", () => {
+    const html = renderClient();
+    expect(html).toContain('href="/login"');
+    expect(html).toContain('href="/sign-up"');
+  });
+
+  it("renders as a <header> role=banner landmark", () => {
+    const html = renderClient();
+    expect(html).toContain("<header");
+    expect(html).toContain('role="banner"');
+  });
+
+  it("does not apply scrolled class in SSR initial state", () => {
+    // frosted defaults false in useState — scrolled modifier absent on first render
+    expect(renderClient()).not.toContain("kin-landing-nav--scrolled");
+  });
+});
+
+describe("LandingNav (server wrapper)", () => {
+  it("renders brand name from messages", () => {
+    const html = renderToStaticMarkup(LandingNav({ messages: defaultMessages }));
+    expect(html).toContain("kInorA");
+  });
+
+  it("renders navigation labels from messages", () => {
+    const html = renderToStaticMarkup(LandingNav({ messages: defaultMessages }));
+    expect(html).toContain("Product");
+    expect(html).toContain("How it works");
+    expect(html).toContain("Pricing");
+  });
+
+  it("renders login and sign-up labels from messages", () => {
+    const html = renderToStaticMarkup(LandingNav({ messages: defaultMessages }));
+    expect(html).toContain("Log in");
+    expect(html).toContain("Start free");
+  });
+
+  it("passes menu aria label from messages to client component", () => {
+    const html = renderToStaticMarkup(LandingNav({ messages: defaultMessages }));
+    expect(html).toContain("Open menu");
+  });
+
+  it("renders the hamburger button", () => {
+    const html = renderToStaticMarkup(LandingNav({ messages: defaultMessages }));
+    expect(html).toContain("<button");
+    expect(html).toContain("kin-landing-nav__toggle");
   });
 });
 
