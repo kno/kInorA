@@ -207,6 +207,8 @@ a {
 .kin-landing-nav__logo {
   flex: none;
   display: block;
+  /* Ring/arc render in muted gray; the ball is the lime accent (set on the SVG). */
+  color: var(--muted);
 }
 
 .kin-landing-nav__links {

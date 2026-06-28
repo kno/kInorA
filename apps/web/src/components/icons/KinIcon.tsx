@@ -169,7 +169,8 @@ export const kinIconRegistry = {
     <>
       <circle className={className} cx="24" cy="24" r="15" strokeWidth="4" />
       <path className={className} d="M24 9A15 15 0 0 1 38 19" strokeWidth="4" />
-      <circle cx="24" cy="9" r="5.5" fill="currentColor" stroke="none" />
+      {/* Brand mark: the orbiting ball is always the lime accent, not currentColor. */}
+      <circle cx="24" cy="9" r="5.5" fill="var(--accent)" stroke="none" />
     </>
   )),
   menu: createOpenDesignIcon("Menu", ({ className }) => (

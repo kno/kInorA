@@ -18,6 +18,14 @@ describe("KinIcon", () => {
     expect(html).toContain('aria-hidden="true"');
   });
 
+  it("renders the orbit logo brand mark with a lime accent ball", () => {
+    const html = renderToStaticMarkup(<KinIcon name="orbitLogo" />);
+
+    // The orbiting ball is always the brand accent, not currentColor, so the
+    // logo shows a green ball regardless of the surrounding text color.
+    expect(html).toContain('fill="var(--accent)"');
+  });
+
   it("renders a semantic title when the icon is not decorative", () => {
     const html = renderToStaticMarkup(
       <KinIcon name="plan" decorative={false} title="Training plan" />,
