@@ -1,5 +1,6 @@
 import { KinIcon } from "@/components/icons";
 import { OrbitProgress } from "@/components/orbit";
+import { Reveal } from "./Reveal";
 
 export function LandingHero({ messages }: { messages: Record<string, string> }) {
   const days = [
@@ -15,7 +16,7 @@ export function LandingHero({ messages }: { messages: Record<string, string> }) 
   return (
     <section className="kin-landing-hero" id="producto">
       <div className="kin-landing-wrap kin-landing-hero__grid">
-        <div className="hero-copy">
+        <Reveal className="hero-copy">
           <span className="kin-landing-head__eyebrow">
             <KinIcon name="target" size={14} />
             {messages.hero_eyebrow}
@@ -48,9 +49,9 @@ export function LandingHero({ messages }: { messages: Record<string, string> }) 
               {messages.hero_meta_iosandroid}
             </span>
           </div>
-        </div>
+        </Reveal>
 
-        <div className="kin-landing-hero__visual">
+        <Reveal className="kin-landing-hero__visual">
           <div className="kin-landing-hero__glow" aria-hidden="true"></div>
           <div
             className="kin-landing-phone"
@@ -122,7 +123,7 @@ export function LandingHero({ messages }: { messages: Record<string, string> }) 
               </div>
             </div>
           </div>
-        </div>
+        </Reveal>
       </div>
     </section>
   );

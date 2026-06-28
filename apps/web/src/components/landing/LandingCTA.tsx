@@ -1,8 +1,10 @@
+import { Reveal } from "./Reveal";
+
 export function LandingCTA({ messages }: { messages: Record<string, string> }) {
   return (
     <section className="kin-landing-section">
       <div className="kin-landing-wrap">
-        <div className="kin-landing-ctaband-photo">
+        <Reveal className="kin-landing-ctaband-photo">
           <div className="kin-landing-cta-bg" aria-hidden="true">
             <picture>
               <source media="(min-width: 801px)" srcSet="/landing/cta-run-1600.webp" width={1600} height={901} />
@@ -22,7 +24,7 @@ export function LandingCTA({ messages }: { messages: Record<string, string> }) {
               </a>
             </div>
           </div>
-        </div>
+        </Reveal>
       </div>
     </section>
   );

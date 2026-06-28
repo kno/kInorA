@@ -1,6 +1,7 @@
 import type { KinIconName } from "@/components/icons";
 import { KinIcon } from "@/components/icons";
 import { OrbitCard, OrbitSectionHeader } from "@/components/orbit";
+import { Reveal } from "./Reveal";
 
 export function LandingHowItWorks({ messages }: { messages: Record<string, string> }) {
   const steps = [
@@ -27,9 +28,11 @@ export function LandingHowItWorks({ messages }: { messages: Record<string, strin
   return (
     <section className="kin-landing-section" id="como">
       <div className="kin-landing-wrap">
-        <OrbitSectionHeader className="kin-landing-head" eyebrow={messages.hiw_eyebrow ?? ""} title={messages.hiw_title ?? ""} description={messages.hiw_subtitle ?? ""} />
+        <Reveal>
+          <OrbitSectionHeader className="kin-landing-head" eyebrow={messages.hiw_eyebrow ?? ""} title={messages.hiw_title ?? ""} description={messages.hiw_subtitle ?? ""} />
+        </Reveal>
         <div className="kin-landing-como-split">
-          <div className="kin-landing-como-img">
+          <Reveal className="kin-landing-como-img">
             <picture>
               <source media="(min-width: 761px)" srcSet="/landing/hero-squat-1120.webp" width={1120} height={1400} />
               <source media="(max-width: 760px)" srcSet="/landing/hero-squat-640.webp" width={640} height={800} />
@@ -42,15 +45,17 @@ export function LandingHowItWorks({ messages }: { messages: Record<string, strin
                 height={1400}
               />
             </picture>
-          </div>
+          </Reveal>
           <div className="kin-landing-steps">
             {steps.map((step) => (
-              <OrbitCard className="kin-landing-step" key={step.num}>
-                <div className="kin-landing-step__num"><b>{step.num}</b></div>
-                <h3>{step.title}</h3>
-                <p>{step.desc}</p>
-                <KinIcon className="kin-landing-step__icon" name={step.icon} size={24} />
-              </OrbitCard>
+              <Reveal key={step.num}>
+                <OrbitCard className="kin-landing-step">
+                  <div className="kin-landing-step__num"><b>{step.num}</b></div>
+                  <h3>{step.title}</h3>
+                  <p>{step.desc}</p>
+                  <KinIcon className="kin-landing-step__icon" name={step.icon} size={24} />
+                </OrbitCard>
+              </Reveal>
             ))}
           </div>
         </div>

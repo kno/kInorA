@@ -1,5 +1,6 @@
 import { KinIcon } from "@/components/icons";
 import { OrbitCard, OrbitSectionHeader } from "@/components/orbit";
+import { Reveal } from "./Reveal";
 
 /** Monthly price in EUR for the Pro tier. */
 const PRO_PRICE_EUR = "9";
@@ -69,12 +70,14 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
   return (
     <section className="kin-landing-section" id="precios">
       <div className="kin-landing-wrap">
-        <OrbitSectionHeader className="kin-landing-head" eyebrow={messages.pricing_eyebrow ?? ""} title={messages.pricing_title ?? ""} description={messages.pricing_subtitle ?? ""} />
+        <Reveal>
+          <OrbitSectionHeader className="kin-landing-head" eyebrow={messages.pricing_eyebrow ?? ""} title={messages.pricing_title ?? ""} description={messages.pricing_subtitle ?? ""} />
+        </Reveal>
         <div className="kin-landing-prices">
           {tiers.map((tier, index) => (
+            <Reveal key={`${tier.tier || "tier"}-${index}`}>
             <OrbitCard
               className={`kin-landing-price${tier.pro ? " kin-landing-price--pro" : ""}`}
-              key={`${tier.tier || "tier"}-${index}`}
               tone={tier.pro ? "surface-2" : "surface"}
             >
               {tier.badge && (
@@ -101,6 +104,7 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
                   {tier.cta}
                 </a>
             </OrbitCard>
+            </Reveal>
           ))}
         </div>
       </div>
