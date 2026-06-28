@@ -58,6 +58,15 @@ describe("LandingFooter", () => {
     const iconCount = (html.match(/focusable="false"/g) || []).length;
     expect(iconCount).toBe(4);
   });
+
+  it("brand logo uses kin-landing-nav__logo class (not kin-landing-nav__dot which breaks SVG)", () => {
+    // kin-landing-nav__dot applies background/border-radius/width/height which clobbers SVG rendering.
+    // The OrbitLogoIcon should use kin-landing-nav__logo (clean SVG class) instead.
+    const html = renderToStaticMarkup(LandingFooter({ messages }));
+    expect(html).toContain("kin-landing-nav__logo");
+    // The dot class must not be applied to the SVG brand mark
+    expect(html).not.toContain("kin-landing-nav__dot");
+  });
 });
 
 function findFirst(
