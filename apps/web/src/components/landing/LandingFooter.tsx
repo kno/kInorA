@@ -7,7 +7,7 @@ export function LandingFooter({ messages }: { messages: Record<string, string> }
         <div className="kin-landing-footer__grid">
           <div className="kin-landing-footer__brand">
             <a className="kin-landing-nav__brand" href="#top">
-              <OrbitLogoIcon size={16} decorative className="kin-landing-nav__dot" />
+              <OrbitLogoIcon size={16} decorative className="kin-landing-nav__logo" />
               kInorA
             </a>
             <p>{messages.footer_tagline}</p>

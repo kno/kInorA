@@ -5,9 +5,12 @@ import { LandingCinemaBand } from "../LandingCinemaBand";
 describe("LandingCinemaBand", () => {
   const alt = "Atleta tomando un descanso activo";
 
-  it("renders with role=presentation", () => {
+  it("does NOT use role=presentation on the wrapper (descriptive alt already provides context)", () => {
+    // role="presentation" on a wrapper while the child img has a meaningful alt is misleading:
+    // the meaningful alt conveys content but role=presentation tells AT to ignore it.
+    // Drop the role; let the descriptive alt do its job.
     const html = renderToStaticMarkup(<LandingCinemaBand alt={alt} />);
-    expect(html).toContain('role="presentation"');
+    expect(html).not.toContain('role="presentation"');
   });
 
   it("renders a picture element with two sources", () => {
