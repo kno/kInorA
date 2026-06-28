@@ -156,6 +156,25 @@ Implementation notes:
 - Use the proof consumers from this change as the first reference: AppShell navigation plus landing hero, features, how-it-works, pricing, CTA, footer, and trust sections.
 - Keep reuse visual only. Do not attach new product behavior, network flows, analytics, or feature logic while applying these primitives.
 
+## OpenDesign → component sync flow
+
+When new OpenDesign screens are delivered, follow this translation sequence:
+
+1. **Refresh tokens** — diff `docs/open-design/kinora/assets/kinora.css` against `apps/web/src/app/globals.css`. Apply updated or new CSS custom properties only; do not copy raw HTML or layout rules verbatim. (See implementation guardrail at line ~141 above.)
+2. **Update the reference screen** — replace or add the relevant file under `docs/open-design/kinora/screens/` (e.g. `web-landing.html`) with the new snapshot.
+3. **Sync `.kin-landing-*` sections** — if the landing redesign introduces new or changed section classes, translate them into component-level JSX and CSS classes within `LandingHero`, `LandingFeatures`, `LandingHowItWorks`, `LandingPricing`, `LandingCTA`, `LandingFooter`, and `LandingNav`, following the project's existing component patterns.
+4. **Verify visual output** — run the manual visual-verification checklist below after every sync.
+
+### Pending: NEW landing designs (blocked — deferred)
+
+The redesigned landing screens for kInorA have **not yet been delivered** by Open Design. Until the updated `screens/web-landing.html` artifact is available in the Open Design project `kiNorA`, the following work is **blocked and must not be attempted**:
+
+- Re-syncing landing-page tokens from `docs/open-design/kinora/assets/kinora.css` → `globals.css`
+- Updating the reference screen `docs/open-design/kinora/screens/web-landing.html`
+- Restyling or restructuring the `.kin-landing-*` sections to match the new designs
+
+When the new designs are delivered, follow the sync flow above. Record the delivery event and any token or layout changes in SDD before applying.
+
 ## Deviation record rules
 
 When a future screen cannot mirror the Open Design reference exactly, record the deviation in the active SDD design/apply artifacts with:
