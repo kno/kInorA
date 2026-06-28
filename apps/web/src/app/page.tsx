@@ -10,6 +10,7 @@ import { LandingFeatures } from "@/components/landing/LandingFeatures";
 import { LandingPricing } from "@/components/landing/LandingPricing";
 import { LandingCTA } from "@/components/landing/LandingCTA";
 import { LandingFooter } from "@/components/landing/LandingFooter";
+import { LandingCinemaBand } from "@/components/landing/LandingCinemaBand";
 
 export default async function HomePage({
   searchParams,
@@ -33,7 +34,7 @@ export default async function HomePage({
   const trustItems: TrustItem[] = [
     { icon: "clock", title: messages.trust_title ?? "", desc: messages.trust_desc_schedule ?? "" },
     { icon: "chart", title: messages.trust_title_level ?? "", desc: messages.trust_desc_level ?? "" },
-    { icon: "check", title: messages.trust_title_equipment ?? "", desc: messages.trust_desc_equipment ?? "" },
+    { icon: "checkbox", title: messages.trust_title_equipment ?? "", desc: messages.trust_desc_equipment ?? "" },
     { icon: "mic", title: messages.trust_title_hands ?? "", desc: messages.trust_desc_hands ?? "" },
   ];
 
@@ -41,6 +42,7 @@ export default async function HomePage({
     <main>
       <LandingNav messages={messages} />
       <LandingHero messages={messages} />
+      <LandingCinemaBand alt={messages.cinema_alt ?? "Atleta tomando un descanso activo"} />
       <LandingTrust items={trustItems} />
       <LandingHowItWorks messages={messages} />
       <LandingFeatures messages={messages} />
