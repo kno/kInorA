@@ -196,13 +196,20 @@ a {
   min-width: var(--tap);
 }
 
+/* Legacy placeholder: keep for footer brand mark (SVG, not a span).
+   Do not add background/border-radius here — those rules would squash an SVG
+   into a coloured blob. Size is controlled by the icon's size prop. */
 .kin-landing-nav__dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: var(--accent);
-  box-shadow: 0 0 14px 1px color-mix(in oklab, var(--accent) 60%, transparent);
   flex: none;
+  color: var(--accent);
+  filter: drop-shadow(0 0 6px color-mix(in oklab, var(--accent) 55%, transparent));
+}
+
+/* Nav brand logo — Orbit SVG, replaces the old dot span */
+.kin-landing-nav__logo {
+  flex: none;
+  color: var(--accent);
+  filter: drop-shadow(0 0 6px color-mix(in oklab, var(--accent) 55%, transparent));
 }
 
 .kin-landing-nav__links {
