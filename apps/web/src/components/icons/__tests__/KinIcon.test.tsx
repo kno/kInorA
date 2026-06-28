@@ -68,4 +68,9 @@ describe("KinIcon", () => {
     expect(kinIconRegistry.user.label).toBe("Profile");
     expect(kinIconRegistry.close.label).toBe("Close");
   });
+
+  it("includes chart and checkbox icons for trust strip", () => {
+    expect(kinIconRegistry.chart.label).toBe("Chart");
+    expect(kinIconRegistry.checkbox.label).toBe("Checkbox");
+  });
 });
