@@ -64,6 +64,34 @@ describe("LandingPricing", () => {
     expect(textOf(el)).toContain("Talk to sales");
   });
 
+  it("Teams CTA links to # regardless of locale (href driven by data, not copy)", () => {
+    // Bug guard: previously keyed off `tier.cta === "Talk to sales"` which breaks
+    // in non-English locales where the copy is "Hablar con ventas".
+    const html = renderToStaticMarkup(LandingPricing({ messages }));
+    // Locate the Teams section and assert its CTA href is "#"
+    const teamsIdx = html.indexOf("Teams");
+    const ctaAfterTeams = html.slice(teamsIdx).match(/href="([^"]+)"/);
+    expect(ctaAfterTeams?.[1]).toBe("#");
+  });
+
+  it("Teams CTA also links to # with Spanish copy (es locale guard)", () => {
+    const esMessages = {
+      ...messages,
+      pricing_team_tier: "Equipos",
+      pricing_team_cta: "Hablar con ventas",
+    };
+    const html = renderToStaticMarkup(LandingPricing({ messages: esMessages }));
+    const teamsIdx = html.indexOf("Equipos");
+    const ctaAfterTeams = html.slice(teamsIdx).match(/href="([^"]+)"/);
+    expect(ctaAfterTeams?.[1]).toBe("#");
+  });
+
+  it("Pro tier badge uses the defined kin-landing-pill classes (not undefined pill/pill-active)", () => {
+    const html = renderToStaticMarkup(LandingPricing({ messages }));
+    expect(html).toContain("kin-landing-pill kin-landing-pill--active");
+    expect(html).not.toContain('"pill pill-active"');
+  });
+
   it("renders the Pro and Team prices", () => {
     const el = LandingPricing({ messages });
     const text = textOf(el);

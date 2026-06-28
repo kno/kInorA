@@ -14,6 +14,7 @@ export function LandingNav({ messages }: { messages: Record<string, string> }) {
       loginLabel={messages.nav_login ?? ""}
       signupLabel={messages.nav_signup ?? ""}
       menuAriaLabel={messages.nav_menu_label ?? "Abrir menú"}
+      navAriaLabel={messages.nav_aria_label ?? "Principal"}
     />
   );
 }
