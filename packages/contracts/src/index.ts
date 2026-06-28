@@ -38,7 +38,7 @@ export interface WorkoutProgram {
   limitationWarnings: string[];
 }
 
-export { WorkoutProgramSchema } from "./workout-program.schema";
+export { WorkoutProgramSchema } from "./workout-program.schema.js";
 
 export interface HealthResponse {
   status: "ok";
