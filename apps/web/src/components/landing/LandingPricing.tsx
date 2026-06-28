@@ -67,7 +67,7 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
   ];
 
   return (
-    <section className="kin-landing-section" id="pricing">
+    <section className="kin-landing-section" id="precios">
       <div className="kin-landing-wrap">
         <OrbitSectionHeader className="kin-landing-head" eyebrow={messages.pricing_eyebrow ?? ""} title={messages.pricing_title ?? ""} description={messages.pricing_subtitle ?? ""} />
         <div className="kin-landing-prices">
