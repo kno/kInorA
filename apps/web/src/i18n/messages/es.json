@@ -8,6 +8,8 @@
   "nav_pricing": "Precios",
   "nav_login": "Iniciar sesión",
   "nav_signup": "Empezar gratis",
+  "nav_menu_label": "Abrir menú",
+  "nav_aria_label": "Principal",
 
   "hero_eyebrow": "Entrenador con IA",
   "hero_title": "Tu entrenador personal, ",

@@ -172,6 +172,9 @@ export const kinIconRegistry = {
       <circle cx="24" cy="9" r="5.5" fill="currentColor" stroke="none" />
     </>
   )),
+  menu: createOpenDesignIcon("Menu", ({ className }) => (
+    <path className={className} d="M4 7h16M4 12h16M4 17h16" />
+  )),
 } as const;
 
 export type KinIconName = keyof typeof kinIconRegistry;

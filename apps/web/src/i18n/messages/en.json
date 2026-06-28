@@ -8,6 +8,8 @@
   "nav_pricing": "Pricing",
   "nav_login": "Log in",
   "nav_signup": "Start free",
+  "nav_menu_label": "Open menu",
+  "nav_aria_label": "Main",
 
   "hero_eyebrow": "AI Coach",
   "hero_title": "Your personal trainer, ",
