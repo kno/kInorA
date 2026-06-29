@@ -29,8 +29,11 @@ export interface StepperShellProps {
   initialDraft?: InitialDraft;
   /** Persists the current step + spec to the server (POST /plan-specs/drafts). */
   saveDraftAction: (step: number, spec: Partial<PlanSpec>) => Promise<void>;
-  /** Promotes the draft to a confirmed PlanSpec (POST /plan-specs) then redirects. */
-  confirmPlanSpecAction: () => Promise<void>;
+  /**
+   * Promotes the draft to a confirmed PlanSpec and triggers AI generation.
+   * Returns { planId, status } so the shell can navigate to /plan/[planId].
+   */
+  confirmPlanSpecAction: () => Promise<{ planId: string; status: string }>;
 }
 
 const STEP_QUESTIONS = [
@@ -118,12 +121,13 @@ export function StepperShell({
     if (!isSpecComplete()) return;
     setBusy(true);
     try {
-      // Persist the final raw answers, then promote. The server derives
-      // preferenceScores on promote (source of truth); the client never
-      // computes them.
+      // Persist the final raw answers, then promote + confirm. The server
+      // derives preferenceScores on promote (source of truth); the client
+      // never computes them. confirmPlanSpecAction triggers AI generation
+      // and returns the planId for the new generating plan.
       await saveDraftAction(TOTAL_STEPS, spec);
-      await confirmPlanSpecAction();
-      router.push("/plan");
+      const { planId } = await confirmPlanSpecAction();
+      router.push(`/plan/${planId}`);
     } finally {
       setBusy(false);
     }
