@@ -72,10 +72,11 @@ describe("assertNoDiagnosticLanguage — clean programs pass", () => {
 
 // ---------------------------------------------------------------------------
 // Diagnostic language detection — must throw
+// (guard keys on diagnostic PHRASING/ATTRIBUTION, not bare condition nouns)
 // ---------------------------------------------------------------------------
 
-describe("assertNoDiagnosticLanguage — rejects diagnostic patterns in exercise notes", () => {
-  it('throws when exercise notes contain "you have" diagnostic pattern', () => {
+describe("assertNoDiagnosticLanguage — rejects diagnostic attribution phrases", () => {
+  it('throws when exercise notes contain "you have" attribution', () => {
     const program = makeProgram({
       weeklySessions: [
         {
@@ -87,7 +88,7 @@ describe("assertNoDiagnosticLanguage — rejects diagnostic patterns in exercise
               sets: 3,
               reps: "15",
               restSeconds: 45,
-              notes: "Because you have rotator cuff tendinitis, avoid overhead pressing.",
+              notes: "Because you have rotator cuff pain, avoid overhead pressing.",
             },
           ],
         },
@@ -97,7 +98,7 @@ describe("assertNoDiagnosticLanguage — rejects diagnostic patterns in exercise
     expect(() => assertNoDiagnosticLanguage(program)).toThrow();
   });
 
-  it('throws when exercise notes contain "you are diagnosed" pattern', () => {
+  it('throws when exercise notes contain "you are diagnosed with" pattern', () => {
     const program = makeProgram({
       weeklySessions: [
         {
@@ -109,7 +110,7 @@ describe("assertNoDiagnosticLanguage — rejects diagnostic patterns in exercise
               sets: 3,
               reps: "30s",
               restSeconds: 60,
-              notes: "You are diagnosed with lower back syndrome; avoid heavy loads.",
+              notes: "You are diagnosed with lower back issues; avoid heavy loads.",
             },
           ],
         },
@@ -119,14 +120,20 @@ describe("assertNoDiagnosticLanguage — rejects diagnostic patterns in exercise
     expect(() => assertNoDiagnosticLanguage(program)).toThrow();
   });
 
-  it('throws when session title contains "diagnosis" pattern', () => {
+  it('throws when exercise notes contain "diagnosed with" attribution (without "you are")', () => {
     const program = makeProgram({
       weeklySessions: [
         {
           day: 1,
-          title: "Arthritis rehabilitation session",
+          title: "Day 1",
           exercises: [
-            { name: "leg raise", sets: 2, reps: "10", restSeconds: 60 },
+            {
+              name: "leg press",
+              sets: 3,
+              reps: "12",
+              restSeconds: 90,
+              notes: "Because you were diagnosed with hypertension, keep intensity moderate.",
+            },
           ],
         },
       ],
@@ -135,7 +142,7 @@ describe("assertNoDiagnosticLanguage — rejects diagnostic patterns in exercise
     expect(() => assertNoDiagnosticLanguage(program)).toThrow();
   });
 
-  it('throws when substitutionNote contains "condition" diagnostic language', () => {
+  it('throws when substitutionNote contains "your chronic condition" attribution', () => {
     const program = makeProgram({
       weeklySessions: [
         {
@@ -157,10 +164,76 @@ describe("assertNoDiagnosticLanguage — rejects diagnostic patterns in exercise
     expect(() => assertNoDiagnosticLanguage(program)).toThrow();
   });
 
-  it('throws when limitationWarnings contains "you suffer from" pattern', () => {
+  it('throws when limitationWarnings contains "you suffer from" attribution', () => {
     const program = makeProgram({
       limitationWarnings: [
-        "You suffer from degenerative disc disease — avoid heavy compound lifts.",
+        "You suffer from disc issues — avoid heavy compound lifts.",
+      ],
+    });
+
+    expect(() => assertNoDiagnosticLanguage(program)).toThrow();
+  });
+
+  it('throws when notes contain "this indicates" diagnostic attribution', () => {
+    const program = makeProgram({
+      weeklySessions: [
+        {
+          day: 1,
+          title: "Strength Day",
+          exercises: [
+            {
+              name: "deadlift",
+              sets: 3,
+              reps: "5",
+              restSeconds: 180,
+              notes: "This indicates a rotator cuff tear — avoid overhead pressing.",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(() => assertNoDiagnosticLanguage(program)).toThrow();
+  });
+
+  it('throws when notes contain "you may have" hedged diagnosis', () => {
+    const program = makeProgram({
+      weeklySessions: [
+        {
+          day: 1,
+          title: "Day 1",
+          exercises: [
+            {
+              name: "squat",
+              sets: 3,
+              reps: "10",
+              restSeconds: 60,
+              notes: "You may have a herniated disc — reduce load significantly.",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(() => assertNoDiagnosticLanguage(program)).toThrow();
+  });
+
+  it('throws when notes contain "symptoms of" diagnostic attribution', () => {
+    const program = makeProgram({
+      weeklySessions: [
+        {
+          day: 1,
+          title: "Day 1",
+          exercises: [
+            {
+              name: "shoulder press",
+              sets: 3,
+              reps: "10",
+              restSeconds: 60,
+              notes: "Avoid if showing symptoms of rotator cuff impingement.",
+            },
+          ],
+        },
       ],
     });
 
@@ -169,7 +242,7 @@ describe("assertNoDiagnosticLanguage — rejects diagnostic patterns in exercise
 });
 
 describe("assertNoDiagnosticLanguage — case-insensitive matching", () => {
-  it("detects diagnostic patterns regardless of casing", () => {
+  it("detects diagnostic phrases regardless of casing", () => {
     const program = makeProgram({
       weeklySessions: [
         {
@@ -181,7 +254,7 @@ describe("assertNoDiagnosticLanguage — case-insensitive matching", () => {
               sets: 3,
               reps: "5",
               restSeconds: 180,
-              notes: "YOU HAVE herniated disc — keep back neutral.",
+              notes: "YOU HAVE a back injury — keep neutral spine.",
             },
           ],
         },
@@ -192,10 +265,88 @@ describe("assertNoDiagnosticLanguage — case-insensitive matching", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Legit fitness content — must NOT throw (false-positive guard)
+// ---------------------------------------------------------------------------
+
+describe("assertNoDiagnosticLanguage — passes legitimate fitness content without throwing", () => {
+  it("does not throw for a session title mentioning a condition noun without attribution", () => {
+    // "Arthritis rehab" as a session category is common programming vocabulary;
+    // the guard must not block it because there is no attribution phrasing.
+    const program = makeProgram({
+      weeklySessions: [
+        {
+          day: 1,
+          title: "Arthritis-friendly low-impact session",
+          exercises: [
+            { name: "leg raise", sets: 2, reps: "10", restSeconds: 60 },
+          ],
+        },
+      ],
+    });
+
+    expect(() => assertNoDiagnosticLanguage(program)).not.toThrow();
+  });
+
+  it('does not throw for "iliotibial band syndrome" mentioned as a context reference (not attribution)', () => {
+    const program = makeProgram({
+      weeklySessions: [
+        {
+          day: 1,
+          title: "Knee Mobility",
+          exercises: [
+            {
+              name: "lateral band walk",
+              sets: 3,
+              reps: "15",
+              restSeconds: 45,
+              notes: "Modify if you experience iliotibial band syndrome discomfort.",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(() => assertNoDiagnosticLanguage(program)).not.toThrow();
+  });
+
+  it('does not throw for "general metabolic health" — common fitness phrasing', () => {
+    const program = makeProgram({
+      weeklySessions: [
+        {
+          day: 1,
+          title: "Cardio",
+          exercises: [
+            {
+              name: "rowing machine",
+              sets: 1,
+              reps: "20 min",
+              restSeconds: 0,
+              notes: "Great for general metabolic health and cardiovascular conditioning.",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(() => assertNoDiagnosticLanguage(program)).not.toThrow();
+  });
+
+  it("does not throw for professional advisory language in limitationWarnings", () => {
+    const program = makeProgram({
+      limitationWarnings: [
+        "Limitation: lower back pain — Consult a professional before attempting exercises that stress this area.",
+      ],
+    });
+
+    expect(() => assertNoDiagnosticLanguage(program)).not.toThrow();
+  });
+});
+
 describe("assertNoDiagnosticLanguage — error message quality", () => {
   it("error message identifies which string triggered the violation", () => {
     const program = makeProgram({
-      limitationWarnings: ["You have sciatica — avoid long hip flexor stretches."],
+      limitationWarnings: ["You have back pain — avoid long hip flexor stretches."],
     });
 
     let thrownError: unknown;

@@ -3,30 +3,38 @@ import type { WorkoutProgram } from "@kinora/contracts";
 /**
  * Diagnostic language patterns that MUST NOT appear in generated plan output.
  *
- * These patterns identify medical diagnosis language — language that implies
- * the system is diagnosing the user's health condition rather than providing
- * fitness guidance. Each entry is a case-insensitive regex fragment.
+ * The guard keys on diagnostic PHRASING and ATTRIBUTION — language where the
+ * system is telling the user they HAVE or ARE a medical condition. It does NOT
+ * reject bare condition nouns (e.g. "arthritis", "syndrome") because those words
+ * appear legitimately in fitness programming ("arthritis-friendly session",
+ * "iliotibial band syndrome exercises"). Blocking them would cause false positives
+ * that mark valid plans as `failed`.
+ *
+ * The rule of thumb: a pattern is diagnostic when it attributes a condition TO
+ * the user ("you have X", "diagnosed with X", "you suffer from X") or asserts
+ * a clinical finding ("this indicates X", "symptoms of X").
  *
  * Design reference: spec §"No medical diagnosis" requirement.
  */
 const DIAGNOSTIC_PATTERNS: RegExp[] = [
+  // Direct attribution — the most common LLM diagnostic slip
   /you have\b/i,
+  /you may have\b/i,
   /you are diagnosed/i,
+  /you were diagnosed/i,
+  /diagnosed with/i,
   /you suffer from/i,
-  /your condition/i,
+  /suffering from/i,
+
+  // Possessive condition attribution
+  /your condition\b/i,
   /your chronic condition/i,
-  /\barthritis\b/i,
-  /\btendinitis\b/i,
-  /\btendinopathy\b/i,
-  /\bherniated\b/i,
-  /\bdegenerative\b/i,
-  /\bsciatica\b/i,
-  /\bdiabetes\b/i,
-  /\bhypertension\b/i,
-  /\bosteoporosis\b/i,
-  /\bfibromyalgia\b/i,
-  /\bdiagnosis\b/i,
-  /\bsyndrome\b/i,
+  /your diagnosis\b/i,
+
+  // Clinical finding / inference attribution
+  /this indicates\b/i,
+  /this suggests a\b/i,
+  /symptoms of\b/i,
 ];
 
 /**

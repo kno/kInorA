@@ -23,6 +23,12 @@ function buildWarningMessage(limitation: PlanLimitation): string {
  * - Never diagnoses: warnings are advisory suggestions only.
  * - No duplicate warnings: skips any limitation whose generated message
  *   already appears in the existing `limitationWarnings` array.
+ * - `PlanLimitation.isWarning` is intentionally NOT used as a gate.
+ *   The domain layer never hard-blocks regardless of that flag. Every
+ *   limitation — whether `isWarning` is true or false — becomes a
+ *   non-blocking advisory warning. Callers that want to differentiate
+ *   UI rendering may inspect the flag themselves, but generation must
+ *   always produce a plan.
  *
  * @param program     The generated workout program.
  * @param limitations The user's reported limitations from the PlanSpec.
