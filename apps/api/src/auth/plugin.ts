@@ -10,6 +10,38 @@ import { computeTokenHash } from "./session.js";
 import { isValidTokenFormat, isSessionExpired } from "@kinora/domain";
 import type { SessionContext, UserId, TenantId, SessionId } from "@kinora/contracts";
 
+/**
+ * Shared token-string → SessionContext|null resolution logic.
+ *
+ * Used by BOTH the HTTP Bearer-header path (authPlugin onRequest hook) AND
+ * the WebSocket query-param path (wsRoutes preValidation hook) so the validation
+ * chain is IDENTICAL: format check → hash → session lookup → expiry check →
+ * tenant+user resolution.
+ *
+ * This is the ONLY place that performs session validation. Do NOT duplicate
+ * this logic — always call this function.
+ *
+ * @param token  Raw token string (already stripped of "Bearer " prefix)
+ * @param deps   Dependencies: SessionRepository for DB lookup
+ * @returns      Resolved SessionContext on success, null on any failure
+ */
+export async function resolveAuthContextFromToken(
+  token: string,
+  deps: { sessionRepo: Pick<SessionRepository, "findByTokenHash"> }
+): Promise<SessionContext | null> {
+  if (!isValidTokenFormat(token)) return null;
+
+  const tokenHash = computeTokenHash(token);
+  const session = await deps.sessionRepo.findByTokenHash(tokenHash);
+  if (!session || isSessionExpired(session.expiresAt)) return null;
+
+  return {
+    userId: session.userId as UserId,
+    tenantId: session.tenantId as TenantId,
+    sessionId: session.tokenHash as SessionId,
+  };
+}
+
 export interface AuthPluginOptions {
   db: Database;
 }
@@ -30,11 +62,15 @@ const rawPlugin: FastifyPluginAsync<AuthPluginOptions> = async (
   options: AuthPluginOptions
 ) => {
   const sessionRepo = new SessionRepository(options.db);
+  const deps = { sessionRepo };
 
   fastify.decorateRequest("authContext", null);
   fastify.decorateReply("authError", null);
 
   // Session extraction — runs on every request, never blocks.
+  // Reads the Bearer token from the Authorization header only.
+  // WebSocket connections that cannot set headers use the query-param path
+  // in wsRoutes (same resolveAuthContextFromToken — identical validation chain).
   fastify.addHook("onRequest", async (request: FastifyRequest) => {
     const authHeader = request.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -43,23 +79,7 @@ const rawPlugin: FastifyPluginAsync<AuthPluginOptions> = async (
     }
 
     const token = authHeader.slice(7);
-    if (!isValidTokenFormat(token)) {
-      request.authContext = null;
-      return;
-    }
-
-    const tokenHash = computeTokenHash(token);
-    const session = await sessionRepo.findByTokenHash(tokenHash);
-    if (!session || isSessionExpired(session.expiresAt)) {
-      request.authContext = null;
-      return;
-    }
-
-    request.authContext = {
-      userId: session.userId as UserId,
-      tenantId: session.tenantId as TenantId,
-      sessionId: session.tokenHash as SessionId,
-    };
+    request.authContext = await resolveAuthContextFromToken(token, deps);
   });
 
   // Expose reply.authError as a response header for observability.

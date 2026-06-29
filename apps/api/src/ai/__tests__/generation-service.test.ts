@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { PlanGenerationService } from "../generation-service.js";
 import { MockPlanGenerator } from "../mock-generator.js";
 import type { WorkoutProgram } from "@kinora/contracts";
+import type { WsRegistry } from "../../ws/registry.js";
 
 // --- Fixtures ---
 
@@ -38,6 +39,18 @@ const mockProgram: WorkoutProgram = {
 };
 
 // --- Mock factories ---
+
+/**
+ * Build a mock WsRegistry.
+ * notify is a spy that captures all calls.
+ */
+function buildMockRegistry(): WsRegistry {
+  return {
+    register: vi.fn(),
+    unregister: vi.fn(),
+    notify: vi.fn(),
+  } as unknown as WsRegistry;
+}
 
 /**
  * Build a mock PlanSpecRepository.
@@ -274,6 +287,144 @@ describe("PlanGenerationService", () => {
 
       // Flush — must not throw
       await vi.runAllTimersAsync();
+
+      vi.useRealTimers();
+    });
+  });
+
+  describe("WsRegistry.notify — generation service emits after markReady and markFailed", () => {
+    it("calls registry.notify with correct userId and { planId, status: 'ready' } on success", async () => {
+      vi.useFakeTimers();
+
+      const specRow = { specJson: confirmedSpec };
+      const specRepo = buildMockSpecRepo(specRow);
+      const planRepo = buildMockPlanRepo();
+      const registry = buildMockRegistry();
+      vi.spyOn(generator, "generate").mockResolvedValue(mockProgram);
+
+      const service = new PlanGenerationService(
+        generator,
+        specRepo as never,
+        planRepo as never,
+        registry
+      );
+
+      await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
+      await vi.runAllTimersAsync();
+
+      expect(registry.notify).toHaveBeenCalledTimes(1);
+      expect(registry.notify).toHaveBeenCalledWith(USER_A, { planId: PLAN_ID, status: "ready" });
+
+      vi.useRealTimers();
+    });
+
+    it("calls registry.notify with correct userId and { planId, status: 'failed' } on failure", async () => {
+      vi.useFakeTimers();
+
+      const specRow = { specJson: confirmedSpec };
+      const specRepo = buildMockSpecRepo(specRow);
+      const planRepo = buildMockPlanRepo();
+      const registry = buildMockRegistry();
+      vi.spyOn(generator, "generate").mockRejectedValue(new Error("LLM failure"));
+
+      const service = new PlanGenerationService(
+        generator,
+        specRepo as never,
+        planRepo as never,
+        registry
+      );
+
+      await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
+      await vi.runAllTimersAsync();
+
+      expect(registry.notify).toHaveBeenCalledTimes(1);
+      expect(registry.notify).toHaveBeenCalledWith(USER_A, { planId: PLAN_ID, status: "failed" });
+
+      vi.useRealTimers();
+    });
+
+    it("does NOT throw when registry.notify throws (fire-and-forget-safe)", async () => {
+      vi.useFakeTimers();
+
+      const specRow = { specJson: confirmedSpec };
+      const specRepo = buildMockSpecRepo(specRow);
+      const planRepo = buildMockPlanRepo();
+      const registry = buildMockRegistry();
+      (registry.notify as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        throw new Error("notify failure");
+      });
+      vi.spyOn(generator, "generate").mockResolvedValue(mockProgram);
+
+      const service = new PlanGenerationService(
+        generator,
+        specRepo as never,
+        planRepo as never,
+        registry
+      );
+
+      // startGeneration must resolve without throwing
+      await expect(service.startGeneration(TENANT_A, USER_A, SPEC_ID)).resolves.toBeDefined();
+      // Flushing the background task must not throw
+      await vi.runAllTimersAsync();
+
+      vi.useRealTimers();
+    });
+
+    it("works without a registry (registry is optional — no-op when not provided)", async () => {
+      vi.useFakeTimers();
+
+      const specRow = { specJson: confirmedSpec };
+      const specRepo = buildMockSpecRepo(specRow);
+      const planRepo = buildMockPlanRepo();
+      vi.spyOn(generator, "generate").mockResolvedValue(mockProgram);
+
+      // No registry passed → should not throw
+      const service = new PlanGenerationService(
+        generator,
+        specRepo as never,
+        planRepo as never
+        // registry omitted
+      );
+
+      await expect(service.startGeneration(TENANT_A, USER_A, SPEC_ID)).resolves.toBeDefined();
+      await vi.runAllTimersAsync();
+      // planRepo.markReady still called as normal
+      expect(planRepo.markReady).toHaveBeenCalledTimes(1);
+
+      vi.useRealTimers();
+    });
+
+    it("does NOT notify 'ready' when markReady returns undefined (0 rows — plan stays generating)", async () => {
+      // Fix 2: a false-ready notification would tell the client the plan is ready
+      // when the DB was NOT updated (tenant mismatch / race). Guard: only notify
+      // 'ready' when markReady returns a truthy result (row updated).
+      vi.useFakeTimers();
+
+      const specRow = { specJson: confirmedSpec };
+      const specRepo = buildMockSpecRepo(specRow);
+      const planRepo = buildMockPlanRepo();
+      const registry = buildMockRegistry();
+
+      // markReady returns undefined → 0 rows updated (stuck-generating scenario)
+      planRepo.markReady.mockResolvedValue(undefined);
+      vi.spyOn(generator, "generate").mockResolvedValue(mockProgram);
+
+      const service = new PlanGenerationService(
+        generator,
+        specRepo as never,
+        planRepo as never,
+        registry
+      );
+
+      await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
+      await vi.runAllTimersAsync();
+
+      // markReady was called
+      expect(planRepo.markReady).toHaveBeenCalledTimes(1);
+      // notify must NOT be called with status "ready" — the DB wasn't updated
+      expect(registry.notify).not.toHaveBeenCalledWith(USER_A, { planId: PLAN_ID, status: "ready" });
+      // notify also must not have been called at all (no other status applies here)
+      expect(registry.notify).not.toHaveBeenCalled();
 
       vi.useRealTimers();
     });
