@@ -90,6 +90,29 @@ describe("MockPlanGenerator", () => {
     });
   });
 
+  describe("day numbering", () => {
+    it("first session has day === 1", async () => {
+      const generator = new MockPlanGenerator();
+      const program = await generator.generate(baseSpec);
+      expect(program.weeklySessions[0]?.day).toBe(1);
+    });
+
+    it("days are sequential 1..daysPerWeek for a 4-day spec", async () => {
+      const generator = new MockPlanGenerator();
+      const program = await generator.generate(baseSpec);
+      const days = program.weeklySessions.map((s) => s.day);
+      expect(days).toEqual([1, 2, 3, 4]);
+    });
+
+    it("days are sequential 1..daysPerWeek for a 3-day spec", async () => {
+      const generator = new MockPlanGenerator();
+      const spec: PlanSpec = { ...baseSpec, daysPerWeek: 3 };
+      const program = await generator.generate(spec);
+      const days = program.weeklySessions.map((s) => s.day);
+      expect(days).toEqual([1, 2, 3]);
+    });
+  });
+
   describe("no network", () => {
     it("resolves synchronously (no real async I/O) within 10ms", async () => {
       const generator = new MockPlanGenerator();

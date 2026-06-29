@@ -21,6 +21,7 @@ export function mask(text: string, limitations: string[]): string {
 
   let result = text;
   for (const term of limitations) {
+    if (term.length === 0) continue; // empty term would corrupt the entire string
     // Use split+join for a safe literal string replacement (no regex escaping needed)
     result = result.split(term).join("[REDACTED]");
   }

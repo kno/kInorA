@@ -117,6 +117,33 @@ describe("buildPlanPrompt", () => {
     });
   });
 
+  describe("preferenceScores inclusion", () => {
+    it("includes all four preference score labels and their values in the prompt", () => {
+      const prompt = buildPlanPrompt(baseSpec);
+      // baseSpec has: strength=0.3, hypertrophy=0.9, endurance=0.2, mobility=0.4
+      expect(prompt).toContain("strength");
+      expect(prompt).toContain("hypertrophy");
+      expect(prompt).toContain("endurance");
+      expect(prompt).toContain("mobility");
+      expect(prompt).toContain("0.3");
+      expect(prompt).toContain("0.9");
+      expect(prompt).toContain("0.2");
+      expect(prompt).toContain("0.4");
+    });
+
+    it("reflects different preferenceScores in the prompt", () => {
+      const spec: PlanSpec = {
+        ...baseSpec,
+        preferenceScores: { strength: 0.9, hypertrophy: 0.1, endurance: 0.5, mobility: 0.7 },
+      };
+      const prompt = buildPlanPrompt(spec);
+      expect(prompt).toContain("0.9");
+      expect(prompt).toContain("0.1");
+      expect(prompt).toContain("0.5");
+      expect(prompt).toContain("0.7");
+    });
+  });
+
   describe("do-not-diagnose instruction", () => {
     it('contains an explicit "do not diagnose" instruction', () => {
       const prompt = buildPlanPrompt(baseSpec);
