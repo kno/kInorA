@@ -245,26 +245,11 @@ jobs:
             echo "ERROR: API_BASE_URL secret is required for the web→API proxy (e.g. https://kinora.aitsai.com/api)."
             errors=$((errors + 1))
           fi
-          if [ -z "${{ secrets.OPENROUTER_API_KEY }}" ]; then
-            echo "ERROR: OPENROUTER_API_KEY secret is required for AI plan generation."
-            errors=$((errors + 1))
-          fi
-          if [ -z "${{ secrets.OPENROUTER_MODEL }}" ]; then
-            echo "ERROR: OPENROUTER_MODEL secret is required (must support JSON-schema structured output, e.g. openai/gpt-4o-mini; models that only support function-calling will fail)."
-            errors=$((errors + 1))
-          fi
-          if [ -z "${{ secrets.LANGFUSE_PUBLIC_KEY }}" ]; then
-            echo "ERROR: LANGFUSE_PUBLIC_KEY secret is required for Langfuse tracing."
-            errors=$((errors + 1))
-          fi
-          if [ -z "${{ secrets.LANGFUSE_SECRET_KEY }}" ]; then
-            echo "ERROR: LANGFUSE_SECRET_KEY secret is required for Langfuse tracing."
-            errors=$((errors + 1))
-          fi
-          if [ -z "${{ secrets.LANGFUSE_HOST }}" ]; then
-            echo "ERROR: LANGFUSE_HOST secret is required for Langfuse tracing (e.g. https://cloud.langfuse.com)."
-            errors=$((errors + 1))
-          fi
+          # NOTE: OPENROUTER_API_KEY, OPENROUTER_MODEL, LANGFUSE_PUBLIC_KEY,
+          # LANGFUSE_SECRET_KEY, LANGFUSE_HOST are NOT GitHub secrets. They are
+          # provided via a persistent .env file on the VPS ($VPS_DEPLOY_DIR/.env)
+          # managed directly by the server operator. See .env.example and
+          # apps/api/README.md for the required variables.
           if [ "$errors" -gt 0 ]; then
             echo "One or more required secrets are missing. Configure them in GitHub repository settings."
             exit 1
@@ -299,18 +284,14 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
-          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
-          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
-          LANGFUSE_HOST: ${{ secrets.LANGFUSE_HOST }}
         run: |
           # Build safe shell env script with printf %q to prevent injection.
-          ENV_SCRIPT=$(printf 'export GHCR_IMAGE=%q\nexport IMAGE_TAG=%q\nexport GHCR_USER=%q\nexport GHCR_TOKEN=%q\nexport VPS_DEPLOY_DIR=%q\nexport GOOGLE_CLIENT_ID=%q\nexport GOOGLE_CLIENT_SECRET=%q\nexport API_BASE_URL=%q\nexport WEB_PUBLIC_ORIGIN=%q\nexport OPENROUTER_API_KEY=%q\nexport OPENROUTER_MODEL=%q\nexport LANGFUSE_PUBLIC_KEY=%q\nexport LANGFUSE_SECRET_KEY=%q\nexport LANGFUSE_HOST=%q\n' \
+          # OPENROUTER_* and LANGFUSE_* are NOT included here — they are
+          # sourced on the VPS from the operator-managed $VPS_DEPLOY_DIR/.env.
+          ENV_SCRIPT=$(printf 'export GHCR_IMAGE=%q\nexport IMAGE_TAG=%q\nexport GHCR_USER=%q\nexport GHCR_TOKEN=%q\nexport VPS_DEPLOY_DIR=%q\nexport GOOGLE_CLIENT_ID=%q\nexport GOOGLE_CLIENT_SECRET=%q\nexport API_BASE_URL=%q\nexport WEB_PUBLIC_ORIGIN=%q\n' \
             "$GHCR_IMAGE" "$IMAGE_TAG" "$GHCR_USER" "$GHCR_TOKEN" "$VPS_DEPLOY_DIR" \
             "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$API_BASE_URL" \
-            "$WEB_PUBLIC_ORIGIN" "$OPENROUTER_API_KEY" "$OPENROUTER_MODEL" \
-            "$LANGFUSE_PUBLIC_KEY" "$LANGFUSE_SECRET_KEY" "$LANGFUSE_HOST")
+            "$WEB_PUBLIC_ORIGIN")
           ENV_PAYLOAD=$(printf '%s' "$ENV_SCRIPT" | base64 -w0)
 
           ssh -i ~/.ssh/kinora_vps -p "$VPS_PORT" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
