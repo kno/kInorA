@@ -12,11 +12,12 @@ import type { PlanGenerationService } from "../ai/generation-service.js";
 export interface PlanRoutesOptions {
   db: Database;
   /**
-   * Injectable generation service — defaults to constructing a new instance
-   * backed by the real OpenRouterPlanGenerator in production.
-   * Pass a mock in tests to avoid LLM calls.
+   * Generation service — REQUIRED. Provide a real PlanGenerationService in
+   * production (wired in buildApp) or a MockPlanGenerator-backed instance in tests.
+   * The plugin throws at registration time if this is absent, so misconfiguration
+   * is caught at boot, not at the first request.
    */
-  generationService?: Pick<PlanGenerationService, "startGeneration">;
+  generationService: Pick<PlanGenerationService, "startGeneration">;
   /**
    * Injectable WorkoutPlanRepository — defaults to constructing from db.
    * Pass a mock in tests.
@@ -75,12 +76,15 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   options
 ) => {
   const { db } = options;
+
+  // Assert DI contract at registration time — fail fast if the caller forgot to wire the service.
+  if (!options.generationService) {
+    throw new Error("generationService is required for plan generation routes");
+  }
+
   const draftRepo = new PlanDraftRepository(db);
   const specRepo = options.specRepo ?? new PlanSpecRepository(db);
   const planRepo = options.planRepo ?? new WorkoutPlanRepository(db);
-
-  // generationService is resolved lazily (only required for generation routes)
-  // so that the existing wizard routes continue to work even without it.
   const generationService = options.generationService;
 
   // POST /plan-specs/drafts
@@ -184,12 +188,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       const { tenantId, userId } = request.authContext!;
       const { id } = request.params as { id: string };
 
-      const svc = generationService;
-      if (!svc) {
-        return reply.code(503).send({ error: "generation_service_unavailable" });
-      }
-
-      const result = await svc.startGeneration(tenantId, userId, id);
+      const result = await generationService.startGeneration(tenantId, userId, id);
       return reply.code(200).send(result);
     }
   );
@@ -212,12 +211,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       const { tenantId, userId } = request.authContext!;
       const { id } = request.params as { id: string };
 
-      const svc = generationService;
-      if (!svc) {
-        return reply.code(503).send({ error: "generation_service_unavailable" });
-      }
-
-      const result = await svc.startGeneration(tenantId, userId, id);
+      const result = await generationService.startGeneration(tenantId, userId, id);
       return reply.code(202).send(result);
     }
   );

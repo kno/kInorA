@@ -2,7 +2,6 @@ import type { PlanGenerator } from "./port.js";
 import type { WorkoutPlanRepository } from "../db/repositories/workout-plan.js";
 import type { PlanSpecRepository } from "../db/repositories/plan-spec.js";
 import { assertPlanSpecShape } from "../plan/boundary.js";
-import { buildPlanPrompt } from "./prompt.js";
 import {
   applyEquipmentSubstitutions,
   injectLimitationWarnings,
@@ -10,16 +9,42 @@ import {
 } from "@kinora/domain";
 
 /**
+ * 404-class error: spec not found or belongs to a different tenant.
+ * Used by the route layer to respond 404 without conflating with shape errors.
+ */
+export class PlanSpecNotFoundError extends Error {
+  statusCode = 404;
+  constructor(planSpecId: string) {
+    super(`PlanSpec not found or unconfirmed: ${planSpecId}`);
+    this.name = "PlanSpecNotFoundError";
+  }
+}
+
+/**
+ * 422-class error: spec shape is invalid (boundary guard failure).
+ * This indicates a server-side data integrity issue (spec was persisted without
+ * passing assertPlanSpecShape), not a client error.
+ */
+export class PlanSpecShapeError extends Error {
+  statusCode = 422;
+  constructor(message: string) {
+    super(message);
+    this.name = "PlanSpecShapeError";
+  }
+}
+
+/**
  * Generation service — orchestrates the async workout plan creation pipeline.
  *
  * Lifecycle:
  * 1. Load the confirmed PlanSpec via PlanSpecRepository.findConfirmedById.
- *    If missing or unconfirmed → throws a 422-class error BEFORE any LLM call.
+ *    If missing or unconfirmed → throws PlanSpecNotFoundError (404-class).
  * 2. Validate the spec shape via assertPlanSpecShape (boundary guard).
+ *    If invalid → throws PlanSpecShapeError (422-class).
  * 3. Create a "generating" row in WorkoutPlanRepository and return { planId, status }
  *    IMMEDIATELY to the caller — the LLM call is fire-and-forget.
  * 4. Background task (unhandled rejection is caught → markFailed):
- *    buildPlanPrompt → generator.generate → applyEquipmentSubstitutions
+ *    generator.generate → applyEquipmentSubstitutions
  *    → injectLimitationWarnings → assertNoDiagnosticLanguage → markReady.
  *    On ANY error → markFailed.
  *
@@ -50,21 +75,27 @@ export class PlanGenerationService {
    * @param userId    User from authContext (never from request body)
    * @param planSpecId ID of the confirmed plan spec to generate from
    *
-   * @throws Error (422-class) when the spec is missing, unconfirmed, or fails shape validation
+   * @throws PlanSpecNotFoundError (404) when the spec is missing or unconfirmed
+   * @throws PlanSpecShapeError (422) when the spec fails assertPlanSpecShape
    */
   async startGeneration(
     tenantId: string,
     userId: string,
     planSpecId: string
   ): Promise<{ planId: string; status: "generating" }> {
-    // Step 1: Load confirmed spec — throws if missing or unconfirmed
+    // Step 1: Load confirmed spec — throws 404 if missing or unconfirmed
     const specRow = await this.specRepo.findConfirmedById(tenantId, planSpecId);
     if (!specRow) {
-      throw new Error("PlanSpec not found or unconfirmed");
+      throw new PlanSpecNotFoundError(planSpecId);
     }
 
-    // Step 2: Validate spec shape — throws if structurally invalid (server bug defense)
-    assertPlanSpecShape(specRow.specJson);
+    // Step 2: Validate spec shape — throws 422 if structurally invalid
+    try {
+      assertPlanSpecShape(specRow.specJson);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new PlanSpecShapeError(message);
+    }
     const spec = specRow.specJson;
 
     // Step 3: Create the "generating" row and return planId immediately
@@ -87,20 +118,32 @@ export class PlanGenerationService {
     spec: import("@kinora/contracts").PlanSpec
   ): Promise<void> {
     try {
-      // Build prompt → generate → post-process → guard → persist
-      buildPlanPrompt(spec); // validate prompt builds cleanly (pure function, no-op result used by generator internally)
+      // generate → post-process → guard → persist
       const rawProgram = await this.generator.generate(spec);
       const substituted = applyEquipmentSubstitutions(rawProgram, spec.equipment);
       const withWarnings = injectLimitationWarnings(substituted, spec.limitations);
       assertNoDiagnosticLanguage(withWarnings);
 
-      await this.planRepo.markReady(tenantId, planId, withWarnings);
+      const result = await this.planRepo.markReady(tenantId, planId, withWarnings);
+      // Fix 8: warn if markReady updated 0 rows (tenant mismatch — should not happen
+      // since planId was just created, but log so stuck-generating is traceable).
+      if (!result) {
+        console.warn(
+          `[generation-service] markReady returned undefined for planId=${planId} tenantId=${tenantId} — plan may be stuck in generating`
+        );
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // markFailed errors are swallowed — the plan row is already persisted as "generating"
-      // and the user can still trigger regenerate. Logging to stderr is acceptable.
+      // and the user can still trigger regenerate via POST /plan-specs/:id/regenerate.
       try {
-        await this.planRepo.markFailed(tenantId, planId, message);
+        const result = await this.planRepo.markFailed(tenantId, planId, message);
+        // Fix 8: warn if markFailed updated 0 rows — same stuck-generating concern.
+        if (!result) {
+          console.warn(
+            `[generation-service] markFailed returned undefined for planId=${planId} tenantId=${tenantId} — plan may be stuck in generating`
+          );
+        }
       } catch {
         // Intentionally swallowed — do not let markFailed failure propagate
       }
