@@ -18,8 +18,8 @@ afterEach(() => {
 function noopSave(): Promise<void> {
   return Promise.resolve();
 }
-function noopConfirm(): Promise<void> {
-  return Promise.resolve();
+function noopConfirm(): Promise<{ planId: string; status: string }> {
+  return Promise.resolve({ planId: "plan-noop", status: "generating" });
 }
 
 describe("StepperShell", () => {
@@ -140,7 +140,7 @@ describe("StepperShell", () => {
       vi.fn<(step: number, spec: Partial<PlanSpec>) => Promise<void>>().mockResolvedValue(
         undefined,
       );
-    const confirmPlanSpecAction = vi.fn().mockResolvedValue(undefined);
+    const confirmPlanSpecAction = vi.fn().mockResolvedValue({ planId: "plan-999", status: "generating" });
     render(
       <StepperShell
         saveDraftAction={saveDraftAction}
@@ -170,9 +170,9 @@ describe("StepperShell", () => {
     expect(step).toBe(6);
     expect(finalSpec.goal).toBe("strength");
     expect(finalSpec.sessionDurationMinutes).toBe(60);
-    // On success the wizard navigates to the plan view.
+    // On success the wizard navigates to the plan status view with the planId.
     await waitFor(() => {
-      expect(push).toHaveBeenCalledWith("/plan");
+      expect(push).toHaveBeenCalledWith("/plan/plan-999");
     });
   });
 
