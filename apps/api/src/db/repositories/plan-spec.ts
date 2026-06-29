@@ -1,3 +1,4 @@
+import { and, eq } from "drizzle-orm";
 import { planSpecs } from "../schema.js";
 import type { Database } from "../client.js";
 import type { PlanSpec } from "@kinora/contracts";
@@ -21,6 +22,52 @@ export class PlanSpecRepository {
    * inside a db.transaction() alongside other statements atomically.
    * Returns the persisted id and the confirmed PlanSpec.
    */
+  /**
+   * Return a confirmed plan spec by id, scoped to the requesting tenant.
+   * Returns undefined when:
+   * - the spec does not exist
+   * - the spec is a draft (confirmed === false)
+   * - the spec belongs to a different tenant (cross-tenant isolation)
+   *
+   * Used by the generation service to verify the spec is ready before
+   * starting LLM generation.
+   */
+  async findConfirmedById(
+    tenantId: string,
+    id: string
+  ): Promise<
+    | {
+        id: string;
+        tenantId: string;
+        userId: string;
+        specJson: PlanSpec;
+        confirmed: boolean;
+        createdAt: Date;
+      }
+    | undefined
+  > {
+    const rows = await this.db
+      .select()
+      .from(planSpecs)
+      .where(
+        and(
+          eq(planSpecs.tenantId, tenantId),
+          eq(planSpecs.id, id),
+          eq(planSpecs.confirmed, true)
+        )
+      );
+    return rows[0] as
+      | {
+          id: string;
+          tenantId: string;
+          userId: string;
+          specJson: PlanSpec;
+          confirmed: boolean;
+          createdAt: Date;
+        }
+      | undefined;
+  }
+
   async create(
     tenantId: string,
     userId: string,

@@ -35,7 +35,49 @@ function planSpecRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function selectChain(rows: unknown[]) {
+  const where = vi.fn().mockResolvedValue(rows);
+  const from = vi.fn().mockReturnValue({ where });
+  const select = vi.fn().mockReturnValue({ from });
+  return { select, from, where };
+}
+
 describe("PlanSpecRepository", () => {
+  describe("findConfirmedById", () => {
+    it("returns the spec when it is confirmed and belongs to the tenant", async () => {
+      const row = planSpecRow({ confirmed: true });
+      const { select } = selectChain([row]);
+      const repo = new PlanSpecRepository({ select } as never);
+
+      const result = await repo.findConfirmedById(TENANT_A, "spec-uuid-1");
+
+      expect(select).toHaveBeenCalledTimes(1);
+      expect(result).not.toBeUndefined();
+      expect(result!.id).toBe("spec-uuid-1");
+      expect(result!.confirmed).toBe(true);
+    });
+
+    it("returns undefined when the spec is a draft (confirmed: false)", async () => {
+      // The repository filters by confirmed=true so unconfirmed specs return no rows
+      const { select } = selectChain([]);
+      const repo = new PlanSpecRepository({ select } as never);
+
+      const result = await repo.findConfirmedById(TENANT_A, "spec-uuid-1");
+
+      expect(result).toBeUndefined();
+    });
+
+    it("returns undefined when the spec belongs to a different tenant (cross-tenant isolation)", async () => {
+      // TENANT_B trying to read TENANT_A's spec — the where clause filters by TENANT_B → no rows
+      const { select } = selectChain([]);
+      const repo = new PlanSpecRepository({ select } as never);
+
+      const result = await repo.findConfirmedById(TENANT_B, "spec-uuid-1");
+
+      expect(result).toBeUndefined();
+    });
+  });
+
   describe("create", () => {
     it("inserts a confirmed plan_specs row and returns {id, spec}", async () => {
       const row = planSpecRow();
