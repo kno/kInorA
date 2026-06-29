@@ -1,0 +1,61 @@
+/**
+ * Plan status page — /plan/[id]
+ *
+ * Server component that:
+ *  1. Fetches the initial plan status from GET /workout-plans/:id
+ *  2. Reads the session token from the kinora_session cookie
+ *  3. Loads i18n messages for the locale
+ *  4. Renders PlanStatusClient (client component) with initial state
+ *
+ * The client component subscribes to the WS for live updates and handles
+ * the "Regenerate" CTA.
+ */
+import { cookies, headers } from "next/headers";
+import { notFound } from "next/navigation";
+import { SESSION_COOKIE } from "@/auth/session-cookie";
+import { resolveLocale, loadMessages } from "@/i18n/locale";
+import { fetchPlanStatus } from "@/app/(app)/create-plan/plan-draft-client";
+import { PlanStatusClient } from "./PlanStatusClient";
+import type { WorkoutProgram } from "@kinora/contracts";
+
+interface PlanPageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default async function PlanStatusPage({ params }: PlanPageProps) {
+  const { id: planId } = await params;
+
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+
+  const requestHeaders = await headers();
+  const acceptLanguage = requestHeaders.get("accept-language");
+  const locale = resolveLocale(acceptLanguage, undefined);
+  const messages = loadMessages(locale);
+
+  // Fetch the initial plan status server-side for fast first render.
+  // On 404 or cross-tenant, Next.js returns a 404 page.
+  const result = await fetchPlanStatus(planId, token);
+
+  if (result.kind === "error" && result.message === "not_found") {
+    notFound();
+  }
+
+  const plan =
+    result.kind === "ok"
+      ? result.plan
+      : { id: planId, status: "generating" };
+
+  return (
+    <PlanStatusClient
+      planId={planId}
+      specId={plan.specId}
+      initialStatus={plan.status}
+      initialProgram={
+        plan.status === "ready" ? (plan.program as WorkoutProgram) : undefined
+      }
+      token={token}
+      messages={messages}
+    />
+  );
+}

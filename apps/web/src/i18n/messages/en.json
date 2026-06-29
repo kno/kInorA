@@ -136,5 +136,20 @@
   "features_strength_eyebrow": "Real progression",
   "features_strength_title": "Every kilo lifted, recorded",
   "features_strength_desc": "kInorA keeps track of your loads and adjusts progression intelligently. No spreadsheets, no guessing. Just steady progress week after week.",
-  "strength_img_alt": "Chalked hands gripping a barbell before a lift, ready to execute the movement"
+  "strength_img_alt": "Chalked hands gripping a barbell before a lift, ready to execute the movement",
+
+  "plan_generating_title": "Generating your plan…",
+  "plan_generating_desc": "Your personalized workout plan is being created. This usually takes about 30 seconds.",
+  "plan_generating_aria": "Generating plan",
+  "plan_ready_title": "Your plan is ready",
+  "plan_failed_title": "Plan generation failed",
+  "plan_failed_desc": "Something went wrong while generating your plan. You can try again.",
+  "plan_regenerate_cta": "Regenerate plan",
+  "plan_session_day": "Day",
+  "plan_exercises_label": "Exercises",
+  "plan_sets_label": "sets",
+  "plan_reps_label": "reps",
+  "plan_rest_label": "rest",
+  "plan_limitation_warning_label": "Note",
+  "plan_back_to_dashboard": "Back to dashboard"
 }
