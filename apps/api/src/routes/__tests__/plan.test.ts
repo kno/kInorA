@@ -144,6 +144,13 @@ function buildMockDb(opts: {
   return db as unknown as Database;
 }
 
+// Minimal no-op generation service for wizard-only route tests.
+// The wizard routes (draft/promote) do not call the service, but planRoutes
+// now requires it at registration time to catch DI misconfigurations at boot.
+const noopGenerationService = {
+  startGeneration: () => Promise.reject(new Error("unexpected call in wizard tests")),
+};
+
 // Build a test Fastify app with auth plugin + plan routes.
 // The auth onRequest hook will look up the session; we mock the DB to return
 // a valid session row for VALID_TOKEN.
@@ -163,7 +170,11 @@ async function buildTestApp(db: Database): Promise<FastifyInstance> {
 
   // authPlugin decorates request.authContext via onRequest hook
   await app.register(authPlugin, { db });
-  await app.register(planRoutes, { db });
+  await app.register(planRoutes, {
+    db,
+    // generationService is now required — provide a no-op; wizard routes never call it
+    generationService: noopGenerationService,
+  });
 
   return app;
 }
