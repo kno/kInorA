@@ -13,6 +13,7 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "@fastify/websocket": "^11.2.0",
     "@kinora/contracts": "workspace:*",
     "@kinora/domain": "workspace:*",
     "@langchain/core": "^1.2.1",

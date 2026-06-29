@@ -1,6 +1,7 @@
 import type { PlanGenerator } from "./port.js";
 import type { WorkoutPlanRepository } from "../db/repositories/workout-plan.js";
 import type { PlanSpecRepository } from "../db/repositories/plan-spec.js";
+import type { WsRegistry } from "../ws/registry.js";
 import { assertPlanSpecShape } from "../plan/boundary.js";
 import {
   applyEquipmentSubstitutions,
@@ -62,7 +63,9 @@ export class PlanGenerationService {
     private planRepo: Pick<
       WorkoutPlanRepository,
       "createGenerating" | "markReady" | "markFailed"
-    >
+    >,
+    /** Optional WsRegistry. When provided, notifies the user after markReady/markFailed. */
+    private wsRegistry?: WsRegistry
   ) {}
 
   /**
@@ -103,7 +106,7 @@ export class PlanGenerationService {
 
     // Step 4: Fire-and-forget background task.
     // Promise rejection is caught inside the task — no unhandledRejection.
-    void this.runGenerationTask(tenantId, planId, spec);
+    void this.runGenerationTask(tenantId, userId, planId, spec);
 
     return { planId, status: "generating" };
   }
@@ -111,9 +114,14 @@ export class PlanGenerationService {
   /**
    * Background generation pipeline. All errors are caught and routed to markFailed.
    * This method never rejects — unhandledRejection is impossible.
+   *
+   * Notifies the user via WsRegistry after markReady / markFailed.
+   * Payload is ONLY { planId, status } — NO program content, NO health data.
+   * notify failure is swallowed (fire-and-forget-safe).
    */
   private async runGenerationTask(
     tenantId: string,
+    userId: string,
     planId: string,
     spec: import("@kinora/contracts").PlanSpec
   ): Promise<void> {
@@ -132,6 +140,14 @@ export class PlanGenerationService {
           `[generation-service] markReady returned undefined for planId=${planId} tenantId=${tenantId} — plan may be stuck in generating`
         );
       }
+
+      // Notify the user via WebSocket — fire-and-forget-safe.
+      // Payload: ONLY { planId, status } — no program content, no health data.
+      try {
+        this.wsRegistry?.notify(userId, { planId, status: "ready" });
+      } catch {
+        // Swallow notify failures — a broken WS must not abort the generation pipeline.
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // markFailed errors are swallowed — the plan row is already persisted as "generating"
@@ -146,6 +162,13 @@ export class PlanGenerationService {
         }
       } catch {
         // Intentionally swallowed — do not let markFailed failure propagate
+      }
+
+      // Notify the user of failure — fire-and-forget-safe.
+      try {
+        this.wsRegistry?.notify(userId, { planId, status: "failed" });
+      } catch {
+        // Swallow notify failures — a broken WS must not abort error recovery.
       }
     }
   }
