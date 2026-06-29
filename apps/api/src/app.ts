@@ -12,7 +12,7 @@ import { wsRoutes } from "./routes/ws.js";
 import { WorkoutPlanRepository } from "./db/repositories/workout-plan.js";
 import { PlanSpecRepository } from "./db/repositories/plan-spec.js";
 import { PlanGenerationService } from "./ai/generation-service.js";
-import { OpenRouterPlanGenerator } from "./ai/openrouter-generator.js";
+import { OpenRouterPlanGenerator, warnIfAiConfigMissing } from "./ai/openrouter-generator.js";
 import { WsRegistry } from "./ws/registry.js";
 import type { PlanGenerator } from "./ai/port.js";
 import type { SocialAuthService } from "./auth/social.js";
@@ -124,6 +124,10 @@ export async function buildApp(
   // Build generation DI graph.
   // OpenRouterPlanGenerator is constructed here (lazy — no key required at build time).
   // In tests, callers pass planGenerator: new MockPlanGenerator() via BuildAppOptions.
+  // Warn once at boot when no AI key is configured (silent in tests that inject a mock).
+  if (!planGenerator) {
+    warnIfAiConfigMissing();
+  }
   const registry = wsRegistry ?? new WsRegistry();
   const generator = planGenerator ?? new OpenRouterPlanGenerator();
   const workoutPlanRepo = new WorkoutPlanRepository(database);
