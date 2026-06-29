@@ -126,14 +126,14 @@ describe("WorkoutPlanRepository", () => {
       const { update, set, where, returning } = updateChain([updatedRow]);
       const repo = new WorkoutPlanRepository({ update } as never);
 
-      const result = await repo.markReady(PLAN_ID, sampleProgram);
+      const result = await repo.markReady(TENANT_A, PLAN_ID, sampleProgram);
 
       expect(update).toHaveBeenCalledTimes(1);
       expect(set).toHaveBeenCalledTimes(1);
       expect(where).toHaveBeenCalledTimes(1);
       expect(returning).toHaveBeenCalledTimes(1);
-      expect(result.status).toBe("ready");
-      expect(result.programJson).toEqual(sampleProgram);
+      expect(result!.status).toBe("ready");
+      expect(result!.programJson).toEqual(sampleProgram);
     });
 
     it("sets status and programJson in the update payload", async () => {
@@ -151,12 +151,22 @@ describe("WorkoutPlanRepository", () => {
       const { update, set } = updateChain([updatedRow]);
       const repo = new WorkoutPlanRepository({ update } as never);
 
-      await repo.markReady(PLAN_ID, sampleProgram);
+      await repo.markReady(TENANT_A, PLAN_ID, sampleProgram);
 
       const setPayload = (set as ReturnType<typeof vi.fn>).mock
         .calls[0][0] as Record<string, unknown>;
       expect(setPayload.status).toBe("ready");
       expect(setPayload.programJson).toEqual(sampleProgram);
+    });
+
+    it("cross-tenant isolation: returns undefined when tenantId does not match the row", async () => {
+      // TENANT_B tries to markReady a row owned by TENANT_A → the tenant+id WHERE returns 0 rows
+      const { update } = updateChain([]);
+      const repo = new WorkoutPlanRepository({ update } as never);
+
+      const result = await repo.markReady(TENANT_B, PLAN_ID, sampleProgram);
+
+      expect(result).toBeUndefined();
     });
   });
 
@@ -176,14 +186,14 @@ describe("WorkoutPlanRepository", () => {
       const { update, set, where, returning } = updateChain([updatedRow]);
       const repo = new WorkoutPlanRepository({ update } as never);
 
-      const result = await repo.markFailed(PLAN_ID, "LLM timeout");
+      const result = await repo.markFailed(TENANT_A, PLAN_ID, "LLM timeout");
 
       expect(update).toHaveBeenCalledTimes(1);
       expect(set).toHaveBeenCalledTimes(1);
       expect(where).toHaveBeenCalledTimes(1);
       expect(returning).toHaveBeenCalledTimes(1);
-      expect(result.status).toBe("failed");
-      expect(result.errorMessage).toBe("LLM timeout");
+      expect(result!.status).toBe("failed");
+      expect(result!.errorMessage).toBe("LLM timeout");
     });
 
     it("persists a different error message (triangulate)", async () => {
@@ -201,11 +211,21 @@ describe("WorkoutPlanRepository", () => {
       const { update, set } = updateChain([updatedRow]);
       const repo = new WorkoutPlanRepository({ update } as never);
 
-      await repo.markFailed(PLAN_ID, "Schema validation error");
+      await repo.markFailed(TENANT_A, PLAN_ID, "Schema validation error");
 
       const setPayload = (set as ReturnType<typeof vi.fn>).mock
         .calls[0][0] as Record<string, unknown>;
       expect(setPayload.errorMessage).toBe("Schema validation error");
+    });
+
+    it("cross-tenant isolation: returns undefined when tenantId does not match the row", async () => {
+      // TENANT_B tries to markFailed a row owned by TENANT_A → the tenant+id WHERE returns 0 rows
+      const { update } = updateChain([]);
+      const repo = new WorkoutPlanRepository({ update } as never);
+
+      const result = await repo.markFailed(TENANT_B, PLAN_ID, "any error");
+
+      expect(result).toBeUndefined();
     });
   });
 
@@ -234,6 +254,52 @@ describe("WorkoutPlanRepository", () => {
       expect(result).not.toBeUndefined();
       expect(result!.id).toBe("plan-newer");
       expect(result!.status).toBe("ready");
+    });
+
+    it("orderBy argument is DESC on createdAt (locks newest-first invariant)", async () => {
+      // The mock returns rows in whatever order we give it; we verify the query
+      // asks for descending order by inspecting the SQL node passed to orderBy().
+      // Drizzle's desc() produces a SQL node whose queryChunks contain " desc".
+      const olderRow = {
+        id: "plan-older",
+        tenantId: TENANT_A,
+        userId: USER_A,
+        planSpecId: SPEC_A,
+        status: "generating" as const,
+        programJson: null,
+        errorMessage: null,
+        createdAt: new Date("2026-06-28T09:00:00Z"),
+        updatedAt: new Date("2026-06-28T09:00:00Z"),
+      };
+      const newerRow = {
+        id: "plan-newer",
+        tenantId: TENANT_A,
+        userId: USER_A,
+        planSpecId: SPEC_A,
+        status: "ready" as const,
+        programJson: sampleProgram,
+        errorMessage: null,
+        createdAt: new Date("2026-06-29T10:00:00Z"),
+        updatedAt: new Date("2026-06-29T10:00:00Z"),
+      };
+      // Mock resolves newest-first (as the ORDER BY DESC would produce in SQL)
+      const { select, orderBy } = selectChain([newerRow, olderRow]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.findLatestByPlanSpec(TENANT_A, SPEC_A);
+
+      // The repo must pass a DESC expression to orderBy — check via queryChunks
+      expect(orderBy).toHaveBeenCalledTimes(1);
+      const orderByArg = (orderBy as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+        queryChunks?: Array<{ value?: string[] }>;
+      };
+      const chunks = orderByArg.queryChunks ?? [];
+      const hasDesc = chunks.some((chunk) =>
+        (chunk.value ?? []).some((v) => v.includes("desc"))
+      );
+      expect(hasDesc).toBe(true);
+      // And the first result is the newer row (limit(1) picks first from the ordered set)
+      expect(result!.id).toBe("plan-newer");
     });
 
     it("returns undefined when no plan exists for the spec", async () => {
