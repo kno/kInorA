@@ -184,6 +184,53 @@ export const planSpecs = pgTable(
 );
 
 /**
+ * Workout Plan Status — lifecycle enum for AI-generated workout plans.
+ *   generating — LLM is working; the row was created by confirm/regenerate
+ *   ready      — LLM succeeded; program_json is populated
+ *   failed     — LLM or post-processing failed; error_message is populated
+ */
+export const workoutPlanStatusEnum = pgEnum("workout_plan_status", [
+  "generating",
+  "ready",
+  "failed",
+]);
+
+/**
+ * Workout Plans — AI-generated workout programs for a plan spec.
+ * Created by change 08 (ai-plan-generation).
+ * One row per generation attempt; multiple rows may exist per plan_spec_id
+ * (each regenerate creates a fresh row). The latest row represents the current plan.
+ * program_json is typed by WorkoutProgram from @kinora/contracts.
+ * Stuck-generating strategy: manual regenerate only — stale rows remain for audit.
+ */
+export const workoutPlans = pgTable(
+  "workout_plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    planSpecId: uuid("plan_spec_id")
+      .notNull()
+      .references(() => planSpecs.id, { onDelete: "cascade" }),
+    status: workoutPlanStatusEnum("status").notNull(),
+    programJson: jsonb("program_json"),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantSpecIdx: index("workout_plans_tenant_spec_idx").on(
+      table.tenantId,
+      table.planSpecId
+    ),
+  })
+);
+
+/**
  * Sessions — opaque DB-backed bearer tokens.
  * The token sent to the client is never stored; only its scrypt hash is.
  * `tokenHash` is unique and used for lookup. `tenantId` records the tenant
