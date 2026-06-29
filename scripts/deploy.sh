@@ -6,7 +6,19 @@ eval "$(printf '%s' "$ENV_PAYLOAD" | base64 -d)"
 
 cd "$VPS_DEPLOY_DIR"
 
-# Persist the deployed image reference and runtime env vars for SSH restarts without GitHub secrets.
+# Operator-managed runtime secrets (OPENROUTER_*, LANGFUSE_*, optional POSTGRES_*)
+# live in a persistent .env on the server, NOT in GitHub secrets. Sourced here so
+# docker compose can interpolate ${OPENROUTER_*} / ${LANGFUSE_*} from the environment.
+# This file is NOT shipped by the deploy workflow and survives across deploys.
+if [ -f .env ]; then
+  set -a
+  . ./.env
+  set +a
+fi
+
+# Persist deploy-managed vars (image ref, Google OAuth, API base URL) for SSH
+# restarts without GitHub secrets. Operator secrets (OPENROUTER_*, LANGFUSE_*)
+# come from the persistent .env above — they are NOT written to .env.deploy.
 printf 'GHCR_IMAGE=%s\nIMAGE_TAG=%s\nGOOGLE_CLIENT_ID=%s\nGOOGLE_CLIENT_SECRET=%s\nGOOGLE_REDIRECT_URI=%s\nOIDC_REDIRECT_URI=%s\nAPI_BASE_URL=%s\n' \
   "$GHCR_IMAGE" "$IMAGE_TAG" \
   "${GOOGLE_CLIENT_ID:-}" "${GOOGLE_CLIENT_SECRET:-}" \
