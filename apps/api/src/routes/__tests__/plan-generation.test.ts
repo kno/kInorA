@@ -90,6 +90,30 @@ function buildSessionOnlyDb(sessionRow?: unknown): Database {
 
 // --- Mock service/repo factories ---
 
+/**
+ * Error class for 404 (spec not found / cross-tenant).
+ * Mirrors what the production service throws.
+ */
+class NotFoundError extends Error {
+  statusCode = 404;
+  constructor(message: string) {
+    super(message);
+    this.name = "NotFoundError";
+  }
+}
+
+/**
+ * Error class for 422 (invalid spec shape).
+ * Mirrors what the production service throws.
+ */
+class UnprocessableError extends Error {
+  statusCode = 422;
+  constructor(message: string) {
+    super(message);
+    this.name = "UnprocessableError";
+  }
+}
+
 function buildMockGenerationService(result: { planId: string; status: "generating" } | Error) {
   return {
     startGeneration: vi.fn().mockImplementation(() => {
@@ -142,9 +166,16 @@ async function buildTestApp(opts: {
   });
 
   await app.register(authPlugin, { db: opts.db });
+
+  // Fix 2: generationService is required — pass a no-op if caller omits it
+  // (only happens for tests that only test non-generation routes).
+  const svc = opts.generationService ?? {
+    startGeneration: vi.fn().mockRejectedValue(new Error("unexpected call")),
+  };
+
   await app.register(planRoutes, {
     db: opts.db,
-    generationService: opts.generationService as never,
+    generationService: svc as never,
     planRepo: opts.planRepo as never,
     specRepo: opts.specRepo as never,
   });
@@ -197,10 +228,10 @@ describe("Plan generation routes", () => {
       expect(response.statusCode).toBe(401);
     });
 
-    it("returns 422 when spec is incomplete/unconfirmed (startGeneration throws)", async () => {
+    it("returns 422 when spec fails shape validation (service throws UnprocessableError)", async () => {
       const db = buildSessionOnlyDb(buildSessionRow());
-      const err = new Error("PlanSpec not found or unconfirmed");
-      (err as unknown as { statusCode: number }).statusCode = 422;
+      // Fix 7: service throws a proper 422-class error for invalid spec shape
+      const err = new UnprocessableError("PlanSpec.preferenceScores must be an object");
       const generationService = buildMockGenerationService(err);
       app = await buildTestApp({ db, generationService });
 
@@ -213,10 +244,10 @@ describe("Plan generation routes", () => {
       expect(response.statusCode).toBe(422);
     });
 
-    it("returns 404 for cross-tenant spec (startGeneration throws)", async () => {
+    it("returns 404 when spec not found or cross-tenant (service throws NotFoundError)", async () => {
+      // Fix 7: service throws a proper 404-class error when findConfirmedById returns undefined
       const db = buildSessionOnlyDb(buildSessionRow(TENANT_B, USER_A));
-      const err = new Error("PlanSpec not found or unconfirmed");
-      (err as unknown as { statusCode: number }).statusCode = 404;
+      const err = new NotFoundError("PlanSpec not found or unconfirmed");
       const generationService = buildMockGenerationService(err);
       app = await buildTestApp({ db, generationService });
 
@@ -280,10 +311,9 @@ describe("Plan generation routes", () => {
       expect(response.statusCode).toBe(401);
     });
 
-    it("returns 422 when spec is unconfirmed (startGeneration throws)", async () => {
+    it("returns 422 when spec fails shape validation (service throws UnprocessableError)", async () => {
       const db = buildSessionOnlyDb(buildSessionRow());
-      const err = new Error("PlanSpec not found or unconfirmed");
-      (err as unknown as { statusCode: number }).statusCode = 422;
+      const err = new UnprocessableError("PlanSpec.preferenceScores must be an object");
       const generationService = buildMockGenerationService(err);
       app = await buildTestApp({ db, generationService });
 
@@ -296,10 +326,9 @@ describe("Plan generation routes", () => {
       expect(response.statusCode).toBe(422);
     });
 
-    it("returns 404 for cross-tenant spec (startGeneration throws)", async () => {
+    it("returns 404 when spec not found or cross-tenant (service throws NotFoundError)", async () => {
       const db = buildSessionOnlyDb(buildSessionRow(TENANT_B, USER_A));
-      const err = new Error("PlanSpec not found or unconfirmed");
-      (err as unknown as { statusCode: number }).statusCode = 404;
+      const err = new NotFoundError("PlanSpec not found or unconfirmed");
       const generationService = buildMockGenerationService(err);
       app = await buildTestApp({ db, generationService });
 
@@ -323,7 +352,6 @@ describe("Plan generation routes", () => {
         headers: { authorization: `Bearer ${VALID_TOKEN}` },
       });
 
-      // Must call startGeneration with authContext values (not body)
       expect(generationService.startGeneration).toHaveBeenCalledWith(
         TENANT_A,
         USER_A,
@@ -364,7 +392,7 @@ describe("Plan generation routes", () => {
       expect(response.statusCode).toBe(401);
     });
 
-    it("returns 404 when plan not found (cross-tenant or missing)", async () => {
+    it("returns 404 when plan not found (plan does not exist)", async () => {
       const db = buildSessionOnlyDb(buildSessionRow());
       const planRepo = buildMockPlanRepo({ findById: undefined });
       app = await buildTestApp({ db, planRepo });
@@ -390,6 +418,26 @@ describe("Plan generation routes", () => {
       });
 
       expect(planRepo.findById).toHaveBeenCalledWith(TENANT_A, PLAN_ID);
+    });
+
+    // Fix 3: genuine cross-tenant test — TENANT_B session, repo returns undefined for TENANT_B
+    it("cross-tenant: findById is called with TENANT_B tenantId and returns 404", async () => {
+      // Session authenticated as TENANT_B
+      const db = buildSessionOnlyDb(buildSessionRow(TENANT_B, USER_A));
+      // Repo mock returns undefined only for TENANT_B (simulates tenant isolation at DB layer)
+      const planRepo = buildMockPlanRepo({ findById: undefined });
+      app = await buildTestApp({ db, planRepo });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/workout-plans/${PLAN_ID}`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      // (a) Repo was called with TENANT_B's tenantId — route uses authContext, not path/body
+      expect(planRepo.findById).toHaveBeenCalledWith(TENANT_B, PLAN_ID);
+      // (b) Response is 404 — cross-tenant rows are invisible
+      expect(response.statusCode).toBe(404);
     });
   });
 
@@ -425,7 +473,7 @@ describe("Plan generation routes", () => {
       expect(response.statusCode).toBe(401);
     });
 
-    it("returns 404 when no plan exists for spec (cross-tenant or no generation yet)", async () => {
+    it("returns 404 when no plan exists for spec", async () => {
       const db = buildSessionOnlyDb(buildSessionRow());
       const planRepo = buildMockPlanRepo({ findLatestByPlanSpec: undefined });
       app = await buildTestApp({ db, planRepo });
@@ -451,6 +499,25 @@ describe("Plan generation routes", () => {
       });
 
       expect(planRepo.findLatestByPlanSpec).toHaveBeenCalledWith(TENANT_A, SPEC_ID);
+    });
+
+    // Fix 3: genuine cross-tenant test — TENANT_B session, repo returns undefined for TENANT_B
+    it("cross-tenant: findLatestByPlanSpec is called with TENANT_B tenantId and returns 404", async () => {
+      // Session authenticated as TENANT_B
+      const db = buildSessionOnlyDb(buildSessionRow(TENANT_B, USER_A));
+      const planRepo = buildMockPlanRepo({ findLatestByPlanSpec: undefined });
+      app = await buildTestApp({ db, planRepo });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/plan-specs/${SPEC_ID}/workout-plan`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      // (a) Repo called with TENANT_B's tenantId
+      expect(planRepo.findLatestByPlanSpec).toHaveBeenCalledWith(TENANT_B, SPEC_ID);
+      // (b) Response is 404
+      expect(response.statusCode).toBe(404);
     });
   });
 });

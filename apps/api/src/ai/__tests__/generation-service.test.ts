@@ -73,6 +73,8 @@ describe("PlanGenerationService", () => {
   beforeEach(() => {
     generator = new MockPlanGenerator();
     vi.clearAllMocks();
+    // Ensure fake timers are reset to real timers before each test
+    vi.useRealTimers();
   });
 
   describe("startGeneration — spec validation (422 class)", () => {
@@ -92,7 +94,6 @@ describe("PlanGenerationService", () => {
     it("does NOT call the generator on missing spec", async () => {
       const specRepo = buildMockSpecRepo(undefined);
       const planRepo = buildMockPlanRepo();
-      // Spy directly on the generator.generate method
       const generateSpy = vi.spyOn(generator, "generate");
       const service = new PlanGenerationService(generator, specRepo as never, planRepo as never);
 
@@ -114,11 +115,13 @@ describe("PlanGenerationService", () => {
 
   describe("startGeneration — happy path", () => {
     it("returns { planId, status: 'generating' } immediately without awaiting LLM", async () => {
+      vi.useFakeTimers();
+
       const specRow = { specJson: confirmedSpec };
       const specRepo = buildMockSpecRepo(specRow);
       const planRepo = buildMockPlanRepo();
 
-      // Make the generator slow — the route must not await it
+      // Make the generator resolve only after we advance timers
       let resolveGenerate!: () => void;
       const slowGenerate = vi.fn().mockImplementation(
         () =>
@@ -138,13 +141,14 @@ describe("PlanGenerationService", () => {
       const result = await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
 
       expect(result).toEqual({ planId: PLAN_ID, status: "generating" });
-      // At this point, the background task has NOT completed
+      // Background task has NOT completed — markReady not yet called
       expect(planRepo.markReady).not.toHaveBeenCalled();
 
-      // Let the background task complete now
+      // Resolve the generator and flush all async work
       resolveGenerate();
-      // Flush the microtask queue
-      await new Promise((r) => setTimeout(r, 0));
+      await vi.runAllTimersAsync();
+
+      vi.useRealTimers();
     });
 
     it("calls createGenerating with tenantId, userId, planSpecId", async () => {
@@ -161,31 +165,36 @@ describe("PlanGenerationService", () => {
 
   describe("background task — success path", () => {
     it("calls markReady with tenantId + planId + WorkoutProgram on successful generation", async () => {
+      vi.useFakeTimers();
+
       const specRow = { specJson: confirmedSpec };
       const specRepo = buildMockSpecRepo(specRow);
       const planRepo = buildMockPlanRepo();
 
-      // Override generator.generate to return a known program
       vi.spyOn(generator, "generate").mockResolvedValue(mockProgram);
 
       const service = new PlanGenerationService(generator, specRepo as never, planRepo as never);
       await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
 
-      // Wait for background task to complete
-      await new Promise((r) => setTimeout(r, 10));
+      // Flush background task
+      await vi.runAllTimersAsync();
 
       expect(planRepo.markReady).toHaveBeenCalledTimes(1);
+      expect(planRepo.markFailed).not.toHaveBeenCalled(); // Fix 4: assert symmetry
       const [calledTenantId, calledPlanId, calledProgram] =
         planRepo.markReady.mock.calls[0] as [string, string, WorkoutProgram];
       expect(calledTenantId).toBe(TENANT_A);
       expect(calledPlanId).toBe(PLAN_ID);
-      // The program passed to markReady must have the same weeklySessions count as mock
       expect(calledProgram.weeklySessions).toHaveLength(mockProgram.weeklySessions.length);
+
+      vi.useRealTimers();
     });
   });
 
   describe("background task — failure path", () => {
     it("calls markFailed with tenantId + planId + error message when generator throws", async () => {
+      vi.useFakeTimers();
+
       const specRow = { specJson: confirmedSpec };
       const specRepo = buildMockSpecRepo(specRow);
       const planRepo = buildMockPlanRepo();
@@ -196,23 +205,26 @@ describe("PlanGenerationService", () => {
       const service = new PlanGenerationService(generator, specRepo as never, planRepo as never);
       await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
 
-      // Wait for background task to complete
-      await new Promise((r) => setTimeout(r, 10));
+      await vi.runAllTimersAsync();
 
       expect(planRepo.markFailed).toHaveBeenCalledTimes(1);
+      expect(planRepo.markReady).not.toHaveBeenCalled(); // Fix 4: assert symmetry
       const [calledTenantId, calledPlanId, calledMessage] =
         planRepo.markFailed.mock.calls[0] as [string, string, string];
       expect(calledTenantId).toBe(TENANT_A);
       expect(calledPlanId).toBe(PLAN_ID);
       expect(calledMessage).toContain("LLM timeout");
+
+      vi.useRealTimers();
     });
 
     it("calls markFailed (not markReady) when assertNoDiagnosticLanguage rejects the program", async () => {
+      vi.useFakeTimers();
+
       const specRow = { specJson: confirmedSpec };
       const specRepo = buildMockSpecRepo(specRow);
       const planRepo = buildMockPlanRepo();
 
-      // Return a program with diagnostic language that the guard will reject
       const diagnosticProgram: WorkoutProgram = {
         weeklySessions: [
           {
@@ -236,13 +248,17 @@ describe("PlanGenerationService", () => {
       const service = new PlanGenerationService(generator, specRepo as never, planRepo as never);
       await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
 
-      await new Promise((r) => setTimeout(r, 10));
+      await vi.runAllTimersAsync();
 
       expect(planRepo.markFailed).toHaveBeenCalledTimes(1);
       expect(planRepo.markReady).not.toHaveBeenCalled();
+
+      vi.useRealTimers();
     });
 
     it("does NOT propagate promise rejection (no unhandledRejection)", async () => {
+      vi.useFakeTimers();
+
       const specRow = { specJson: confirmedSpec };
       const specRepo = buildMockSpecRepo(specRow);
       const planRepo = buildMockPlanRepo();
@@ -256,8 +272,10 @@ describe("PlanGenerationService", () => {
       // startGeneration must resolve without throwing
       await expect(service.startGeneration(TENANT_A, USER_A, SPEC_ID)).resolves.toBeDefined();
 
-      // Allow background task to run
-      await new Promise((r) => setTimeout(r, 10));
+      // Flush — must not throw
+      await vi.runAllTimersAsync();
+
+      vi.useRealTimers();
     });
   });
 });

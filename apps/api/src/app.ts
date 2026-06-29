@@ -48,11 +48,21 @@ export async function buildApp(
   let socialAuthService: SocialAuthService | undefined;
   let planGenerator: PlanGenerator | undefined;
 
+  // Discriminate between the options-bag form (BuildAppOptions) and the legacy
+  // 2-argument form (Database, SocialAuthService?).
+  //
+  // We use a nominal key ("planGenerator") that belongs ONLY to BuildAppOptions —
+  // NOT to Database — to avoid fragile negative checks like !("select" in obj)
+  // that break when the DB client is wrapped or the options bag grows those keys.
+  //
+  // Legacy callers: buildApp(mockDb) or buildApp(mockDb, socialSvc) — mockDb is a
+  // Database-shaped object that never has "planGenerator".
+  // New callers: buildApp({ db, planGenerator }) — always has "planGenerator" key
+  // (even when the value is undefined, the key is present via the interface).
   if (
-    dbOrOptions &&
+    dbOrOptions !== null &&
     typeof dbOrOptions === "object" &&
-    !("select" in dbOrOptions) &&
-    !("insert" in dbOrOptions)
+    "planGenerator" in dbOrOptions
   ) {
     // Options-bag form
     const opts = dbOrOptions as BuildAppOptions;
