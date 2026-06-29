@@ -8,6 +8,38 @@
  * DTOs, and cross-boundary types.
  */
 
+// ---------------------------------------------------------------------------
+// Workout plan types — 08-v1-ai-plan-generation
+// Forward-compatible with 09a (session/exercise/planned-set tracking).
+// ---------------------------------------------------------------------------
+
+export type WorkoutPlanStatus = "generating" | "ready" | "failed";
+
+export interface WorkoutExercise {
+  name: string;
+  sets: number;
+  /** Rep range or count expressed as a string (e.g. "8-12" or "15"). */
+  reps: string;
+  restSeconds: number;
+  notes?: string;
+  substitutionNote?: string;
+}
+
+export interface WorkoutSession {
+  /** Day number within the week (1-based). */
+  day: number;
+  title: string;
+  exercises: WorkoutExercise[];
+}
+
+export interface WorkoutProgram {
+  /** One session per training day; length equals daysPerWeek from PlanSpec. */
+  weeklySessions: WorkoutSession[];
+  limitationWarnings: string[];
+}
+
+export { WorkoutProgramSchema } from "./workout-program.schema.js";
+
 export interface HealthResponse {
   status: "ok";
 }

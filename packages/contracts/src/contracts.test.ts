@@ -21,8 +21,11 @@ import type {
 } from "./index";
 
 describe("shared contracts boundary", () => {
-  it("keeps the package honest as a type-only boundary", () => {
-    expect(Object.keys(contracts)).toEqual([]);
+  it("exports only the declared runtime values (Zod schemas)", () => {
+    // Before 08-v1-ai-plan-generation this package was type-only.
+    // WorkoutProgramSchema is the first runtime export — required for
+    // .withStructuredOutput(WorkoutProgramSchema) in the OpenRouter adapter.
+    expect(Object.keys(contracts)).toEqual(["WorkoutProgramSchema"]);
   });
 
   it("defines the health response contract", () => {

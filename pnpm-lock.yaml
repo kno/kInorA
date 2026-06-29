@@ -169,6 +169,10 @@ importers:
         version: 3.2.4(@types/node@22.19.21)(jsdom@29.1.1)(lightningcss@1.27.0)(terser@5.48.0)(tsx@4.22.4)
 
   packages/contracts:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 3.2.4
@@ -5068,6 +5072,9 @@ packages:
 
   zod@4.4.1:
     resolution: {integrity: sha512-a6ENMBBGZBsnlSebQ/eKCguSBeGKSf4O7BPnqVPmYGtpBYI7VSqoVqw+QcB7kPRjbqPwhYTpFbVj/RqNz/CT0Q==}
+
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
 snapshots:
 
@@ -10152,3 +10159,5 @@ snapshots:
   yocto-queue@0.1.0: {}
 
   zod@4.4.1: {}
+
+  zod@4.4.3: {}
