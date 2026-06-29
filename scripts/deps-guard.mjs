@@ -3,11 +3,13 @@
 /**
  * Dependency guard — ensures no out-of-scope packages are present.
  *
- * Capability categories per the 01c spec:
- *   - DB packages: ALLOWED in apps/api only; BLOCKED from domain, contracts, web
+ * Capability categories:
+ *   - DB packages: ALLOWED in apps/api only; BLOCKED from domain, contracts, web, mobile
+ *   - AI/LLM packages: ALLOWED in apps/api only (08-v1-ai-plan-generation); BLOCKED from
+ *     domain, contracts, web, mobile to keep inner layers pure and network-free
  *   - PWA packages: ALLOWED in apps/web only; BLOCKED everywhere else
  *   - Capacitor/native packages: ALLOWED at root and apps/mobile only; BLOCKED elsewhere
- *   - Auth, Stripe, AI, Docker, CI/CD: BLOCKED everywhere
+ *   - Auth, Stripe, Docker, CI/CD: BLOCKED everywhere
  *
  * Exits 0 if clean, 1 with a descriptive error listing any violations.
  */
@@ -31,11 +33,6 @@ const PROHIBITED_EVERYWHERE = [
   /argon2/i,
   // Payments
   /stripe/i,
-  // AI
-  /openai/i,
-  /@ai-sdk/i,
-  /ai-sdk/i,
-  /langchain/i,
   // Docker
   /docker/i,
   /dockerode/i,
@@ -59,6 +56,19 @@ const DB_PATTERNS = [
 
 // Workspaces where DB packages are permitted (API infrastructure).
 const DB_ALLOWED_WORKSPACES = ["apps/api"];
+
+// AI/LLM packages: allowed ONLY in apps/api (the runtime AI stack, 08-v1-ai-plan-generation);
+// banned from domain, contracts, web, mobile to keep the inner layers pure and network-free.
+const AI_PATTERNS = [
+  /openai/i,
+  /@ai-sdk/i,
+  /ai-sdk/i,
+  /langchain/i,
+  /langfuse/i,
+];
+
+// Workspaces where AI packages are permitted.
+const AI_ALLOWED_WORKSPACES = ["apps/api"];
 
 // PWA packages: allowed ONLY in apps/web; banned from every other workspace.
 const PWA_PATTERNS = [
@@ -133,6 +143,16 @@ for (const filePath of WORKSPACE_PACKAGE_FILES) {
     // Check DB packages — prohibited unless in an allowed workspace
     if (!isAllowedWorkspace(filePath, DB_ALLOWED_WORKSPACES)) {
       for (const pattern of DB_PATTERNS) {
+        if (pattern.test(dep)) {
+          violations.push(dep);
+          break;
+        }
+      }
+    }
+
+    // Check AI/LLM packages — prohibited unless in an allowed workspace
+    if (!isAllowedWorkspace(filePath, AI_ALLOWED_WORKSPACES)) {
+      for (const pattern of AI_PATTERNS) {
         if (pattern.test(dep)) {
           violations.push(dep);
           break;
