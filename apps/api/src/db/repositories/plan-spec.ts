@@ -17,12 +17,6 @@ export class PlanSpecRepository {
   constructor(private db: Database) {}
 
   /**
-   * Insert a confirmed plan_specs row for a given tenant + user.
-   * Accepts an optional transaction executor (tx) so callers can run this
-   * inside a db.transaction() alongside other statements atomically.
-   * Returns the persisted id and the confirmed PlanSpec.
-   */
-  /**
    * Return a confirmed plan spec by id, scoped to the requesting tenant.
    * Returns undefined when:
    * - the spec does not exist
@@ -68,6 +62,12 @@ export class PlanSpecRepository {
       | undefined;
   }
 
+  /**
+   * Insert a confirmed plan_specs row for a given tenant + user.
+   * Accepts an optional transaction executor (tx) so callers can run this
+   * inside a db.transaction() alongside other statements atomically.
+   * Returns the persisted id and the confirmed PlanSpec.
+   */
   async create(
     tenantId: string,
     userId: string,

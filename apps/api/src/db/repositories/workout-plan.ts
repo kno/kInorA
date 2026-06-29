@@ -22,8 +22,8 @@ export interface WorkoutPlanRecord {
  * Workout plan persistence repository.
  *
  * All methods are tenant-scoped: tenantId is always included in WHERE clauses.
- * Cross-tenant reads return undefined; cross-tenant writes are prevented at the
- * application layer (routes validate authContext before calling this repo).
+ * Cross-tenant reads return undefined; cross-tenant writes return undefined (0 rows updated)
+ * because the tenant+id compound WHERE clause will match no row.
  *
  * Stuck-generating strategy: manual regenerate only. Stale "generating" rows
  * remain visible for audit; a new row is created on each regenerate call.
@@ -54,17 +54,22 @@ export class WorkoutPlanRepository {
    * Transition a plan to "ready" and persist the generated program JSON.
    * Called by the generation service after a successful LLM response that
    * has passed all post-processing guards.
+   *
+   * tenantId is REQUIRED in the WHERE clause to prevent cross-tenant writes:
+   * a caller with a planId from another tenant must not be able to flip its status.
+   * Returns undefined when 0 rows are updated (plan not found or tenant mismatch).
    */
   async markReady(
+    tenantId: string,
     id: string,
     program: WorkoutProgram
-  ): Promise<WorkoutPlanRecord> {
+  ): Promise<WorkoutPlanRecord | undefined> {
     const rows = await this.db
       .update(workoutPlans)
       .set({ status: "ready", programJson: program, updatedAt: new Date() })
-      .where(eq(workoutPlans.id, id))
+      .where(and(eq(workoutPlans.tenantId, tenantId), eq(workoutPlans.id, id)))
       .returning();
-    return rows[0] as WorkoutPlanRecord;
+    return rows[0] as WorkoutPlanRecord | undefined;
   }
 
   /**
@@ -72,17 +77,21 @@ export class WorkoutPlanRepository {
    * Called by the generation service on any unrecoverable error during
    * generation (LLM error, schema validation failure, diagnostic guard rejection).
    * The failed row is retained for audit; the user can trigger regenerate.
+   *
+   * tenantId is REQUIRED in the WHERE clause to prevent cross-tenant writes.
+   * Returns undefined when 0 rows are updated (plan not found or tenant mismatch).
    */
   async markFailed(
+    tenantId: string,
     id: string,
     errorMessage: string
-  ): Promise<WorkoutPlanRecord> {
+  ): Promise<WorkoutPlanRecord | undefined> {
     const rows = await this.db
       .update(workoutPlans)
       .set({ status: "failed", errorMessage, updatedAt: new Date() })
-      .where(eq(workoutPlans.id, id))
+      .where(and(eq(workoutPlans.tenantId, tenantId), eq(workoutPlans.id, id)))
       .returning();
-    return rows[0] as WorkoutPlanRecord;
+    return rows[0] as WorkoutPlanRecord | undefined;
   }
 
   /**
