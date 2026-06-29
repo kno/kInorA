@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
+import fastifyWebsocket from "@fastify/websocket";
 import type { Database } from "./db/client.js";
 import { createDbClient } from "./db/client.js";
 import { AuthService, AuthError } from "./auth/service.js";
@@ -7,10 +8,12 @@ import { authRoutes } from "./routes/auth.js";
 import { healthRoute } from "./routes/health.js";
 import { socialRoutes } from "./routes/social.js";
 import { planRoutes } from "./routes/plan.js";
+import { wsRoutes } from "./routes/ws.js";
 import { WorkoutPlanRepository } from "./db/repositories/workout-plan.js";
 import { PlanSpecRepository } from "./db/repositories/plan-spec.js";
 import { PlanGenerationService } from "./ai/generation-service.js";
 import { OpenRouterPlanGenerator } from "./ai/openrouter-generator.js";
+import { WsRegistry } from "./ws/registry.js";
 import type { PlanGenerator } from "./ai/port.js";
 import type { SocialAuthService } from "./auth/social.js";
 
@@ -23,6 +26,12 @@ export interface BuildAppOptions {
    * Pass a MockPlanGenerator to avoid LLM calls in tests.
    */
   planGenerator?: PlanGenerator;
+  /**
+   * Injectable WsRegistry for tests.
+   * Defaults to a fresh WsRegistry() in production.
+   * Pass a pre-constructed instance to observe notifications in tests.
+   */
+  wsRegistry?: WsRegistry;
 }
 
 /**
@@ -47,6 +56,7 @@ export async function buildApp(
   let database: Database;
   let socialAuthService: SocialAuthService | undefined;
   let planGenerator: PlanGenerator | undefined;
+  let wsRegistry: WsRegistry | undefined;
 
   // Discriminate between the options-bag form (BuildAppOptions) and the legacy
   // 2-argument form (Database, SocialAuthService?).
@@ -69,6 +79,7 @@ export async function buildApp(
     database = opts.db ?? createDbClient().db;
     socialAuthService = opts.socialAuthService;
     planGenerator = opts.planGenerator;
+    wsRegistry = opts.wsRegistry;
   } else {
     // Legacy 2-argument form: (db?, socialAuthService?)
     database = (dbOrOptions as Database | undefined) ?? createDbClient().db;
@@ -113,10 +124,16 @@ export async function buildApp(
   // Build generation DI graph.
   // OpenRouterPlanGenerator is constructed here (lazy — no key required at build time).
   // In tests, callers pass planGenerator: new MockPlanGenerator() via BuildAppOptions.
+  const registry = wsRegistry ?? new WsRegistry();
   const generator = planGenerator ?? new OpenRouterPlanGenerator();
   const workoutPlanRepo = new WorkoutPlanRepository(database);
   const planSpecRepo = new PlanSpecRepository(database);
-  const planGenerationService = new PlanGenerationService(generator, planSpecRepo, workoutPlanRepo);
+  const planGenerationService = new PlanGenerationService(
+    generator,
+    planSpecRepo,
+    workoutPlanRepo,
+    registry
+  );
 
   // Plan wizard + generation routes (draft, promote, confirm, regenerate, fetch)
   await app.register(planRoutes, {
@@ -125,6 +142,14 @@ export async function buildApp(
     planRepo: workoutPlanRepo,
     specRepo: planSpecRepo,
   });
+
+  // WebSocket plugin + authenticated plan-status route.
+  // WsRegistry is shared between this route and PlanGenerationService so
+  // notifications from the generation background task reach connected clients.
+  // db is passed so wsRoutes can resolve ?token= query-param auth using the
+  // same SessionRepository + resolveAuthContextFromToken as the Bearer path.
+  await app.register(fastifyWebsocket);
+  await app.register(wsRoutes, { registry, db: database });
 
   return app;
 }
