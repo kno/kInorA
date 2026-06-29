@@ -10,3 +10,7 @@ export { createPlanDraft } from "./plan-draft.js";
 export type { PlanDraft } from "./plan-draft.js";
 
 export { derivePreferenceScores } from "./derive-preference-scores.js";
+
+export { applyEquipmentSubstitutions } from "./equipment-substitution.js";
+export { injectLimitationWarnings } from "./limitation-warnings.js";
+export { assertNoDiagnosticLanguage } from "./diagnostic-guard.js";
