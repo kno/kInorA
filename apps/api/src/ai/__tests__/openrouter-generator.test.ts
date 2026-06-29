@@ -106,11 +106,12 @@ describe("OpenRouterPlanGenerator", () => {
       );
     });
 
-    it("calls withStructuredOutput with WorkoutProgramSchema", () => {
+    // Fix 2 (HIGH): lock the method option — expect.anything() was too loose
+    it("calls withStructuredOutput with method: jsonSchema", () => {
       new OpenRouterPlanGenerator();
       expect(mockWithStructuredOutput).toHaveBeenCalledWith(
-        expect.anything(), // WorkoutProgramSchema
-        expect.anything()  // options with method
+        expect.anything(),
+        expect.objectContaining({ method: "jsonSchema" })
       );
     });
   });
@@ -165,8 +166,25 @@ describe("OpenRouterPlanGenerator", () => {
       // Second argument is the RunnableConfig with callbacks
       const config = invokeArgs?.[1] as Record<string, unknown> | undefined;
       expect(config).toBeDefined();
-      expect(config?.callbacks).toBeDefined();
       expect(Array.isArray(config?.callbacks)).toBe(true);
+    });
+
+    // Fix 3 (MEDIUM): assert the actual CallbackHandler instance is at index 0.
+    // vi.fn(() => ({})) uses a factory that returns an explicit object, so
+    // mock.results[0].value is the returned handler instance (what langfuseHandler
+    // holds), while mock.instances[0] would be the raw 'this' context — different
+    // objects. We assert the RETURNED value, which is what production code uses.
+    it("wires the specific CallbackHandler instance as callbacks[0]", async () => {
+      const generator = new OpenRouterPlanGenerator();
+      await generator.generate(baseSpec);
+
+      const invokeArgs = mockInvoke.mock.calls[0];
+      const config = invokeArgs?.[1] as Record<string, unknown> | undefined;
+      const callbacks = config?.callbacks as unknown[] | undefined;
+      // Must be the exact instance the constructor created — not an empty array
+      // or a different object. Changing to `callbacks: []` would break this test.
+      const handlerInstance = MockCallbackHandler.mock.results[0]?.value as unknown;
+      expect(callbacks?.[0]).toBe(handlerInstance);
     });
   });
 
@@ -185,6 +203,17 @@ describe("OpenRouterPlanGenerator", () => {
       mockInvoke.mockRejectedValueOnce(new Error("API timeout"));
       const generator = new OpenRouterPlanGenerator();
       await expect(generator.generate(baseSpec)).rejects.toThrow("API timeout");
+    });
+
+    // Fix 1 (HIGH): explicit Zod validation — malformed model output must throw
+    // rather than silently returning garbage into the domain pipeline.
+    it("throws a ZodError when the LLM returns malformed output", async () => {
+      // Mock chain returns an object that does NOT match WorkoutProgramSchema
+      mockInvoke.mockResolvedValueOnce({ weeklySessions: null });
+      const generator = new OpenRouterPlanGenerator();
+      // generate() must reject — the bare cast `result as WorkoutProgram`
+      // would silently pass; WorkoutProgramSchema.parse() throws ZodError
+      await expect(generator.generate(baseSpec)).rejects.toThrow();
     });
   });
 });

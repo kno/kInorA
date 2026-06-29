@@ -250,7 +250,7 @@ jobs:
             errors=$((errors + 1))
           fi
           if [ -z "${{ secrets.OPENROUTER_MODEL }}" ]; then
-            echo "ERROR: OPENROUTER_MODEL secret is required (must be a tool/function-calling or JSON-schema capable model, e.g. openai/gpt-4o-mini)."
+            echo "ERROR: OPENROUTER_MODEL secret is required (must support JSON-schema structured output, e.g. openai/gpt-4o-mini; models that only support function-calling will fail)."
             errors=$((errors + 1))
           fi
           if [ -z "${{ secrets.LANGFUSE_PUBLIC_KEY }}" ]; then

@@ -66,10 +66,15 @@ export class OpenRouterPlanGenerator implements PlanGenerator {
     const limitationTerms = spec.limitations.map((l) => l.text);
     const maskedPrompt = mask(rawPrompt, limitationTerms);
 
-    const result = await this.chain.invoke(maskedPrompt, {
+    const raw = await this.chain.invoke(maskedPrompt, {
       callbacks: [this.langfuseHandler],
     });
 
-    return result as WorkoutProgram;
+    // Explicit Zod parse — do NOT bare-cast with `as WorkoutProgram`.
+    // LangChain's internal validation is not a substitute for an explicit
+    // parse at the adapter boundary. A ZodError here propagates to the
+    // PR6 generation service, which catches it and calls markFailed —
+    // preventing malformed model output from reaching the domain steps.
+    return WorkoutProgramSchema.parse(raw);
   }
 }
