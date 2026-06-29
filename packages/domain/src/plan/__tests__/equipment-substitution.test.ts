@@ -193,4 +193,32 @@ describe("applyEquipmentSubstitutions — edge cases", () => {
 
     expect(result.limitationWarnings).toEqual(["Consult a professional"]);
   });
+
+  it("leaves an exercise unchanged when it is NOT in the substitution map (no substitutionNote added)", () => {
+    // An LLM may generate a novel or very specific exercise that has no known
+    // bodyweight equivalent in SUBSTITUTION_MAP. The function must not alter it
+    // and must NOT set a substitutionNote on it.
+    const program = makeProgram({
+      weeklySessions: [
+        {
+          day: 1,
+          title: "Functional",
+          exercises: [
+            {
+              name: "unstable surface single-leg balance",
+              sets: 3,
+              reps: "30s",
+              restSeconds: 30,
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = applyEquipmentSubstitutions(program, []);
+
+    const exercise = result.weeklySessions[0]?.exercises[0];
+    expect(exercise?.name).toBe("unstable surface single-leg balance");
+    expect(exercise?.substitutionNote).toBeUndefined();
+  });
 });

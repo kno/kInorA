@@ -145,3 +145,25 @@ describe("injectLimitationWarnings — pure function", () => {
     expect(program.limitationWarnings).toHaveLength(0);
   });
 });
+
+describe("injectLimitationWarnings — isWarning flag intentionally ignored", () => {
+  it("still produces a non-blocking advisory warning when isWarning is false", () => {
+    // The domain layer NEVER hard-blocks. isWarning is not used as a gate here.
+    // Every limitation — whether flagged isWarning:true or false — becomes an
+    // advisory warning appended to limitationWarnings. Hard-blocking (e.g. removing
+    // sessions) is explicitly forbidden by the spec's "limitation warning, not block"
+    // requirement. isWarning is preserved in PlanLimitation for callers that want to
+    // differentiate UI rendering, but it has no effect on this function's output.
+    const program = makeProgram();
+    const limitations = [{ text: "severe knee surgery history", isWarning: false }];
+
+    const result = injectLimitationWarnings(program, limitations);
+
+    expect(result.limitationWarnings).toHaveLength(1);
+    const [w] = result.limitationWarnings;
+    expect(w).toContain("severe knee surgery history");
+    expect(w).toMatch(/consult a professional/i);
+    // sessions untouched — no hard-block
+    expect(result.weeklySessions).toEqual(program.weeklySessions);
+  });
+});
