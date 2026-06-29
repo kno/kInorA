@@ -24,13 +24,6 @@ export interface PlanStatusViewProps {
   onRegenerate?: () => void;
 }
 
-/**
- * Renders the appropriate plan status UI.
- *
- * Exported as a plain function (not a React component) so the React tree
- * inspection helpers in tests can operate on it without DOM/RTL overhead.
- * In production it is used as a JSX component via <PlanStatusView ... />.
- */
 export function PlanStatusView({
   planId: _planId,
   status,
@@ -73,23 +66,14 @@ export function PlanStatusView({
               "Something went wrong while generating your plan. You can try again.",
             )}
           </p>
-          {onRegenerate && (
-            <button
-              type="button"
-              className="kin-btn kin-btn--primary"
-              onClick={onRegenerate}
-            >
-              {t("plan_regenerate_cta", "Regenerate plan")}
-            </button>
-          )}
-          {!onRegenerate && (
-            <button
-              type="button"
-              className="kin-btn kin-btn--primary"
-            >
-              {t("plan_regenerate_cta", "Regenerate plan")}
-            </button>
-          )}
+          {/* Fix F: onRegenerate is always provided; removed dead handler-less fallback button */}
+          <button
+            type="button"
+            className="kin-btn kin-btn--primary"
+            onClick={onRegenerate}
+          >
+            {t("plan_regenerate_cta", "Regenerate plan")}
+          </button>
         </div>
       </main>
     );
@@ -98,10 +82,17 @@ export function PlanStatusView({
   // status === "ready"
   return (
     <main className="kin-page">
-      <h1 className="kin-title">{t("plan_ready_title", "Your plan is ready")}</h1>
+      <header className="kin-card kin-card--header">
+        <h1 className="kin-title">{t("plan_ready_title", "Your plan is ready")}</h1>
+        <a href="/dashboard" className="kin-link">
+          {t("plan_back_to_dashboard", "Back to dashboard")}
+        </a>
+      </header>
       {program?.weeklySessions.map((session) => (
         <section key={session.day} className="kin-card">
-          <h2 className="kin-subtitle">{session.title}</h2>
+          <h2 className="kin-subtitle">
+            {t("plan_session_day", "Day")} {session.day} — {session.title}
+          </h2>
           <ul>
             {session.exercises.map((exercise, idx) => (
               <li key={`${session.day}-${idx}`}>

@@ -1,16 +1,21 @@
+// @vitest-environment jsdom
 /**
- * Tests for usePlanWs hook.
+ * Tests for usePlanWs hook and its exported pure helpers.
  *
- * The hook:
- *  - Opens wss://.../ws/plans?token=<token>
- *  - Updates status when it receives { planId, status } for the matching planId
- *  - Ignores messages for other planIds
- *  - Falls back to polling GET /workout-plans/:id when WebSocket connect fails
+ * Pure helpers (buildWsUrl, buildPollUrl, resolveStatusUpdate, shouldUpdateStatus,
+ * isStatusAllowed, getApiBase, getWsBase) are tested directly — no mocks needed.
  *
- * Uses a mock WebSocket class injected via options (no browser globals required).
- * Pure logic extracted as testable units so we can test without a real DOM/hook runner.
+ * Hook behaviour (Fix D) is tested with renderHook + a fake WebSocket class
+ * injected via the WebSocketImpl option. This avoids global mock pollution
+ * while exercising the real hook logic: mount → message → status update;
+ * non-matching planId ignored; onerror → poll starts; unmount → socket closed;
+ * terminal status → no reconnect (Fix A); stale "generating" after "ready"
+ * ignored (Fix B).
+ *
+ * Mock/assertion ratio: each test uses at most 1 fake WebSocket + 1 mock fetch.
  */
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { renderHook, act } from "@testing-library/react";
 import {
   buildWsUrl,
   resolveStatusUpdate,
@@ -18,10 +23,13 @@ import {
   buildPollUrl,
   getApiBase,
   getWsBase,
+  isStatusAllowed,
+  STATUS_RANK,
+  usePlanWs,
 } from "../use-plan-ws";
 
 // ---------------------------------------------------------------------------
-// Pure function tests (no mock WS needed)
+// Pure helper tests
 // ---------------------------------------------------------------------------
 
 describe("buildWsUrl", () => {
@@ -100,112 +108,351 @@ describe("getApiBase", () => {
 });
 
 describe("getWsBase", () => {
-  it("returns an empty string when window is undefined (SSR context)", () => {
-    // In vitest (Node environment), window is not defined.
-    // getWsBase detects typeof window === 'undefined' and returns "".
+  it("returns a ws:// base from window.location in jsdom", () => {
+    // jsdom provides window.location — protocol is "http:", host includes the port
     const base = getWsBase();
-    expect(base).toBe("");
+    // Must start with ws:// and use window.location.host (protocol is http: → ws:)
+    expect(base).toMatch(/^ws:\/\//);
+    expect(base).toContain(window.location.host);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Integration: mock WebSocket — subscribe, update, ignore other planIds
+// Fix B — isStatusAllowed (monotonicity guard)
 // ---------------------------------------------------------------------------
 
-interface MockWsInstance {
+describe("isStatusAllowed — status rank monotonicity (Fix B)", () => {
+  it("STATUS_RANK assigns generating=0, ready=1, failed=1", () => {
+    expect(STATUS_RANK["generating"]).toBe(0);
+    expect(STATUS_RANK["ready"]).toBe(1);
+    expect(STATUS_RANK["failed"]).toBe(1);
+  });
+
+  it("allows generating → ready (rank 0 → 1)", () => {
+    expect(isStatusAllowed("generating", "ready")).toBe(true);
+  });
+
+  it("allows generating → failed (rank 0 → 1)", () => {
+    expect(isStatusAllowed("generating", "failed")).toBe(true);
+  });
+
+  it("rejects ready → generating (rank 1 → 0 — stale push)", () => {
+    expect(isStatusAllowed("ready", "generating")).toBe(false);
+  });
+
+  it("rejects failed → generating (rank 1 → 0 — stale push)", () => {
+    expect(isStatusAllowed("failed", "generating")).toBe(false);
+  });
+
+  it("allows ready → ready (same rank — idempotent)", () => {
+    expect(isStatusAllowed("ready", "ready")).toBe(true);
+  });
+
+  it("allows generating → generating (same rank — idempotent)", () => {
+    expect(isStatusAllowed("generating", "generating")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fake WebSocket factory for hook tests (Fix D)
+// ---------------------------------------------------------------------------
+
+interface FakeWsInstance {
+  url: string;
   onopen: ((e: Event) => void) | null;
   onmessage: ((e: MessageEvent) => void) | null;
   onerror: ((e: Event) => void) | null;
   onclose: ((e: CloseEvent) => void) | null;
-  close: () => void;
-  send: (data: string) => void;
-  /** Simulate message received */
-  receive: (data: string) => void;
-  /** Simulate connect */
-  connect: () => void;
-  /** Simulate error */
-  fail: () => void;
+  close: ReturnType<typeof vi.fn>;
+  simulateOpen: () => void;
+  simulateMessage: (data: string) => void;
+  simulateError: () => void;
+  simulateClose: () => void;
 }
 
-function createMockWs(): MockWsInstance {
-  const ws: MockWsInstance = {
-    onopen: null,
-    onmessage: null,
-    onerror: null,
-    onclose: null,
-    close: vi.fn(),
-    send: vi.fn(),
-    receive(data: string) {
-      if (ws.onmessage) {
-        ws.onmessage({ data } as MessageEvent);
-      }
-    },
-    connect() {
-      if (ws.onopen) ws.onopen(new Event("open"));
-    },
-    fail() {
-      if (ws.onerror) ws.onerror(new Event("error"));
-    },
-  };
-  return ws;
-}
+function createFakeWsClass(): {
+  FakeWs: typeof WebSocket;
+  instances: FakeWsInstance[];
+} {
+  const instances: FakeWsInstance[] = [];
 
-describe("WS message handling (pure logic)", () => {
-  it("updates status when a matching planId message arrives", () => {
-    const onStatusChange = vi.fn();
-    const planId = "plan-abc";
+  class FakeWs {
+    url: string;
+    onopen: ((e: Event) => void) | null = null;
+    onmessage: ((e: MessageEvent) => void) | null = null;
+    onerror: ((e: Event) => void) | null = null;
+    onclose: ((e: CloseEvent) => void) | null = null;
+    close = vi.fn(() => {
+      if (this.onclose) this.onclose(new CloseEvent("close"));
+    });
 
-    const msg = JSON.stringify({ planId, status: "ready" });
-    const parsed = resolveStatusUpdate(msg);
-
-    if (parsed && shouldUpdateStatus(planId, parsed)) {
-      onStatusChange(parsed.status);
+    simulateOpen() {
+      if (this.onopen) this.onopen(new Event("open"));
+    }
+    simulateMessage(data: string) {
+      if (this.onmessage) this.onmessage(new MessageEvent("message", { data }));
+    }
+    simulateError() {
+      if (this.onerror) this.onerror(new Event("error"));
+    }
+    simulateClose() {
+      if (this.onclose) this.onclose(new CloseEvent("close"));
     }
 
-    expect(onStatusChange).toHaveBeenCalledWith("ready");
+    constructor(url: string) {
+      this.url = url;
+      instances.push(this as unknown as FakeWsInstance);
+    }
+  }
+
+  return { FakeWs: FakeWs as unknown as typeof WebSocket, instances };
+}
+
+// ---------------------------------------------------------------------------
+// Hook integration tests (Fix D)
+// ---------------------------------------------------------------------------
+
+describe("usePlanWs hook — WS message updates status", () => {
+  it("updates status when a matching planId message arrives", () => {
+    const { FakeWs, instances } = createFakeWsClass();
+
+    const { result } = renderHook(() =>
+      usePlanWs("plan-1", {
+        token: "tok-abc",
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        WebSocketImpl: FakeWs,
+      }),
+    );
+
+    expect(result.current.status).toBe("generating");
+
+    const ws = instances[0]!;
+    act(() => ws.simulateOpen());
+    act(() => ws.simulateMessage(JSON.stringify({ planId: "plan-1", status: "ready" })));
+
+    expect(result.current.status).toBe("ready");
   });
 
-  it("does NOT update status when the planId does not match", () => {
-    const onStatusChange = vi.fn();
-    const planId = "plan-abc";
+  it("does NOT update status when the planId does not match (other user's plan)", () => {
+    const { FakeWs, instances } = createFakeWsClass();
 
-    const msg = JSON.stringify({ planId: "plan-OTHER", status: "ready" });
-    const parsed = resolveStatusUpdate(msg);
+    const { result } = renderHook(() =>
+      usePlanWs("plan-1", {
+        token: "tok-abc",
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        WebSocketImpl: FakeWs,
+      }),
+    );
 
-    if (parsed && shouldUpdateStatus(planId, parsed)) {
-      onStatusChange(parsed.status);
-    }
+    const ws = instances[0]!;
+    act(() => ws.simulateOpen());
+    act(() => ws.simulateMessage(JSON.stringify({ planId: "plan-OTHER", status: "ready" })));
 
-    expect(onStatusChange).not.toHaveBeenCalled();
+    expect(result.current.status).toBe("generating");
   });
 
   it("does NOT update status when the message is invalid JSON", () => {
-    const onStatusChange = vi.fn();
-    const planId = "plan-abc";
+    const { FakeWs, instances } = createFakeWsClass();
 
-    const parsed = resolveStatusUpdate("broken{{json");
+    const { result } = renderHook(() =>
+      usePlanWs("plan-1", {
+        token: "tok-abc",
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        WebSocketImpl: FakeWs,
+      }),
+    );
 
-    if (parsed && shouldUpdateStatus(planId, parsed)) {
-      onStatusChange(parsed.status);
-    }
+    const ws = instances[0]!;
+    act(() => ws.simulateOpen());
+    act(() => ws.simulateMessage("not-json{{"));
 
-    expect(onStatusChange).not.toHaveBeenCalled();
+    expect(result.current.status).toBe("generating");
+  });
+});
+
+describe("usePlanWs hook — Fix A: terminal status prevents reconnect", () => {
+  it("does NOT schedule a reconnect after 'ready' closes the socket", () => {
+    vi.useFakeTimers();
+    const { FakeWs, instances } = createFakeWsClass();
+
+    renderHook(() =>
+      usePlanWs("plan-1", {
+        token: "tok-abc",
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        WebSocketImpl: FakeWs,
+      }),
+    );
+
+    const ws = instances[0]!;
+    act(() => ws.simulateOpen());
+    // "ready" → hook updates ref to "ready" then calls ws.close()
+    act(() => ws.simulateMessage(JSON.stringify({ planId: "plan-1", status: "ready" })));
+    // Advance timers; no reconnect should be scheduled
+    act(() => vi.advanceTimersByTime(10000));
+
+    // Only one WS instance was ever created — no reconnect
+    expect(instances).toHaveLength(1);
+
+    vi.useRealTimers();
   });
 
-  it("handles both ready and failed status updates (triangulation)", () => {
-    const onStatusChange = vi.fn();
-    const planId = "plan-1";
+  it("does NOT schedule a reconnect after 'failed' closes the socket", () => {
+    vi.useFakeTimers();
+    const { FakeWs, instances } = createFakeWsClass();
 
-    for (const status of ["ready", "failed"] as const) {
-      const msg = JSON.stringify({ planId, status });
-      const parsed = resolveStatusUpdate(msg);
-      if (parsed && shouldUpdateStatus(planId, parsed)) {
-        onStatusChange(parsed.status);
-      }
-    }
+    renderHook(() =>
+      usePlanWs("plan-1", {
+        token: "tok-abc",
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        WebSocketImpl: FakeWs,
+      }),
+    );
 
-    expect(onStatusChange).toHaveBeenCalledTimes(2);
-    expect(onStatusChange).toHaveBeenNthCalledWith(1, "ready");
-    expect(onStatusChange).toHaveBeenNthCalledWith(2, "failed");
+    const ws = instances[0]!;
+    act(() => ws.simulateOpen());
+    act(() => ws.simulateMessage(JSON.stringify({ planId: "plan-1", status: "failed" })));
+    act(() => vi.advanceTimersByTime(10000));
+
+    expect(instances).toHaveLength(1);
+
+    vi.useRealTimers();
+  });
+});
+
+describe("usePlanWs hook — Fix B: monotonicity guard (stale push rejected)", () => {
+  it("ignores a stale 'generating' message after status is already 'ready'", () => {
+    const { FakeWs, instances } = createFakeWsClass();
+
+    const { result } = renderHook(() =>
+      usePlanWs("plan-1", {
+        token: "tok-abc",
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        WebSocketImpl: FakeWs,
+      }),
+    );
+
+    const ws = instances[0]!;
+    act(() => ws.simulateOpen());
+    // First: "ready" arrives
+    act(() => ws.simulateMessage(JSON.stringify({ planId: "plan-1", status: "ready" })));
+    expect(result.current.status).toBe("ready");
+    // Second: stale "generating" push — must be rejected
+    act(() => ws.simulateMessage(JSON.stringify({ planId: "plan-1", status: "generating" })));
+    expect(result.current.status).toBe("ready");
+  });
+});
+
+describe("usePlanWs hook — onerror starts poll fallback", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("starts polling GET /workout-plans/:id when the WS connect errors", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: "ready" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const { FakeWs, instances } = createFakeWsClass();
+
+    const { result } = renderHook(() =>
+      usePlanWs("plan-1", {
+        token: "tok-abc",
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        apiBase: "http://api.test",
+        fetchImpl,
+        WebSocketImpl: FakeWs,
+      }),
+    );
+
+    const ws = instances[0]!;
+    act(() => ws.simulateError());
+
+    await act(async () => {
+      vi.advanceTimersByTime(6000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://api.test/workout-plans/plan-1",
+      expect.objectContaining({
+        headers: expect.objectContaining({ authorization: "Bearer tok-abc" }),
+      }),
+    );
+    expect(result.current.status).toBe("ready");
+  });
+});
+
+describe("usePlanWs hook — unmount cleanup", () => {
+  it("closes the socket and does not call setState after unmount", () => {
+    vi.useFakeTimers();
+    const { FakeWs, instances } = createFakeWsClass();
+
+    const { unmount } = renderHook(() =>
+      usePlanWs("plan-1", {
+        token: "tok-abc",
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        WebSocketImpl: FakeWs,
+      }),
+    );
+
+    const ws = instances[0]!;
+    unmount();
+
+    // Socket must be closed on unmount
+    expect(ws.close).toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+});
+
+describe("usePlanWs hook — no token starts polling immediately", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("polls GET /workout-plans/:id immediately when no token is provided", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: "generating" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    renderHook(() =>
+      usePlanWs("plan-1", {
+        token: undefined,
+        initialStatus: "generating",
+        apiBase: "http://api.test",
+        fetchImpl,
+      }),
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(6000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://api.test/workout-plans/plan-1",
+      expect.objectContaining({}),
+    );
   });
 });

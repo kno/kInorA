@@ -182,27 +182,27 @@ Chain strategy: stacked-to-main
 ## PR 7b — Web UX (needs PR6, PR7a)
 
 ### Phase 7b.1: Generate action on confirm path
-- [ ] 7b.1.1 RED: write/extend `apps/web/src/app/(app)/create-plan/__tests__/confirm.test.tsx` — confirm response includes `{ planId, status: "generating" }`, redirects to plan view with status param
-- [ ] 7b.1.2 GREEN: update server action / fetch in confirm step to consume `planId` and `status` from confirm response; navigate to plan view
+- [x] 7b.1.1 RED: write/extend `apps/web/src/app/(app)/create-plan/__tests__/confirm.test.tsx` — confirm response includes `{ planId, status: "generating" }`, redirects to plan view with status param
+- [x] 7b.1.2 GREEN: update server action / fetch in confirm step to consume `planId` and `status` from confirm response; navigate to plan view
 
 ### Phase 7b.2: Regenerate action
-- [ ] 7b.2.1 RED: write `apps/web/src/app/(app)/create-plan/__tests__/regenerate.test.tsx` — regenerate button calls `POST /plan-specs/:id/regenerate`, sets local status to `generating`
-- [ ] 7b.2.2 GREEN: add `regeneratePlan(specId)` server action or client fetch; wire to "Regenerate" button in plan view
+- [x] 7b.2.1 RED: write `apps/web/src/app/(app)/create-plan/__tests__/regenerate.test.tsx` — regenerate button calls `POST /plan-specs/:id/regenerate`, sets local status to `generating`
+- [x] 7b.2.2 GREEN: add `regeneratePlan(specId)` server action or client fetch; wire to "Regenerate" button in plan view
 
 ### Phase 7b.3: Plan status UI
-- [ ] 7b.3.1 Create `apps/web/src/app/(app)/plan/[id]/page.tsx` (or extend existing) — renders `generating` spinner, `ready` plan detail, `failed` error+regenerate CTA; uses `WorkoutProgram` type from `@kinora/contracts`
-- [ ] 7b.3.2 RED: write `apps/web/src/app/(app)/plan/__tests__/plan-status.test.tsx` — spinner when generating, content when ready, error+CTA when failed; status-fetch fallback renders correctly when WS not connected
+- [x] 7b.3.1 Create `apps/web/src/app/(app)/plan/[id]/page.tsx` (or extend existing) — renders `generating` spinner, `ready` plan detail, `failed` error+regenerate CTA; uses `WorkoutProgram` type from `@kinora/contracts`
+- [x] 7b.3.2 RED: write `apps/web/src/app/(app)/plan/[id]/__tests__/plan-status.test.tsx` — spinner when generating, content when ready, error+CTA when failed; status-fetch fallback renders correctly when WS not connected
 
 ### Phase 7b.4: WebSocket subscribe
-- [ ] 7b.4.1 RED: write `apps/web/src/hooks/__tests__/use-plan-ws.test.ts` — hook subscribes to `/ws/plans`, updates status on `{ planId, status }` message, handles disconnect/reconnect, skips messages for other planIds
-- [ ] 7b.4.2 GREEN: create `apps/web/src/hooks/use-plan-ws.ts` — custom hook opening WS with session credential, dispatching status updates; falls back to `GET /workout-plans/:id` poll on connect failure
+- [x] 7b.4.1 RED: write `apps/web/src/hooks/__tests__/use-plan-ws.test.ts` — hook subscribes to `/ws/plans`, updates status on `{ planId, status }` message, handles disconnect/reconnect, skips messages for other planIds
+- [x] 7b.4.2 GREEN: create `apps/web/src/hooks/use-plan-ws.ts` — custom hook opening WS with session credential, dispatching status updates; falls back to `GET /workout-plans/:id` poll on connect failure
 
 ### Phase 7b.5: Wire hook into plan page
-- [ ] 7b.5.1 Integrate `usePlanWs(planId)` into plan status page; merge WS-pushed status with server-fetched initial state
-- [ ] 7b.5.2 GREEN: confirm component test passes with hook mock
+- [x] 7b.5.1 Integrate `usePlanWs(planId)` into plan status page; merge WS-pushed status with server-fetched initial state
+- [x] 7b.5.2 GREEN: confirm component test passes with hook mock
 
 ### Phase 7b.6: Commit
-- [ ] 7b.6.1 Conventional commit: `feat(web): add plan status UI, WebSocket subscribe, regenerate action`
+- [x] 7b.6.1 Conventional commit: `feat(web): add plan status UI, WebSocket subscribe, regenerate action`
 
 ---
 
