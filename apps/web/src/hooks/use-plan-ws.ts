@@ -9,15 +9,47 @@
  * session token is passed as a URL query parameter — matching the server-side
  * `routes/ws.ts` preValidation that reads `request.query.token`.
  *
- * On connect: listens for { planId, status } messages and updates local status
- *   when planId matches the watched planId.
- * On connect failure: falls back to polling GET /workout-plans/:planId.
- * On disconnect: attempts reconnect (up to MAX_RECONNECTS times).
+ * v1 token-in-URL tradeoff: the session token is short-lived and opaque; the
+ * connection is always TLS-encrypted in production. Cookie-on-WS upgrade is
+ * the preferred hardening path but requires same-origin (web + API on the same
+ * domain) and `@fastify/cookie` on the server. Tracked for v2.
  *
- * Pure helper functions are exported separately so they can be unit-tested
- * without a DOM environment or hook runner.
+ * On connect: listens for { planId, status } messages. Updates local status
+ *   when planId matches AND the new status rank ≥ current rank (monotonicity
+ *   guard — prevents a late "generating" push from overwriting a "ready").
+ * On connect failure: falls back to polling GET /workout-plans/:planId.
+ * On disconnect: attempts reconnect ONLY when NOT in a terminal state, using a
+ *   ref (not stale closure) to check the current status.
+ *
+ * Pure helper functions are exported separately for unit testing.
  */
 import { useEffect, useRef, useState, useCallback } from "react";
+
+// ---------------------------------------------------------------------------
+// Status rank — monotonicity guard (Fix B)
+// ---------------------------------------------------------------------------
+
+/** Numeric rank for status strings. Higher rank = cannot be overwritten. */
+export const STATUS_RANK: Record<string, number> = {
+  generating: 0,
+  ready: 1,
+  failed: 1,
+};
+
+/**
+ * Returns true only when the incoming status rank ≥ the current status rank.
+ * Prevents out-of-order/late "generating" pushes from overwriting "ready"/"failed".
+ *
+ * Unknown statuses (rank undefined) are treated as rank 0 (lowest precedence).
+ */
+export function isStatusAllowed(
+  currentStatus: string,
+  incomingStatus: string,
+): boolean {
+  const currentRank = STATUS_RANK[currentStatus] ?? 0;
+  const incomingRank = STATUS_RANK[incomingStatus] ?? 0;
+  return incomingRank >= currentRank;
+}
 
 // ---------------------------------------------------------------------------
 // Pure helper functions (exported for testing)
@@ -70,14 +102,6 @@ export function shouldUpdateStatus(
   return msg.planId === watchedPlanId;
 }
 
-// ---------------------------------------------------------------------------
-// Hook configuration
-// ---------------------------------------------------------------------------
-
-const MAX_RECONNECTS = 5;
-const RECONNECT_DELAY_MS = 3000;
-const POLL_INTERVAL_MS = 5000;
-
 export function getWsBase(): string {
   if (typeof window === "undefined") return "";
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -86,6 +110,19 @@ export function getWsBase(): string {
 
 export function getApiBase(): string {
   return process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+}
+
+// ---------------------------------------------------------------------------
+// Hook configuration
+// ---------------------------------------------------------------------------
+
+const MAX_RECONNECTS = 5;
+const RECONNECT_DELAY_MS = 3000;
+const POLL_INTERVAL_MS = 5000;
+
+/** Returns true when a status value represents a terminal state. */
+function isTerminal(s: string): boolean {
+  return s === "ready" || s === "failed";
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +140,8 @@ export interface UsePlanWsOptions {
   apiBase?: string;
   /** Override fetch (testing). */
   fetchImpl?: typeof fetch;
+  /** Override WebSocket constructor (testing). */
+  WebSocketImpl?: typeof WebSocket;
 }
 
 export interface UsePlanWsResult {
@@ -119,13 +158,25 @@ export function usePlanWs(
     wsBase,
     apiBase,
     fetchImpl = fetch,
+    WebSocketImpl,
   } = options;
 
   const [status, setStatus] = useState(initialStatus);
+
+  // Fix A: track current status in a ref so onclose can read the LIVE value,
+  // not the stale closure value captured when connect() was created.
+  const currentStatusRef = useRef(initialStatus);
+
   const reconnectCount = useRef(0);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const isMounted = useRef(true);
+
+  /** Update both state and the ref atomically. */
+  const updateStatus = useCallback((next: string) => {
+    currentStatusRef.current = next;
+    setStatus(next);
+  }, []);
 
   const stopPolling = useCallback(() => {
     if (pollTimerRef.current !== null) {
@@ -150,9 +201,12 @@ export function usePlanWs(
           if (!res.ok) return;
           const body = (await res.json()) as { status?: string };
           if (body.status && isMounted.current) {
-            setStatus(body.status);
+            // Fix B: apply monotonicity guard on poll results too
+            if (isStatusAllowed(currentStatusRef.current, body.status)) {
+              updateStatus(body.status);
+            }
             // Stop polling once in a terminal state
-            if (body.status === "ready" || body.status === "failed") {
+            if (isTerminal(body.status)) {
               stopPolling();
             }
           }
@@ -161,13 +215,25 @@ export function usePlanWs(
         }
       })();
     }, POLL_INTERVAL_MS);
-  }, [planId, token, apiBase, fetchImpl, stopPolling]);
+  }, [planId, token, apiBase, fetchImpl, stopPolling, updateStatus]);
 
   useEffect(() => {
     isMounted.current = true;
+    // Sync the ref if initialStatus changes between renders
+    currentStatusRef.current = initialStatus;
 
     if (!token) {
       // No session — fall back to polling immediately
+      startPolling();
+      return () => {
+        isMounted.current = false;
+        stopPolling();
+      };
+    }
+
+    const WS = WebSocketImpl ?? (typeof WebSocket !== "undefined" ? WebSocket : undefined);
+    if (!WS) {
+      // No WebSocket in environment (SSR/Node) — fall back to polling
       startPolling();
       return () => {
         isMounted.current = false;
@@ -182,7 +248,7 @@ export function usePlanWs(
       const url = buildWsUrl(base, token!);
       let ws: WebSocket;
       try {
-        ws = new WebSocket(url);
+        ws = new WS!(url);
       } catch {
         // Constructor can throw in some environments
         startPolling();
@@ -198,17 +264,23 @@ export function usePlanWs(
 
       ws.onmessage = (event: MessageEvent<string>) => {
         const msg = resolveStatusUpdate(event.data);
-        if (msg && shouldUpdateStatus(planId, msg) && isMounted.current) {
-          setStatus(msg.status);
+        if (
+          msg &&
+          shouldUpdateStatus(planId, msg) &&
+          // Fix B: monotonicity — reject late "generating" after "ready"/"failed"
+          isStatusAllowed(currentStatusRef.current, msg.status) &&
+          isMounted.current
+        ) {
+          updateStatus(msg.status);
           // In terminal state we don't need to keep the socket open
-          if (msg.status === "ready" || msg.status === "failed") {
+          if (isTerminal(msg.status)) {
             ws.close();
           }
         }
       };
 
       ws.onerror = () => {
-        // On error, fall back to polling
+        // On error, fall back to polling (only start once)
         if (reconnectCount.current === 0) {
           startPolling();
         }
@@ -217,17 +289,21 @@ export function usePlanWs(
       ws.onclose = () => {
         wsRef.current = null;
         if (!isMounted.current) return;
-        // Reconnect unless we're in a terminal state or out of attempts
+        // Fix A: read currentStatusRef (live value), NOT the stale closure `status`.
+        // This prevents a spurious reconnect after the socket closes following a
+        // "ready"/"failed" message (the onmessage handler updates the ref before
+        // calling ws.close(), so onclose sees the correct terminal value).
         if (
-          status !== "ready" &&
-          status !== "failed" &&
+          !isTerminal(currentStatusRef.current) &&
           reconnectCount.current < MAX_RECONNECTS
         ) {
           reconnectCount.current += 1;
           setTimeout(connect, RECONNECT_DELAY_MS);
         } else {
-          // Give up on WS — fall back to polling
-          startPolling();
+          // Terminal state OR exhausted reconnects — fall back to polling
+          if (!isTerminal(currentStatusRef.current)) {
+            startPolling();
+          }
         }
       };
     }
