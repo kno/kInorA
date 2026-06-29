@@ -6,6 +6,13 @@
  *
  * Supports multiple open sockets per user (e.g. multiple browser tabs).
  * Payloads carry ONLY { planId, status } — NO program content, NO health data.
+ *
+ * Cross-tenant isolation invariant:
+ * The registry keys on `userId` alone and does NOT explicitly enforce tenant
+ * scoping. This is safe ONLY because session `userId` values are globally-unique
+ * UUIDs (assigned at user-creation time, never reused across tenants). A userId
+ * from tenant A will never equal a userId from tenant B, so isolation is a
+ * natural consequence of UUID uniqueness — not a separate check here.
  */
 
 /** Minimal interface satisfied by WebSocket.WebSocket from the `ws` package. */

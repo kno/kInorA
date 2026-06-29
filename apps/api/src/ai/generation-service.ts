@@ -133,12 +133,16 @@ export class PlanGenerationService {
       assertNoDiagnosticLanguage(withWarnings);
 
       const result = await this.planRepo.markReady(tenantId, planId, withWarnings);
-      // Fix 8: warn if markReady updated 0 rows (tenant mismatch — should not happen
-      // since planId was just created, but log so stuck-generating is traceable).
       if (!result) {
+        // markReady updated 0 rows (tenant mismatch or race — should not happen
+        // normally, but log so stuck-generating is traceable).
         console.warn(
           `[generation-service] markReady returned undefined for planId=${planId} tenantId=${tenantId} — plan may be stuck in generating`
         );
+        // Do NOT notify "ready" — the DB was not updated, so the plan is still
+        // in "generating" state. Emitting a false-ready would contradict the DB.
+        // The client stays in "generating" until the user triggers regenerate.
+        return;
       }
 
       // Notify the user via WebSocket — fire-and-forget-safe.

@@ -127,16 +127,24 @@ describe("WsRegistry", () => {
   });
 
   describe("cross-tenant isolation", () => {
-    it("tenants with different userIds do not receive each other's notifications", () => {
-      // Simulate two users from different tenants (different userId strings)
+    it("users from different tenants do not receive each other's notifications", () => {
+      // WsRegistry keys on userId alone. This is safe because session userIds
+      // are globally-unique UUIDs assigned at user-creation time — they never
+      // collide across tenants. The registry does NOT enforce tenant scoping
+      // itself; tenant isolation is a natural consequence of UUID uniqueness.
+      //
+      // Fixtures use realistic distinct UUID-style userIds (matching production),
+      // NOT compound "tenant:user" strings (which production never uses).
+      const USER_TENANT_1 = "11111111-0000-0000-0000-000000000001";
+      const USER_TENANT_2 = "22222222-0000-0000-0000-000000000001";
+
       const socketTenant1 = makeFakeSocket();
       const socketTenant2 = makeFakeSocket();
 
-      // Different users from different tenants have distinct userIds
-      registry.register("tenant1:user-1", socketTenant1 as never);
-      registry.register("tenant2:user-1", socketTenant2 as never);
+      registry.register(USER_TENANT_1, socketTenant1 as never);
+      registry.register(USER_TENANT_2, socketTenant2 as never);
 
-      registry.notify("tenant1:user-1", { planId: "plan-1", status: "ready" as const });
+      registry.notify(USER_TENANT_1, { planId: "plan-1", status: "ready" as const });
 
       expect(socketTenant1.send).toHaveBeenCalledTimes(1);
       expect(socketTenant2.send).not.toHaveBeenCalled();

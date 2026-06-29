@@ -393,5 +393,40 @@ describe("PlanGenerationService", () => {
 
       vi.useRealTimers();
     });
+
+    it("does NOT notify 'ready' when markReady returns undefined (0 rows — plan stays generating)", async () => {
+      // Fix 2: a false-ready notification would tell the client the plan is ready
+      // when the DB was NOT updated (tenant mismatch / race). Guard: only notify
+      // 'ready' when markReady returns a truthy result (row updated).
+      vi.useFakeTimers();
+
+      const specRow = { specJson: confirmedSpec };
+      const specRepo = buildMockSpecRepo(specRow);
+      const planRepo = buildMockPlanRepo();
+      const registry = buildMockRegistry();
+
+      // markReady returns undefined → 0 rows updated (stuck-generating scenario)
+      planRepo.markReady.mockResolvedValue(undefined);
+      vi.spyOn(generator, "generate").mockResolvedValue(mockProgram);
+
+      const service = new PlanGenerationService(
+        generator,
+        specRepo as never,
+        planRepo as never,
+        registry
+      );
+
+      await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
+      await vi.runAllTimersAsync();
+
+      // markReady was called
+      expect(planRepo.markReady).toHaveBeenCalledTimes(1);
+      // notify must NOT be called with status "ready" — the DB wasn't updated
+      expect(registry.notify).not.toHaveBeenCalledWith(USER_A, { planId: PLAN_ID, status: "ready" });
+      // notify also must not have been called at all (no other status applies here)
+      expect(registry.notify).not.toHaveBeenCalled();
+
+      vi.useRealTimers();
+    });
   });
 });

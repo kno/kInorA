@@ -146,8 +146,10 @@ export async function buildApp(
   // WebSocket plugin + authenticated plan-status route.
   // WsRegistry is shared between this route and PlanGenerationService so
   // notifications from the generation background task reach connected clients.
+  // db is passed so wsRoutes can resolve ?token= query-param auth using the
+  // same SessionRepository + resolveAuthContextFromToken as the Bearer path.
   await app.register(fastifyWebsocket);
-  await app.register(wsRoutes, { registry });
+  await app.register(wsRoutes, { registry, db: database });
 
   return app;
 }
