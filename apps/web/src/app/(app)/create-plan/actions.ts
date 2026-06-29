@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import type { PlanSpec } from "@kinora/contracts";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
-import { promotePlanSpec, submitDraft } from "./plan-draft-client";
+import { promotePlanSpec, confirmPlanGen, submitDraft, regeneratePlan } from "./plan-draft-client";
 
 /**
  * Server Actions for the create-plan wizard.
@@ -36,15 +36,37 @@ export async function saveDraftAction(
 }
 
 /**
- * Promote the draft to a confirmed PlanSpec. Throws on failure so the client
- * surfaces it; on success the client navigates to the plan view. Navigation is
- * client-side (router.push) rather than a server `redirect()` so the call works
- * from a plain onClick handler, not only inside a `<form action>`.
+ * Promote the draft to a confirmed PlanSpec, then trigger AI plan generation.
+ *
+ * 1. POST /plan-specs → create confirmed spec → { id: specId }
+ * 2. POST /plan-specs/:specId/confirm → trigger generation → { planId, status }
+ *
+ * Returns the planId so the client can navigate to /plan/[planId].
+ * Throws on failure so the client surfaces it.
  */
-export async function confirmPlanSpecAction(): Promise<void> {
+export async function confirmPlanSpecAction(): Promise<{ planId: string; status: string }> {
   const token = await sessionToken();
-  const result = await promotePlanSpec(token);
+  const promoteResult = await promotePlanSpec(token);
+  if (promoteResult.kind === "error") {
+    throw new Error(promoteResult.message);
+  }
+  const confirmResult = await confirmPlanGen(promoteResult.id, token);
+  if (confirmResult.kind === "error") {
+    throw new Error(confirmResult.message);
+  }
+  return { planId: confirmResult.planId, status: confirmResult.status };
+}
+
+/**
+ * Trigger plan regeneration for an already-confirmed spec.
+ * Returns { planId, status: "generating" } so the client can update UI.
+ * Throws on failure so the client surfaces it.
+ */
+export async function regeneratePlanAction(specId: string): Promise<{ planId: string; status: string }> {
+  const token = await sessionToken();
+  const result = await regeneratePlan(specId, token);
   if (result.kind === "error") {
     throw new Error(result.message);
   }
+  return { planId: result.planId, status: result.status };
 }

@@ -42,6 +42,10 @@ export type PromoteResult =
   | { kind: "ok"; id: string }
   | { kind: "error"; message: string };
 
+export type ConfirmResult =
+  | { kind: "ok"; planId: string; status: string }
+  | { kind: "error"; message: string };
+
 interface ClientOptions {
   fetchImpl?: typeof fetch;
   apiBaseUrl?: string;
@@ -120,6 +124,153 @@ export async function submitDraft(
   }
 
   return { kind: "ok" };
+}
+
+/**
+ * Confirm a promoted PlanSpec and trigger AI plan generation.
+ * Calls `POST /plan-specs/:specId/confirm` → `{ planId, status: "generating" }`.
+ * Returns the planId so the caller can navigate to the plan status view.
+ */
+export async function confirmPlanGen(
+  specId: string,
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<ConfirmResult> {
+  if (!token) {
+    return { kind: "error", message: "no_session" };
+  }
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}/plan-specs/${specId}/confirm`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({}),
+    });
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? "confirm_failed" };
+  }
+
+  const body = (await res.json().catch(() => ({}))) as {
+    planId?: string;
+    status?: string;
+  };
+  if (!body.planId) {
+    return { kind: "error", message: "no_plan_id" };
+  }
+
+  return { kind: "ok", planId: body.planId, status: body.status ?? "generating" };
+}
+
+/**
+ * Trigger plan regeneration via `POST /plan-specs/:specId/regenerate`.
+ * Returns `{ planId, status: "generating" }` so the caller can set UI status.
+ */
+export type RegenerateResult =
+  | { kind: "ok"; planId: string; status: string }
+  | { kind: "error"; message: string };
+
+export async function regeneratePlan(
+  specId: string,
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<RegenerateResult> {
+  if (!token) {
+    return { kind: "error", message: "no_session" };
+  }
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}/plan-specs/${specId}/regenerate`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({}),
+    });
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? "regenerate_failed" };
+  }
+
+  const body = (await res.json().catch(() => ({}))) as {
+    planId?: string;
+    status?: string;
+  };
+  if (!body.planId) {
+    return { kind: "error", message: "no_plan_id" };
+  }
+
+  return { kind: "ok", planId: body.planId, status: body.status ?? "generating" };
+}
+
+/**
+ * Fetch the current status of a workout plan via `GET /workout-plans/:planId`.
+ */
+export interface PlanStatusResponse {
+  id: string;
+  status: string;
+  program?: unknown;
+  specId?: string;
+}
+
+export type FetchPlanResult =
+  | { kind: "ok"; plan: PlanStatusResponse }
+  | { kind: "error"; message: string };
+
+export async function fetchPlanStatus(
+  planId: string,
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<FetchPlanResult> {
+  if (!token) {
+    return { kind: "error", message: "no_session" };
+  }
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}/workout-plans/${planId}`, {
+      method: "GET",
+      headers: { authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? "fetch_plan_failed" };
+  }
+
+  const body = (await res.json().catch(() => null)) as PlanStatusResponse | null;
+  if (!body?.id) {
+    return { kind: "error", message: "invalid_response" };
+  }
+
+  return { kind: "ok", plan: body };
 }
 
 /**

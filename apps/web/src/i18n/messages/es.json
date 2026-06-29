@@ -136,5 +136,20 @@
   "features_strength_eyebrow": "Progresión real",
   "features_strength_title": "Cada kilo levantado, registrado",
   "features_strength_desc": "kInorA lleva el control de tus cargas y ajusta la progresión de manera inteligente. Sin hojas de cálculo, sin adivinar. Solo avance constante semana a semana.",
-  "strength_img_alt": "Manos con magnesio sujetando una barra de pesas antes de un levantamiento, listos para ejecutar el movimiento"
+  "strength_img_alt": "Manos con magnesio sujetando una barra de pesas antes de un levantamiento, listos para ejecutar el movimiento",
+
+  "plan_generating_title": "Generando tu plan…",
+  "plan_generating_desc": "Tu plan de entrenamiento personalizado está siendo creado. Esto suele tardar unos 30 segundos.",
+  "plan_generating_aria": "Generando plan",
+  "plan_ready_title": "Tu plan está listo",
+  "plan_failed_title": "Error al generar el plan",
+  "plan_failed_desc": "Algo salió mal al generar tu plan. Puedes intentarlo de nuevo.",
+  "plan_regenerate_cta": "Regenerar plan",
+  "plan_session_day": "Día",
+  "plan_exercises_label": "Ejercicios",
+  "plan_sets_label": "series",
+  "plan_reps_label": "reps",
+  "plan_rest_label": "descanso",
+  "plan_limitation_warning_label": "Nota",
+  "plan_back_to_dashboard": "Volver al dashboard"
 }
