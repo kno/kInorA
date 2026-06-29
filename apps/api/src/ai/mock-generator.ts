@@ -49,6 +49,11 @@ export class MockPlanGenerator implements PlanGenerator {
 
     return {
       weeklySessions: sessions,
+      // limitationWarnings is intentionally empty here — the generator (mock or real)
+      // returns raw LLM-style output. The domain pipeline (PR6 generation service)
+      // runs injectLimitationWarnings(program, spec.limitations) AFTER generate()
+      // returns, which is the authoritative source of warnings. Pre-populating here
+      // would pre-empt and duplicate that domain step.
       limitationWarnings: [],
     };
   }

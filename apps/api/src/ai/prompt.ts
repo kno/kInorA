@@ -18,9 +18,10 @@ export function buildPlanPrompt(spec: PlanSpec): string {
 
   const limitationsSection =
     spec.limitations.length > 0
-      ? `User context — physical considerations (treat as background context only, NOT as diagnoses):
-${spec.limitations.map((l) => `- ${l.text}`).join("\n")}`
+      ? `User context — physical considerations:\n${spec.limitations.map((l) => `- ${l.text}`).join("\n")}`
       : "User context: No specific physical considerations reported.";
+
+  const { strength, hypertrophy, endurance, mobility } = spec.preferenceScores;
 
   return `You are a certified personal trainer creating a personalized workout program.
 
@@ -38,6 +39,7 @@ USER TRAINING PROFILE:
 - Session duration: ${spec.sessionDurationMinutes} minutes
 - Training location: ${spec.location}
 - Available equipment: ${equipmentList}
+- Training emphasis (0–1 weights): strength=${strength}, hypertrophy=${hypertrophy}, endurance=${endurance}, mobility=${mobility}
 
 ${limitationsSection}
 

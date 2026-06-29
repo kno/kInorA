@@ -71,4 +71,33 @@ describe("mask", () => {
       expect(result).toBe("");
     });
   });
+
+  describe("empty-string limitation term guard", () => {
+    it("returns text unchanged when a limitation term is an empty string", () => {
+      // split("").join("[REDACTED]") would corrupt "abc" → "[REDACTED]a[REDACTED]b[REDACTED]c[REDACTED]"
+      // The guard must skip empty terms entirely.
+      const result = mask("abc", [""]);
+      expect(result).toBe("abc");
+    });
+
+    it("skips empty terms but still redacts non-empty terms in the same array", () => {
+      const result = mask(
+        "User has lower back pain and other issues.",
+        ["", "lower back pain"]
+      );
+      expect(result).toBe("User has [REDACTED] and other issues.");
+    });
+  });
+
+  describe("regex special characters in limitation terms", () => {
+    it("handles regex-special-char limitation terms without throwing or mis-matching", () => {
+      // If mask were ever refactored to use RegExp, these chars would break it.
+      // This test locks in the correct behavior and acts as a regression guard.
+      const result = mask(
+        "User has knee pain (left) and L4-L5 disc involvement.",
+        ["knee pain (left)", "L4-L5 disc"]
+      );
+      expect(result).toBe("User has [REDACTED] and [REDACTED] involvement.");
+    });
+  });
 });
