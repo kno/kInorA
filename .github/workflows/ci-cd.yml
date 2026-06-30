@@ -54,6 +54,9 @@ jobs:
       - name: Architecture guard
         run: pnpm architecture
 
+      - name: UI → API guardrail
+        run: pnpm ui-api-guard
+
       - name: Build
         run: pnpm build
 

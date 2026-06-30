@@ -9,6 +9,12 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // server-only always throws at runtime — stub it out in the test
+      // environment so modules that import it can be exercised via
+      // vi.importActual without the module throwing.
+      "server-only": fileURLToPath(
+        new URL("./test/__mocks__/server-only.ts", import.meta.url)
+      ),
     },
   },
   test: {
