@@ -378,6 +378,14 @@ describe("Plan generation routes", () => {
       const body = response.json();
       expect(body.id).toBe(PLAN_ID);
       expect(body.status).toBe("ready");
+      // DTO contract: the client reads `program` + `specId`. The handler MUST map
+      // the raw DB row (programJson/planSpecId) to these names, or the web shows
+      // a "ready" plan with no content. It must NOT leak internal columns.
+      expect(body.program).toEqual(mockProgram);
+      expect(body.specId).toBeDefined();
+      expect(body.programJson).toBeUndefined();
+      expect(body.tenantId).toBeUndefined();
+      expect(body.userId).toBeUndefined();
     });
 
     it("returns 401 when not authenticated", async () => {
@@ -459,6 +467,10 @@ describe("Plan generation routes", () => {
       const body = response.json();
       expect(body.id).toBe(PLAN_ID);
       expect(body.status).toBe("ready");
+      // Same DTO contract as GET /workout-plans/:id.
+      expect(body.program).toEqual(mockProgram);
+      expect(body.specId).toBeDefined();
+      expect(body.programJson).toBeUndefined();
     });
 
     it("returns 401 when not authenticated", async () => {
