@@ -68,10 +68,10 @@ describe("createOpenCodeGoAdapter (via buildAdapters)", () => {
     const adapter = factory("deepseek-v4-flash");
     await adapter.generate(baseSpec);
 
-    // Must use json_mode — jsonSchema causes a 400 from DeepSeek/OpenCode-Go
+    // Must use jsonMode — jsonSchema causes a 400 from DeepSeek/OpenCode-Go
     expect(mockWithStructuredOutput).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ method: "json_mode" })
+      expect.objectContaining({ method: "jsonMode" })
     );
   });
 
