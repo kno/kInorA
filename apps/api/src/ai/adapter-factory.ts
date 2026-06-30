@@ -153,7 +153,7 @@ function createOpenCodeGoAdapter(model: string): PlanGenerator {
     },
   });
 
-  const chain = llm.withStructuredOutput(WorkoutProgramSchema, { method: "json_mode" });
+  const chain = llm.withStructuredOutput(WorkoutProgramSchema, { method: "jsonMode" });
 
   return {
     generate(spec: PlanSpec): Promise<WorkoutProgram> {
