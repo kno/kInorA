@@ -10,10 +10,41 @@ cd "$VPS_DEPLOY_DIR"
 # live in a persistent .env on the server, NOT in GitHub secrets. Sourced here so
 # docker compose can interpolate ${OPENROUTER_*} / ${LANGFUSE_*} from the environment.
 # This file is NOT shipped by the deploy workflow and survives across deploys.
+#
+# PRECEDENCE: the deploy-managed vars from the ENV_PAYLOAD (image ref, OAuth, API base)
+# are authoritative for THIS release. We snapshot them before sourcing .env and restore
+# them after, so a stale value accidentally left in the operator .env (e.g. a hardcoded
+# IMAGE_TAG/GHCR_IMAGE copied from .env.deploy) can NEVER override the image the workflow
+# just built and pushed. Without this, a green deploy could silently run an old image.
 if [ -f .env ]; then
+  __payload_ghcr_image="$GHCR_IMAGE"
+  __payload_image_tag="$IMAGE_TAG"
+  __payload_google_client_id="${GOOGLE_CLIENT_ID:-}"
+  __payload_google_client_secret="${GOOGLE_CLIENT_SECRET:-}"
+  __payload_google_redirect_uri="${GOOGLE_REDIRECT_URI:-}"
+  __payload_oidc_redirect_uri="${OIDC_REDIRECT_URI:-}"
+  __payload_api_base_url="${API_BASE_URL:-}"
+  __payload_web_public_origin="${WEB_PUBLIC_ORIGIN:-}"
+
+  if grep -qE '^[[:space:]]*(GHCR_IMAGE|IMAGE_TAG|GOOGLE_|OIDC_REDIRECT_URI|API_BASE_URL|WEB_PUBLIC_ORIGIN)=' .env; then
+    echo "WARNING: operator .env defines deploy-managed vars (IMAGE_TAG/GHCR_IMAGE/GOOGLE_*/API_BASE_URL/WEB_PUBLIC_ORIGIN)." >&2
+    echo "         These are ignored — the release payload is authoritative. Keep only OPENROUTER_*/LANGFUSE_*/POSTGRES_* in .env." >&2
+  fi
+
   set -a
+  # shellcheck disable=SC1091
   . ./.env
   set +a
+
+  # Restore deploy-managed vars — the release payload always wins over .env.
+  GHCR_IMAGE="$__payload_ghcr_image"
+  IMAGE_TAG="$__payload_image_tag"
+  GOOGLE_CLIENT_ID="$__payload_google_client_id"
+  GOOGLE_CLIENT_SECRET="$__payload_google_client_secret"
+  GOOGLE_REDIRECT_URI="$__payload_google_redirect_uri"
+  OIDC_REDIRECT_URI="$__payload_oidc_redirect_uri"
+  API_BASE_URL="$__payload_api_base_url"
+  WEB_PUBLIC_ORIGIN="$__payload_web_public_origin"
 fi
 
 # Persist deploy-managed vars (image ref, Google OAuth, API base URL) for SSH
