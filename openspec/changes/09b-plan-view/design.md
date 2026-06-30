@@ -34,9 +34,12 @@ at render time — same pattern as `/plan/[id]/page.tsx` calling `fetchPlanStatu
 and trivially enforce the browser-never-calls-API constraint. The `/plan` tab shows a
 snapshot; real-time tracking is the `/plan/[id]` concern.
 
-### Decision: No WebSocket / polling on /plan tab
+### Decision: No WebSocket / polling on /plan tab; redirect in-flight plans to /plan/[id]
 
-**Choice**: Static snapshot only; generating plans show a "generating" state with a link to `/plan/[id]`.
+**Choice** (resolved with the user): the `/plan` tab is a read-only server snapshot.
+- `generating` plan → **`redirect("/plan/${id}")`** so the user lands on the live WebSocket status view (no static "generating" snapshot on `/plan`).
+- `failed` plan → render the failed state with a **link** to `/plan/[id]` (where Regenerate + live status already exist). No direct Regenerate button on `/plan` — keeps it a read-only server component.
+- `ready` plan → render `PlanStatusView`. `empty` → CTA to `/create-plan`.
 
 **Rationale**: The WS hook (`use-plan-ws.ts`) is a client-side construct requiring a
 client component. Adding it to the nav tab would pull in client-component weight and
