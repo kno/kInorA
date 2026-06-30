@@ -1,0 +1,320 @@
+/* ==========================================================================
+ * plan-week-view.module.css
+ * Scoped layout styles for PlanWeekView + DayDetailPanel.
+ * Uses global design-token custom properties from globals.css.
+ * ========================================================================== */
+
+/* ---- Summary strip ---- */
+
+.summaryStrip {
+  display: flex;
+  gap: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.summaryItem {
+  flex: 1;
+  padding: 16px 20px;
+  border-right: 1px solid var(--border);
+}
+
+.summaryItem:last-child {
+  border-right: none;
+}
+
+.summaryEyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.summaryVal {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.summarySub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ---- Limitation warning banner ---- */
+
+.limitationBanner {
+  background: var(--surface);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--r-card);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.limitationBannerTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warning);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.limitationBannerList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.limitationBannerItem {
+  font-size: 13px;
+  color: var(--fg);
+}
+
+/* ---- Day card grid ---- */
+
+.dayGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+/* ---- Day card ---- */
+
+.dayCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 12px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  width: 100%;
+}
+
+.dayCard:hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.dayCardActive {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.dcDayLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.dcFocus {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  line-height: 1.2;
+}
+
+.dcMeta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ---- Detail panel ---- */
+
+.detailPanel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.detailHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.detailTitleBlock {
+  flex: 1;
+}
+
+.detailEyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.detailTitle {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+
+.detailMeta {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.detailClose {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s;
+  flex-shrink: 0;
+}
+
+.detailClose:hover {
+  background: var(--border);
+  color: var(--fg);
+}
+
+/* ---- Exercise table ---- */
+
+.exTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.exTable th {
+  text-align: left;
+  padding: 0 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.exTable th:not(:first-child) {
+  text-align: right;
+}
+
+.exTable td {
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  vertical-align: top;
+}
+
+.exTable tr:last-child td {
+  border-bottom: none;
+}
+
+.exTable td:not(:first-child) {
+  text-align: right;
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.exTable td:first-child {
+  font-weight: 500;
+}
+
+.exerciseName {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exerciseNote {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.exerciseSubstitution {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* ---- Rest chip ---- */
+
+.restChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--font-body);
+}
+
+/* ---- Responsive breakpoints ---- */
+/*
+ * Day-grid tiers match design (web-plan.html + spec SC-11):
+ *   ≥1100px    → auto-fill (≥4 cols with minmax(180px, 1fr))
+ *   768–1099px → 3 columns (explicit lock-in)
+ *   <768px     → 2 columns
+ *
+ * auto-fill + minmax(180px) naturally yields ≥4 cols on wide viewports.
+ * The media queries lock in the expected mid and narrow tiers.
+ */
+
+@media (max-width: 1099px) {
+  .dayGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  .summaryStrip {
+    flex-wrap: wrap;
+  }
+
+  .summaryItem {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    flex: 1 1 45%;
+  }
+
+  .summaryItem:last-child {
+    border-bottom: none;
+  }
+
+  .dayGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
