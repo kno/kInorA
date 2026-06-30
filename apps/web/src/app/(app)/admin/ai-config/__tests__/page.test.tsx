@@ -75,6 +75,15 @@ describe("AiConfigPage (server component)", () => {
     expect(redirect).toHaveBeenCalledWith("/");
   });
 
+  it("redirects to / when the API returns 401 (unauthenticated — never render the panel)", async () => {
+    cookieGet.mockReturnValue({ value: undefined });
+    fetchAiConfig.mockResolvedValue({ kind: "unauthorized" });
+
+    await AiConfigPage();
+
+    expect(redirect).toHaveBeenCalledWith("/");
+  });
+
   // SC-14: admin sees current config
   it("renders AiConfigForm with current config for admin users (SC-14)", async () => {
     cookieGet.mockReturnValue({ value: "admin-token" });

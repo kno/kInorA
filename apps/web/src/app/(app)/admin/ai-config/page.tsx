@@ -22,8 +22,9 @@ export default async function AiConfigPage() {
 
   const result = await fetchAiConfig(token);
 
-  // SC-13 / T9: non-admin user → redirect to home
-  if (result.kind === "forbidden") {
+  // SC-13 / T9: non-admin (403) OR unauthenticated (401) → redirect to home.
+  // Never render the admin panel UI to a user the API would not authorize.
+  if (result.kind === "forbidden" || result.kind === "unauthorized") {
     redirect("/");
   }
 

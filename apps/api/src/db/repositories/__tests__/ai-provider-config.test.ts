@@ -22,21 +22,6 @@ function selectChain(rows: unknown[] = []) {
   };
 }
 
-function upsertChain() {
-  return {
-    insert: vi.fn().mockReturnValue({
-      values: vi.fn().mockReturnValue({
-        onConflictDoUpdate: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([CONFIG_ROW]),
-        }),
-      }),
-    }),
-    delete: vi.fn().mockReturnValue({
-      returning: vi.fn().mockResolvedValue([]),
-    }),
-  };
-}
-
 // --- Tests ---
 
 describe("AiProviderConfigRepository", () => {
@@ -63,13 +48,13 @@ describe("AiProviderConfigRepository", () => {
   });
 
   describe("upsert", () => {
-    it("returns the upserted config with the given provider and model", async () => {
+    it("deletes existing rows then inserts (singleton) and returns the upserted config", async () => {
+      const deleteSpy = vi.fn().mockReturnValue({
+        returning: vi.fn().mockResolvedValue([]),
+      });
       const db = {
         ...selectChain([]),
-        ...upsertChain(),
-        delete: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([]),
-        }),
+        delete: deleteSpy,
         insert: vi.fn().mockReturnValue({
           values: vi.fn().mockReturnValue({
             returning: vi.fn().mockResolvedValue([
@@ -82,6 +67,8 @@ describe("AiProviderConfigRepository", () => {
 
       const result = await repo.upsert("openai", "gpt-4o");
 
+      // Singleton invariant: existing rows MUST be deleted before insert.
+      expect(deleteSpy).toHaveBeenCalled();
       expect(result.provider).toBe("openai");
       expect(result.model).toBe("gpt-4o");
     });

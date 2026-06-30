@@ -270,7 +270,9 @@ export const aiProviderEnum = pgEnum("ai_provider", [
 
 /**
  * AI Provider Config — singleton table storing the active AI provider and model.
- * At most one row should exist at any time; upsert on a fixed id keeps it singleton.
+ * At most one row should exist at any time; the repository enforces this by deleting
+ * all existing rows before each insert (delete+insert, since there is no fixed anchor
+ * key for ON CONFLICT DO UPDATE).
  * If no row exists the generation pipeline falls back to OPENROUTER_API_KEY env var.
  */
 export const aiProviderConfig = pgTable("ai_provider_config", {
