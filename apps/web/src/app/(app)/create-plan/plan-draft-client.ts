@@ -280,6 +280,59 @@ export async function fetchPlanStatus(
 }
 
 /**
+ * Lightweight summary of a workout plan for the plan selector.
+ */
+export interface PlanSummary {
+  id: string;
+  status: string;
+  createdAt: string;
+}
+
+export type FetchUserPlansResult =
+  | { kind: "ok"; plans: PlanSummary[] }
+  | { kind: "error"; message: string };
+
+/**
+ * Fetch all plans for the authenticated user via `GET /workout-plans`.
+ * Returns summaries newest-first. On any error returns { kind: "error" }.
+ * Only usable server-side (this module imports server-only).
+ */
+export async function fetchUserPlans(
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<FetchUserPlansResult> {
+  if (!token) {
+    return { kind: "error", message: "no_session" };
+  }
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}/workout-plans`, {
+      method: "GET",
+      headers: { authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? "fetch_plans_failed" };
+  }
+
+  const body = (await res.json().catch(() => null)) as PlanSummary[] | null;
+  if (!Array.isArray(body)) {
+    return { kind: "error", message: "invalid_response" };
+  }
+
+  return { kind: "ok", plans: body };
+}
+
+/**
  * Promote the current draft to a confirmed `PlanSpec` via `POST /plan-specs`.
  * Returns the new spec id on success; a `409` maps to an error result so the
  * UI can keep the user on the wizard.

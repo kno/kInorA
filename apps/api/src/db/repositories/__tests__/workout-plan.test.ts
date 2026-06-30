@@ -58,6 +58,15 @@ function selectChainNoOrder(rows: unknown[]) {
   return { select, from, where };
 }
 
+/** Chain for queries that end at orderBy (no limit) — used by findAllByUser. */
+function selectChainOrderOnly(rows: unknown[]) {
+  const orderBy = vi.fn().mockResolvedValue(rows);
+  const where = vi.fn().mockReturnValue({ orderBy });
+  const from = vi.fn().mockReturnValue({ where });
+  const select = vi.fn().mockReturnValue({ from });
+  return { select, from, where, orderBy };
+}
+
 describe("WorkoutPlanRepository", () => {
   describe("createGenerating", () => {
     it("inserts a row with status 'generating' and returns { id, status }", async () => {
@@ -319,6 +328,87 @@ describe("WorkoutPlanRepository", () => {
       const result = await repo.findLatestByPlanSpec(TENANT_B, SPEC_A);
 
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe("findAllByUser", () => {
+    it("returns summaries ordered newest-first (createdAt DESC) for tenant+user", async () => {
+      const newer = {
+        id: "plan-newer",
+        status: "ready" as const,
+        createdAt: new Date("2026-06-29T10:00:00Z"),
+      };
+      const older = {
+        id: "plan-older",
+        status: "generating" as const,
+        createdAt: new Date("2026-06-28T09:00:00Z"),
+      };
+      // DB mock returns rows newest-first (as ORDER BY created_at DESC would)
+      const { select, orderBy } = selectChainOrderOnly([newer, older]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.findAllByUser(TENANT_A, USER_A);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe("plan-newer");
+      expect(result[1].id).toBe("plan-older");
+      // Verify DESC ordering was requested
+      expect(orderBy).toHaveBeenCalledTimes(1);
+      const orderByArg = (orderBy as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+        queryChunks?: Array<{ value?: string[] }>;
+      };
+      const chunks = orderByArg.queryChunks ?? [];
+      const hasDesc = chunks.some((chunk) =>
+        (chunk.value ?? []).some((v) => v.includes("desc"))
+      );
+      expect(hasDesc).toBe(true);
+    });
+
+    it("returns only own plans when multiple users exist in the same tenant (cross-user isolation)", async () => {
+      // Mock returns empty — the WHERE clause for USER_B finds nothing
+      const { select } = selectChainOrderOnly([]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.findAllByUser(TENANT_A, USER_B);
+
+      expect(result).toHaveLength(0);
+    });
+
+    it("returns empty array when no plans exist for the user", async () => {
+      const { select } = selectChainOrderOnly([]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.findAllByUser(TENANT_A, USER_A);
+
+      expect(result).toHaveLength(0);
+    });
+
+    it("returns only own plans — cross-tenant isolation", async () => {
+      // TENANT_B queries: WHERE clause filters by TENANT_B → no rows
+      const { select } = selectChainOrderOnly([]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.findAllByUser(TENANT_B, USER_A);
+
+      expect(result).toHaveLength(0);
+    });
+
+    it("maps each row to { id, status, createdAt } summary shape", async () => {
+      const createdAt = new Date("2026-06-29T10:00:00Z");
+      const row = {
+        id: PLAN_ID,
+        status: "ready" as const,
+        createdAt,
+      };
+      const { select } = selectChainOrderOnly([row]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.findAllByUser(TENANT_A, USER_A);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe(PLAN_ID);
+      expect(result[0].status).toBe("ready");
+      expect(result[0].createdAt).toEqual(createdAt);
     });
   });
 

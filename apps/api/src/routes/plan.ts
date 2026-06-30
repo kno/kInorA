@@ -22,7 +22,7 @@ export interface PlanRoutesOptions {
    * Injectable WorkoutPlanRepository — defaults to constructing from db.
    * Pass a mock in tests.
    */
-  planRepo?: Pick<WorkoutPlanRepository, "findById" | "findLatestByPlanSpec">;
+  planRepo?: Pick<WorkoutPlanRepository, "findById" | "findLatestByPlanSpec" | "findAllByUser">;
   /**
    * Injectable PlanSpecRepository — defaults to constructing from db.
    * Pass a mock in tests to control findConfirmedById results.
@@ -213,6 +213,27 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
 
       const result = await generationService.startGeneration(tenantId, userId, id);
       return reply.code(202).send(result);
+    }
+  );
+
+  // GET /workout-plans
+  // Returns all workout plan summaries for the authenticated user within their tenant.
+  // Ordered newest-first (createdAt DESC). Returns [] when no plans exist.
+  // Returns: 200 Array<{ id, status, createdAt }> — newest first; [] when none
+  // Returns: 401 if not authenticated
+  fastify.get(
+    "/workout-plans",
+    { preHandler: requireAuth() },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { tenantId, userId } = request.authContext!;
+      const summaries = await planRepo.findAllByUser(tenantId, userId);
+      return reply.code(200).send(
+        summaries.map((s) => ({
+          id: s.id,
+          status: s.status,
+          createdAt: s.createdAt,
+        }))
+      );
     }
   );
 

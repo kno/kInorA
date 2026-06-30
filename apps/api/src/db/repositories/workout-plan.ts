@@ -4,6 +4,16 @@ import type { Database } from "../client.js";
 import type { WorkoutProgram } from "@kinora/contracts";
 
 /**
+ * Lightweight summary returned by findAllByUser.
+ * Contains only the fields needed for the plan selector UI.
+ */
+export interface WorkoutPlanSummary {
+  id: string;
+  status: "generating" | "ready" | "failed";
+  createdAt: Date;
+}
+
+/**
  * A workout plan record as returned by persistence.
  */
 export interface WorkoutPlanRecord {
@@ -116,6 +126,33 @@ export class WorkoutPlanRepository {
       .orderBy(desc(workoutPlans.createdAt))
       .limit(1);
     return rows[0] as WorkoutPlanRecord | undefined;
+  }
+
+  /**
+   * Return all plans for a given tenant + user, ordered newest-first (createdAt DESC).
+   * Each row is mapped to a lightweight WorkoutPlanSummary { id, status, createdAt }.
+   * Returns an empty array when no plans exist.
+   * Both tenantId and userId are required in the WHERE clause for full isolation.
+   */
+  async findAllByUser(
+    tenantId: string,
+    userId: string
+  ): Promise<WorkoutPlanSummary[]> {
+    const rows = await this.db
+      .select({
+        id: workoutPlans.id,
+        status: workoutPlans.status,
+        createdAt: workoutPlans.createdAt,
+      })
+      .from(workoutPlans)
+      .where(
+        and(
+          eq(workoutPlans.tenantId, tenantId),
+          eq(workoutPlans.userId, userId)
+        )
+      )
+      .orderBy(desc(workoutPlans.createdAt));
+    return rows as WorkoutPlanSummary[];
   }
 
   /**

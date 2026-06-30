@@ -151,5 +151,10 @@
   "plan_reps_label": "reps",
   "plan_rest_label": "rest",
   "plan_limitation_warning_label": "Note",
-  "plan_back_to_dashboard": "Back to dashboard"
+  "plan_back_to_dashboard": "Back to dashboard",
+  "plan_nav_empty_title": "No plan yet",
+  "plan_nav_empty_desc": "Create your personalized workout plan to get started.",
+  "plan_nav_empty_cta": "Create your plan",
+  "plan_selector_label": "Select a plan",
+  "plan_selector_option": "{date} ({status})"
 }

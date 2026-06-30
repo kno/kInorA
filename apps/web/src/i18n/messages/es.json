@@ -151,5 +151,10 @@
   "plan_reps_label": "reps",
   "plan_rest_label": "descanso",
   "plan_limitation_warning_label": "Nota",
-  "plan_back_to_dashboard": "Volver al dashboard"
+  "plan_back_to_dashboard": "Volver al dashboard",
+  "plan_nav_empty_title": "Sin plan todavía",
+  "plan_nav_empty_desc": "Crea tu plan de entrenamiento personalizado para comenzar.",
+  "plan_nav_empty_cta": "Crear tu plan",
+  "plan_selector_label": "Seleccionar un plan",
+  "plan_selector_option": "{date} ({status})"
 }
