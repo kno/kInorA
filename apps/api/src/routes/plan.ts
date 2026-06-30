@@ -232,7 +232,16 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       if (!plan) {
         return reply.code(404).send({ error: "not_found" });
       }
-      return reply.code(200).send(plan);
+      // Map to the client DTO: the web reads { id, status, program, specId }.
+      // Do NOT return the raw DB row — its field names (programJson/planSpecId)
+      // differ from the client contract and it carries internal columns
+      // (tenantId/userId/errorMessage) that must not leak to the client.
+      return reply.code(200).send({
+        id: plan.id,
+        status: plan.status,
+        program: plan.programJson ?? undefined,
+        specId: plan.planSpecId,
+      });
     }
   );
 
@@ -253,7 +262,14 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       if (!plan) {
         return reply.code(404).send({ error: "not_found" });
       }
-      return reply.code(200).send(plan);
+      // Map to the client DTO (see GET /workout-plans/:id above): client reads
+      // { id, status, program, specId } — not the raw DB row.
+      return reply.code(200).send({
+        id: plan.id,
+        status: plan.status,
+        program: plan.programJson ?? undefined,
+        specId: plan.planSpecId,
+      });
     }
   );
 };
