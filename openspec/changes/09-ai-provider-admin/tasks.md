@@ -7,12 +7,12 @@ Chained PRs recommended: No
 
 ## Tasks
 
-- [ ] T1: Drizzle schema — add `isAdmin` to users table + `aiProviderConfig` table + generate migration
-- [ ] T2: `AiProviderConfigRepository` — `getActive()` + `upsert(provider, model)`
-- [ ] T3: `requireAdmin` preHandler in auth plugin
-- [ ] T4: Admin routes `GET /admin/ai-config` + `PUT /admin/ai-config`
-- [ ] T5: `DynamicPlanGenerator` — reads DB config per-request, delegates to correct adapter
-- [ ] T6: Provider adapters — openai, anthropic, google, opencode-go (openrouter already exists)
-- [ ] T7: Wire `DynamicPlanGenerator` into `buildApp` (replace direct `OpenRouterPlanGenerator`)
-- [ ] T8: Web page `/admin/ai-config` — server component + `AiConfigForm` client component
-- [ ] T9: Web route protection — non-admin redirect in server component
+- [x] T1: Drizzle schema — add `isAdmin` to users table + `aiProviderConfig` table + generate migration
+- [x] T2: `AiProviderConfigRepository` — `getActive()` + `upsert(provider, model)`
+- [x] T3: `requireAdmin` preHandler in auth plugin
+- [x] T4: Admin routes `GET /admin/ai-config` + `PUT /admin/ai-config`
+- [x] T5: `DynamicPlanGenerator` — reads DB config per-request, delegates to correct adapter
+- [x] T6: Provider adapters — openai, anthropic, google, opencode-go (openrouter already exists)
+- [x] T7: Wire `DynamicPlanGenerator` into `buildApp` (replace direct `OpenRouterPlanGenerator`)
+- [x] T8: Web page `/admin/ai-config` — server component + `AiConfigForm` client component
+- [x] T9: Web route protection — non-admin redirect in server component
