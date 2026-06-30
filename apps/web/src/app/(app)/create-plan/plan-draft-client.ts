@@ -1,3 +1,5 @@
+import "server-only";
+
 /**
  * Pure orchestration for the create-plan draft + promote API calls.
  *
@@ -10,6 +12,10 @@
  *
  * The client sends the raw wizard input to the API. preferenceScores and
  * confirmed are derived server-side on promote — the client never computes them.
+ *
+ * This module is server-only: it reads process.env.API_BASE_URL (the internal
+ * Docker address http://api:4000) which only resolves from within the Docker
+ * network. Client components must call a server action instead.
  */
 import type { PlanSpec } from "@kinora/contracts";
 
