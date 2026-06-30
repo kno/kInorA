@@ -45,12 +45,27 @@ export class DynamicPlanGenerator implements PlanGenerator {
     const config = await this.configRepo.getActive();
 
     // Determine provider and model: use DB config or fall back to openrouter.
+    const openrouterModel = process.env["OPENROUTER_MODEL"] ?? "openai/gpt-4o-mini";
     const provider = config?.provider ?? "openrouter";
-    const model = config?.model ?? (process.env["OPENROUTER_MODEL"] ?? "openai/gpt-4o-mini");
+    let model = config?.model ?? openrouterModel;
 
-    const factory = this.adapters[provider];
+    let factory = this.adapters[provider];
     if (!factory) {
-      throw new Error(`[DynamicPlanGenerator] No adapter registered for provider: "${provider}"`);
+      // Unknown provider in DB (e.g. a stale/hand-edited row, or an enum value added
+      // before its adapter was wired). Do NOT crash all generation — fall back to
+      // openrouter with the openrouter default model (the configured model belongs to
+      // the unknown provider and may be invalid here). Surface it in the logs.
+      console.warn(
+        `[DynamicPlanGenerator] No adapter registered for provider "${provider}" — falling back to openrouter`
+      );
+      factory = this.adapters["openrouter"];
+      model = openrouterModel;
+      if (!factory) {
+        // Wiring bug, not a data issue: even the openrouter fallback is missing.
+        throw new Error(
+          `[DynamicPlanGenerator] No adapter for "${provider}" and openrouter fallback is not registered`
+        );
+      }
     }
 
     const adapter = factory(model);

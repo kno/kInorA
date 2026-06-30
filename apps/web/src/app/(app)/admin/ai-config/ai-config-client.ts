@@ -38,11 +38,13 @@ export interface AiConfigRecord {
 
 export type GetConfigResult =
   | { kind: "ok"; config: AiConfigRecord | null }
+  | { kind: "unauthorized" }
   | { kind: "forbidden" }
   | { kind: "error"; message: string };
 
 export type UpdateConfigResult =
   | { kind: "ok"; config: AiConfigRecord }
+  | { kind: "unauthorized" }
   | { kind: "forbidden" }
   | { kind: "invalid"; message: string }
   | { kind: "error"; message: string };
@@ -69,6 +71,7 @@ export async function fetchAiConfig(
       cache: "no-store",
     });
 
+    if (res.status === 401) return { kind: "unauthorized" };
     if (res.status === 403) return { kind: "forbidden" };
     if (!res.ok) return { kind: "error", message: `api_error_${res.status}` };
 
@@ -103,6 +106,7 @@ export async function updateAiConfig(
       body: JSON.stringify({ provider, model }),
     });
 
+    if (res.status === 401) return { kind: "unauthorized" };
     if (res.status === 403) return { kind: "forbidden" };
     if (res.status === 422) return { kind: "invalid", message: "invalid_payload" };
     if (!res.ok) return { kind: "error", message: `api_error_${res.status}` };

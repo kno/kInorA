@@ -84,6 +84,17 @@ describe("fetchAiConfig", () => {
     expect(result.kind).toBe("forbidden");
   });
 
+  it("returns unauthorized when the API responds 401", async () => {
+    const fetchMock = buildFetch(401, { error: "unauthorized" });
+
+    const result = await fetchAiConfig(undefined, {
+      apiBaseUrl: "http://api",
+      fetchImpl: fetchMock as never,
+    });
+
+    expect(result.kind).toBe("unauthorized");
+  });
+
   it("sends the Bearer token in the Authorization header", async () => {
     const fetchMock = buildFetch(200, CONFIG);
 
@@ -124,6 +135,17 @@ describe("updateAiConfig", () => {
     });
 
     expect(result.kind).toBe("forbidden");
+  });
+
+  it("returns unauthorized when the API responds 401", async () => {
+    const fetchMock = buildFetch(401, { error: "unauthorized" });
+
+    const result = await updateAiConfig(undefined, "openai", "gpt-4o", {
+      apiBaseUrl: "http://api",
+      fetchImpl: fetchMock as never,
+    });
+
+    expect(result.kind).toBe("unauthorized");
   });
 
   it("returns invalid when the API responds 422", async () => {

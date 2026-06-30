@@ -66,6 +66,24 @@ describe("DynamicPlanGenerator", () => {
     expect(adapters.openrouter).toHaveBeenCalled();
   });
 
+  it("falls back to openrouter (no crash) when the DB provider has no registered adapter", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // DB row references a provider that is NOT in the adapter map (e.g. stale/hand-edited row).
+    const configRepo = buildConfigRepo({ provider: "nonexistent", model: "some-model" });
+    const openrouterGenerate = buildAdapterFactory();
+    const adapters = { openrouter: vi.fn().mockReturnValue({ generate: openrouterGenerate }) };
+
+    const gen = new DynamicPlanGenerator(configRepo as never, adapters as never);
+    const result = await gen.generate(baseSpec);
+
+    // Generation must NOT crash; it degrades to openrouter with the openrouter default model.
+    expect(adapters.openrouter).toHaveBeenCalledWith("openai/gpt-4o-mini");
+    expect(openrouterGenerate).toHaveBeenCalledWith(baseSpec);
+    expect(result).toEqual(mockProgram);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it("reads config from DB on every call (not cached)", async () => {
     const configRepo = buildConfigRepo({ provider: "openai", model: "gpt-4o-mini" });
     const openaiGenerate = buildAdapterFactory();
