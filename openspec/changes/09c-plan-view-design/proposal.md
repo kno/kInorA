@@ -17,9 +17,10 @@ Rewrite the plan "ready" view so it faithfully matches the `web-plan.html` mocku
 
 1. **Topbar** — page heading "Mi plan" (already provided by AppShell; add the page title inside
    the existing server component).
-2. **Summary strip** — 4-cell horizontal bar: planned sessions (count), estimated duration
-   (derived from exercises), rest days (omitted — no weekday data), target volume (omitted —
-   no weight data). Cells without data are cleanly absent; layout collapses gracefully.
+2. **Summary strip** — 4-cell horizontal bar matching the mockup: planned sessions (count),
+   rest days (derived: `7 − weeklySessions.length`), estimated duration (derived from
+   exercises), target volume (inert "—" placeholder, deferred to 09a — needs weight). All four
+   cells render, keeping the layout faithful to the mockup.
 3. **Day-card grid** — one card per training session (Día 1 … Día N), not a 7-cell weekday
    grid. Cards show: session label, exercise count, estimated duration, click-to-expand
    interaction. Completion circles and "today" highlight are deferred to 09a (execution).
