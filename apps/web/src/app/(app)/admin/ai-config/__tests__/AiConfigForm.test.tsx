@@ -5,18 +5,15 @@ import { AiConfigForm } from "../AiConfigForm.js";
 import { MODEL_DEFAULTS } from "../ai-config-client.js";
 
 // --- Module mocks ---
+// The form invokes the `updateAiConfigAction` server action (NOT the client fn
+// directly — the browser must never call the API). Mock the action; keep
+// ai-config-client real so MODEL_DEFAULTS / VALID_PROVIDERS resolve.
 
-const updateAiConfig = vi.fn();
+const updateAiConfigAction = vi.fn();
 
-vi.mock("../ai-config-client.js", async () => {
-  const actual = await vi.importActual<typeof import("../ai-config-client.js")>(
-    "../ai-config-client.js"
-  );
-  return {
-    ...actual,
-    updateAiConfig: (...args: unknown[]) => updateAiConfig(...args),
-  };
-});
+vi.mock("../actions.js", () => ({
+  updateAiConfigAction: (...args: unknown[]) => updateAiConfigAction(...args),
+}));
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -28,11 +25,7 @@ describe("AiConfigForm", () => {
   // SC-14: shows current config
   it("renders with the initial provider selected (SC-14)", () => {
     render(
-      <AiConfigForm
-        token="tok-admin"
-        initialProvider="anthropic"
-        initialModel="claude-3-5-haiku-20241022"
-      />
+      <AiConfigForm initialProvider="anthropic" initialModel="claude-3-5-haiku-20241022" />
     );
 
     const select = screen.getByRole("combobox") as HTMLSelectElement;
@@ -40,13 +33,7 @@ describe("AiConfigForm", () => {
   });
 
   it("renders with the initial model value (SC-14)", () => {
-    render(
-      <AiConfigForm
-        token="tok-admin"
-        initialProvider="openai"
-        initialModel="gpt-4o"
-      />
-    );
+    render(<AiConfigForm initialProvider="openai" initialModel="gpt-4o" />);
 
     const input = screen.getByRole("textbox") as HTMLInputElement;
     expect(input.value).toBe("gpt-4o");
@@ -54,11 +41,7 @@ describe("AiConfigForm", () => {
 
   it("updates model default when provider changes", () => {
     render(
-      <AiConfigForm
-        token="tok-admin"
-        initialProvider="openrouter"
-        initialModel="openai/gpt-4o-mini"
-      />
+      <AiConfigForm initialProvider="openrouter" initialModel="openai/gpt-4o-mini" />
     );
 
     const select = screen.getByRole("combobox") as HTMLSelectElement;
@@ -68,20 +51,14 @@ describe("AiConfigForm", () => {
     expect(input.value).toBe(MODEL_DEFAULTS.anthropic);
   });
 
-  // SC-15: submit calls PUT and shows confirmation
-  it("calls updateAiConfig on submit and shows success message (SC-15)", async () => {
-    updateAiConfig.mockResolvedValue({
+  // SC-15: submit invokes the server action (NOT a direct API call) and shows confirmation
+  it("calls updateAiConfigAction on submit and shows success message (SC-15)", async () => {
+    updateAiConfigAction.mockResolvedValue({
       kind: "ok",
       config: { provider: "openai", model: "gpt-4o", updatedAt: "2026-06-30T00:00:00Z" },
     });
 
-    render(
-      <AiConfigForm
-        token="tok-admin"
-        initialProvider="openai"
-        initialModel="gpt-4o-mini"
-      />
-    );
+    render(<AiConfigForm initialProvider="openai" initialModel="gpt-4o-mini" />);
 
     const input = screen.getByRole("textbox") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "gpt-4o" } });
@@ -90,7 +67,8 @@ describe("AiConfigForm", () => {
     fireEvent.click(button);
 
     await waitFor(() => {
-      expect(updateAiConfig).toHaveBeenCalledWith("tok-admin", "openai", "gpt-4o");
+      // No token is passed from the client — the action reads it server-side.
+      expect(updateAiConfigAction).toHaveBeenCalledWith("openai", "gpt-4o");
     });
 
     await waitFor(() => {
@@ -99,15 +77,9 @@ describe("AiConfigForm", () => {
   });
 
   it("shows error message when update fails", async () => {
-    updateAiConfig.mockResolvedValue({ kind: "error", message: "api_error_500" });
+    updateAiConfigAction.mockResolvedValue({ kind: "error", message: "api_error_500" });
 
-    render(
-      <AiConfigForm
-        token="tok-admin"
-        initialProvider="openai"
-        initialModel="gpt-4o-mini"
-      />
-    );
+    render(<AiConfigForm initialProvider="openai" initialModel="gpt-4o-mini" />);
 
     const button = screen.getByRole("button");
     fireEvent.click(button);
