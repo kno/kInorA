@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { authPlugin } from "../../auth/plugin.js";
 import { planRoutes } from "../plan.js";
 import type { Database } from "../../db/client.js";
+import type { WorkoutPlanRepository } from "../../db/repositories/workout-plan.js";
 
 // --- Shared test fixtures ---
 
@@ -177,6 +178,51 @@ async function buildTestApp(db: Database): Promise<FastifyInstance> {
   });
 
   return app;
+}
+
+/**
+ * Build a test app with an injected planRepo mock.
+ * The session DB is wired separately so auth still works.
+ */
+async function buildTestAppWithPlanRepo(
+  sessionDb: Database,
+  planRepo: Pick<WorkoutPlanRepository, "findById" | "findLatestByPlanSpec" | "findAllByUser">
+): Promise<FastifyInstance> {
+  const app = Fastify();
+
+  app.setErrorHandler((error, _request, reply) => {
+    if (error.validation) {
+      return reply.code(400).send({ error: "Bad Request", details: error.validation });
+    }
+    if (error.name === "AuthError") {
+      return reply.code(401).send({ error: error.message });
+    }
+    return reply.code(500).send({ error: "Internal Server Error" });
+  });
+
+  await app.register(authPlugin, { db: sessionDb });
+  await app.register(planRoutes, {
+    db: sessionDb,
+    generationService: noopGenerationService,
+    planRepo,
+  });
+
+  return app;
+}
+
+/** Build a session-only DB mock (auth plugin needs the session select). */
+function buildSessionDb(tenantId = TENANT_A, userId = USER_A): Database {
+  const sessionRows = [
+    {
+      tokenHash: SESSION_HASH,
+      userId,
+      tenantId,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 3_600_000),
+    },
+  ];
+  const select = sessionSelectChain(sessionRows);
+  return { select } as unknown as Database;
 }
 
 // --- Tests ---
@@ -707,6 +753,121 @@ describe("Plan routes", () => {
       expect(insertedValues.tenantId).toBe(TENANT_A);
       expect(insertedValues.userId).toBe(USER_A);
       expect(insertedValues.tenantId).not.toBe(TENANT_B);
+    });
+  });
+
+  // --- GET /workout-plans (list) ---
+
+  describe("GET /workout-plans", () => {
+    it("returns 401 when no authorization header is provided (SC-01)", async () => {
+      const sessionDb = buildSessionDb();
+      const planRepo = {
+        findById: vi.fn(),
+        findLatestByPlanSpec: vi.fn(),
+        findAllByUser: vi.fn(),
+      };
+      app = await buildTestAppWithPlanRepo(
+        { ...sessionDb, select: sessionSelectChain([]) } as unknown as Database,
+        planRepo
+      );
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/workout-plans",
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(planRepo.findAllByUser).not.toHaveBeenCalled();
+    });
+
+    it("returns 200 with empty array when user has no plans (SC-02)", async () => {
+      const sessionDb = buildSessionDb();
+      const planRepo = {
+        findById: vi.fn(),
+        findLatestByPlanSpec: vi.fn(),
+        findAllByUser: vi.fn().mockResolvedValue([]),
+      };
+      app = await buildTestAppWithPlanRepo(sessionDb, planRepo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/workout-plans",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(Array.isArray(body)).toBe(true);
+      expect(body).toHaveLength(0);
+    });
+
+    it("returns 200 array of { id, status, createdAt } summaries ordered newest-first (SC-03)", async () => {
+      const summaries = [
+        { id: "plan-newer", status: "ready", createdAt: new Date("2026-06-29T10:00:00Z") },
+        { id: "plan-older", status: "generating", createdAt: new Date("2026-06-28T09:00:00Z") },
+      ];
+      const sessionDb = buildSessionDb();
+      const planRepo = {
+        findById: vi.fn(),
+        findLatestByPlanSpec: vi.fn(),
+        findAllByUser: vi.fn().mockResolvedValue(summaries),
+      };
+      app = await buildTestAppWithPlanRepo(sessionDb, planRepo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/workout-plans",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as Array<{ id: string; status: string; createdAt: string }>;
+      expect(body).toHaveLength(2);
+      expect(body[0].id).toBe("plan-newer");
+      expect(body[0].status).toBe("ready");
+      expect(body[0].createdAt).toBeDefined();
+      expect(body[1].id).toBe("plan-older");
+    });
+
+    it("calls findAllByUser with tenantId+userId from authContext (SC-04, tenant+user scoping)", async () => {
+      const sessionDb = buildSessionDb(TENANT_A, USER_A);
+      const planRepo = {
+        findById: vi.fn(),
+        findLatestByPlanSpec: vi.fn(),
+        findAllByUser: vi.fn().mockResolvedValue([]),
+      };
+      app = await buildTestAppWithPlanRepo(sessionDb, planRepo);
+
+      await app.inject({
+        method: "GET",
+        url: "/workout-plans",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(planRepo.findAllByUser).toHaveBeenCalledWith(TENANT_A, USER_A);
+    });
+
+    it("cross-tenant isolation: tenant B user cannot see tenant A plans — repo is called with tenant B context (SC-05)", async () => {
+      const tenantBSession = buildSessionDb(TENANT_B, USER_A);
+      const planRepo = {
+        findById: vi.fn(),
+        findLatestByPlanSpec: vi.fn(),
+        // Tenant B query finds nothing (tenant-scoped WHERE)
+        findAllByUser: vi.fn().mockResolvedValue([]),
+      };
+      app = await buildTestAppWithPlanRepo(tenantBSession, planRepo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/workout-plans",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      // Repo was called with TENANT_B — isolation is guaranteed by the WHERE clause
+      expect(planRepo.findAllByUser).toHaveBeenCalledWith(TENANT_B, USER_A);
+      const body = response.json();
+      expect(body).toHaveLength(0);
     });
   });
 });

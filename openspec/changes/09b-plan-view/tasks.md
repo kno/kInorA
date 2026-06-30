@@ -35,7 +35,7 @@ the work MAY ship as one PR; otherwise apply the chained slices above.
 
 ## Tasks
 
-- [ ] T1: `WorkoutPlanRepository.findAllByUser` — add method + unit tests  _(PR #1)_
+- [x] T1: `WorkoutPlanRepository.findAllByUser` — add method + unit tests  _(PR #1)_
   - File: `apps/api/src/db/repositories/workout-plan.ts`
   - Tests: `apps/api/src/db/repositories/__tests__/workout-plan.test.ts`
   - Add `WorkoutPlanSummary { id, status, createdAt }`; return `WorkoutPlanSummary[]`
@@ -43,7 +43,7 @@ the work MAY ship as one PR; otherwise apply the chained slices above.
   - Test cases: newest-first ordering; only tenant+user rows; empty array for unknown user; cross-tenant excluded; cross-user (same tenant) excluded
   - Conventional commit: `feat(api): add WorkoutPlanRepository.findAllByUser`
 
-- [ ] T2: `GET /workout-plans` list route + integration tests  _(PR #1)_
+- [x] T2: `GET /workout-plans` list route + integration tests  _(PR #1)_
   - File: `apps/api/src/routes/plan.ts`
   - Tests: `apps/api/src/routes/__tests__/plan.test.ts` (extend existing file)
   - Extend `PlanRoutesOptions.planRepo` Pick to include `findAllByUser`
@@ -52,14 +52,14 @@ the work MAY ship as one PR; otherwise apply the chained slices above.
   - Test cases: 200 array (DTO shape + ordering); 200 [] when no plans; 401 unauthenticated; scoping (only own plans returned)
   - Conventional commit: `feat(api): GET /workout-plans list route`
 
-- [ ] T3: `fetchUserPlans` in plan-draft-client + `listPlansAction` server action  _(PR #2)_
+- [x] T3: `fetchUserPlans` in plan-draft-client + `listPlansAction` server action  _(PR #2)_
   - File: `apps/web/src/app/(app)/create-plan/plan-draft-client.ts` — add `fetchUserPlans(token, options?)` + `PlanSummary`/`FetchUserPlansResult` types
   - File: `apps/web/src/app/(app)/plan/actions.ts` — create `"use server"` module with `listPlansAction()`
   - Detail fetch reuses existing `getPlanStatusAction(planId)` from `plan/[id]/actions.ts` — do NOT duplicate
   - Mirror `fetchPlanStatus` / `getPlanStatusAction` pattern exactly
   - Conventional commit: `feat(web): listPlansAction server action`
 
-- [ ] T4: `PlanSelector` client component + tests  _(PR #2)_
+- [x] T4: `PlanSelector` client component + tests  _(PR #2)_
   - File: `apps/web/src/app/(app)/plan/PlanSelector.tsx` — `"use client"`; `<select>` of summaries (newest first)
   - On change: `router.push("/plan?planId=" + id)` (next/navigation `useRouter`)
   - Mark the current selection (from a `selectedId` prop) as the selected option
@@ -67,7 +67,7 @@ the work MAY ship as one PR; otherwise apply the chained slices above.
   - Tests: `apps/web/src/app/(app)/plan/__tests__/PlanSelector.test.tsx` — renders options newest-first; onChange pushes `/plan?planId=<id>`; current selection marked
   - Conventional commit: `feat(web): PlanSelector plan picker`
 
-- [ ] T5: Replace `/plan` placeholder page (searchParams + selector + selected plan)  _(PR #2)_
+- [x] T5: Replace `/plan` placeholder page (searchParams + selector + selected plan)  _(PR #2)_
   - File: `apps/web/src/app/(app)/plan/page.tsx` — rewrite to async server component
   - Read `searchParams.planId` (Next 15: `searchParams` is a Promise — `await` it)
   - Call `listPlansAction()`; if list empty/error → empty state CTA (no selector)
@@ -81,13 +81,13 @@ the work MAY ship as one PR; otherwise apply the chained slices above.
   - Note: no `onRegenerate` on `/plan`; failed links out to `/plan/[id]`
   - Conventional commit: `feat(web): /plan tab plan selector + selected plan view`
 
-- [ ] T6: Web page tests  _(PR #2)_
+- [x] T6: Web page tests  _(PR #2)_
   - File: `apps/web/src/app/(app)/plan/__tests__/page.test.tsx` — create
   - Mock `listPlansAction` + `getPlanStatusAction` via `vi.mock`; mock `next/navigation` redirect
   - Test cases: default-latest when no param; `?planId=X` selects that plan; unowned id falls back; ready renders sessions; failed renders link-out; generating triggers redirect; empty state with `/create-plan` link (no selector); selector present when multiple plans
   - Conventional commit: included in T5 or `test(web): /plan page selector + states`
 
-- [ ] T7: i18n keys  _(PR #2)_
+- [x] T7: i18n keys  _(PR #2)_
   - File: `apps/web/src/i18n/messages/en.json` — add:
     - `"plan_nav_empty_title"`: `"No plan yet"`
     - `"plan_nav_empty_desc"`: `"Create your personalized workout plan to get started."`
