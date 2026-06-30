@@ -234,11 +234,88 @@ describe("DayDetailPanel — guardrail: no API reference (SC-22)", () => {
   });
 });
 
+describe("DayDetailPanel — aria-controls (Fix 3 / SC-08)", () => {
+  it("active card has aria-controls pointing to the detail panel id", () => {
+    render(<DayDetailPanel sessions={sessions} messages={messages} />);
+
+    // Before clicking — no card should have aria-controls
+    const day1Card = screen.getByRole("button", { name: "Day 1" });
+    expect(day1Card.getAttribute("aria-controls")).toBeNull();
+
+    // Open the panel
+    fireEvent.click(day1Card);
+
+    // Now the active card should have aria-controls="day-detail-panel"
+    expect(day1Card.getAttribute("aria-controls")).toBe("day-detail-panel");
+
+    // And the detail panel element should have that id
+    const panel = document.getElementById("day-detail-panel");
+    expect(panel).not.toBeNull();
+  });
+
+  it("inactive cards have no aria-controls; only the active card does", () => {
+    render(<DayDetailPanel sessions={sessions} messages={messages} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Day 2" }));
+
+    // Day 2 card (active) has aria-controls
+    const day2Card = screen.getByRole("button", { name: "Day 2" });
+    expect(day2Card.getAttribute("aria-controls")).toBe("day-detail-panel");
+
+    // Day 1 card (inactive) does NOT
+    const day1Card = screen.getByRole("button", { name: "Day 1" });
+    expect(day1Card.getAttribute("aria-controls")).toBeNull();
+  });
+});
+
 describe("DayDetailPanel — 2-session variant (triangulation for SC-06)", () => {
   it("renders exactly 2 day cards for a 2-session program", () => {
     const twoSessions: WorkoutSession[] = sessions.slice(0, 2);
     render(<DayDetailPanel sessions={twoSessions} messages={messages} />);
     const buttons = screen.getAllByRole("button");
     expect(buttons.length).toBe(2);
+  });
+});
+
+describe("DayDetailPanel — keyboard interaction (SC-08, Fix 6)", () => {
+  it("Enter key on a day-card opens its detail panel", () => {
+    render(<DayDetailPanel sessions={sessions} messages={messages} />);
+
+    // Initially no detail panel
+    expect(screen.queryByRole("table")).toBeNull();
+
+    // Fire Enter on the Push Day card
+    const pushDayCard = screen.getByRole("button", { name: "Day 1" });
+    fireEvent.keyDown(pushDayCard, { key: "Enter" });
+
+    // Detail panel should open showing the exercise table
+    expect(screen.getByRole("table")).toBeDefined();
+    expect(screen.getByText("Bench Press")).toBeDefined();
+  });
+
+  it("Space key on a day-card opens its detail panel", () => {
+    render(<DayDetailPanel sessions={sessions} messages={messages} />);
+
+    expect(screen.queryByRole("table")).toBeNull();
+
+    // Fire Space on Day 2 (Pull Day)
+    const pullDayCard = screen.getByRole("button", { name: "Day 2" });
+    fireEvent.keyDown(pullDayCard, { key: " " });
+
+    expect(screen.getByRole("table")).toBeDefined();
+    expect(screen.getByText("Barbell Row")).toBeDefined();
+  });
+
+  it("Enter key on open card closes it (toggle via keyboard)", () => {
+    render(<DayDetailPanel sessions={sessions} messages={messages} />);
+
+    // Open Day 1 via keyboard
+    const pushDayCard = screen.getByRole("button", { name: "Day 1" });
+    fireEvent.keyDown(pushDayCard, { key: "Enter" });
+    expect(screen.getByText("Bench Press")).toBeDefined();
+
+    // Press Enter again to close (toggle)
+    fireEvent.keyDown(pushDayCard, { key: "Enter" });
+    expect(screen.queryByText("Bench Press")).toBeNull();
   });
 });

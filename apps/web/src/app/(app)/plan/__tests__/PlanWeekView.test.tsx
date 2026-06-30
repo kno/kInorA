@@ -144,18 +144,61 @@ describe("PlanWeekView — summary strip", () => {
     expect(text).toContain("Planned sessions");
   });
 
-  it("SC-02: rest-days tile shows 7 − N (2 sessions → 5 rest days)", () => {
-    const view = PlanWeekView({ program: twoSessionProgram, messages });
-    const text = textOf(view);
-    expect(text).toContain("5"); // 7 - 2 = 5 rest days
-    expect(text).toContain("Rest days");
+  it("SC-02: rest-days tile shows 7 − N (1 session → 6 rest days — value unique in tree)", () => {
+    // Use 1 session → 6 rest days: the value "6" is unique in the rendered tree
+    // (there are no exercises with 6 sets and no session day numbered 6),
+    // so the assertion is unambiguous.
+    const oneSessionProgram: WorkoutProgram = {
+      weeklySessions: [
+        {
+          day: 1,
+          title: "Single Day",
+          exercises: [{ name: "Pushup", sets: 3, reps: "15", restSeconds: 30 }],
+        },
+      ],
+      limitationWarnings: [],
+    };
+    const view = PlanWeekView({ program: oneSessionProgram, messages });
+    // Find the summary tile that contains "Rest days" label
+    const restTile = findFirst(
+      view,
+      (el) =>
+        typeof el.type === "string" &&
+        textOf(el).includes("Rest days") &&
+        textOf(el).includes("per week"),
+    );
+    expect(restTile).toBeDefined();
+    // The tile text contains the value "6" (7 − 1 = 6)
+    const tileText = textOf(restTile!);
+    expect(tileText).toContain("6");
+    // Confirm "Rest days" label is present in the same tile
+    expect(tileText).toContain("Rest days");
   });
 
-  it("SC-02 triangulation: rest-days tile shows 2 for 5 sessions (7 − 5 = 2)", () => {
-    const view = PlanWeekView({ program: fiveSessionProgram, messages });
-    const text = textOf(view);
-    expect(text).toContain("2"); // 7 - 5 = 2 rest days
-    expect(text).toContain("Rest days");
+  it("SC-02 triangulation: rest-days tile shows 1 for 6 sessions (7 − 6 = 1 — unique value)", () => {
+    // 6 sessions → 1 rest day: "1" as a rest-day value is unique
+    // (session days are 1–6, but we inspect only the rest-tile node).
+    const sixSessionProgram: WorkoutProgram = {
+      weeklySessions: Array.from({ length: 6 }, (_, i) => ({
+        day: i + 1,
+        title: `Day ${i + 1}`,
+        exercises: [{ name: "Run", sets: 1, reps: "20 min", restSeconds: 0 }],
+      })),
+      limitationWarnings: [],
+    };
+    const view = PlanWeekView({ program: sixSessionProgram, messages });
+    const restTile = findFirst(
+      view,
+      (el) =>
+        typeof el.type === "string" &&
+        textOf(el).includes("Rest days") &&
+        textOf(el).includes("per week"),
+    );
+    expect(restTile).toBeDefined();
+    const tileText = textOf(restTile!);
+    // The value "1" appears in the rest tile (7 − 6 = 1)
+    expect(tileText).toContain("1");
+    expect(tileText).toContain("Rest days");
   });
 
   it("SC-03: estimated duration tile shows correct derived value (2 sessions = 21 min)", () => {

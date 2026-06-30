@@ -14,35 +14,10 @@
  *   - Week navigation prev/next buttons
  */
 
-import type { WorkoutProgram, WorkoutSession } from "@kinora/contracts";
+import type { WorkoutProgram } from "@kinora/contracts";
 import styles from "./plan-week-view.module.css";
 import { DayDetailPanel } from "./DayDetailPanel";
-
-/** Assumed average seconds to perform one set (rep execution). Documented estimate. */
-export const EXECUTION_OVERHEAD_SECONDS = 30;
-
-/**
- * Estimate session duration in minutes.
- * Formula: ceil( Σ(sets × (restSeconds + EXECUTION_OVERHEAD_SECONDS)) / 60 )
- */
-export function estimateSessionMinutes(
-  exercises: WorkoutSession["exercises"],
-): number {
-  const totalSeconds = exercises.reduce(
-    (sum, e) => sum + e.sets * (e.restSeconds + EXECUTION_OVERHEAD_SECONDS),
-    0,
-  );
-  return Math.ceil(totalSeconds / 60);
-}
-
-/**
- * Derive rest days from 08 contract invariant:
- *   weeklySessions.length === daysPerWeek → rest days = max(0, 7 − length)
- * No API change required.
- */
-export function restDays(weeklySessions: WorkoutSession[]): number {
-  return Math.max(0, 7 - weeklySessions.length);
-}
+import { estimateSessionMinutes, restDays } from "./plan-utils";
 
 export interface PlanWeekViewProps {
   program: WorkoutProgram;

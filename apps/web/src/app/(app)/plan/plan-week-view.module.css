@@ -283,14 +283,23 @@
 }
 
 /* ---- Responsive breakpoints ---- */
+/*
+ * Day-grid tiers match design (web-plan.html + spec SC-11):
+ *   ≥1100px    → auto-fill (≥4 cols with minmax(180px, 1fr))
+ *   768–1099px → 3 columns (explicit lock-in)
+ *   <768px     → 2 columns
+ *
+ * auto-fill + minmax(180px) naturally yields ≥4 cols on wide viewports.
+ * The media queries lock in the expected mid and narrow tiers.
+ */
 
-@media (max-width: 1100px) {
+@media (max-width: 1099px) {
   .dayGrid {
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
-@media (max-width: 800px) {
+@media (max-width: 767px) {
   .summaryStrip {
     flex-wrap: wrap;
   }
