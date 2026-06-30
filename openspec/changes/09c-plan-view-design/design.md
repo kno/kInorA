@@ -3,10 +3,14 @@
 ## Technical Approach
 
 Replace the `status === "ready"` branch in `/plan/page.tsx` with a new `PlanWeekView` server
-component that renders the summary strip + day-card grid. Day-card expand/collapse is handled
-by a `DayDetailPanel` client island that receives all session data as props (no fetches). A
-scoped CSS module consumes the existing `globals.css` design tokens. All other page states
-(generating, failed, empty) and the `PlanSelector` are untouched.
+component that renders a 4-tile summary strip + day-card grid. Day-card expand/collapse is
+handled by a `DayDetailPanel` client island that receives all session data as props (no
+fetches). A scoped CSS module consumes the existing `globals.css` design tokens. All other page
+states (generating, failed, empty) and the `PlanSelector` are untouched.
+
+**09c is frontend-only.** No API route, repo method, or DTO change. All four summary tiles and
+the day-grid derive entirely from the `program` already present in the existing detail DTO
+`{ id, status, program, specId }`.
 
 ## Architecture Decisions
 
@@ -33,19 +37,21 @@ context. Our `WorkoutSession.day` is a 1-based training-day index with no calend
 Fabricating weekday names would be misleading. "Día N" is honest and keeps the layout faithful
 to the grid structure without inventing data.
 
-### Decision: Summary strip tiles — which to include
+### Decision: Summary strip — all 4 mockup tiles, derived without an API change
 
-| Tile | Data Available | 09c Decision |
-|------|----------------|--------------|
+| Tile | Source | 09c Decision |
+|------|--------|--------------|
 | Sesiones planificadas | `weeklySessions.length` | Rendered |
-| Duración estimada | Derived: `ceil(sum(sets×restSeconds)/60)` per session, total | Rendered (as an estimate) |
-| Días de descanso | None (no daysPerWeek or weekday anchor) | Omitted |
-| Volumen objetivo | None (`WorkoutExercise` has no weight field) | Omitted |
+| Días de descanso | `max(0, 7 − weeklySessions.length)` (08 invariant: `weeklySessions.length === daysPerWeek`, 7-day week) | Rendered (derived, no API change) |
+| Duración estimada | Sum of per-session durations (formula below) | Rendered (as an estimate) |
+| Volumen objetivo | None (`WorkoutExercise` has no weight field) | Inert "—" placeholder, deferred to 09a |
 
-**Rationale**: Show only what we can honestly derive. The "estimated duration" is a rough proxy
-(rest time only, not actual rep/set execution time); the label will note it is an estimate.
-Omitting rather than inventing keeps the summary honest. The layout collapses to 2 tiles; the
-CSS module handles this via `flex-wrap` or reduced flex children without empty slots.
+**Rationale**: The earlier plan to expose `PlanSpec.daysPerWeek` via a DTO/route change is
+UNNECESSARY. The 08 contract guarantees one session per training day, so
+`weeklySessions.length === daysPerWeek`; rest days = `7 − weeklySessions.length`, derivable
+straight from the `program` already in the detail DTO. This keeps the full 4-tile mockup layout
+with real data for 3 tiles, and an inert "—" placeholder for Volume (the only value that truly
+needs weight, deferred to 09a). No backend change is required — 09c is frontend-only.
 
 ### Decision: Expand/collapse interaction — client island vs. CSS details/summary
 
@@ -60,17 +66,22 @@ client island with `selectedDay: number | null` state is the minimal correct imp
 `<details>` can't close siblings. The island imports zero external state and fetches nothing —
 it is pure local React state.
 
-### Decision: Duration estimation formula
+### Decision: Duration estimation formula — rest + per-set execution overhead
 
-**Choice**: Per session: `Math.ceil((totalSets × avgRestSeconds) / 60)` where
-`totalSets = sum(exercise.sets)` and `avgRestSeconds = mean(exercise.restSeconds)`.
-For the summary tile: sum of per-session estimates.
+**Choice**: Per session:
+`Math.ceil( sum_over_exercises( sets × (restSeconds + EXECUTION_OVERHEAD_SECONDS) ) / 60 )`
+with a named constant `EXECUTION_OVERHEAD_SECONDS = 30` (the assumed average seconds to perform
+one set). For the summary tile: sum of per-session durations. Each day-card shows its own
+per-session value.
 
-**Alternatives considered**: Using a fixed per-set multiplier (e.g. 3 min/set including
-execution time). Rejected — too opaque; at least the rest-based derivation uses real data.
+**Alternatives considered**: Rest-time-only (`sets × restSeconds`) — rejected because it
+ignores the time spent actually performing the sets, systematically under-estimating duration.
+A fully opaque fixed minutes-per-set — rejected because it discards the real rest data we have.
 
-**Rationale**: The rest time is the only timing data we have. The label reads "est. {N} min"
-to communicate approximation to the user. This is intentionally surfaced as a rough estimate.
+**Rationale**: Rest + a documented per-set execution overhead is a more realistic estimate than
+rest alone, while still using the program's real `sets`/`restSeconds` data. The `30s` overhead
+is a named, documented constant so it is reviewable and tunable. The label reads "est. {N} min"
+to communicate approximation; it is explicitly an estimate, not a precise duration.
 
 ### Decision: limitationWarnings placement
 
@@ -106,7 +117,11 @@ Browser ─GET /plan[?planId=X]─→ Next.js server component (plan/page.tsx)
     └─ plan.status === "ready"
          └─ <PlanWeekView program={plan.program} messages={messages} />
                 │
-                ├─ derives summaryTiles (sessions count, est. duration)
+                ├─ derives 4 summary tiles:
+                │     sessions = weeklySessions.length
+                │     restDays = max(0, 7 − weeklySessions.length)
+                │     duration = Σ estimateSessionMinutes(session)
+                │     volume   = "—" (inert placeholder, deferred to 09a)
                 ├─ renders <LimitationWarningBanner warnings={…} />  [server]
                 ├─ renders summary strip  [server]
                 └─ renders <DayDetailPanel sessions={program.weeklySessions} messages={…} />
@@ -166,9 +181,20 @@ interface WorkoutExercise {
 
 Duration derivation (co-located utility, not exported):
 ```ts
+// Assumed average seconds to perform one set (rep execution). Documented estimate.
+const EXECUTION_OVERHEAD_SECONDS = 30;
+
 function estimateSessionMinutes(exercises: WorkoutExercise[]): number {
-  const totalRest = exercises.reduce((s, e) => s + e.sets * e.restSeconds, 0);
-  return Math.ceil(totalRest / 60);
+  const totalSeconds = exercises.reduce(
+    (sum, e) => sum + e.sets * (e.restSeconds + EXECUTION_OVERHEAD_SECONDS),
+    0,
+  );
+  return Math.ceil(totalSeconds / 60);
+}
+
+// Rest days, derived (08 invariant: weeklySessions.length === daysPerWeek, 7-day week).
+function restDays(weeklySessions: WorkoutSession[]): number {
+  return Math.max(0, 7 - weeklySessions.length);
 }
 ```
 
@@ -176,20 +202,25 @@ function estimateSessionMinutes(exercises: WorkoutExercise[]): number {
 
 | Layer | What to Test | Approach |
 |-------|-------------|----------|
-| Unit — PlanWeekView | Summary tile session count; est. duration tile presence; limitation banner present/absent; correct day-card count passed to island | Vitest + RTL (render as RSC-compatible) |
+| Unit — PlanWeekView | All 4 tiles: session count; rest-days = `7 − N`; est. duration value; volume = "—" placeholder; limitation banner present/absent; correct day-card count passed to island | Vitest + RTL (render as RSC-compatible) |
 | Unit — DayDetailPanel | Default: no panel open; click day 1 opens panel 1; click again closes; click day 2 switches; exercise table has 4 columns (no Peso); notes and substitutionNote visible; close button works | Vitest + RTL |
 | Unit — page.tsx | ready branch renders PlanWeekView (not PlanStatusView); all 09b states still render correctly | Vitest + RTL, extend existing page.test.tsx |
 | i18n | No new key is missing from en.json or es.json | Static JSON key presence check (extend existing i18n test if present) |
 
 ## Migration / Rollout
 
-No migration required. No schema changes. `PlanStatusView` is not removed — it continues
-to serve the generating/failed states and `/plan/[id]`. The "ready" branch in `/plan/page.tsx`
-is swapped to `PlanWeekView`. Rollback is a one-line revert of that branch.
+No migration required. No schema changes. **No API/backend change** — 09c is frontend-only.
+`PlanStatusView` is not removed — it continues to serve the generating/failed states and
+`/plan/[id]`. The "ready" branch in `/plan/page.tsx` is swapped to `PlanWeekView`. Rollback is
+a one-line revert of that branch.
 
 ## Open Questions
 
-- [ ] Estimated duration formula: using `sets × restSeconds` only — confirm with product that
-      this is an acceptable proxy, or whether a fixed per-set execution overhead should be added.
-- [ ] Summary strip with 2 tiles only: confirm the visual is acceptable without the rest-day
-      and volume tiles, versus showing them as "—" placeholders.
+Both prior open questions are now resolved:
+- Estimated duration formula: **resolved** → rest + `EXECUTION_OVERHEAD_SECONDS = 30` per set
+  (named, documented constant), summed per session.
+- Summary strip: **resolved** → keep the full 4-tile mockup layout; rest-days derived from
+  `7 − weeklySessions.length` (no API change); volume renders an inert "—" placeholder
+  (deferred to 09a).
+
+No remaining blocking questions.
