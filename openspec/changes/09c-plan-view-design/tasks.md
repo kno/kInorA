@@ -45,7 +45,7 @@ may ship as one PR; otherwise apply the chained slices above.
 
 ## Tasks
 
-- [ ] T1: `PlanWeekView` server component + `LimitationWarningBanner`  _(PR #1)_
+- [x] T1: `PlanWeekView` server component + `LimitationWarningBanner`  _(PR #1)_
   - File: `apps/web/src/app/(app)/plan/PlanWeekView.tsx`
   - Pure server component (no `"use client"`); receives `program: WorkoutProgram` and
     `messages: Record<string, string>`
@@ -70,7 +70,7 @@ may ship as one PR; otherwise apply the chained slices above.
     - SC-06: DayDetailPanel receives `sessions` with correct length
   - Conventional commit: `feat(web): PlanWeekView server component + 4-tile summary strip`
 
-- [ ] T2: `DayDetailPanel` client island  _(PR #1)_
+- [x] T2: `DayDetailPanel` client island  _(PR #1)_
   - File: `apps/web/src/app/(app)/plan/DayDetailPanel.tsx`
   - `"use client"` directive; receives `sessions: WorkoutSession[]` and `messages`
   - Local state: `selectedDay: number | null` (null = no panel open)
@@ -97,7 +97,7 @@ may ship as one PR; otherwise apply the chained slices above.
     - SC-23: Peso column heading is not in the DOM
   - Conventional commit: `feat(web): DayDetailPanel client island — day-grid + exercise detail`
 
-- [ ] T3: CSS module + i18n keys  _(PR #1)_
+- [x] T3: CSS module + i18n keys  _(PR #1)_
   - File: `apps/web/src/app/(app)/plan/plan-week-view.module.css`
   - Summary strip: flex row, border, `--r-card`, dividers between tiles, responsive wrap
   - Day-card: CSS Grid (auto-fill, responsive columns: `repeat(auto-fill, minmax(180px, 1fr))`),
