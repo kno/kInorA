@@ -118,6 +118,10 @@ export class PlanGenerationService {
    * Notifies the user via WsRegistry after markReady / markFailed.
    * Payload is ONLY { planId, status } — NO program content, NO health data.
    * notify failure is swallowed (fire-and-forget-safe).
+   *
+   * Logs ONLY: planId, tenantId, planSpecId, error.name, error.message, error.stack.
+   * NEVER logs: spec content, limitations, program content, exercise names, or any
+   * health/plan data. This is a hard privacy invariant.
    */
   private async runGenerationTask(
     tenantId: string,
@@ -125,6 +129,9 @@ export class PlanGenerationService {
     planId: string,
     spec: import("@kinora/contracts").PlanSpec
   ): Promise<void> {
+    // Signal: task is starting (greppable prefix for log aggregators)
+    console.info("[generation-service] generation started", { planId, tenantId });
+
     try {
       // generate → post-process → guard → persist
       const rawProgram = await this.generator.generate(spec);
@@ -145,6 +152,10 @@ export class PlanGenerationService {
         return;
       }
 
+      // Signal: generation pipeline completed successfully.
+      // Log ONLY ids — never log the program or any health/plan content.
+      console.info("[generation-service] generation ready", { planId, tenantId });
+
       // Notify the user via WebSocket — fire-and-forget-safe.
       // Payload: ONLY { planId, status } — no program content, no health data.
       try {
@@ -153,7 +164,14 @@ export class PlanGenerationService {
         // Swallow notify failures — a broken WS must not abort the generation pipeline.
       }
     } catch (error) {
+      // Log the failure BEFORE attempting markFailed so it is always visible even
+      // if markFailed itself throws. Log ONLY ids + error metadata — NEVER log
+      // spec content, limitations, program content, or any health/plan data.
+      const name = error instanceof Error ? error.name : "UnknownError";
       const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      console.error("[generation-service] generation failed", { planId, tenantId, name, message, stack });
+
       // markFailed errors are swallowed — the plan row is already persisted as "generating"
       // and the user can still trigger regenerate via POST /plan-specs/:id/regenerate.
       try {
