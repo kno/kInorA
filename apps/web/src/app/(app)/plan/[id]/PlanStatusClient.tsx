@@ -7,9 +7,10 @@
  *   1. Subscribes to wss://.../ws/plans?token=<sessionToken> via usePlanWs
  *   2. Merges WS-pushed status with the server-fetched initial status
  *   3. When WS pushes "ready" but the initial render had no program (was still
- *      "generating" at SSR), fetches GET /workout-plans/:planId to load the
- *      program content (Fix C — prevents empty "ready" state on happy path).
+ *      "generating" at SSR), calls getPlanStatusAction (a server action) to
+ *      fetch the program server-side. The browser never calls the API directly.
  *   4. Handles the "Regenerate" button → POST /plan-specs/:specId/regenerate
+ *      via NEXT_PUBLIC_API_BASE_URL (the public origin, allowed for browser calls)
  *
  * Token-in-URL tradeoff (v1): the session token is read server-side from the
  * httpOnly kinora_session cookie and passed as a prop to avoid client-side
@@ -24,7 +25,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { usePlanWs } from "@/hooks/use-plan-ws";
-import { fetchPlanStatus } from "@/app/(app)/create-plan/plan-draft-client";
+import { getPlanStatusAction } from "./actions";
 import { PlanStatusView } from "./PlanStatusView";
 import type { WorkoutProgram } from "@kinora/contracts";
 import type { Messages } from "@/i18n/locale";
@@ -59,11 +60,13 @@ export function PlanStatusClient({
     initialStatus,
   });
 
-  // Fix C: when WS pushes "ready" but we have no program content (the page was
-  // server-rendered while still "generating"), fetch the program now.
+  // When WS pushes "ready" but we have no program content (the page was
+  // server-rendered while still "generating"), fetch the program via a server
+  // action. The server action calls the API server-to-server (internal
+  // API_BASE_URL) — the browser never touches the API directly.
   useEffect(() => {
     if (status === "ready" && !program) {
-      void fetchPlanStatus(planId, token).then((result) => {
+      void getPlanStatusAction(planId).then((result) => {
         if (result.kind === "ok" && result.plan.program) {
           setProgram(result.plan.program as WorkoutProgram);
         }

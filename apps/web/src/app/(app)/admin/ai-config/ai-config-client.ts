@@ -1,3 +1,5 @@
+import "server-only";
+
 /**
  * Pure API client for the AI provider admin config endpoints.
  *
@@ -6,48 +8,31 @@
  * Mirrors the plan-draft-client.ts pattern.
  *
  * API keys are NEVER sent or received — only provider + model.
+ *
+ * This module is server-only: it reads process.env.API_BASE_URL (the internal
+ * Docker address) and must never be imported by client components.
+ * Client-safe constants (VALID_PROVIDERS, MODEL_DEFAULTS, AiProvider, types)
+ * are defined in ai-config-constants.ts and re-exported here for server
+ * importers that already depend on this module.
  */
 
-export const VALID_PROVIDERS = [
-  "openrouter",
-  "openai",
-  "anthropic",
-  "google",
-  "opencode-go",
-] as const;
+import {
+  VALID_PROVIDERS,
+  MODEL_DEFAULTS,
+  type AiProvider,
+  type AiConfigRecord,
+  type GetConfigResult,
+  type UpdateConfigResult,
+} from "./ai-config-constants";
 
-export type AiProvider = (typeof VALID_PROVIDERS)[number];
-
-/**
- * Default model to pre-fill when the user switches providers.
- * Matches the design MODEL_DEFAULTS table.
- */
-export const MODEL_DEFAULTS: Record<AiProvider, string> = {
-  openrouter: "openai/gpt-4o-mini",
-  openai: "gpt-4o-mini",
-  anthropic: "claude-3-5-haiku-20241022",
-  google: "gemini-2.0-flash",
-  "opencode-go": "deepseek-v4-flash",
+export {
+  VALID_PROVIDERS,
+  MODEL_DEFAULTS,
+  type AiProvider,
+  type AiConfigRecord,
+  type GetConfigResult,
+  type UpdateConfigResult,
 };
-
-export interface AiConfigRecord {
-  provider: AiProvider;
-  model: string;
-  updatedAt: string;
-}
-
-export type GetConfigResult =
-  | { kind: "ok"; config: AiConfigRecord | null }
-  | { kind: "unauthorized" }
-  | { kind: "forbidden" }
-  | { kind: "error"; message: string };
-
-export type UpdateConfigResult =
-  | { kind: "ok"; config: AiConfigRecord }
-  | { kind: "unauthorized" }
-  | { kind: "forbidden" }
-  | { kind: "invalid"; message: string }
-  | { kind: "error"; message: string };
 
 export function apiBaseUrl(): string {
   return process.env.API_BASE_URL ?? "http://localhost:4000";
