@@ -15,17 +15,10 @@
 import { useState } from "react";
 import type { WorkoutSession } from "@kinora/contracts";
 import styles from "./plan-week-view.module.css";
+import { estimateSessionMinutes } from "./plan-utils";
 
-/** Assumed average seconds to perform one set (rep execution). Documented estimate. */
-const EXECUTION_OVERHEAD_SECONDS = 30;
-
-export function estimateSessionMinutes(exercises: WorkoutSession["exercises"]): number {
-  const totalSeconds = exercises.reduce(
-    (sum, e) => sum + e.sets * (e.restSeconds + EXECUTION_OVERHEAD_SECONDS),
-    0,
-  );
-  return Math.ceil(totalSeconds / 60);
-}
+/** Stable id for the detail panel element — used for aria-controls. */
+const DETAIL_PANEL_ID = "day-detail-panel";
 
 export interface DayDetailPanelProps {
   sessions: WorkoutSession[];
@@ -62,6 +55,10 @@ export function DayDetailPanel({ sessions, messages }: DayDetailPanelProps) {
             String(session.day),
           );
           const exercisesLabel = `${session.exercises.length} ${t("plan_exercises_count", "exercises")}`;
+          // Known limitation: "1 exercises" is grammatically incorrect.
+          // ICU plural ({count, plural, one {exercise} other {exercises}}) would fix
+          // this, but the project currently uses a plain key-value i18n catalogue
+          // without MessageFormat/ICU support. Left as-is until the catalogue is upgraded.
           const durationLabel = t("plan_est_duration", "est. {n} min").replace(
             "{n}",
             String(estMin),
@@ -74,6 +71,7 @@ export function DayDetailPanel({ sessions, messages }: DayDetailPanelProps) {
               tabIndex={0}
               aria-expanded={isActive}
               aria-label={dayLabel}
+              aria-controls={isActive ? DETAIL_PANEL_ID : undefined}
               className={`${styles.dayCard}${isActive ? ` ${styles.dayCardActive}` : ""}`}
               onClick={() => handleCardClick(session.day)}
               onKeyDown={(e) => handleKeyDown(e, session.day)}
@@ -90,7 +88,7 @@ export function DayDetailPanel({ sessions, messages }: DayDetailPanelProps) {
 
       {/* Detail panel — shown when a day is selected */}
       {selectedSession !== null && (
-        <div className={styles.detailPanel}>
+        <div id={DETAIL_PANEL_ID} className={styles.detailPanel}>
           <div className={styles.detailHeader}>
             <div className={styles.detailTitleBlock}>
               <div className={styles.detailEyebrow}>
@@ -100,11 +98,15 @@ export function DayDetailPanel({ sessions, messages }: DayDetailPanelProps) {
                 )}
               </div>
               <h2 className={styles.detailTitle}>{selectedSession.title}</h2>
+              {/* Fix 2: meta line uses catalogue keys, no hardcoded "min" or "·" */}
               <div className={styles.detailMeta}>
                 {selectedSession.exercises.length}{" "}
-                {t("plan_exercises_count", "exercises")} ·{" "}
-                {estimateSessionMinutes(selectedSession.exercises)}{" "}
-                min
+                {t("plan_exercises_count", "exercises")}
+                {" · "}
+                {t("plan_est_duration", "est. {n} min").replace(
+                  "{n}",
+                  String(estimateSessionMinutes(selectedSession.exercises)),
+                )}
               </div>
             </div>
             <button
