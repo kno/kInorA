@@ -130,6 +130,7 @@ function buildMockPlanRepo(opts: {
   return {
     findById: vi.fn().mockResolvedValue(opts.findById),
     findLatestByPlanSpec: vi.fn().mockResolvedValue(opts.findLatestByPlanSpec),
+    findAllByUser: vi.fn().mockResolvedValue([]),
     createGenerating: vi.fn(),
     markReady: vi.fn(),
     markFailed: vi.fn(),
@@ -414,7 +415,7 @@ describe("Plan generation routes", () => {
       expect(response.statusCode).toBe(404);
     });
 
-    it("calls findById with tenantId from authContext", async () => {
+    it("calls findById with tenantId+userId from authContext (tenant + user scoped)", async () => {
       const db = buildSessionOnlyDb(buildSessionRow());
       const planRepo = buildMockPlanRepo({ findById: mockPlanRecord });
       app = await buildTestApp({ db, planRepo });
@@ -425,14 +426,13 @@ describe("Plan generation routes", () => {
         headers: { authorization: `Bearer ${VALID_TOKEN}` },
       });
 
-      expect(planRepo.findById).toHaveBeenCalledWith(TENANT_A, PLAN_ID);
+      // After Fix 1: route passes (tenantId, userId, id) — 3 args required
+      expect(planRepo.findById).toHaveBeenCalledWith(TENANT_A, USER_A, PLAN_ID);
     });
 
-    // Fix 3: genuine cross-tenant test — TENANT_B session, repo returns undefined for TENANT_B
-    it("cross-tenant: findById is called with TENANT_B tenantId and returns 404", async () => {
-      // Session authenticated as TENANT_B
+    // Cross-tenant isolation: repo is called with TENANT_B context and returns 404
+    it("cross-tenant: findById is called with TENANT_B context and returns 404", async () => {
       const db = buildSessionOnlyDb(buildSessionRow(TENANT_B, USER_A));
-      // Repo mock returns undefined only for TENANT_B (simulates tenant isolation at DB layer)
       const planRepo = buildMockPlanRepo({ findById: undefined });
       app = await buildTestApp({ db, planRepo });
 
@@ -442,9 +442,29 @@ describe("Plan generation routes", () => {
         headers: { authorization: `Bearer ${VALID_TOKEN}` },
       });
 
-      // (a) Repo was called with TENANT_B's tenantId — route uses authContext, not path/body
-      expect(planRepo.findById).toHaveBeenCalledWith(TENANT_B, PLAN_ID);
+      // (a) Repo was called with TENANT_B's tenantId + USER_A userId
+      expect(planRepo.findById).toHaveBeenCalledWith(TENANT_B, USER_A, PLAN_ID);
       // (b) Response is 404 — cross-tenant rows are invisible
+      expect(response.statusCode).toBe(404);
+    });
+
+    // Same-tenant cross-user isolation (Fix 1 — CRITICAL security test)
+    it("same-tenant cross-user: findById is called with USER_B context and returns 404", async () => {
+      // USER_B in TENANT_A tries to access USER_A's plan — must return 404
+      const USER_B = "bbbbbbbb-0000-0000-0000-000000000002";
+      const db = buildSessionOnlyDb(buildSessionRow(TENANT_A, USER_B));
+      const planRepo = buildMockPlanRepo({ findById: undefined });
+      app = await buildTestApp({ db, planRepo });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/workout-plans/${PLAN_ID}`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      // (a) Repo was called with TENANT_A + USER_B — userId isolation enforced at repo level
+      expect(planRepo.findById).toHaveBeenCalledWith(TENANT_A, USER_B, PLAN_ID);
+      // (b) Response is 404 — same-tenant cross-user plan is not accessible
       expect(response.statusCode).toBe(404);
     });
   });
@@ -499,7 +519,7 @@ describe("Plan generation routes", () => {
       expect(response.statusCode).toBe(404);
     });
 
-    it("calls findLatestByPlanSpec with tenantId from authContext", async () => {
+    it("calls findLatestByPlanSpec with tenantId+userId from authContext (tenant + user scoped)", async () => {
       const db = buildSessionOnlyDb(buildSessionRow());
       const planRepo = buildMockPlanRepo({ findLatestByPlanSpec: mockPlanRecord });
       app = await buildTestApp({ db, planRepo });
@@ -510,12 +530,12 @@ describe("Plan generation routes", () => {
         headers: { authorization: `Bearer ${VALID_TOKEN}` },
       });
 
-      expect(planRepo.findLatestByPlanSpec).toHaveBeenCalledWith(TENANT_A, SPEC_ID);
+      // After Fix 2: route passes (tenantId, userId, planSpecId) — 3 args required
+      expect(planRepo.findLatestByPlanSpec).toHaveBeenCalledWith(TENANT_A, USER_A, SPEC_ID);
     });
 
-    // Fix 3: genuine cross-tenant test — TENANT_B session, repo returns undefined for TENANT_B
-    it("cross-tenant: findLatestByPlanSpec is called with TENANT_B tenantId and returns 404", async () => {
-      // Session authenticated as TENANT_B
+    // Cross-tenant isolation: repo is called with TENANT_B context and returns 404
+    it("cross-tenant: findLatestByPlanSpec is called with TENANT_B context and returns 404", async () => {
       const db = buildSessionOnlyDb(buildSessionRow(TENANT_B, USER_A));
       const planRepo = buildMockPlanRepo({ findLatestByPlanSpec: undefined });
       app = await buildTestApp({ db, planRepo });
@@ -526,9 +546,28 @@ describe("Plan generation routes", () => {
         headers: { authorization: `Bearer ${VALID_TOKEN}` },
       });
 
-      // (a) Repo called with TENANT_B's tenantId
-      expect(planRepo.findLatestByPlanSpec).toHaveBeenCalledWith(TENANT_B, SPEC_ID);
+      // (a) Repo called with TENANT_B + USER_A
+      expect(planRepo.findLatestByPlanSpec).toHaveBeenCalledWith(TENANT_B, USER_A, SPEC_ID);
       // (b) Response is 404
+      expect(response.statusCode).toBe(404);
+    });
+
+    // Same-tenant cross-user isolation (Fix 2 — HIGH security test)
+    it("same-tenant cross-user: findLatestByPlanSpec is called with USER_B context and returns 404", async () => {
+      const USER_B = "bbbbbbbb-0000-0000-0000-000000000002";
+      const db = buildSessionOnlyDb(buildSessionRow(TENANT_A, USER_B));
+      const planRepo = buildMockPlanRepo({ findLatestByPlanSpec: undefined });
+      app = await buildTestApp({ db, planRepo });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/plan-specs/${SPEC_ID}/workout-plan`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      // (a) Repo called with TENANT_A + USER_B — userId isolation enforced at repo level
+      expect(planRepo.findLatestByPlanSpec).toHaveBeenCalledWith(TENANT_A, USER_B, SPEC_ID);
+      // (b) Response is 404 — same-tenant cross-user spec is not accessible
       expect(response.statusCode).toBe(404);
     });
   });

@@ -870,4 +870,170 @@ describe("Plan routes", () => {
       expect(body).toHaveLength(0);
     });
   });
+
+  // --- GET /workout-plans/:id (Fix 3 — SC-06 through SC-10) ---
+  //
+  // These tests assert that the route uses tenant+user scoped findById (Fix 1),
+  // and provide the base cases that were missing (reviewer BLOCK reason).
+
+  describe("GET /workout-plans/:id", () => {
+    const PLAN_ID = "plan-uuid-1";
+    const SPEC_ID = "spec-uuid-1";
+    const USER_B = "bbbbbbbb-0000-0000-0000-000000000002";
+
+    const readyPlanRecord = {
+      id: PLAN_ID,
+      tenantId: TENANT_A,
+      userId: USER_A,
+      planSpecId: SPEC_ID,
+      status: "ready" as const,
+      programJson: {
+        weeklySessions: [
+          {
+            day: 1,
+            title: "Upper Body",
+            exercises: [{ name: "Squat", sets: 4, reps: "8-12", restSeconds: 90 }],
+          },
+        ],
+        limitationWarnings: [],
+      },
+      errorMessage: null,
+      createdAt: new Date("2026-06-29T12:00:00Z"),
+      updatedAt: new Date("2026-06-29T12:01:00Z"),
+    };
+
+    it("returns 401 when not authenticated (SC-06)", async () => {
+      const sessionDb = { ...buildSessionDb(), select: sessionSelectChain([]) } as unknown as Database;
+      const planRepo = {
+        findById: vi.fn(),
+        findLatestByPlanSpec: vi.fn(),
+        findAllByUser: vi.fn(),
+      };
+      app = await buildTestAppWithPlanRepo(sessionDb, planRepo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/workout-plans/${PLAN_ID}`,
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(planRepo.findById).not.toHaveBeenCalled();
+    });
+
+    it("returns 200 with DTO shape when plan is ready (SC-07)", async () => {
+      const sessionDb = buildSessionDb(TENANT_A, USER_A);
+      const planRepo = {
+        findById: vi.fn().mockResolvedValue(readyPlanRecord),
+        findLatestByPlanSpec: vi.fn(),
+        findAllByUser: vi.fn(),
+      };
+      app = await buildTestAppWithPlanRepo(sessionDb, planRepo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/workout-plans/${PLAN_ID}`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      // DTO contract: client reads { id, status, program, specId }
+      expect(body.id).toBe(PLAN_ID);
+      expect(body.status).toBe("ready");
+      expect(body.specId).toBe(SPEC_ID);
+      expect(body.program).toBeDefined();
+      // Must NOT leak internal DB columns
+      expect(body.programJson).toBeUndefined();
+      expect(body.tenantId).toBeUndefined();
+      expect(body.userId).toBeUndefined();
+      expect(body.errorMessage).toBeUndefined();
+    });
+
+    it("returns 200 with program undefined when plan is generating (SC-08)", async () => {
+      const generatingPlan = {
+        ...readyPlanRecord,
+        status: "generating" as const,
+        programJson: null,
+      };
+      const sessionDb = buildSessionDb(TENANT_A, USER_A);
+      const planRepo = {
+        findById: vi.fn().mockResolvedValue(generatingPlan),
+        findLatestByPlanSpec: vi.fn(),
+        findAllByUser: vi.fn(),
+      };
+      app = await buildTestAppWithPlanRepo(sessionDb, planRepo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/workout-plans/${PLAN_ID}`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.status).toBe("generating");
+      expect(body.program).toBeUndefined();
+    });
+
+    it("returns 404 when plan does not exist (SC-09)", async () => {
+      const sessionDb = buildSessionDb(TENANT_A, USER_A);
+      const planRepo = {
+        findById: vi.fn().mockResolvedValue(undefined),
+        findLatestByPlanSpec: vi.fn(),
+        findAllByUser: vi.fn(),
+      };
+      app = await buildTestAppWithPlanRepo(sessionDb, planRepo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/workout-plans/${PLAN_ID}`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it("same-tenant cross-user: repo called with userId and returns 404 (SC-10 — Fix 1 CRITICAL)", async () => {
+      // USER_B authenticates and tries to access USER_A's plan in TENANT_A.
+      // The route must pass USER_B's userId to findById.
+      // The repo returns undefined (simulating the WHERE user_id=USER_B finding nothing).
+      const sessionDb = buildSessionDb(TENANT_A, USER_B);
+      const planRepo = {
+        findById: vi.fn().mockResolvedValue(undefined),
+        findLatestByPlanSpec: vi.fn(),
+        findAllByUser: vi.fn(),
+      };
+      app = await buildTestAppWithPlanRepo(sessionDb, planRepo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/workout-plans/${PLAN_ID}`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      // (a) findById was called with TENANT_A + USER_B + PLAN_ID (3 args with userId)
+      expect(planRepo.findById).toHaveBeenCalledWith(TENANT_A, USER_B, PLAN_ID);
+      // (b) Route returns 404 — same-tenant cross-user plan is not accessible
+      expect(response.statusCode).toBe(404);
+    });
+
+    it("calls findById with tenantId+userId from authContext (tenant + user scoped)", async () => {
+      const sessionDb = buildSessionDb(TENANT_A, USER_A);
+      const planRepo = {
+        findById: vi.fn().mockResolvedValue(readyPlanRecord),
+        findLatestByPlanSpec: vi.fn(),
+        findAllByUser: vi.fn(),
+      };
+      app = await buildTestAppWithPlanRepo(sessionDb, planRepo);
+
+      await app.inject({
+        method: "GET",
+        url: `/workout-plans/${PLAN_ID}`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      // After Fix 1: route passes (tenantId, userId, id)
+      expect(planRepo.findById).toHaveBeenCalledWith(TENANT_A, USER_A, PLAN_ID);
+    });
+  });
 });
