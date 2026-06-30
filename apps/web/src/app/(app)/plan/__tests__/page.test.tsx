@@ -42,6 +42,14 @@ const redirect = vi.fn();
 const listPlansAction = vi.fn();
 const getPlanStatusAction = vi.fn();
 
+// Mock next/headers — page uses headers() to read Accept-Language for i18n locale resolution.
+// Return an empty Accept-Language so locale resolves to English (default).
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => ({
+    get: (key: string) => (key === "accept-language" ? null : null),
+  })),
+}));
+
 vi.mock("next/navigation", () => ({
   redirect: (...args: unknown[]) => redirect(...args),
 }));

@@ -62,8 +62,8 @@ const saveDraftSchema = {
  *   POST /plan-specs                    — promote draft to confirmed plan_specs row; 409 if missing/incomplete
  *   POST /plan-specs/:id/confirm        — confirm spec + trigger generation; returns { planId, status: "generating" }
  *   POST /plan-specs/:id/regenerate     — re-trigger generation for confirmed spec; returns 202 { planId, status: "generating" }
- *   GET  /workout-plans/:id             — fetch a plan by id (tenant-scoped)
- *   GET  /plan-specs/:id/workout-plan   — fetch the latest plan for a spec (tenant-scoped)
+ *   GET  /workout-plans/:id             — fetch a plan by id (tenant + user scoped)
+ *   GET  /plan-specs/:id/workout-plan   — fetch the latest plan for a spec (tenant + user scoped)
  *
  * Stuck-generating strategy: MANUAL REGENERATE ONLY.
  * Stale "generating" rows from aborted generation (e.g. server restart) are
@@ -238,18 +238,19 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   );
 
   // GET /workout-plans/:id
-  // Returns a single workout plan by id, scoped to the requesting tenant.
-  // Returns: 200 { id, tenantId, userId, planSpecId, status, programJson, errorMessage, createdAt, updatedAt }
+  // Returns a single workout plan by id, scoped to the requesting tenant + user.
+  // Returns: 200 { id, status, program, specId }
   // Returns: 401 if not authenticated
-  // Returns: 404 if plan not found or belongs to a different tenant
+  // Returns: 404 if plan not found, belongs to a different tenant, or belongs to a
+  //           different user within the same tenant (same-tenant cross-user isolation)
   fastify.get(
     "/workout-plans/:id",
     { preHandler: requireAuth() },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { tenantId } = request.authContext!;
+      const { tenantId, userId } = request.authContext!;
       const { id } = request.params as { id: string };
 
-      const plan = await planRepo.findById(tenantId, id);
+      const plan = await planRepo.findById(tenantId, userId, id);
       if (!plan) {
         return reply.code(404).send({ error: "not_found" });
       }
@@ -269,17 +270,19 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   // GET /plan-specs/:id/workout-plan
   // Returns the most recently created workout plan for a given plan spec.
   // Multiple plans may exist (one per confirm/regenerate call); only the latest is returned.
-  // Returns: 200 { id, status, programJson, ... }
+  // Scoped to the requesting tenant + user — same-tenant cross-user reads return 404.
+  // Returns: 200 { id, status, program, specId }
   // Returns: 401 if not authenticated
-  // Returns: 404 if no plan exists for this spec or it belongs to a different tenant
+  // Returns: 404 if no plan exists for this spec, belongs to a different tenant, or belongs
+  //           to a different user within the same tenant
   fastify.get(
     "/plan-specs/:id/workout-plan",
     { preHandler: requireAuth() },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { tenantId } = request.authContext!;
+      const { tenantId, userId } = request.authContext!;
       const { id } = request.params as { id: string };
 
-      const plan = await planRepo.findLatestByPlanSpec(tenantId, id);
+      const plan = await planRepo.findLatestByPlanSpec(tenantId, userId, id);
       if (!plan) {
         return reply.code(404).send({ error: "not_found" });
       }

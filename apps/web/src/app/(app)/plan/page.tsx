@@ -14,7 +14,9 @@
  *
  * searchParams is a Promise in Next 15+ (async searchParams). Await it.
  */
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { resolveLocale, loadMessages } from "@/i18n/locale";
 import { listPlansAction } from "./actions";
 import { getPlanStatusAction } from "./[id]/actions";
 import { PlanStatusView } from "./[id]/PlanStatusView";
@@ -28,6 +30,15 @@ interface PlanPageProps {
 export default async function PlanPage({ searchParams }: PlanPageProps) {
   const params = await searchParams;
 
+  // Load i18n messages (Accept-Language header → locale → catalogue)
+  const requestHeaders = await headers();
+  const acceptLanguage = requestHeaders.get("accept-language");
+  const locale = resolveLocale(acceptLanguage, undefined);
+  const messages = loadMessages(locale);
+
+  // Helper: translate with English fallback
+  const t = (key: string, fallback: string) => messages[key] ?? fallback;
+
   // 1. List all plans (fail-open: error → empty state)
   const listResult = await listPlansAction();
   const summaries = listResult.kind === "ok" ? listResult.plans : [];
@@ -37,12 +48,12 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     return (
       <main className="kin-page">
         <div className="kin-card kin-card--center">
-          <h1 className="kin-title">No plan yet</h1>
+          <h1 className="kin-title">{t("plan_nav_empty_title", "No plan yet")}</h1>
           <p className="kin-text kin-muted">
-            Create your personalized workout plan to get started.
+            {t("plan_nav_empty_desc", "Create your personalized workout plan to get started.")}
           </p>
           <a href="/create-plan" className="kin-btn kin-btn--primary">
-            Create your plan
+            {t("plan_nav_empty_cta", "Create your plan")}
           </a>
         </div>
       </main>
@@ -67,12 +78,12 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     return (
       <main className="kin-page">
         <div className="kin-card kin-card--center">
-          <h1 className="kin-title">No plan yet</h1>
+          <h1 className="kin-title">{t("plan_nav_empty_title", "No plan yet")}</h1>
           <p className="kin-text kin-muted">
-            Create your personalized workout plan to get started.
+            {t("plan_nav_empty_desc", "Create your personalized workout plan to get started.")}
           </p>
           <a href="/create-plan" className="kin-btn kin-btn--primary">
-            Create your plan
+            {t("plan_nav_empty_cta", "Create your plan")}
           </a>
         </div>
       </main>
@@ -94,12 +105,13 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     return (
       <main className="kin-page">
         {showSelector && (
-          <PlanSelector summaries={summaries} selectedId={resolvedId} />
+          <PlanSelector summaries={summaries} selectedId={resolvedId} messages={messages} />
         )}
         <PlanStatusView
           planId={resolvedId}
           status="failed"
           specId={plan.specId}
+          messages={messages}
         />
         <div className="kin-card kin-card--center">
           <a href={`/plan/${resolvedId}`} className="kin-link">
@@ -114,13 +126,14 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   return (
     <main className="kin-page">
       {showSelector && (
-        <PlanSelector summaries={summaries} selectedId={resolvedId} />
+        <PlanSelector summaries={summaries} selectedId={resolvedId} messages={messages} />
       )}
       <PlanStatusView
         planId={resolvedId}
         status="ready"
         program={plan.program as WorkoutProgram | undefined}
         specId={plan.specId}
+        messages={messages}
       />
     </main>
   );
