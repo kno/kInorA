@@ -35,6 +35,24 @@ These variables are required for the OpenRouter LLM adapter and Langfuse observa
 
 **Privacy note**: `PlanSpec.limitations` (health context) is masked with `[REDACTED]` before the prompt reaches Langfuse. Raw limitation text never appears in traces.
 
+### AI provider admin (09-ai-provider-admin) — operator-managed, optional
+
+The active AI provider and model can be changed via the admin panel at `/admin/ai-config`. Only the key for the **currently selected provider** needs to be set. Keys are never stored in the database or shown in the UI.
+
+| Variable | When needed | Description |
+|---|---|---|
+| `OPENAI_API_KEY` | Only when provider `openai` is selected | OpenAI API key. Obtain at https://platform.openai.com/api-keys |
+| `ANTHROPIC_API_KEY` | Only when provider `anthropic` is selected | Anthropic API key. Obtain at https://console.anthropic.com/settings/keys |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Only when provider `google` is selected | Google Generative AI key. Obtain at https://ai.google.dev/gemini-api/docs/api-key |
+| `OPENCODE_GO_API_KEY` | Only when provider `opencode-go` is selected | OpenCode-Go API key. Obtain at https://opencode.ai |
+
+**To make a user admin** (direct SQL — no admin UI for this):
+```sql
+UPDATE users SET is_admin = true WHERE email = 'your@email.com';
+```
+
+**Configure**: set keys in the operator `.env` on the VPS. They are **not** GitHub secrets and not injected by CI/CD (same pattern as `OPENROUTER_API_KEY`).
+
 ### Optional / runtime tunables
 
 | Variable | Default | Description |

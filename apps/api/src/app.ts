@@ -11,8 +11,12 @@ import { planRoutes } from "./routes/plan.js";
 import { wsRoutes } from "./routes/ws.js";
 import { WorkoutPlanRepository } from "./db/repositories/workout-plan.js";
 import { PlanSpecRepository } from "./db/repositories/plan-spec.js";
+import { AiProviderConfigRepository } from "./db/repositories/ai-provider-config.js";
 import { PlanGenerationService } from "./ai/generation-service.js";
-import { OpenRouterPlanGenerator, warnIfAiConfigMissing } from "./ai/openrouter-generator.js";
+import { warnIfAiConfigMissing } from "./ai/openrouter-generator.js";
+import { DynamicPlanGenerator } from "./ai/dynamic-generator.js";
+import { buildAdapters } from "./ai/adapter-factory.js";
+import { adminAiConfigRoutes } from "./routes/admin-ai-config.js";
 import { WsRegistry } from "./ws/registry.js";
 import type { PlanGenerator } from "./ai/port.js";
 import type { SocialAuthService } from "./auth/social.js";
@@ -122,14 +126,17 @@ export async function buildApp(
   }
 
   // Build generation DI graph.
-  // OpenRouterPlanGenerator is constructed here (lazy — no key required at build time).
+  // DynamicPlanGenerator reads the active provider config from DB on every generate() call,
+  // then delegates to the correct adapter (openrouter, openai, anthropic, google, opencode-go).
+  // Falls back to OPENROUTER_API_KEY env var behavior when no DB row exists (retrocompatible).
   // In tests, callers pass planGenerator: new MockPlanGenerator() via BuildAppOptions.
   // Warn once at boot when no AI key is configured (silent in tests that inject a mock).
   if (!planGenerator) {
     warnIfAiConfigMissing();
   }
   const registry = wsRegistry ?? new WsRegistry();
-  const generator = planGenerator ?? new OpenRouterPlanGenerator();
+  const configRepo = new AiProviderConfigRepository(database);
+  const generator = planGenerator ?? new DynamicPlanGenerator(configRepo, buildAdapters());
   const workoutPlanRepo = new WorkoutPlanRepository(database);
   const planSpecRepo = new PlanSpecRepository(database);
   const planGenerationService = new PlanGenerationService(
@@ -146,6 +153,10 @@ export async function buildApp(
     planRepo: workoutPlanRepo,
     specRepo: planSpecRepo,
   });
+
+  // Admin AI config routes — GET/PUT /admin/ai-config (requireAuth + requireAdmin).
+  // Uses the same configRepo instance that powers DynamicPlanGenerator.
+  await app.register(adminAiConfigRoutes, { db: database, configRepo });
 
   // WebSocket plugin + authenticated plan-status route.
   // WsRegistry is shared between this route and PlanGenerationService so
