@@ -137,6 +137,12 @@ function createGoogleAdapter(model: string): PlanGenerator {
  * OpenCode-Go adapter factory.
  * Uses ChatOpenAI with the OpenCode baseURL.
  * Reads OPENCODE_GO_API_KEY at call time.
+ *
+ * NOTE: uses method "json_mode" (response_format: json_object) instead of
+ * "jsonSchema" (response_format: json_schema). DeepSeek models on OpenCode-Go
+ * return HTTP 400 "This response_format type is unavailable now" when sent a
+ * json_schema structured output request. json_mode works correctly and the
+ * response is parsed against WorkoutProgramSchema by invokeChain.
  */
 function createOpenCodeGoAdapter(model: string): PlanGenerator {
   const llm = new ChatOpenAI({
@@ -147,7 +153,7 @@ function createOpenCodeGoAdapter(model: string): PlanGenerator {
     },
   });
 
-  const chain = llm.withStructuredOutput(WorkoutProgramSchema, { method: "jsonSchema" });
+  const chain = llm.withStructuredOutput(WorkoutProgramSchema, { method: "json_mode" });
 
   return {
     generate(spec: PlanSpec): Promise<WorkoutProgram> {

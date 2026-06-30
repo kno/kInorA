@@ -1,0 +1,117 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { WorkoutProgram } from "@kinora/contracts";
+
+// ---------------------------------------------------------------------------
+// Mock @langchain/openai — hoisted before any import of production code
+// ---------------------------------------------------------------------------
+const mockInvoke = vi.fn();
+const mockWithStructuredOutput = vi.fn(() => ({ invoke: mockInvoke }));
+const MockChatOpenAI = vi.fn(() => ({
+  withStructuredOutput: mockWithStructuredOutput,
+}));
+
+vi.mock("@langchain/openai", () => ({
+  ChatOpenAI: MockChatOpenAI,
+}));
+
+vi.mock("@langchain/anthropic", () => ({
+  ChatAnthropic: vi.fn(() => ({ withStructuredOutput: mockWithStructuredOutput })),
+}));
+
+vi.mock("@langchain/google-genai", () => ({
+  ChatGoogleGenerativeAI: vi.fn(() => ({ withStructuredOutput: mockWithStructuredOutput })),
+}));
+
+vi.mock("langfuse-langchain", () => ({
+  CallbackHandler: vi.fn(() => ({})),
+}));
+
+// ---------------------------------------------------------------------------
+// Import AFTER mocks
+// ---------------------------------------------------------------------------
+const { buildAdapters } = await import("../adapter-factory.js");
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+const baseSpec = {
+  goal: "strength" as const,
+  daysPerWeek: 3,
+  sessionDurationMinutes: 60,
+  location: "gym" as const,
+  equipment: ["barbell"],
+  limitations: [],
+  preferenceScores: { strength: 0.9, hypertrophy: 0.3, endurance: 0.2, mobility: 0.2 },
+  confirmed: true,
+};
+
+const mockProgram: WorkoutProgram = {
+  weeklySessions: [{ day: 1, title: "Day 1", exercises: [] }],
+  limitationWarnings: [],
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockInvoke.mockResolvedValue(mockProgram);
+});
+
+// ---------------------------------------------------------------------------
+// opencode-go adapter — must use json_mode, NOT jsonSchema
+// ---------------------------------------------------------------------------
+
+describe("createOpenCodeGoAdapter (via buildAdapters)", () => {
+  it("calls withStructuredOutput with method 'json_mode' (DeepSeek does not support jsonSchema)", async () => {
+    const adapters = buildAdapters();
+    const factory = adapters["opencode-go"];
+    if (!factory) throw new Error("opencode-go adapter not registered");
+
+    const adapter = factory("deepseek-v4-flash");
+    await adapter.generate(baseSpec);
+
+    // Must use json_mode — jsonSchema causes a 400 from DeepSeek/OpenCode-Go
+    expect(mockWithStructuredOutput).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ method: "json_mode" })
+    );
+  });
+
+  it("does NOT use jsonSchema method for opencode-go (regression: 400 from DeepSeek)", async () => {
+    const adapters = buildAdapters();
+    const factory = adapters["opencode-go"]!;
+    const adapter = factory("deepseek-v4-flash");
+    await adapter.generate(baseSpec);
+
+    const [, options] = mockWithStructuredOutput.mock.calls[0] as [unknown, { method?: string }];
+    expect(options?.method).not.toBe("jsonSchema");
+  });
+
+  it("uses the model string passed to the factory", async () => {
+    const adapters = buildAdapters();
+    const factory = adapters["opencode-go"]!;
+    factory("deepseek-v4-pro");
+
+    const [, constructorArgs] = MockChatOpenAI.mock.calls[0] as [unknown, { model: string }];
+    // ChatOpenAI is called with the model
+    expect(MockChatOpenAI).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "deepseek-v4-pro" })
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Other adapters still use jsonSchema (sanity check)
+// ---------------------------------------------------------------------------
+
+describe("openrouter adapter still uses jsonSchema", () => {
+  it("calls withStructuredOutput with method 'jsonSchema'", async () => {
+    const adapters = buildAdapters();
+    const factory = adapters["openrouter"]!;
+    const adapter = factory("openai/gpt-4o-mini");
+    await adapter.generate(baseSpec);
+
+    expect(mockWithStructuredOutput).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ method: "jsonSchema" })
+    );
+  });
+});
