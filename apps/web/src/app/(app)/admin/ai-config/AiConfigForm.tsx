@@ -2,14 +2,13 @@
 
 import { useState } from "react";
 import {
-  updateAiConfig,
   MODEL_DEFAULTS,
   VALID_PROVIDERS,
   type AiProvider,
 } from "./ai-config-client";
+import { updateAiConfigAction } from "./actions";
 
 export interface AiConfigFormProps {
-  token: string | undefined;
   initialProvider?: AiProvider;
   initialModel?: string;
 }
@@ -17,13 +16,15 @@ export interface AiConfigFormProps {
 /**
  * AiConfigForm — client component for the AI provider admin panel.
  *
- * Renders a provider select and a model text input. On submit it calls
- * PUT /admin/ai-config via updateAiConfig and shows a success or error message.
+ * Renders a provider select and a model text input. On submit it invokes the
+ * `updateAiConfigAction` server action (which proxies to PUT /admin/ai-config
+ * server-to-server) and shows a success or error message. The browser never
+ * calls the API directly, and the session token never reaches client JS.
  *
  * SC-14: admin user sees current config (passed as props from server component)
  * SC-15: submit → calls PUT, shows confirmation
  */
-export function AiConfigForm({ token, initialProvider, initialModel }: AiConfigFormProps) {
+export function AiConfigForm({ initialProvider, initialModel }: AiConfigFormProps) {
   const defaultProvider: AiProvider = initialProvider ?? "openrouter";
   const defaultModel = initialModel ?? MODEL_DEFAULTS[defaultProvider];
 
@@ -49,7 +50,7 @@ export function AiConfigForm({ token, initialProvider, initialModel }: AiConfigF
     setStatus("loading");
     setErrorMessage("");
 
-    const result = await updateAiConfig(token, provider, model);
+    const result = await updateAiConfigAction(provider, model);
 
     if (result.kind === "ok") {
       setStatus("saved");
