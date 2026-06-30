@@ -4,6 +4,7 @@ import {
   submitDraft,
   promotePlanSpec,
   isSpecComplete,
+  fetchUserPlans,
 } from "../plan-draft-client";
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -149,5 +150,82 @@ describe("promotePlanSpec", () => {
     const result = await promotePlanSpec(undefined, { fetchImpl });
     expect(result.kind).toBe("error");
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("fetchUserPlans", () => {
+  it("GETs /workout-plans with the Bearer token and returns plan summaries on 200", async () => {
+    const summaries = [
+      { id: "plan-1", status: "ready", createdAt: "2026-06-29T10:00:00.000Z" },
+      { id: "plan-2", status: "generating", createdAt: "2026-06-28T09:00:00.000Z" },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(summaries), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
+
+    const result = await fetchUserPlans("tok-abc", { fetchImpl, apiBaseUrl: "http://api.test" });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.plans).toHaveLength(2);
+      expect(result.plans[0]!.id).toBe("plan-1");
+      expect(result.plans[0]!.status).toBe("ready");
+    }
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://api.test/workout-plans",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({ authorization: "Bearer tok-abc" }),
+      })
+    );
+  });
+
+  it("returns { kind: 'ok', plans: [] } when the user has no plans (empty array)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
+
+    const result = await fetchUserPlans("tok-abc", { fetchImpl, apiBaseUrl: "http://api.test" });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.plans).toHaveLength(0);
+    }
+  });
+
+  it("returns an error when no token is provided", async () => {
+    const fetchImpl = vi.fn();
+    const result = await fetchUserPlans(undefined, { fetchImpl });
+    expect(result.kind).toBe("error");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("returns an error when the API returns 401", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      })
+    );
+    const result = await fetchUserPlans("tok", { fetchImpl });
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.message).toBe("unauthorized");
+    }
+  });
+
+  it("returns an error when the fetch itself throws (network unreachable)", async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error("Network error"));
+    const result = await fetchUserPlans("tok", { fetchImpl });
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.message).toBe("api_unreachable");
+    }
   });
 });
