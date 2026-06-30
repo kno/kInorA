@@ -7,7 +7,7 @@
  *  3. Fetches the selected plan's detail via getPlanStatusAction(selectedId).
  *  4. Handles four states:
  *     - generating → redirect to /plan/[id] (live WS view)
- *     - ready       → PlanStatusView ready
+ *     - ready       → PlanWeekView (4-tile summary + day-card grid)
  *     - failed      → PlanStatusView failed + link to /plan/[id]
  *     - empty       → empty state card + /create-plan CTA (no selector)
  *  5. Renders PlanSelector when multiple plans exist.
@@ -21,6 +21,7 @@ import { listPlansAction } from "./actions";
 import { getPlanStatusAction } from "./[id]/actions";
 import { PlanStatusView } from "./[id]/PlanStatusView";
 import { PlanSelector } from "./PlanSelector";
+import { PlanWeekView } from "./PlanWeekView";
 import type { WorkoutProgram } from "@kinora/contracts";
 
 interface PlanPageProps {
@@ -122,19 +123,13 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     );
   }
 
-  // status === "ready"
+  // status === "ready" — render the week-view layout (PlanWeekView server component)
   return (
     <main className="kin-page">
       {showSelector && (
         <PlanSelector summaries={summaries} selectedId={resolvedId} messages={messages} />
       )}
-      <PlanStatusView
-        planId={resolvedId}
-        status="ready"
-        program={plan.program as WorkoutProgram | undefined}
-        specId={plan.specId}
-        messages={messages}
-      />
+      <PlanWeekView program={plan.program as WorkoutProgram} messages={messages} />
     </main>
   );
 }

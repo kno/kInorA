@@ -72,9 +72,15 @@ vi.mock("../PlanSelector.js", () => ({
   PlanSelector: (props: AnyProps) => null,
 }));
 
+// Stub PlanWeekView — the new ready-state component wired in T4.
+vi.mock("../PlanWeekView.js", () => ({
+  PlanWeekView: (props: AnyProps) => null,
+}));
+
 import PlanPage from "../page";
 import { PlanStatusView } from "../../plan/[id]/PlanStatusView";
 import { PlanSelector } from "../PlanSelector";
+import { PlanWeekView } from "../PlanWeekView";
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -191,15 +197,50 @@ describe("PlanPage — unowned planId fallback (SC-15)", () => {
   });
 });
 
-describe("PlanPage — ready state (SC-18)", () => {
-  it("renders PlanStatusView with status='ready' when selected plan is ready", async () => {
+describe("PlanPage — ready state (SC-18 / T4 wiring)", () => {
+  it("renders PlanWeekView when selected plan is ready", async () => {
     listPlansAction.mockResolvedValue({ kind: "ok", plans: summaries });
     getPlanStatusAction.mockResolvedValue({ kind: "ok", plan: readyPlan });
 
     const page = await PlanPage({ searchParams: Promise.resolve({}) });
-    const statusView = findFirst(page, (el) => el.type === PlanStatusView);
-    expect(statusView).toBeDefined();
-    expect(statusView?.props?.status).toBe("ready");
+    const weekView = findFirst(page, (el) => el.type === PlanWeekView);
+    expect(weekView).toBeDefined();
+  });
+
+  it("passes the plan program to PlanWeekView when ready", async () => {
+    listPlansAction.mockResolvedValue({ kind: "ok", plans: summaries });
+    getPlanStatusAction.mockResolvedValue({ kind: "ok", plan: readyPlan });
+
+    const page = await PlanPage({ searchParams: Promise.resolve({}) });
+    const weekView = findFirst(page, (el) => el.type === PlanWeekView);
+    expect(weekView?.props?.program).toBeDefined();
+    // Verify program has the expected weeklySessions from readyPlan
+    expect((weekView?.props?.program as { weeklySessions: unknown[] })?.weeklySessions).toHaveLength(1);
+  });
+
+  it("does NOT render PlanStatusView for the ready state (old layout removed)", async () => {
+    listPlansAction.mockResolvedValue({ kind: "ok", plans: summaries });
+    getPlanStatusAction.mockResolvedValue({ kind: "ok", plan: readyPlan });
+
+    const page = await PlanPage({ searchParams: Promise.resolve({}) });
+    // PlanStatusView must not appear at all in the ready branch
+    // (it is still used for failed branch — verified separately)
+    const statusView = findFirst(
+      page,
+      (el) => el.type === PlanStatusView && el.props?.status === "ready",
+    );
+    expect(statusView).toBeUndefined();
+  });
+
+  it("passes messages (i18n record) to PlanWeekView", async () => {
+    listPlansAction.mockResolvedValue({ kind: "ok", plans: summaries });
+    getPlanStatusAction.mockResolvedValue({ kind: "ok", plan: readyPlan });
+
+    const page = await PlanPage({ searchParams: Promise.resolve({}) });
+    const weekView = findFirst(page, (el) => el.type === PlanWeekView);
+    // messages must be a non-null Record — the component needs it for i18n
+    expect(weekView?.props?.messages).toBeDefined();
+    expect(typeof weekView?.props?.messages).toBe("object");
   });
 });
 
@@ -257,15 +298,14 @@ describe("PlanPage — selector presence (SC-16, SC-17)", () => {
     expect(selector).toBeDefined();
   });
 
-  it("renders the selected plan even when only one plan exists (SC-17)", async () => {
+  it("renders PlanWeekView for the selected plan even when only one plan exists (SC-17)", async () => {
     const singleSummary = [{ id: "plan-only", status: "ready", createdAt: "2026-06-29T10:00:00.000Z" }];
     listPlansAction.mockResolvedValue({ kind: "ok", plans: singleSummary });
     getPlanStatusAction.mockResolvedValue({ kind: "ok", plan: { ...readyPlan, id: "plan-only" } });
 
     const page = await PlanPage({ searchParams: Promise.resolve({}) });
-    const statusView = findFirst(page, (el) => el.type === PlanStatusView);
-    expect(statusView).toBeDefined();
-    expect(statusView?.props?.status).toBe("ready");
+    const weekView = findFirst(page, (el) => el.type === PlanWeekView);
+    expect(weekView).toBeDefined();
   });
 
   it("does NOT render PlanSelector when only one plan exists (SC-17)", async () => {
