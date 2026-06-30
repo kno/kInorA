@@ -5,7 +5,7 @@ import {
   MODEL_DEFAULTS,
   VALID_PROVIDERS,
   type AiProvider,
-} from "./ai-config-client";
+} from "./ai-config-constants";
 import { updateAiConfigAction } from "./actions";
 
 export interface AiConfigFormProps {
