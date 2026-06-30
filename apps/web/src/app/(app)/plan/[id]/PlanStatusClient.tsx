@@ -4,13 +4,15 @@
  * PlanStatusClient — client component that wires the WS subscription.
  *
  * Wraps PlanStatusView and:
- *   1. Subscribes to wss://.../ws/plans?token=<sessionToken> via usePlanWs
- *   2. Merges WS-pushed status with the server-fetched initial status
+ *   1. Subscribes to wss://.../ws/plans?token=<sessionToken> via usePlanWs.
+ *      ALLOWED: usePlanWs uses NEXT_PUBLIC_API_BASE_URL (public origin) for the
+ *      WebSocket — browsers cannot proxy WebSocket connections through Next.js.
+ *   2. Merges WS-pushed status with the server-fetched initial status.
  *   3. When WS pushes "ready" but the initial render had no program (was still
  *      "generating" at SSR), calls getPlanStatusAction (a server action) to
  *      fetch the program server-side. The browser never calls the API directly.
- *   4. Handles the "Regenerate" button → POST /plan-specs/:specId/regenerate
- *      via NEXT_PUBLIC_API_BASE_URL (the public origin, allowed for browser calls)
+ *   4. Handles the "Regenerate" button via regeneratePlanAction (a server
+ *      action in create-plan/actions.ts) — the browser never fetches the API.
  *
  * Token-in-URL tradeoff (v1): the session token is read server-side from the
  * httpOnly kinora_session cookie and passed as a prop to avoid client-side
@@ -26,6 +28,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePlanWs } from "@/hooks/use-plan-ws";
 import { getPlanStatusAction } from "./actions";
+import { regeneratePlanAction } from "@/app/(app)/create-plan/actions";
 import { PlanStatusView } from "./PlanStatusView";
 import type { WorkoutProgram } from "@kinora/contracts";
 import type { Messages } from "@/i18n/locale";
@@ -55,6 +58,8 @@ export function PlanStatusClient({
 
   // usePlanWs opens the WebSocket and updates status on push messages.
   // Falls back to polling GET /workout-plans/:id if the WS connect fails.
+  // ALLOWED: usePlanWs uses NEXT_PUBLIC_API_BASE_URL (public origin) for the
+  // WebSocket connection — browsers cannot proxy WebSockets through Next.js.
   const { status } = usePlanWs(planId, {
     token,
     initialStatus,
@@ -80,26 +85,18 @@ export function PlanStatusClient({
     if (!specId) return;
     setRegenerating(true);
     try {
-      const base =
-        process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
-      const res = await fetch(`${base}/plan-specs/${specId}/regenerate`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({}),
-      });
-      if (res.ok) {
-        // Status will be pushed via WS; clear the stale program
-        setProgram(undefined);
-      }
+      // Route through a server action — the browser never calls the API directly.
+      // regeneratePlanAction reads the session cookie server-side and calls
+      // POST /plan-specs/:specId/regenerate via the internal API_BASE_URL.
+      await regeneratePlanAction(specId);
+      // Status will be pushed via WS; clear the stale program
+      setProgram(undefined);
     } catch {
       // Network error — user can try again
     } finally {
       setRegenerating(false);
     }
-  }, [specId, token]);
+  }, [specId]);
 
   return (
     <PlanStatusView
