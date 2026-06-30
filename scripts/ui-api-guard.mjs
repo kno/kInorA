@@ -3,30 +3,41 @@
 /**
  * UI → API guardrail — ensures no client component calls the API directly.
  *
- * Rule: the browser talks to Next.js (server components / server actions),
- * which proxies to the API server-to-server via the INTERNAL API_BASE_URL
+ * ARCHITECTURE RULE
+ * -----------------
+ * The browser talks to Next.js (server components / server actions), which
+ * proxies to the API server-to-server via the INTERNAL API_BASE_URL
  * (http://api:4000). The ONLY legitimate browser→API channel is the WebSocket,
- * which uses NEXT_PUBLIC_API_BASE_URL (public origin) — a socket cannot be
- * proxied through Next.js. Everything else must go through a server action.
+ * because a WebSocket cannot be proxied through Next.js; it requires a direct
+ * connection using the PUBLIC origin (NEXT_PUBLIC_API_BASE_URL). Everything
+ * else — REST fetches, status polls, mutations — MUST go through a server action.
  *
- * Scans every .ts/.tsx under apps/web/src (recursively) excluding:
- *   - files under __tests__ directories
- *   - *.test.* files
- *   - *.d.ts files
+ * LAYERED DEFENCE
+ * ---------------
+ * `import "server-only"` in API-fetch modules is the BUILD-TIME backstop for
+ * import-path violations: if a client component (or a module it imports)
+ * contains `import "server-only"`, `next build` fails with a clear error,
+ * regardless of how the import reaches it (direct, barrel re-export, or
+ * dynamic import).
  *
- * A file is CLIENT if:
- *   - Its first ~5 non-empty lines contain the "use client" directive, OR
- *   - It lives under apps/web/src/hooks/
+ * This script is the RUNTIME-STATIC layer that catches what server-only
+ * CANNOT: inline fetch / env / URL access in client files that do not import
+ * a server-only module. It also enforces the browser→API allowlist (below).
  *
- * Failures (exit 1) when a CLIENT file:
- *   1. References process.env.API_BASE_URL or process.env["API_BASE_URL"]
- *      (the INTERNAL base URL — server-only).
- *   2. Imports from a module marked server-only (i.e. a file under
- *      apps/web/src whose first non-empty lines contain `import "server-only"`).
+ * The guard additionally reports server-only import violations (static
+ * imports and dynamic imports) so they are visible in CI output, even though
+ * `next build` would catch them at compile time.
  *
- * ALLOWED: NEXT_PUBLIC_API_BASE_URL (public origin — WS channel). Not flagged.
+ * KNOWN LIMITATION
+ * ----------------
+ * A client file that constructs the API URL from a fully dynamic string
+ * (e.g. a variable built at runtime from user input) cannot be caught
+ * statically. This is expected — review dynamic URL construction manually.
  *
- * Exit 0 → clean. Exit 1 → violations found (with a clear per-line report).
+ * BROWSER → API ALLOWLIST
+ * -----------------------
+ * Only these files may reference NEXT_PUBLIC_API_BASE_URL or connect to the
+ * API from the browser. All other client files must go through a server action.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -38,6 +49,21 @@ const __dirname = dirname(__filename);
 const ROOT = join(__dirname, "..");
 const WEB_SRC = join(ROOT, "apps/web/src");
 const HOOKS_DIR = join(WEB_SRC, "hooks");
+
+/**
+ * Explicit allowlist of client files that are permitted to reference
+ * NEXT_PUBLIC_API_BASE_URL and connect to the API from the browser.
+ *
+ * WHY an allowlist instead of a blanket exception: the WebSocket hook is the
+ * ONLY client code that legitimately reaches the API from the browser (it
+ * cannot be proxied through Next.js). Any other client file using
+ * NEXT_PUBLIC_API_BASE_URL would be making a direct browser→API REST call,
+ * which violates the rule. The allowlist makes this boundary explicit and
+ * auditable.
+ */
+const BROWSER_API_ALLOWLIST = new Set([
+  join(WEB_SRC, "hooks/use-plan-ws.ts"),
+]);
 
 // ---------------------------------------------------------------------------
 // File collection
@@ -61,8 +87,8 @@ function collectFiles(dir) {
       results.push(...collectFiles(full));
     } else if (stat.isFile()) {
       // Accept .ts and .tsx; skip test files and type declarations
-      if (!/\.(tsx?$)/.test(entry)) continue;
-      if (/\.test\.(tsx?$)/.test(entry)) continue;
+      if (!/\.(tsx?)$/.test(entry)) continue;
+      if (/\.test\.(tsx?)$/.test(entry)) continue;
       if (/\.d\.ts$/.test(entry)) continue;
       results.push(full);
     }
@@ -156,29 +182,77 @@ function resolveImport(specifier, fromFile) {
 }
 
 // ---------------------------------------------------------------------------
-// Violation detection
+// Violation detection patterns
 // ---------------------------------------------------------------------------
 
+/** Internal API_BASE_URL (server-only env var) — never allowed in client. */
 const API_BASE_URL_RE =
   /process\.env(?:\.API_BASE_URL|\[["']API_BASE_URL["']\])/g;
 
-// Matches import statements — captures the specifier (non-npm, relative or @/)
-const IMPORT_RE =
-  /^\s*import\s+(?:.*?\s+from\s+)?["']([^"']+)["']/gm;
+/**
+ * NEXT_PUBLIC_API_BASE_URL — only allowed in the BROWSER_API_ALLOWLIST files.
+ * For all other client files this is a violation (browser→API REST call).
+ */
+const NEXT_PUBLIC_API_BASE_URL_RE =
+  /process\.env(?:\.NEXT_PUBLIC_API_BASE_URL|\[["']NEXT_PUBLIC_API_BASE_URL["']\])/g;
+
+/**
+ * Hardcoded internal API compose host — always fails in client files.
+ * `http://api:4000` only resolves inside the Docker network; using it in a
+ * client component means the browser would make a direct API call that fails
+ * in production.
+ */
+const COMPOSE_HOST_RE = /https?:\/\/api:\d+/g;
+
+/**
+ * Localhost API fallback — flagged in non-allowlisted client files.
+ * `http://localhost:4000` is the local dev fallback for API_BASE_URL.
+ * It is legitimate ONLY inside the WS hook allowlist (for the WebSocket
+ * dev fallback). In any other client file it indicates a direct browser→API
+ * call that would fail in deployed environments.
+ */
+const LOCALHOST_API_RE = /https?:\/\/localhost:\d+/g;
+
+/**
+ * Static import statement — captures specifier on a potentially multiline import.
+ * Fix 1: content is normalized (newlines collapsed to spaces) before matching
+ * so multiline imports like:
+ *   import {
+ *     foo,
+ *   } from "./module"
+ * are correctly detected.
+ */
+const STATIC_IMPORT_RE =
+  /\bimport\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/g;
+
+/**
+ * Dynamic import — captures the specifier in import("./module").
+ * Fix 2: catches dynamic imports of server-only modules.
+ */
+const DYNAMIC_IMPORT_RE = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g;
+
+// ---------------------------------------------------------------------------
+// Violation check for a single client file
+// ---------------------------------------------------------------------------
 
 /**
  * Check a single client file for violations.
  * Returns an array of { line, col, token, remedy } objects.
+ *
+ * @param {string} filePath  Absolute path to the file.
+ * @param {string} content   Raw file content (original, newlines preserved).
+ * @param {Set<string>} serverOnlyModules  Absolute paths of server-only modules.
+ * @param {boolean} isAllowlisted  Whether this file is in BROWSER_API_ALLOWLIST.
  */
-function checkClientFile(filePath, content, serverOnlyModules) {
+function checkClientFile(filePath, content, serverOnlyModules, isAllowlisted) {
   const violations = [];
   const lines = content.split("\n");
 
-  // Check 1: API_BASE_URL reference
+  // --- Check 1: process.env.API_BASE_URL (internal — never allowed in client) ---
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    let match;
     API_BASE_URL_RE.lastIndex = 0;
+    let match;
     while ((match = API_BASE_URL_RE.exec(line)) !== null) {
       violations.push({
         line: i + 1,
@@ -186,15 +260,73 @@ function checkClientFile(filePath, content, serverOnlyModules) {
         token: match[0].trim(),
         remedy:
           "Client components must call a server action, not the API directly. " +
-          "Move the fetch call to a server action and import NEXT_PUBLIC_API_BASE_URL for public-origin calls only.",
+          "Move the fetch call to a server action; use NEXT_PUBLIC_API_BASE_URL only for the WebSocket hook.",
       });
     }
   }
 
-  // Check 2: imports from server-only modules
+  // --- Check 2: NEXT_PUBLIC_API_BASE_URL (only allowed in BROWSER_API_ALLOWLIST) ---
+  if (!isAllowlisted) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      NEXT_PUBLIC_API_BASE_URL_RE.lastIndex = 0;
+      let match;
+      while ((match = NEXT_PUBLIC_API_BASE_URL_RE.exec(line)) !== null) {
+        violations.push({
+          line: i + 1,
+          col: match.index + 1,
+          token: match[0].trim(),
+          remedy:
+            "NEXT_PUBLIC_API_BASE_URL is only permitted in the browser→API allowlist " +
+            "(currently: use-plan-ws.ts, for the WebSocket channel). " +
+            "Route this call through a server action instead.",
+        });
+      }
+    }
+  }
+
+  // --- Check 3a: hardcoded internal Docker compose host (always forbidden) ---
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    COMPOSE_HOST_RE.lastIndex = 0;
+    let match;
+    while ((match = COMPOSE_HOST_RE.exec(line)) !== null) {
+      violations.push({
+        line: i + 1,
+        col: match.index + 1,
+        token: match[0].trim(),
+        remedy:
+          "Hardcoded internal Docker compose host (http://api:<port>) in a client file. " +
+          "This URL only resolves inside the Docker network — the browser cannot reach it. " +
+          "Client components must call a server action.",
+      });
+    }
+  }
+
+  // --- Check 3b: localhost API fallback (only forbidden outside the allowlist) ---
+  if (!isAllowlisted) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      LOCALHOST_API_RE.lastIndex = 0;
+      let match;
+      while ((match = LOCALHOST_API_RE.exec(line)) !== null) {
+        violations.push({
+          line: i + 1,
+          col: match.index + 1,
+          token: match[0].trim(),
+          remedy:
+            "Hardcoded localhost API URL in a client file (http://localhost:<port>). " +
+            "This is typically an API_BASE_URL fallback — client components must call a server action instead.",
+        });
+      }
+    }
+  }
+
+  // --- Check 4: static imports from server-only modules (Fix 1: normalize newlines) ---
+  const scan = content.replace(/\r?\n/g, " ");
+  STATIC_IMPORT_RE.lastIndex = 0;
   let importMatch;
-  IMPORT_RE.lastIndex = 0;
-  while ((importMatch = IMPORT_RE.exec(content)) !== null) {
+  while ((importMatch = STATIC_IMPORT_RE.exec(scan)) !== null) {
     const specifier = importMatch[1];
     // Only resolve relative or @/ imports — npm packages are not files we own
     if (!specifier.startsWith(".") && !specifier.startsWith("@/")) continue;
@@ -203,16 +335,43 @@ function checkClientFile(filePath, content, serverOnlyModules) {
     if (!resolved) continue;
 
     if (serverOnlyModules.has(resolved)) {
-      // Find line number by counting newlines before this match position
+      // Compute line number from position in normalized string (spaces = newlines)
+      // Since we collapsed newlines to spaces in `scan`, use the original content
+      // to find the position — count newlines up to the same character offset.
       const before = content.slice(0, importMatch.index);
-      const lineNum = before.split("\n").length;
+      const lineNum = (before.match(/\n/g) ?? []).length + 1;
       violations.push({
         line: lineNum,
         col: 1,
         token: `import ... from '${specifier}'`,
         remedy:
           "Client components must call a server action, not the API directly. " +
-          `'${specifier}' is a server-only module — import from the client-safe constants file or call a server action.`,
+          `'${specifier}' is a server-only module — import from the client-safe constants file or call a server action. ` +
+          "(Note: next build also enforces this at compile time via server-only.)",
+      });
+    }
+  }
+
+  // --- Check 5: dynamic imports of server-only modules (Fix 2) ---
+  DYNAMIC_IMPORT_RE.lastIndex = 0;
+  let dynMatch;
+  while ((dynMatch = DYNAMIC_IMPORT_RE.exec(content)) !== null) {
+    const specifier = dynMatch[1];
+    if (!specifier.startsWith(".") && !specifier.startsWith("@/")) continue;
+
+    const resolved = resolveImport(specifier, filePath);
+    if (!resolved) continue;
+
+    if (serverOnlyModules.has(resolved)) {
+      const before = content.slice(0, dynMatch.index);
+      const lineNum = (before.match(/\n/g) ?? []).length + 1;
+      violations.push({
+        line: lineNum,
+        col: 1,
+        token: `import('${specifier}')`,
+        remedy:
+          "Dynamic import of a server-only module from a client component. " +
+          `'${specifier}' is server-only — call a server action instead.`,
       });
     }
   }
@@ -243,7 +402,13 @@ for (const filePath of allFiles) {
   if (!isClientFile(filePath, content)) continue;
   totalClientFiles += 1;
 
-  const violations = checkClientFile(filePath, content, serverOnlyModules);
+  const isAllowlisted = BROWSER_API_ALLOWLIST.has(filePath);
+  const violations = checkClientFile(
+    filePath,
+    content,
+    serverOnlyModules,
+    isAllowlisted
+  );
   if (violations.length === 0) continue;
 
   hasViolations = true;
@@ -251,9 +416,7 @@ for (const filePath of allFiles) {
 
   for (const v of violations) {
     totalViolations += 1;
-    console.error(
-      `❌  ${relPath}:${v.line}:${v.col}  [${v.token}]`
-    );
+    console.error(`❌  ${relPath}:${v.line}:${v.col}  [${v.token}]`);
     console.error(`    Remedy: ${v.remedy}`);
   }
 }
