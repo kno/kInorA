@@ -156,5 +156,24 @@
   "plan_nav_empty_desc": "Create your personalized workout plan to get started.",
   "plan_nav_empty_cta": "Create your plan",
   "plan_selector_label": "Select a plan",
-  "plan_selector_option": "{date} ({status})"
+  "plan_selector_option": "{date} ({status})",
+
+  "plan_day_label": "Day {n}",
+  "plan_exercises_count": "exercises",
+  "plan_est_duration": "est. {n} min",
+  "plan_summary_sessions": "Planned sessions",
+  "plan_summary_sessions_sub": "training days",
+  "plan_summary_rest": "Rest days",
+  "plan_summary_rest_sub": "per week",
+  "plan_summary_duration": "Estimated duration",
+  "plan_summary_duration_sub": "per week (est.)",
+  "plan_summary_volume": "Target volume",
+  "plan_summary_volume_sub": "coming soon",
+  "plan_summary_volume_placeholder": "—",
+  "plan_table_exercise": "Exercise",
+  "plan_table_sets": "Sets",
+  "plan_table_reps": "Reps",
+  "plan_table_rest": "Rest",
+  "plan_limitation_title": "Important note",
+  "plan_day_detail_close": "Close"
 }

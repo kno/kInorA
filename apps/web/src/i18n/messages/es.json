@@ -156,5 +156,24 @@
   "plan_nav_empty_desc": "Crea tu plan de entrenamiento personalizado para comenzar.",
   "plan_nav_empty_cta": "Crear tu plan",
   "plan_selector_label": "Seleccionar un plan",
-  "plan_selector_option": "{date} ({status})"
+  "plan_selector_option": "{date} ({status})",
+
+  "plan_day_label": "Día {n}",
+  "plan_exercises_count": "ejercicios",
+  "plan_est_duration": "est. {n} min",
+  "plan_summary_sessions": "Sesiones planificadas",
+  "plan_summary_sessions_sub": "días de entrenamiento",
+  "plan_summary_rest": "Días de descanso",
+  "plan_summary_rest_sub": "por semana",
+  "plan_summary_duration": "Duración estimada",
+  "plan_summary_duration_sub": "por semana (est.)",
+  "plan_summary_volume": "Volumen objetivo",
+  "plan_summary_volume_sub": "próximamente",
+  "plan_summary_volume_placeholder": "—",
+  "plan_table_exercise": "Ejercicio",
+  "plan_table_sets": "Series",
+  "plan_table_reps": "Reps",
+  "plan_table_rest": "Descanso",
+  "plan_limitation_title": "Nota importante",
+  "plan_day_detail_close": "Cerrar"
 }
