@@ -39,7 +39,6 @@ export default async function AiConfigPage() {
           API keys are managed via server environment variables — not here.
         </p>
         <AiConfigForm
-          token={token}
           initialProvider={config?.provider as AiProvider | undefined}
           initialModel={config?.model}
         />
