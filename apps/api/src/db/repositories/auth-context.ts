@@ -8,6 +8,7 @@ import type { Database } from "../client.js";
 export interface UserRecord {
   id: string;
   email: string;
+  isAdmin: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -17,6 +18,11 @@ export class UserRepository {
 
   async findByEmail(email: string): Promise<UserRecord | null> {
     const rows = await this.db.select().from(users).where(eq(users.email, email));
+    return (rows[0] as UserRecord | undefined) ?? null;
+  }
+
+  async findById(id: string): Promise<UserRecord | null> {
+    const rows = await this.db.select().from(users).where(eq(users.id, id));
     return (rows[0] as UserRecord | undefined) ?? null;
   }
 }

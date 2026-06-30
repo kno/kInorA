@@ -48,6 +48,7 @@ export const tenants = pgTable("tenants", {
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
+  isAdmin: boolean("is_admin").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -255,3 +256,28 @@ export const sessions = pgTable(
     tokenHashUnique: uniqueIndex("sessions_token_hash_unique").on(table.tokenHash),
   })
 );
+
+/**
+ * AI Provider — valid provider identifiers for the AI generation pipeline.
+ */
+export const aiProviderEnum = pgEnum("ai_provider", [
+  "openrouter",
+  "openai",
+  "anthropic",
+  "google",
+  "opencode-go",
+]);
+
+/**
+ * AI Provider Config — singleton table storing the active AI provider and model.
+ * At most one row should exist at any time; the repository enforces this by deleting
+ * all existing rows before each insert (delete+insert, since there is no fixed anchor
+ * key for ON CONFLICT DO UPDATE).
+ * If no row exists the generation pipeline falls back to OPENROUTER_API_KEY env var.
+ */
+export const aiProviderConfig = pgTable("ai_provider_config", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: aiProviderEnum("provider").notNull(),
+  model: text("model").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
