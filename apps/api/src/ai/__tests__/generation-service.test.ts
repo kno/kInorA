@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { PlanGenerationService } from "../generation-service.js";
 import { MockPlanGenerator } from "../mock-generator.js";
 import type { WorkoutProgram } from "@kinora/contracts";
@@ -287,6 +287,149 @@ describe("PlanGenerationService", () => {
 
       // Flush — must not throw
       await vi.runAllTimersAsync();
+
+      vi.useRealTimers();
+    });
+  });
+
+  describe("structured logging — observability", () => {
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+    let consoleInfoSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleErrorSpy.mockRestore();
+      consoleInfoSpy.mockRestore();
+    });
+
+    it("logs [generation-service] generation failed with planId and error message when generator throws", async () => {
+      vi.useFakeTimers();
+
+      const specRow = { specJson: confirmedSpec };
+      const specRepo = buildMockSpecRepo(specRow);
+      const planRepo = buildMockPlanRepo();
+
+      const generationError = new Error("OpenRouter 401 Unauthorized");
+      vi.spyOn(generator, "generate").mockRejectedValue(generationError);
+
+      const service = new PlanGenerationService(generator, specRepo as never, planRepo as never);
+      await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
+      await vi.runAllTimersAsync();
+
+      // Must have logged the failure
+      expect(consoleErrorSpy).toHaveBeenCalled();
+
+      // The first argument (prefix string) or any argument must contain planId and error message
+      const allArgs = consoleErrorSpy.mock.calls.flatMap((c) => c);
+      const serialized = allArgs.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ");
+      expect(serialized).toContain(PLAN_ID);
+      expect(serialized).toContain("OpenRouter 401 Unauthorized");
+
+      vi.useRealTimers();
+    });
+
+    it("PRIVACY: error log NEVER contains health data (spec.limitations text)", async () => {
+      vi.useFakeTimers();
+
+      // spec with sensitive limitation text
+      const sensitiveSpec = {
+        ...confirmedSpec,
+        limitations: [{ text: "knee pain and herniated disc L4-L5", isWarning: true }],
+      };
+      const specRow = { specJson: sensitiveSpec };
+      const specRepo = buildMockSpecRepo(specRow);
+      const planRepo = buildMockPlanRepo();
+
+      vi.spyOn(generator, "generate").mockRejectedValue(new Error("LLM timeout"));
+
+      const service = new PlanGenerationService(generator, specRepo as never, planRepo as never);
+      await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
+      await vi.runAllTimersAsync();
+
+      // Every console.error call's serialized arguments must NOT contain the sensitive text
+      const allErrorArgs = consoleErrorSpy.mock.calls.flatMap((c) => c);
+      const serialized = allErrorArgs
+        .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
+        .join(" ");
+      expect(serialized).not.toContain("knee pain");
+      expect(serialized).not.toContain("herniated disc L4-L5");
+
+      vi.useRealTimers();
+    });
+
+    it("logs [generation-service] generation ready with planId on success", async () => {
+      vi.useFakeTimers();
+
+      const specRow = { specJson: confirmedSpec };
+      const specRepo = buildMockSpecRepo(specRow);
+      const planRepo = buildMockPlanRepo();
+      vi.spyOn(generator, "generate").mockResolvedValue(mockProgram);
+
+      const service = new PlanGenerationService(generator, specRepo as never, planRepo as never);
+      await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
+      await vi.runAllTimersAsync();
+
+      // Must have logged a ready/success line
+      expect(consoleInfoSpy).toHaveBeenCalled();
+      const allInfoArgs = consoleInfoSpy.mock.calls.flatMap((c) => c);
+      const serialized = allInfoArgs
+        .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
+        .join(" ");
+      expect(serialized).toContain(PLAN_ID);
+
+      vi.useRealTimers();
+    });
+
+    it("PRIVACY: success log NEVER contains health data or program content", async () => {
+      vi.useFakeTimers();
+
+      const sensitiveSpec = {
+        ...confirmedSpec,
+        limitations: [{ text: "knee pain and herniated disc L4-L5", isWarning: true }],
+      };
+      const specRow = { specJson: sensitiveSpec };
+      const specRepo = buildMockSpecRepo(specRow);
+      const planRepo = buildMockPlanRepo();
+      vi.spyOn(generator, "generate").mockResolvedValue(mockProgram);
+
+      const service = new PlanGenerationService(generator, specRepo as never, planRepo as never);
+      await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
+      await vi.runAllTimersAsync();
+
+      const allInfoArgs = consoleInfoSpy.mock.calls.flatMap((c) => c);
+      const serialized = allInfoArgs
+        .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
+        .join(" ");
+      expect(serialized).not.toContain("knee pain");
+      expect(serialized).not.toContain("herniated disc");
+      // Program exercise names must not be logged
+      expect(serialized).not.toContain("Squat");
+
+      vi.useRealTimers();
+    });
+
+    it("logs [generation-service] generation started at task start with planId", async () => {
+      vi.useFakeTimers();
+
+      const specRow = { specJson: confirmedSpec };
+      const specRepo = buildMockSpecRepo(specRow);
+      const planRepo = buildMockPlanRepo();
+      vi.spyOn(generator, "generate").mockResolvedValue(mockProgram);
+
+      const service = new PlanGenerationService(generator, specRepo as never, planRepo as never);
+      await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
+      await vi.runAllTimersAsync();
+
+      // consoleInfo must have been called at least once with planId (started + ready)
+      const allInfoArgs = consoleInfoSpy.mock.calls.flatMap((c) => c);
+      const serialized = allInfoArgs
+        .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
+        .join(" ");
+      expect(serialized).toContain("[generation-service]");
 
       vi.useRealTimers();
     });
