@@ -29,6 +29,7 @@ import type { WsRegistry } from "../ws/registry.js";
 import type { WebSocket } from "@fastify/websocket";
 import { resolveAuthContextFromToken } from "../auth/plugin.js";
 import { SessionRepository } from "../db/repositories/session.js";
+import { MembershipRepository } from "../db/repositories/auth-context.js";
 import type { Database } from "../db/client.js";
 
 export interface WsRoutesOptions {
@@ -48,16 +49,22 @@ export interface WsRoutesOptions {
 async function wsAuthPreValidation(
   request: FastifyRequest<{ Querystring: { token?: string } }>,
   reply: FastifyReply,
-  sessionRepo: Pick<SessionRepository, "findByTokenHash">
+  sessionRepo: Pick<SessionRepository, "findByTokenHash">,
+  membershipRepo: Pick<MembershipRepository, "findByTenantAndUser">
 ): Promise<void> {
-  // Path 1: Bearer header (set by authPlugin.onRequest hook).
+  // Path 1: Bearer header (set by authPlugin.onRequest hook, which already
+  // performed the membership re-check).
   if (request.authContext) return;
 
   // Path 2: ?token= query param (browser WebSocket path).
-  // Uses the SAME resolveAuthContextFromToken as the Bearer path.
+  // Uses the SAME resolveAuthContextFromToken as the Bearer path, including the
+  // fail-secure membership re-check, so a suspended user cannot connect here.
   const queryToken = request.query.token;
   if (queryToken) {
-    const ctx = await resolveAuthContextFromToken(queryToken, { sessionRepo });
+    const ctx = await resolveAuthContextFromToken(queryToken, {
+      sessionRepo,
+      membershipRepo,
+    });
     if (ctx) {
       request.authContext = ctx;
       return;
@@ -80,6 +87,7 @@ export const wsRoutes: FastifyPluginAsync<WsRoutesOptions> = async (
 ) => {
   const { registry, db } = options;
   const sessionRepo = new SessionRepository(db);
+  const membershipRepo = new MembershipRepository(db);
 
   fastify.get<{ Querystring: { token?: string } }>(
     "/ws/plans",
@@ -92,7 +100,8 @@ export const wsRoutes: FastifyPluginAsync<WsRoutesOptions> = async (
           wsAuthPreValidation(
             request as FastifyRequest<{ Querystring: { token?: string } }>,
             reply,
-            sessionRepo
+            sessionRepo,
+            membershipRepo
           ),
       ],
     },

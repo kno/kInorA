@@ -135,6 +135,33 @@ describe("MembershipRepository", () => {
 
     expect(result).toBeNull();
   });
+
+  describe("findByTenantAndUser", () => {
+    it("returns the membership scoped to the (tenantId, userId) pair", async () => {
+      const mockSelect = vi.fn().mockReturnValue(selectChain([membership]));
+      const repo = new MembershipRepository({ select: mockSelect } as never);
+
+      const result = await repo.findByTenantAndUser(
+        "tenant-uuid-1",
+        "user-uuid-1"
+      );
+
+      expect(result).toEqual(membership);
+      expect(mockSelect).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns null when the user has no membership in that tenant", async () => {
+      const mockSelect = vi.fn().mockReturnValue(selectChain([]));
+      const repo = new MembershipRepository({ select: mockSelect } as never);
+
+      const result = await repo.findByTenantAndUser(
+        "tenant-other",
+        "user-uuid-1"
+      );
+
+      expect(result).toBeNull();
+    });
+  });
 });
 
 // --- TenantLookupRepository ---

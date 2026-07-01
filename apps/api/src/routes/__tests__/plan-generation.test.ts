@@ -74,16 +74,43 @@ function buildSessionRow(tenantId = TENANT_A, userId = USER_A) {
   };
 }
 
+// Explicit active-membership row for the tenant-scoped re-check
+// (MembershipRepository.findByTenantAndUser), kept distinct from the session row.
+function buildActiveMembershipRow(tenantId = TENANT_A, userId = USER_A) {
+  return {
+    id: "membership-uuid-1",
+    tenantId,
+    userId,
+    role: "owner" as const,
+    status: "active" as const,
+    createdAt: new Date(),
+  };
+}
+
 /**
- * Build a minimal mock DB that only handles session lookups.
- * Route-level DB calls (repos) are injected via service mocks, not DB mocks.
+ * Build a minimal mock DB that handles the two ordered auth selects: session
+ * lookup then tenant-scoped membership re-check. Route-level DB calls (repos)
+ * are injected via service mocks, not DB mocks, so each authenticated request
+ * issues exactly these two selects; the mock alternates results pairwise
+ * (even call → session, odd call → membership) and returns the membership row
+ * EXPLICITLY rather than blending it into the session row.
  */
-function buildSessionOnlyDb(sessionRow?: unknown): Database {
-  const rows = sessionRow ? [sessionRow] : [];
-  const selectMock = vi.fn().mockReturnValue({
-    from: vi.fn().mockReturnValue({
-      where: vi.fn().mockResolvedValue(rows),
-    }),
+function buildSessionOnlyDb(
+  sessionRow?: unknown,
+  membershipRow: unknown = buildActiveMembershipRow()
+): Database {
+  const sessionRows = sessionRow ? [sessionRow] : [];
+  const membershipRows = sessionRow ? [membershipRow] : [];
+  let call = 0;
+  const selectMock = vi.fn().mockImplementation(() => {
+    const isSessionCall = call % 2 === 0;
+    call++;
+    const rows = isSessionCall ? sessionRows : membershipRows;
+    return {
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue(rows),
+      }),
+    };
   });
   return { select: selectMock } as unknown as Database;
 }
