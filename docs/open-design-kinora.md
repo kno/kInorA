@@ -8,12 +8,13 @@ The current design has been pulled into the repo at `docs/open-design/kinora/`. 
 
 | Field | Value |
 |---|---|
-| Refreshed at | `2026-06-26T06:09:02Z` |
+| Refreshed at | `2026-07-01T15:25:00Z` |
 | Refresh source | Live Open Design MCP via sidecar stdio |
 | Source project | `kiNorA` (`ceeff5f6-0930-4e48-a0b0-17a6a5c9b9ad`) |
 | Source evidence | `get_project` + `list_files` over `OD_SIDECAR_IPC_PATH=/tmp/open-design/ipc/release-stable/daemon.sock` |
 | Entry file | `index.html` |
 | Snapshot proof | `docs/open-design/kinora/snapshot-manifest.json`, `project.json`, `files.json` |
+| Latest change | Create-plan equipment step (Paso 4) equipment photos extended to full per-item coverage: 11 photos total (`assets/equip-*.webp`, 294x294) covering 10 of the 11 app equipment values (`smith_machine` has no matching source image and stays photo-less). App copies live in `apps/web/public/equipment/`. UI wiring tracked under issue #54. |
 
 ## Mandatory workflow
 
