@@ -1,11 +1,11 @@
 {
-  "pulledAt": "2026-06-26T06:09:02Z",
+  "pulledAt": "2026-07-01T15:25:00Z",
   "source": "Open Design MCP (sidecar stdio)",
   "project": {
     "name": "kiNorA",
     "id": "ceeff5f6-0930-4e48-a0b0-17a6a5c9b9ad",
     "entryFile": "index.html",
-    "updatedAt": 1782390057399
+    "updatedAt": 1782919224026
   },
   "mcpServer": "open-design",
   "retrieval": {
@@ -24,6 +24,12 @@
     "brand-proposals.html",
     "kinora-brand-proposals.html",
     "assets/kinora.css",
+    "assets/equip-gimnasio.webp",
+    "assets/equip-mancuernas.webp",
+    "assets/equip-bandas.webp",
+    "assets/equip-peso-corporal.webp",
+    "assets/equip-barras.webp",
+    "assets/equip-maquinas.webp",
     "screens/web-landing.html",
     "screens/web-dashboard.html",
     "screens/web-plan.html",
@@ -58,6 +64,8 @@
     "This is a local snapshot for implementation reference.",
     "Refreshed from the live Open Design source via the working sidecar stdio MCP path.",
     "Manifest file inventory includes supporting snapshot assets such as assets/kinora.css for traceability.",
-    "Do not copy generated HTML directly into production code; translate it into project components."
+    "Do not copy generated HTML directly into production code; translate it into project components.",
+    "2026-07-01 refresh: screens/web-create-plan.html updated and 6 equipment photos (assets/equip-*.webp, 294x294) added to the create-plan equipment step (Paso 4). App-side asset copies live in apps/web/public/equipment/. UI wiring is owned by the create-plan wizard work (issue #54); the equipment taxonomy (design's flat gimnasio/maquinas/barras/mancuernas/bandas/peso-corporal set vs the app's location-scoped EQUIPMENT_BY_LOCATION) is a pending data-model decision.",
+    "The live source also carries additional unreferenced equipment webp candidates (banco, kettlebell, dominadas, prensa, trx, mancuernas-fijas, and -alt variants) not shown in any current screen; only the 6 screen-referenced assets were snapshotted."
   ]
 }
