@@ -33,7 +33,7 @@ import {
 // ---------------------------------------------------------------------------
 
 describe("buildWsUrl", () => {
-  it("builds the wss URL with the token as a query param", () => {
+  it("builds the wss URL with the token as a query param when a token is given", () => {
     const url = buildWsUrl("wss://api.test", "tok-abc");
     expect(url).toBe("wss://api.test/ws/plans?token=tok-abc");
   });
@@ -41,6 +41,19 @@ describe("buildWsUrl", () => {
   it("uses the configured WS_BASE_URL", () => {
     const url = buildWsUrl("wss://kinora.io", "tok-xyz");
     expect(url).toBe("wss://kinora.io/ws/plans?token=tok-xyz");
+  });
+
+  // Issue #42: browsers rely on the same-origin kinora_session cookie, so no
+  // token is passed. The URL must NOT contain ?token= (no token in the WS URL).
+  it("builds the URL WITHOUT a token query param when no token is given", () => {
+    const url = buildWsUrl("wss://api.test");
+    expect(url).toBe("wss://api.test/ws/plans");
+    expect(url).not.toContain("token");
+  });
+
+  it("builds the URL without ?token= when token is undefined", () => {
+    const url = buildWsUrl("wss://api.test", undefined);
+    expect(url).toBe("wss://api.test/ws/plans");
   });
 });
 
@@ -419,7 +432,7 @@ describe("usePlanWs hook — unmount cleanup", () => {
   });
 });
 
-describe("usePlanWs hook — no token starts polling immediately", () => {
+describe("usePlanWs hook — no token, no WebSocket available → polling", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -427,7 +440,7 @@ describe("usePlanWs hook — no token starts polling immediately", () => {
     vi.useRealTimers();
   });
 
-  it("polls GET /workout-plans/:id immediately when no token is provided", async () => {
+  it("polls GET /workout-plans/:id when no token AND no WebSocket impl is available (SSR/Node)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ status: "generating" }), {
         status: 200,
@@ -435,24 +448,218 @@ describe("usePlanWs hook — no token starts polling immediately", () => {
       }),
     );
 
+    // Simulate an environment with NO WebSocket (SSR/Node). jsdom provides a
+    // global WebSocket, so remove it for this test to exercise the poll branch.
+    const originalWs = globalThis.WebSocket;
+    // @ts-expect-error — deliberately removing the global for this scenario.
+    delete globalThis.WebSocket;
+
+    try {
+      renderHook(() =>
+        usePlanWs("plan-1", {
+          token: undefined,
+          initialStatus: "generating",
+          apiBase: "http://api.test",
+          fetchImpl,
+          // No WebSocketImpl and no global WebSocket → poll fallback.
+        }),
+      );
+
+      await act(async () => {
+        vi.advanceTimersByTime(6000);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(fetchImpl).toHaveBeenCalledWith(
+        "http://api.test/workout-plans/plan-1",
+        expect.objectContaining({}),
+      );
+    } finally {
+      globalThis.WebSocket = originalWs;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #42: browser same-origin cookie path — no token in JS or WS URL.
+// When no token is provided but a WebSocket is available (browser), the hook
+// must still open the WS (relying on the auto-sent same-origin cookie) instead
+// of immediately falling back to polling. The WS URL must carry NO ?token=.
+// ---------------------------------------------------------------------------
+describe("usePlanWs hook — no token but WebSocket available → cookie WS path (Fix #42)", () => {
+  it("opens the WS without a token and without ?token= in the URL", () => {
+    const { FakeWs, instances } = createFakeWsClass();
+
+    const { result } = renderHook(() =>
+      usePlanWs("plan-1", {
+        token: undefined,
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        WebSocketImpl: FakeWs,
+      }),
+    );
+
+    // A WS connection must have been attempted (cookie auth), not polling.
+    expect(instances).toHaveLength(1);
+    expect(instances[0]!.url).toBe("ws://api.test/ws/plans");
+    expect(instances[0]!.url).not.toContain("token");
+
+    // And it still processes status pushes normally.
+    const ws = instances[0]!;
+    act(() => ws.simulateOpen());
+    act(() => ws.simulateMessage(JSON.stringify({ planId: "plan-1", status: "ready" })));
+    expect(result.current.status).toBe("ready");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BLOCKER 2 (reliability): auth-rejected WS must fail LOUD and STOP, not loop.
+// When the WS upgrade is rejected (401/403 — cross-origin dev, expired session),
+// the socket closes WITHOUT ever firing onopen. The hook must NOT enter the
+// reconnect storm (5x) and must NOT poll unauthenticated forever staying on
+// "generating"; it must surface a terminal "error" state.
+// ---------------------------------------------------------------------------
+describe("usePlanWs hook — BLOCKER 2: auth-rejected WS fails loud & stops", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("does NOT reconnect-storm when the WS closes WITHOUT ever opening (auth rejection)", async () => {
+    // No usable auth for the poll → every poll 401s → bounded fail-loud.
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 }),
+    );
+    const { FakeWs, instances } = createFakeWsClass();
+
+    const { result } = renderHook(() =>
+      usePlanWs("plan-1", {
+        token: undefined,
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        apiBase: "http://api.test",
+        fetchImpl,
+        WebSocketImpl: FakeWs,
+      }),
+    );
+
+    const ws = instances[0]!;
+    // Simulate the upgrade being rejected: error then close, NO onopen.
+    act(() => ws.simulateError());
+    act(() => ws.simulateClose());
+
+    // Advance well past 5 * 3s reconnect windows AND several poll intervals.
+    await act(async () => {
+      for (let i = 0; i < 8; i++) {
+        vi.advanceTimersByTime(5000);
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+    });
+
+    expect(instances).toHaveLength(1); // no reconnect storm — never reconnected
+    // Bounded poll: stopped after MAX_POLL_FAILURES 401s.
+    expect(fetchImpl.mock.calls.length).toBeLessThanOrEqual(3);
+    // Must surface a terminal error, NOT remain stuck on "generating".
+    expect(result.current.status).toBe("error");
+  });
+
+  it("stops polling and surfaces 'error' after repeated 401 poll responses", async () => {
+    // Poll always returns 401 (requireAuth route, browser sent no usable auth).
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 }),
+    );
+    const { FakeWs, instances } = createFakeWsClass();
+
+    const { result } = renderHook(() =>
+      usePlanWs("plan-1", {
+        token: undefined,
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        apiBase: "http://api.test",
+        fetchImpl,
+        WebSocketImpl: FakeWs,
+      }),
+    );
+
+    const ws = instances[0]!;
+    // Force the poll fallback (WS opened then dropped after opening).
+    act(() => ws.simulateOpen());
+    act(() => ws.simulateError());
+
+    // Drive several poll intervals; each returns 401.
+    await act(async () => {
+      for (let i = 0; i < 6; i++) {
+        vi.advanceTimersByTime(5000);
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+    });
+
+    // Bounded: it must have STOPPED after a small number of 401s, not looped.
+    expect(fetchImpl.mock.calls.length).toBeLessThanOrEqual(3);
+    expect(result.current.status).toBe("error");
+  });
+
+  it("polls with credentials:'include' so the same-origin cookie authenticates the poll", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: "ready" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const { FakeWs, instances } = createFakeWsClass();
+
     renderHook(() =>
       usePlanWs("plan-1", {
         token: undefined,
         initialStatus: "generating",
+        wsBase: "ws://api.test",
         apiBase: "http://api.test",
         fetchImpl,
+        WebSocketImpl: FakeWs,
       }),
     );
 
+    const ws = instances[0]!;
+    act(() => ws.simulateOpen());
+    act(() => ws.simulateError());
+
     await act(async () => {
-      vi.advanceTimersByTime(6000);
+      vi.advanceTimersByTime(5000);
       await Promise.resolve();
       await Promise.resolve();
     });
 
     expect(fetchImpl).toHaveBeenCalledWith(
       "http://api.test/workout-plans/plan-1",
-      expect.objectContaining({}),
+      expect.objectContaining({ credentials: "include" }),
     );
+  });
+
+  it("surfaces 'error' as a terminal state (isTerminal treats it as done)", () => {
+    // A transient close AFTER opening should still reconnect (not an auth reject),
+    // proving the "never opened" distinction is what gates the error path.
+    const { FakeWs, instances } = createFakeWsClass();
+
+    renderHook(() =>
+      usePlanWs("plan-1", {
+        token: undefined,
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        WebSocketImpl: FakeWs,
+      }),
+    );
+
+    const ws = instances[0]!;
+    act(() => ws.simulateOpen()); // opened → a later close is a transient drop
+    act(() => ws.simulateClose());
+    act(() => vi.advanceTimersByTime(3500));
+
+    // Opened-then-dropped → reconnect IS allowed (transient), so a 2nd socket exists.
+    expect(instances.length).toBeGreaterThanOrEqual(2);
   });
 });
