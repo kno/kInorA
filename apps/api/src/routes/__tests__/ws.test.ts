@@ -19,68 +19,51 @@ import { authPlugin } from "../../auth/plugin.js";
 import { wsRoutes } from "../ws.js";
 import { WsRegistry } from "../../ws/registry.js";
 import type { Database } from "../../db/client.js";
+import {
+  VALID_TOKEN,
+  createCyclingAuthMockDb,
+  buildSessionRow as buildSharedSessionRow,
+  buildActiveMembershipRow,
+  buildSuspendedMembershipRow,
+} from "../../test-support/auth-mocks.js";
 
 // --- Fixtures ---
 
 const TENANT_A = "aaaaaaaa-0000-0000-0000-000000000001";
 const USER_A = "aaaaaaaa-0000-0000-0000-000000000002";
 
-const VALID_TOKEN = "a".repeat(64);
-const SESSION_HASH = "b".repeat(64);
-
 // --- Helpers ---
 
-function buildSessionRow(tenantId = TENANT_A, userId = USER_A) {
-  return {
-    tokenHash: SESSION_HASH,
-    userId,
-    tenantId,
-    createdAt: new Date(),
-    expiresAt: new Date(Date.now() + 3_600_000),
-  };
-}
-
-// Explicit active-membership row for the tenant-scoped re-check
-// (MembershipRepository.findByTenantAndUser). Kept DISTINCT from the session row
-// so the membership query is represented as its own result, not blended.
-function buildActiveMembershipRow(tenantId = TENANT_A, userId = USER_A) {
-  return {
-    id: "membership-uuid-1",
-    tenantId,
-    userId,
-    role: "owner" as const,
-    status: "active" as const,
-    createdAt: new Date(),
-  };
+// WS suites use tenant/user IDs distinct from the shared defaults, so build
+// session and membership rows scoped to this suite's tenant/user.
+function buildSessionRow() {
+  return buildSharedSessionRow({ tenantId: TENANT_A, userId: USER_A });
 }
 
 /**
  * Build a mock DB for the WS auth flow. Every authenticated WS request performs
  * exactly two ordered selects — session lookup then tenant-scoped membership
  * re-check — via either the Bearer onRequest hook or the ?token= preValidation
- * path (never interleaved). The mock therefore alternates results pairwise:
- * odd-indexed call (0,2,4,...) → session rows, even-indexed (1,3,5,...) →
- * membership rows. Passing a null session yields the unauthenticated case.
+ * path (never interleaved), so the shared cycling mock repeats the (session,
+ * membership) pair per request.
+ *
+ * `sessionRow` and `membershipRow` are independent: pass a valid session with a
+ * suspended membership, or with `null` membership, to model tenant-scoped
+ * revocation. Omitting `sessionRow` yields the unauthenticated case.
  */
 function buildSessionDb(
   sessionRow?: unknown,
-  membershipRow: unknown = buildActiveMembershipRow()
+  membershipRow: unknown = buildActiveMembershipRow({
+    tenantId: TENANT_A,
+    userId: USER_A,
+  })
 ): Database {
-  const sessionRows = sessionRow ? [sessionRow] : [];
-  // Membership is only meaningful when there is a session to authenticate.
-  const membershipRows = sessionRow ? [membershipRow] : [];
-  let call = 0;
-  const selectMock = vi.fn().mockImplementation(() => {
-    const isSessionCall = call % 2 === 0;
-    call++;
-    const rows = isSessionCall ? sessionRows : membershipRows;
-    return {
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue(rows),
-      }),
-    };
+  return createCyclingAuthMockDb({
+    sessionRows: sessionRow ? [sessionRow] : [],
+    // Membership is only queried when a session resolves; a null membershipRow
+    // models "no membership for this tenant" (missing-membership revocation).
+    membershipRows: membershipRow ? [membershipRow] : [],
   });
-  return { select: selectMock } as unknown as Database;
 }
 
 async function buildTestApp(opts: {
@@ -286,6 +269,114 @@ describe("WS route — GET /ws/plans", () => {
 
       await expect(
         app.injectWS(`/ws/plans?token=${"z".repeat(64)}`)
+      ).rejects.toThrow(/server response/i);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Membership revocation — tenant-scoped fail-secure re-check on WS paths.
+  // A valid, unexpired session is NOT enough: if the membership for the
+  // session's tenant is suspended or missing, the WS upgrade must be REJECTED
+  // on BOTH the Bearer and ?token= paths (mirrors the HTTP coverage in
+  // plugin.test.ts). Both paths run the same resolveAuthContextFromToken.
+  // -------------------------------------------------------------------------
+  describe("membership revocation — suspended / missing membership rejected", () => {
+    const WS_HEADERS = {
+      connection: "upgrade",
+      upgrade: "websocket",
+      "sec-websocket-key": Buffer.from("test-key-12345678901").toString("base64"),
+      "sec-websocket-version": "13",
+    };
+
+    it("rejects the Bearer WS upgrade when the membership is suspended", async () => {
+      const db = buildSessionDb(
+        buildSessionRow(),
+        buildSuspendedMembershipRow({ tenantId: TENANT_A, userId: USER_A })
+      );
+      app = await buildTestApp({ db });
+      await app.ready();
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/ws/plans",
+        headers: { ...WS_HEADERS, authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toEqual({ error: "unauthorized" });
+    });
+
+    it("rejects injectWS on the Bearer path when the membership is suspended", async () => {
+      const db = buildSessionDb(
+        buildSessionRow(),
+        buildSuspendedMembershipRow({ tenantId: TENANT_A, userId: USER_A })
+      );
+      app = await buildTestApp({ db });
+      await app.ready();
+
+      await expect(
+        app.injectWS("/ws/plans", {
+          headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        })
+      ).rejects.toThrow(/server response/i);
+    });
+
+    it("rejects the ?token= WS upgrade when the membership is suspended", async () => {
+      const db = buildSessionDb(
+        buildSessionRow(),
+        buildSuspendedMembershipRow({ tenantId: TENANT_A, userId: USER_A })
+      );
+      app = await buildTestApp({ db });
+      await app.ready();
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/ws/plans?token=${VALID_TOKEN}`,
+        headers: WS_HEADERS,
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toEqual({ error: "unauthorized" });
+    });
+
+    it("rejects the Bearer WS upgrade when the user has no membership for the session tenant", async () => {
+      // Valid session, but no membership row for that tenant → fail-secure deny.
+      const db = buildSessionDb(buildSessionRow(), null);
+      app = await buildTestApp({ db });
+      await app.ready();
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/ws/plans",
+        headers: { ...WS_HEADERS, authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toEqual({ error: "unauthorized" });
+    });
+
+    it("rejects the ?token= WS upgrade when the user has no membership for the session tenant", async () => {
+      const db = buildSessionDb(buildSessionRow(), null);
+      app = await buildTestApp({ db });
+      await app.ready();
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/ws/plans?token=${VALID_TOKEN}`,
+        headers: WS_HEADERS,
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toEqual({ error: "unauthorized" });
+    });
+
+    it("rejects injectWS on the ?token= path when the membership is missing", async () => {
+      const db = buildSessionDb(buildSessionRow(), null);
+      app = await buildTestApp({ db });
+      await app.ready();
+
+      await expect(
+        app.injectWS(`/ws/plans?token=${VALID_TOKEN}`)
       ).rejects.toThrow(/server response/i);
     });
   });
