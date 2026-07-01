@@ -113,6 +113,29 @@ export const EQUIPMENT_PHOTO_BY_VALUE: Readonly<Record<string, EquipmentPhoto>> 
     src: "/equipment/equip-maquinas.webp",
     alt: "A cable pulley station in a gym",
   },
+  pull_up_bar: {
+    src: "/equipment/equip-dominadas.webp",
+    alt: "Doorway pull-up bar",
+  },
+  kettlebell: {
+    src: "/equipment/equip-kettlebell.webp",
+    alt: "Kettlebell",
+  },
+  bench: {
+    src: "/equipment/equip-banco.webp",
+    alt: "Adjustable weight bench",
+  },
+  leg_press: {
+    src: "/equipment/equip-prensa.webp",
+    alt: "Leg press machine",
+  },
+  suspension_trainer: {
+    src: "/equipment/equip-trx.webp",
+    alt: "Suspension trainer straps",
+  },
+  // smith_machine has NO photo: design verified none of the source images
+  // depicts a Smith machine (equip-maquinas is a cable machine, used above).
+  // It falls back to the dumbbell icon.
 };
 
 export function equipmentPhotoForValue(value: string): EquipmentPhoto | undefined {
