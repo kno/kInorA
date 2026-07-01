@@ -96,11 +96,17 @@ export function StepperShell({
     spec.equipment != null &&
     spec.limitations != null;
 
-  const handleContinue = async () => {
+  /**
+   * Persists the given spec for the next step and advances. Shared by the
+   * Continue button and by single-choice auto-advance so both paths behave
+   * identically. Accepts an explicit spec because auto-advance fires from the
+   * same event that sets the selection, before `spec` state has re-rendered.
+   */
+  const advance = async (currentSpec: Partial<PlanSpec>) => {
     const nextStep = step + 1;
     // On entering the equipment/limitations steps, treat them as visited with
     // an empty default so "skip with empty" resolves to a valid array.
-    const patched: Partial<PlanSpec> = { ...spec };
+    const patched: Partial<PlanSpec> = { ...currentSpec };
     if (nextStep === 5 && patched.equipment == null) patched.equipment = [];
     if (nextStep === 6 && patched.limitations == null) patched.limitations = [];
     setSpec(patched);
@@ -111,6 +117,18 @@ export function StepperShell({
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleContinue = () => advance(spec);
+
+  /**
+   * Steps that accept exactly one value auto-advance on selection (issue #52).
+   * The duration step (4) is excluded because it also offers a custom numeric
+   * input; auto-advancing there would fight the user typing. Multi-choice
+   * steps (equipment 5, limitations 6) never auto-advance.
+   */
+  const selectAndAdvance = (patch: Partial<PlanSpec>) => {
+    void advance({ ...spec, ...patch });
   };
 
   const handleBack = () => {
@@ -143,20 +161,23 @@ export function StepperShell({
     switch (step) {
       case 1:
         return (
-          <GoalStep value={spec.goal} onSelect={(goal: PlanGoal) => update({ goal })} />
+          <GoalStep
+            value={spec.goal}
+            onSelect={(goal: PlanGoal) => selectAndAdvance({ goal })}
+          />
         );
       case 2:
         return (
           <LocationStep
             value={spec.location}
-            onSelect={(location: TrainingLocation) => update({ location })}
+            onSelect={(location: TrainingLocation) => selectAndAdvance({ location })}
           />
         );
       case 3:
         return (
           <FrequencyStep
             value={spec.daysPerWeek}
-            onSelect={(daysPerWeek: number) => update({ daysPerWeek })}
+            onSelect={(daysPerWeek: number) => selectAndAdvance({ daysPerWeek })}
           />
         );
       case 4:
