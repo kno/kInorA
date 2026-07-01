@@ -137,12 +137,39 @@ describe("EquipmentStep", () => {
   });
 
   describe("static option imagery", () => {
-    it("renders an OpenDesign icon (in addition to the check mark) on each static card", () => {
+    it("renders the mapped OpenDesign photo on a card that has one", () => {
       render(<EquipmentStep location="gym" value={[]} onSelect={vi.fn()} />);
-      // OrbitSelectableCard always draws a check-mark svg; a static equipment
-      // card must ALSO carry the OpenDesign icon → strictly more than one svg.
       const barbell = screen.getByRole("button", { name: /Barbell/i });
-      expect(barbell.querySelectorAll("svg").length).toBeGreaterThan(1);
+      const img = barbell.querySelector("img");
+      expect(img).not.toBeNull();
+      expect(img!.getAttribute("src")).toBe("/equipment/equip-barras.webp");
+      expect(img!.getAttribute("loading")).toBe("lazy");
+      // Alt text is an English literal (Option A — no i18n catalog keys).
+      expect(img!.getAttribute("alt")).toMatch(/barbell/i);
+    });
+
+    it("maps dumbbells to the dumbbell photo", () => {
+      render(<EquipmentStep location="gym" value={[]} onSelect={vi.fn()} />);
+      const dumbbells = screen.getByRole("button", { name: /Dumbbells/i });
+      const img = dumbbells.querySelector("img");
+      expect(img).not.toBeNull();
+      expect(img!.getAttribute("src")).toBe("/equipment/equip-mancuernas.webp");
+    });
+
+    it("falls back to the OpenDesign dumbbell icon when a value has no photo", () => {
+      // "Pull-up bar" (home) has no mapped photo → no <img>, keeps the icon svg.
+      render(<EquipmentStep location="home" value={[]} onSelect={vi.fn()} />);
+      const pullUp = screen.getByRole("button", { name: /Pull-up bar/i });
+      expect(pullUp.querySelector("img")).toBeNull();
+      // OrbitSelectableCard draws the check svg; the fallback icon adds another.
+      expect(pullUp.querySelectorAll("svg").length).toBeGreaterThan(1);
+    });
+
+    it("keeps the data model unchanged — a photo card still toggles its value", () => {
+      const onSelect = vi.fn();
+      render(<EquipmentStep location="gym" value={[]} onSelect={onSelect} />);
+      fireEvent.click(screen.getByRole("button", { name: /Barbell/i }));
+      expect(onSelect).toHaveBeenCalledWith(["barbell"]);
     });
   });
 });

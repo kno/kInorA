@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { TrainingLocation } from "@kinora/contracts";
 import { OrbitSelectableCard } from "@/components/orbit";
 import { KinIcon } from "@/components/icons/KinIcon";
-import { equipmentForLocation } from "./options";
+import { equipmentForLocation, equipmentPhotoForValue } from "./options";
 import styles from "./wizard.module.css";
 
 export interface EquipmentStepProps {
@@ -19,10 +19,11 @@ export interface EquipmentStepProps {
  * plus free-text entries for gear that isn't in the static catalogue.
  *
  * Static options and manual entries share the one `string[]` the PlanSpec
- * carries. Static cards use the OpenDesign `dumbbell` icon rather than new
- * imagery. Manual entries are de-duplicated case-insensitively against both
- * the current selection and the static option values/labels. An empty
- * selection remains valid (the step is complete once visited).
+ * carries. Static cards show an optional OpenDesign photo where the value maps
+ * to one; values without a photo fall back to the OpenDesign `dumbbell` icon.
+ * Manual entries are de-duplicated case-insensitively against both the current
+ * selection and the static option values/labels. An empty selection remains
+ * valid (the step is complete once visited).
  */
 export function EquipmentStep({ value = [], location, onSelect }: EquipmentStepProps) {
   const options = equipmentForLocation(location);
@@ -69,15 +70,31 @@ export function EquipmentStep({ value = [], location, onSelect }: EquipmentStepP
   return (
     <div className={styles.stack}>
       <div className={styles.grid}>
-        {options.map((option) => (
-          <OrbitSelectableCard
-            key={option.value}
-            label={option.label}
-            selected={value.includes(option.value)}
-            onSelect={() => toggle(option.value)}
-            icon={<KinIcon name="dumbbell" size={22} />}
-          />
-        ))}
+        {options.map((option) => {
+          const photo = equipmentPhotoForValue(option.value);
+          return (
+            <OrbitSelectableCard
+              key={option.value}
+              label={option.label}
+              selected={value.includes(option.value)}
+              onSelect={() => toggle(option.value)}
+              icon={
+                photo ? (
+                  <img
+                    src={photo.src}
+                    alt={photo.alt}
+                    width={294}
+                    height={294}
+                    loading="lazy"
+                    className={styles.optionPhoto}
+                  />
+                ) : (
+                  <KinIcon name="dumbbell" size={22} />
+                )
+              }
+            />
+          );
+        })}
       </div>
 
       <div className={styles.inputRow}>
