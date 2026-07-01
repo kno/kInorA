@@ -151,6 +151,42 @@ describe("PlanStatusView — failed state", () => {
   });
 });
 
+describe("PlanStatusView — error state (issue #42 reliability: fail loud)", () => {
+  it("renders a connection-error message when status is 'error' (not a stale spinner)", () => {
+    const view = PlanStatusView({ status: "error", planId: "plan-1" });
+    // Must NOT keep showing the generating spinner (that was the silent-stuck bug).
+    const progress = findFirst(view, (el) => el.type === OrbitProgress);
+    expect(progress).toBeUndefined();
+    const text = textOf(view).toLowerCase();
+    expect(text).toContain("connection");
+  });
+
+  it("does NOT render exercise content when status is 'error'", () => {
+    const view = PlanStatusView({
+      status: "error",
+      planId: "plan-1",
+      program: sampleProgram,
+    });
+    expect(textOf(view)).not.toContain("Barbell Squat");
+  });
+
+  it("offers a way to retry (Regenerate) when status is 'error' and a handler is provided", () => {
+    const view = PlanStatusView({
+      status: "error",
+      planId: "plan-1",
+      onRegenerate: () => {},
+    });
+    const retryBtn = findFirst(
+      view,
+      (el) =>
+        el.type === "button" &&
+        typeof el.props.children === "string" &&
+        (el.props.children as string).toLowerCase().includes("retry"),
+    );
+    expect(retryBtn).toBeDefined();
+  });
+});
+
 describe("PlanStatusView — status-fetch fallback (WS not connected)", () => {
   it("renders the generating spinner when status is 'generating' and no program present (poll fallback)", () => {
     // When WS is not connected and status is still generating,

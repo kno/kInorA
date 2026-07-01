@@ -6,6 +6,10 @@
  * Fix 4: handleRegenerate must route through regeneratePlanAction (server
  * action in create-plan/actions.ts) so the browser never fetches the API
  * directly. PlanStatusClient must reference NO API base URL after this fix.
+ *
+ * Issue #42: PlanStatusClient must NOT accept or forward a session token. The
+ * browser authenticates the WS via the same-origin kinora_session cookie, so
+ * usePlanWs must be called WITHOUT a token — the token must never reach client JS.
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
@@ -67,7 +71,6 @@ describe("PlanStatusClient — Regenerate button (Fix 4)", () => {
         planId="plan-1"
         specId="spec-1"
         initialStatus="failed"
-        token="tok"
       />
     );
 
@@ -90,7 +93,6 @@ describe("PlanStatusClient — Regenerate button (Fix 4)", () => {
         planId="plan-1"
         specId="spec-2"
         initialStatus="failed"
-        token="tok"
       />
     );
 
@@ -115,7 +117,6 @@ describe("PlanStatusClient — Regenerate button (Fix 4)", () => {
         planId="plan-1"
         specId="spec-1"
         initialStatus="failed"
-        token="tok"
       />
     );
 
@@ -134,7 +135,6 @@ describe("PlanStatusClient — Regenerate button (Fix 4)", () => {
       <PlanStatusClient
         planId="plan-1"
         initialStatus="failed"
-        token="tok"
         // specId deliberately omitted
       />
     );
@@ -142,5 +142,27 @@ describe("PlanStatusClient — Regenerate button (Fix 4)", () => {
     // No regenerate button without specId (PlanStatusView only renders it when onRegenerate present)
     // The guard is inside the handler — but view won't render the button without specId
     expect(regeneratePlanAction).not.toHaveBeenCalled();
+  });
+});
+
+describe("PlanStatusClient — no session token exposed to client JS (Fix #42)", () => {
+  it("calls usePlanWs WITHOUT a token — WS auth relies on the same-origin cookie", () => {
+    defaultWsReturn("generating");
+
+    render(
+      <PlanStatusClient
+        planId="plan-1"
+        specId="spec-1"
+        initialStatus="generating"
+      />
+    );
+
+    // usePlanWs(planId, options) — options must NOT carry a token.
+    expect(usePlanWs).toHaveBeenCalledWith(
+      "plan-1",
+      expect.objectContaining({ initialStatus: "generating" }),
+    );
+    const options = usePlanWs.mock.calls[0]![1] as Record<string, unknown>;
+    expect(options.token).toBeUndefined();
   });
 });

@@ -1,10 +1,13 @@
 /**
  * PlanStatusView — pure presentational component for plan status rendering.
  *
- * Renders three states driven by the `status` prop:
+ * Renders four states driven by the `status` prop:
  *   - "generating" → OrbitProgress (indeterminate) + generating message
  *   - "ready"      → workout program detail (sessions + exercises)
  *   - "failed"     → error message + Regenerate CTA button
+ *   - "error"      → connection-error message + Retry CTA (issue #42): the
+ *     realtime channel could neither connect nor poll, so we fail LOUD instead
+ *     of leaving the user on an eternal spinner.
  *
  * This component is intentionally NOT a client component — it receives all
  * data as props. The client state management (WS subscription, local status
@@ -74,6 +77,33 @@ export function PlanStatusView({
           >
             {t("plan_regenerate_cta", "Regenerate plan")}
           </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <main className="kin-page">
+        <div className="kin-card kin-card--center">
+          <h1 className="kin-title">
+            {t("plan_error_title", "Connection problem")}
+          </h1>
+          <p className="kin-text kin-muted">
+            {t(
+              "plan_error_desc",
+              "We lost the live connection and could not fetch your plan status. Check your connection or sign in again, then retry.",
+            )}
+          </p>
+          {onRegenerate && (
+            <button
+              type="button"
+              className="kin-btn kin-btn--primary"
+              onClick={onRegenerate}
+            >
+              {t("plan_error_retry_cta", "Retry")}
+            </button>
+          )}
         </div>
       </main>
     );

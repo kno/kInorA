@@ -2,10 +2,14 @@
  * Plan status page — /plan/[id]
  *
  * Server component that:
- *  1. Fetches the initial plan status from GET /workout-plans/:id
- *  2. Reads the session token from the kinora_session cookie
- *  3. Loads i18n messages for the locale
- *  4. Renders PlanStatusClient (client component) with initial state
+ *  1. Fetches the initial plan status from GET /workout-plans/:id, using the
+ *     session token read server-side from the httpOnly kinora_session cookie.
+ *  2. Loads i18n messages for the locale
+ *  3. Renders PlanStatusClient (client component) with initial state
+ *
+ * Issue #42: the session token is used ONLY for the server-side fetch here. It
+ * is NOT passed to PlanStatusClient — the browser authenticates the WS upgrade
+ * via the same-origin cookie, keeping the token out of the RSC payload/WS URL.
  *
  * The client component subscribes to the WS for live updates and handles
  * the "Regenerate" CTA.
@@ -54,7 +58,6 @@ export default async function PlanStatusPage({ params }: PlanPageProps) {
       initialProgram={
         plan.status === "ready" ? (plan.program as WorkoutProgram) : undefined
       }
-      token={token}
       messages={messages}
     />
   );
