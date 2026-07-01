@@ -11,6 +11,12 @@ export type { PlanDraft } from "./plan-draft.js";
 
 export { derivePreferenceScores } from "./derive-preference-scores.js";
 
+export {
+  SESSION_DURATION_LIMITS,
+  validateSessionDuration,
+} from "./session-duration.js";
+export type { SessionDurationValidation } from "./session-duration.js";
+
 export { applyEquipmentSubstitutions } from "./equipment-substitution.js";
 export { injectLimitationWarnings } from "./limitation-warnings.js";
 export { assertNoDiagnosticLanguage } from "./diagnostic-guard.js";

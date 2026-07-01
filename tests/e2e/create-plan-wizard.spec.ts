@@ -39,7 +39,20 @@ async function registerFreshUser(page: Page) {
   return { email, password, token: session!.value };
 }
 
-/** Click a selectable option card by its accessible name and continue. */
+/**
+ * Click a single-choice option card. For steps 1-3 (goal / location /
+ * frequency) the wizard auto-advances on selection (issue #52), so no
+ * explicit Continue click is needed or wanted.
+ */
+async function chooseAutoAdvance(page: Page, optionName: RegExp) {
+  await page.getByRole("button", { name: optionName }).first().click();
+}
+
+/**
+ * Click a selectable option card and then click Continue. Used for steps
+ * that require an explicit Continue after selection (duration step 4, and
+ * the multi-select equipment step 5 after picking options).
+ */
 async function chooseAndContinue(page: Page, optionName: RegExp) {
   await page.getByRole("button", { name: optionName }).first().click();
   await page.getByRole("button", { name: /Continue/i }).click();
@@ -53,18 +66,18 @@ test.describe("Create-plan wizard (07)", () => {
 
     await page.goto("/create-plan");
 
-    // Step 1 — goal
+    // Step 1 — goal (auto-advances on selection, no Continue needed)
     await expect(page.getByText("1 / 6")).toBeVisible();
-    await chooseAndContinue(page, /Strength/i);
+    await chooseAutoAdvance(page, /Strength/i);
 
-    // Step 2 — location
+    // Step 2 — location (auto-advances on selection, no Continue needed)
     await expect(page.getByText("2 / 6")).toBeVisible();
-    await chooseAndContinue(page, /Gym/i);
+    await chooseAutoAdvance(page, /Gym/i);
 
-    // Step 3 — frequency. Exit mid-flow AFTER this step is saved, to prove
-    // the server draft resumes at the right place.
+    // Step 3 — frequency (auto-advances on selection). Exit mid-flow AFTER
+    // this step is saved to prove the server draft resumes at the right place.
     await expect(page.getByText("3 / 6")).toBeVisible();
-    await chooseAndContinue(page, /3 days/i);
+    await chooseAutoAdvance(page, /3 days/i);
 
     // Now on step 4 (duration). Navigate away (exit the wizard).
     await expect(page.getByText("4 / 6")).toBeVisible();
