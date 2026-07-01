@@ -1,90 +1,33 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
 import { authPlugin, requireAuth, resolveAuthContextFromToken } from "../plugin.js";
-import type { Database } from "../../db/client.js";
+import {
+  createAuthMockDb,
+  createTenantAwareAuthMockDb,
+  buildSessionRow,
+  buildActiveMembershipRow,
+  buildSuspendedMembershipRow,
+  buildInvitedMembershipRow,
+} from "../../test-support/auth-mocks.js";
 
-// --- Mock helpers -------------------------------------------------------
+// --- Local adapters over the shared mocks -------------------------------
+// Preserve this suite's call-site ergonomics (sessionRows/membershipRows) while
+// the session→membership ordering lives in the shared test-support module.
 
-function selectChain(rows: unknown[] = []) {
-  return {
-    from: vi.fn().mockReturnValue({
-      where: vi.fn().mockResolvedValue(rows),
-    }),
-  };
-}
+const ACTIVE_MEMBERSHIP = buildActiveMembershipRow();
 
-const ACTIVE_MEMBERSHIP = {
-  id: "membership-uuid-1",
-  tenantId: "tenant-uuid-1",
-  userId: "user-uuid-1",
-  role: "member" as const,
-  status: "active" as const,
-  createdAt: new Date(),
-};
-
-/**
- * Mock DB whose `select()` returns, in order:
- *   1st call → session rows (SessionRepository.findByTokenHash)
- *   2nd call → membership rows (MembershipRepository.findByTenantAndUser)
- *
- * A default active membership is supplied so that a valid session resolves
- * to a non-null authContext unless a test overrides `membershipRows`.
- */
 function createMockDb(opts: {
   sessionRows?: unknown[];
   membershipRows?: unknown[];
 } = {}) {
-  return {
-    select: vi
-      .fn()
-      .mockReturnValueOnce(selectChain(opts.sessionRows ?? []))
-      .mockReturnValueOnce(
-        selectChain(opts.membershipRows ?? [ACTIVE_MEMBERSHIP])
-      ),
-  } as unknown as Database;
+  return createAuthMockDb({
+    // This suite's "no session" default is an empty session result.
+    sessionRows: opts.sessionRows ?? [],
+    membershipRows: opts.membershipRows ?? [ACTIVE_MEMBERSHIP],
+  }).db;
 }
 
-/**
- * Tenant-aware mock DB. The membership select resolves the row for the SESSION's
- * tenant (captured from the session row), faithfully modelling the tenant-scoped
- * `findByTenantAndUser` lookup. This is what makes the multi-tenant scenario
- * representable: a user active in one tenant and suspended in another gets the
- * status of the tenant their session is scoped to — not a nondeterministic row.
- */
-function createTenantAwareMockDb(opts: {
-  sessionRows: Array<{ tenantId: string; userId: string; [k: string]: unknown }>;
-  membershipsByTenant: Record<
-    string,
-    { status: "invited" | "active" | "suspended" } & Record<string, unknown>
-  >;
-}) {
-  let sessionTenantId: string | undefined;
-  let call = 0;
-
-  const select = vi.fn().mockImplementation(() => {
-    const isSessionCall = call === 0;
-    call++;
-    return {
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockImplementation(async () => {
-          if (isSessionCall) {
-            const session = opts.sessionRows[0];
-            sessionTenantId = session?.tenantId;
-            return opts.sessionRows;
-          }
-          // Membership select — tenant-scoped: only the session tenant's row.
-          const row =
-            sessionTenantId !== undefined
-              ? opts.membershipsByTenant[sessionTenantId]
-              : undefined;
-          return row ? [row] : [];
-        }),
-      }),
-    };
-  });
-
-  return { select } as unknown as Database;
-}
+const createTenantAwareMockDb = createTenantAwareAuthMockDb;
 
 // --- Tests ---------------------------------------------------------------
 
@@ -328,9 +271,7 @@ describe("membership status re-check (fail-secure)", () => {
   it("sets authContext to null when the membership is suspended", async () => {
     const db = createMockDb({
       sessionRows: [validSession],
-      membershipRows: [
-        { ...ACTIVE_MEMBERSHIP, status: "suspended" },
-      ],
+      membershipRows: [buildSuspendedMembershipRow()],
     });
 
     app = Fastify();
@@ -376,7 +317,7 @@ describe("membership status re-check (fail-secure)", () => {
   it("sets authContext to null when the membership is only invited", async () => {
     const db = createMockDb({
       sessionRows: [validSession],
-      membershipRows: [{ ...ACTIVE_MEMBERSHIP, status: "invited" }],
+      membershipRows: [buildInvitedMembershipRow()],
     });
 
     app = Fastify();
@@ -399,7 +340,7 @@ describe("membership status re-check (fail-secure)", () => {
   it("returns 401 on a protected route when the membership is suspended", async () => {
     const db = createMockDb({
       sessionRows: [validSession],
-      membershipRows: [{ ...ACTIVE_MEMBERSHIP, status: "suspended" }],
+      membershipRows: [buildSuspendedMembershipRow()],
     });
 
     app = Fastify();
@@ -444,7 +385,7 @@ describe("membership status re-check (fail-secure)", () => {
   it("returns 401 on a protected route when the membership is only invited", async () => {
     const db = createMockDb({
       sessionRows: [validSession],
-      membershipRows: [{ ...ACTIVE_MEMBERSHIP, status: "invited" }],
+      membershipRows: [buildInvitedMembershipRow()],
     });
 
     app = Fastify();
@@ -501,32 +442,15 @@ describe("membership re-check is TENANT-SCOPED (multi-tenant user)", () => {
 
   // The user is ACTIVE in tenant A but SUSPENDED in tenant B.
   const membershipsByTenant = {
-    [TENANT_A]: {
-      id: "m-a",
-      tenantId: TENANT_A,
-      userId: USER,
-      role: "member" as const,
-      status: "active" as const,
-      createdAt: new Date(),
-    },
-    [TENANT_B]: {
-      id: "m-b",
+    [TENANT_A]: buildActiveMembershipRow({ tenantId: TENANT_A, userId: USER }),
+    [TENANT_B]: buildSuspendedMembershipRow({
       tenantId: TENANT_B,
       userId: USER,
-      role: "member" as const,
-      status: "suspended" as const,
-      createdAt: new Date(),
-    },
+    }),
   };
 
   function sessionForTenant(tenantId: string) {
-    return {
-      tokenHash: "a".repeat(64),
-      userId: USER,
-      tenantId,
-      createdAt: new Date(),
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-    };
+    return buildSessionRow({ tenantId, userId: USER });
   }
 
   // BLOCKER regression: a tenant-B session (user suspended in B) must be DENIED,

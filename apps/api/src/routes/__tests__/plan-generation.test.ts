@@ -16,6 +16,12 @@ import { planRoutes } from "../plan.js";
 import type { Database } from "../../db/client.js";
 import type { WorkoutPlanRecord } from "../../db/repositories/workout-plan.js";
 import type { WorkoutProgram } from "@kinora/contracts";
+import {
+  VALID_TOKEN,
+  createCyclingAuthMockDb,
+  buildSessionRow as buildSharedSessionRow,
+  buildActiveMembershipRow,
+} from "../../test-support/auth-mocks.js";
 
 // --- Shared fixtures ---
 
@@ -24,9 +30,6 @@ const USER_A = "aaaaaaaa-0000-0000-0000-000000000002";
 const TENANT_B = "bbbbbbbb-0000-0000-0000-000000000001";
 const SPEC_ID = "spec-uuid-1";
 const PLAN_ID = "plan-uuid-1";
-
-const VALID_TOKEN = "a".repeat(64);
-const SESSION_HASH = "b".repeat(64);
 
 const confirmedSpecJson = {
   goal: "strength",
@@ -64,55 +67,29 @@ const mockPlanRecord: WorkoutPlanRecord = {
 
 // --- Mock builder helpers ---
 
+// This suite uses tenant/user IDs distinct from the shared defaults.
 function buildSessionRow(tenantId = TENANT_A, userId = USER_A) {
-  return {
-    tokenHash: SESSION_HASH,
-    userId,
-    tenantId,
-    createdAt: new Date(),
-    expiresAt: new Date(Date.now() + 3_600_000),
-  };
-}
-
-// Explicit active-membership row for the tenant-scoped re-check
-// (MembershipRepository.findByTenantAndUser), kept distinct from the session row.
-function buildActiveMembershipRow(tenantId = TENANT_A, userId = USER_A) {
-  return {
-    id: "membership-uuid-1",
-    tenantId,
-    userId,
-    role: "owner" as const,
-    status: "active" as const,
-    createdAt: new Date(),
-  };
+  return buildSharedSessionRow({ tenantId, userId });
 }
 
 /**
- * Build a minimal mock DB that handles the two ordered auth selects: session
- * lookup then tenant-scoped membership re-check. Route-level DB calls (repos)
- * are injected via service mocks, not DB mocks, so each authenticated request
- * issues exactly these two selects; the mock alternates results pairwise
- * (even call → session, odd call → membership) and returns the membership row
- * EXPLICITLY rather than blending it into the session row.
+ * Build a minimal mock DB that handles the two ordered auth selects (session
+ * lookup then tenant-scoped membership re-check) via the shared cycling mock.
+ * Route-level DB calls (repos) are injected via service mocks, not DB mocks, so
+ * each authenticated request issues exactly these two selects; the membership
+ * row is returned EXPLICITLY, never blended into the session row.
  */
 function buildSessionOnlyDb(
   sessionRow?: unknown,
-  membershipRow: unknown = buildActiveMembershipRow()
+  membershipRow: unknown = buildActiveMembershipRow({
+    tenantId: TENANT_A,
+    userId: USER_A,
+  })
 ): Database {
-  const sessionRows = sessionRow ? [sessionRow] : [];
-  const membershipRows = sessionRow ? [membershipRow] : [];
-  let call = 0;
-  const selectMock = vi.fn().mockImplementation(() => {
-    const isSessionCall = call % 2 === 0;
-    call++;
-    const rows = isSessionCall ? sessionRows : membershipRows;
-    return {
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue(rows),
-      }),
-    };
+  return createCyclingAuthMockDb({
+    sessionRows: sessionRow ? [sessionRow] : [],
+    membershipRows: sessionRow && membershipRow ? [membershipRow] : [],
   });
-  return { select: selectMock } as unknown as Database;
 }
 
 // --- Mock service/repo factories ---

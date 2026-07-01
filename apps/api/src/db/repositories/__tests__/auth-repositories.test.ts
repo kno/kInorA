@@ -11,6 +11,7 @@ import {
   type MembershipRecord,
   type TenantRecord,
 } from "../auth-context.js";
+import { selectChain } from "../../../test-support/auth-mocks.js";
 
 // --- Test fixtures ---
 
@@ -44,14 +45,8 @@ const tenant: TenantRecord = {
 };
 
 // --- Mock helpers ---
-
-function selectChain(rows: unknown[] = []) {
-  return {
-    from: vi.fn().mockReturnValue({
-      where: vi.fn().mockResolvedValue(rows),
-    }),
-  };
-}
+// selectChain (the low-level `select().from().where()` chain) is shared with the
+// auth suites via the test-support module.
 
 // --- CredentialsRepository ---
 
