@@ -45,12 +45,11 @@ export class MembershipRepository {
   /**
    * Find the first membership for a user across ANY tenant (any status).
    *
-   * Use ONLY where the tenant is not yet known — e.g. the login flow picking a
-   * tenant to scope a fresh session. Do NOT use this to authorize a request that
-   * is already scoped to a specific tenant: a user can belong to multiple tenants
-   * with different statuses, so a by-user-only lookup is nondeterministic and can
-   * return an `active` row from a DIFFERENT tenant than the request. For that case
-   * use `findByTenantAndUser`.
+   * NOT for authorization. A user can belong to multiple tenants with different
+   * statuses, so a by-user-only lookup is nondeterministic and can return an
+   * `active` row from a DIFFERENT tenant than the request. To authorize a request
+   * already scoped to a tenant, use `findByTenantAndUser`. For the login flow's
+   * active-membership check, use `findActiveByUserId`.
    */
   async findFirstByUserId(userId: string): Promise<MembershipRecord | null> {
     const rows = await this.db
@@ -83,6 +82,23 @@ export class MembershipRepository {
           eq(memberships.userId, userId)
         )
       );
+    return (rows[0] as MembershipRecord | undefined) ?? null;
+  }
+
+  /**
+   * Find the first active membership for a user (any tenant).
+   *
+   * Only returns a membership with status === "active". Used by the login flow to
+   * enforce a fail-secure membership check before issuing a session. Like
+   * `findFirstByUserId` it is not tenant-scoped, so it must not be used to
+   * authorize a request already bound to a specific tenant — use
+   * `findByTenantAndUser` for that.
+   */
+  async findActiveByUserId(userId: string): Promise<MembershipRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(memberships)
+      .where(and(eq(memberships.userId, userId), eq(memberships.status, "active")));
     return (rows[0] as MembershipRecord | undefined) ?? null;
   }
 }

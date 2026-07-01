@@ -7,7 +7,7 @@ vi.mock("../../tenant/provisioning.js", () => ({
   provisionTenantForUser: vi.fn(),
 }));
 
-import { AuthService, SESSION_TTL_MS } from "../service.js";
+import { AuthService, AuthError, SESSION_TTL_MS } from "../service.js";
 import { provisionTenantForUser } from "../../tenant/provisioning.js";
 import { hashPassword } from "@kinora/domain";
 
@@ -233,6 +233,54 @@ describe("AuthService.login", () => {
     await expect(
       service.login({ email: "social@example.com", password: "SomePassword123!" })
     ).rejects.toThrow();
+  });
+
+  it("rejects login for a suspended membership — no session issued", async () => {
+    const realHash = hashPassword("SecurePass123!");
+    // membershipRows is empty: the DB-level active-only filter excludes the suspended row.
+    // tenantRows is present to ensure the only rejection reason is the missing active membership.
+    const db = createMockDb({
+      userRows: [{ id: "user-suspended", email: "suspended@example.com" }],
+      credentialRows: [{ userId: "user-suspended", passwordHash: realHash }],
+      membershipRows: [],
+      tenantRows: [{ id: "t-1", name: "suspended workspace" }],
+    });
+    service = new AuthService(db);
+
+    await expect(
+      service.login({ email: "suspended@example.com", password: "SecurePass123!" })
+    ).rejects.toThrow(AuthError);
+  });
+
+  it("rejects login for an invited membership — no session issued", async () => {
+    const realHash = hashPassword("SecurePass123!");
+    // membershipRows is empty: the DB-level active-only filter excludes the invited row.
+    // tenantRows is present to ensure the only rejection reason is the missing active membership.
+    const db = createMockDb({
+      userRows: [{ id: "user-invited", email: "invited@example.com" }],
+      credentialRows: [{ userId: "user-invited", passwordHash: realHash }],
+      membershipRows: [],
+      tenantRows: [{ id: "t-1", name: "invited workspace" }],
+    });
+    service = new AuthService(db);
+
+    await expect(
+      service.login({ email: "invited@example.com", password: "SecurePass123!" })
+    ).rejects.toThrow(AuthError);
+  });
+
+  it("rejects login when user has no membership at all — no session issued", async () => {
+    const realHash = hashPassword("SecurePass123!");
+    const db = createMockDb({
+      userRows: [{ id: "user-nomember", email: "nomember@example.com" }],
+      credentialRows: [{ userId: "user-nomember", passwordHash: realHash }],
+      membershipRows: [], // no membership of any kind
+    });
+    service = new AuthService(db);
+
+    await expect(
+      service.login({ email: "nomember@example.com", password: "SecurePass123!" })
+    ).rejects.toThrow(AuthError);
   });
 });
 

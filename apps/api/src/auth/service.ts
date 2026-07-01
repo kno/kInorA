@@ -131,8 +131,10 @@ export class AuthService {
       throw new AuthError("Invalid email or password");
     }
 
-    // 4. Find an active membership to get the tenant context
-    const membership = await this.memberRepo.findFirstByUserId(user.id);
+    // 4. Find an active membership to get the tenant context.
+    // Fail-secure: only status === "active" memberships may obtain a session.
+    // Suspended or invited users are rejected here before any session is created.
+    const membership = await this.memberRepo.findActiveByUserId(user.id);
     if (!membership) {
       throw new AuthError("No active tenant membership found for user");
     }
