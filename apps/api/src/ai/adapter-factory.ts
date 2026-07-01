@@ -9,6 +9,17 @@ import { buildPlanPrompt } from "./prompt.js";
 import { mask } from "./mask.js";
 import type { AdapterFactoryMap } from "./dynamic-generator.js";
 
+type LangfuseHandlerWithFlush = CallbackHandler & {
+  flushAsync?: () => Promise<void>;
+  flush?: () => Promise<void>;
+  shutdownAsync?: () => Promise<void>;
+};
+
+interface InvokeChainMetadata {
+  provider: string;
+  model: string;
+}
+
 /**
  * Base URL for OpenRouter.
  * Used by the openrouter adapter.
@@ -21,6 +32,19 @@ const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
  */
 const OPENCODE_GO_BASE_URL = "https://opencode.ai/zen/go/v1";
 
+function ensureLangfuseBaseUrlEnv(): void {
+  if (!process.env["LANGFUSE_BASEURL"] && process.env["LANGFUSE_HOST"]) {
+    process.env["LANGFUSE_BASEURL"] = process.env["LANGFUSE_HOST"];
+  }
+}
+
+async function flushLangfuseHandler(handler: LangfuseHandlerWithFlush): Promise<void> {
+  const flush = handler.flushAsync ?? handler.flush ?? handler.shutdownAsync;
+  if (flush) {
+    await flush.call(handler);
+  }
+}
+
 /**
  * Shared invoke logic for all adapters.
  * Builds the prompt from the spec, masks health data (limitations),
@@ -30,18 +54,36 @@ const OPENCODE_GO_BASE_URL = "https://opencode.ai/zen/go/v1";
  * to prevent health data from appearing in Langfuse traces (AGENTS.md §72).
  */
 async function invokeChain(
-  chain: { invoke(input: string, options: { callbacks: CallbackHandler[] }): Promise<unknown> },
-  spec: PlanSpec
+  chain: { invoke(input: string, options: Record<string, unknown>): Promise<unknown> },
+  spec: PlanSpec,
+  metadata: InvokeChainMetadata
 ): Promise<WorkoutProgram> {
-  const langfuseHandler = new CallbackHandler();
+  ensureLangfuseBaseUrlEnv();
+
+  const traceMetadata = {
+    feature: "plan-generation",
+    provider: metadata.provider,
+    model: metadata.model,
+  };
+  const langfuseHandler = new CallbackHandler({
+    tags: ["plan-generation"],
+    metadata: traceMetadata,
+  }) as LangfuseHandlerWithFlush;
 
   const rawPrompt = buildPlanPrompt(spec);
   const limitationTerms = spec.limitations.map((l) => l.text);
   const maskedPrompt = mask(rawPrompt, limitationTerms);
 
-  const raw = await chain.invoke(maskedPrompt, {
-    callbacks: [langfuseHandler],
-  });
+  let raw: unknown;
+  try {
+    raw = await chain.invoke(maskedPrompt, {
+      callbacks: [langfuseHandler],
+      runName: "plan-generation",
+      metadata: traceMetadata,
+    });
+  } finally {
+    await flushLangfuseHandler(langfuseHandler);
+  }
 
   return WorkoutProgramSchema.parse(raw);
 }
@@ -68,7 +110,7 @@ function createOpenRouterAdapter(model: string): PlanGenerator {
 
   return {
     generate(spec: PlanSpec): Promise<WorkoutProgram> {
-      return invokeChain(chain, spec);
+      return invokeChain(chain, spec, { provider: "openrouter", model });
     },
   };
 }
@@ -88,7 +130,7 @@ function createOpenAIAdapter(model: string): PlanGenerator {
 
   return {
     generate(spec: PlanSpec): Promise<WorkoutProgram> {
-      return invokeChain(chain, spec);
+      return invokeChain(chain, spec, { provider: "openai", model });
     },
   };
 }
@@ -108,7 +150,7 @@ function createAnthropicAdapter(model: string): PlanGenerator {
 
   return {
     generate(spec: PlanSpec): Promise<WorkoutProgram> {
-      return invokeChain(chain, spec);
+      return invokeChain(chain, spec, { provider: "anthropic", model });
     },
   };
 }
@@ -128,7 +170,7 @@ function createGoogleAdapter(model: string): PlanGenerator {
 
   return {
     generate(spec: PlanSpec): Promise<WorkoutProgram> {
-      return invokeChain(chain, spec);
+      return invokeChain(chain, spec, { provider: "google", model });
     },
   };
 }
@@ -157,7 +199,7 @@ function createOpenCodeGoAdapter(model: string): PlanGenerator {
 
   return {
     generate(spec: PlanSpec): Promise<WorkoutProgram> {
-      return invokeChain(chain, spec);
+      return invokeChain(chain, spec, { provider: "opencode-go", model });
     },
   };
 }
