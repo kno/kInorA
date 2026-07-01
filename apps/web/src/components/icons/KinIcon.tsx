@@ -61,8 +61,8 @@ export const kinIconRegistry = {
   )),
   plan: createOpenDesignIcon("Plan", ({ className }) => (
     <>
-      <rect className={className} x="4" y="5" width="16" height="15" rx="3" />
-      <path className={className} d="M4 9H20M9 3V7M15 3V7" />
+      <rect className={className} x="3" y="4" width="18" height="18" rx="2" />
+      <path className={className} d="M16 2V6M8 2V6M3 10H21" />
     </>
   )),
   exercises: createOpenDesignIcon("Exercises", ({ className }) => (
