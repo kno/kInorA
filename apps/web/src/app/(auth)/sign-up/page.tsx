@@ -1,3 +1,4 @@
+import { getFirstParam, resolvePageI18n } from "@/i18n/request";
 import { signupAction } from "./actions";
 
 /**
@@ -7,24 +8,23 @@ import { signupAction } from "./actions";
  * the API `POST /auth/register`, stores the session token, and redirects
  * home. The Google link hits the social-login proxy. Mirrors the login page
  * layout and styling.
+ *
+ * User-facing copy comes from the i18n catalogs (see `@/i18n/locale`),
+ * resolved from the `?lang=` query parameter or the `Accept-Language` header.
  */
 export default async function SignUpPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string | string[] }>;
+  searchParams: Promise<{ error?: string | string[]; lang?: string | string[] }>;
 }) {
   const params = await searchParams;
-  const error =
-    typeof params.error === "string"
-      ? params.error
-      : Array.isArray(params.error)
-        ? (params.error[0] ?? null)
-        : null;
+  const error = getFirstParam(params.error);
+  const { messages } = await resolvePageI18n(getFirstParam(params.lang));
 
   return (
     <main className="kin-page">
       <div className="kin-card">
-        <h1 className="kin-title kin-title--center">Sign up</h1>
+        <h1 className="kin-title kin-title--center">{messages.auth_signup_title}</h1>
 
         {error ? (
           <p role="alert" className="kin-error">
@@ -34,7 +34,7 @@ export default async function SignUpPage({
 
         <form action={signupAction} className="kin-form">
           <label className="kin-field">
-            <span className="kin-label">Email</span>
+            <span className="kin-label">{messages.auth_email_label}</span>
             <input
               name="email"
               type="email"
@@ -45,7 +45,7 @@ export default async function SignUpPage({
           </label>
 
           <label className="kin-field">
-            <span className="kin-label">Password</span>
+            <span className="kin-label">{messages.auth_password_label}</span>
             <input
               name="password"
               type="password"
@@ -56,7 +56,7 @@ export default async function SignUpPage({
           </label>
 
           <button type="submit" className="kin-btn kin-btn--accent">
-            Sign up
+            {messages.auth_signup_submit}
           </button>
         </form>
 
@@ -64,13 +64,13 @@ export default async function SignUpPage({
           href="/auth/social/login?provider=google"
           className="kin-btn kin-btn--ghost"
         >
-          Sign up with Google
+          {messages.auth_signup_google}
         </a>
 
         <p className="kin-switch">
-          Already have an account?{" "}
+          {messages.auth_signup_switch_prompt}{" "}
           <a href="/login" className="kin-switch-link">
-            Log in
+            {messages.auth_signup_switch_link}
           </a>
         </p>
       </div>
