@@ -3,16 +3,22 @@
 /**
  * usePlanWs — React hook that subscribes to the plan-status WebSocket.
  *
- * Opens: wss://<host>/ws/plans?token=<sessionToken>
+ * Opens (browser, preferred): wss://<host>/ws/plans
+ *   No token in the URL. Authentication relies on the same-origin, httpOnly
+ *   kinora_session cookie, which the browser auto-sends on the WS upgrade
+ *   (sameSite=lax). The server (routes/ws.ts) reads request.cookies.kinora_session.
+ *   This keeps the session token out of client JS AND out of the WS URL
+ *   (devtools/proxy/LB logs) — issue #42.
  *
- * Browsers cannot send custom headers on WebSocket connections, so the
- * session token is passed as a URL query parameter — matching the server-side
- * `routes/ws.ts` preValidation that reads `request.query.token`.
+ * Opens (non-browser / cross-origin fallback): wss://<host>/ws/plans?token=<t>
+ *   Retained for non-browser clients and cross-origin local dev (web:3000 /
+ *   api:4000) where the cookie is NOT sent on the WS upgrade. Only used when a
+ *   token is explicitly passed. Browsers cannot send custom headers on a WS
+ *   connection, hence the query param (industry-standard: Pusher/Ably).
  *
- * v1 token-in-URL tradeoff: the session token is short-lived and opaque; the
- * connection is always TLS-encrypted in production. Cookie-on-WS upgrade is
- * the preferred hardening path but requires same-origin (web + API on the same
- * domain) and `@fastify/cookie` on the server. Tracked for v2.
+ * Same-origin requirement: the cookie path only works when web + API share an
+ * origin (prod proxies the API under /api). In cross-origin local dev the
+ * cookie is dropped, the WS auth fails, and the hook falls back to polling.
  *
  * On connect: listens for { planId, status } messages. Updates local status
  *   when planId matches AND the new status rank ≥ current rank (monotonicity
@@ -55,9 +61,19 @@ export function isStatusAllowed(
 // Pure helper functions (exported for testing)
 // ---------------------------------------------------------------------------
 
-/** Builds the WebSocket URL with the session token as a query param. */
-export function buildWsUrl(wsBase: string, token: string): string {
-  return `${wsBase}/ws/plans?token=${encodeURIComponent(token)}`;
+/**
+ * Builds the WebSocket URL.
+ *
+ * Preferred (browser): no token → `${wsBase}/ws/plans`. Auth relies on the
+ * same-origin kinora_session cookie the browser auto-sends on the upgrade, so
+ * the token stays out of the URL (issue #42).
+ *
+ * Fallback (non-browser / cross-origin): a token appends `?token=<token>`,
+ * matching the server-side `request.query.token` path retained in routes/ws.ts.
+ */
+export function buildWsUrl(wsBase: string, token?: string): string {
+  const base = `${wsBase}/ws/plans`;
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
 }
 
 /** Builds the REST poll URL for a plan. */
@@ -130,8 +146,13 @@ function isTerminal(s: string): boolean {
 // ---------------------------------------------------------------------------
 
 export interface UsePlanWsOptions {
-  /** Session token (from cookie — already read by the parent page). */
-  token: string | undefined;
+  /**
+   * Optional session token — RETAINED fallback for non-browser / cross-origin
+   * clients (issue #42). Browsers should leave this undefined and rely on the
+   * same-origin kinora_session cookie for the WS upgrade; when set, it is
+   * appended as ?token= (WS URL) and used as the poll Authorization header.
+   */
+  token?: string | undefined;
   /** Initial status from server-side fetch. */
   initialStatus: string;
   /** Override websocket base URL (testing). */
@@ -222,18 +243,12 @@ export function usePlanWs(
     // Sync the ref if initialStatus changes between renders
     currentStatusRef.current = initialStatus;
 
-    if (!token) {
-      // No session — fall back to polling immediately
-      startPolling();
-      return () => {
-        isMounted.current = false;
-        stopPolling();
-      };
-    }
-
     const WS = WebSocketImpl ?? (typeof WebSocket !== "undefined" ? WebSocket : undefined);
     if (!WS) {
-      // No WebSocket in environment (SSR/Node) — fall back to polling
+      // No WebSocket in environment (SSR/Node) — fall back to polling.
+      // Issue #42: absence of a token is NO LONGER a reason to skip the WS.
+      // In the browser the same-origin kinora_session cookie authenticates the
+      // upgrade, so we still attempt the WS whenever a WebSocket impl exists.
       startPolling();
       return () => {
         isMounted.current = false;
@@ -245,7 +260,9 @@ export function usePlanWs(
 
     function connect() {
       if (!isMounted.current) return;
-      const url = buildWsUrl(base, token!);
+      // token is optional: when undefined, buildWsUrl omits ?token= and the
+      // browser authenticates via the same-origin kinora_session cookie (#42).
+      const url = buildWsUrl(base, token);
       let ws: WebSocket;
       try {
         ws = new WS!(url);
