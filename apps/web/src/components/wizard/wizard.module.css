@@ -84,3 +84,9 @@
 .chipRemove:hover {
   color: var(--fg);
 }
+
+.error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger, #ff6b6b);
+}

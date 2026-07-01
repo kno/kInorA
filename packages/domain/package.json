@@ -12,6 +12,7 @@
       "default": "./dist/index.js"
     },
     "./plan": {
+      "development": "./src/plan/index.ts",
       "types": "./src/plan/index.ts",
       "default": "./dist/plan/index.js"
     }
