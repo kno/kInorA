@@ -1,6 +1,4 @@
-import { headers } from "next/headers";
-import { resolveLocale, loadMessages } from "@/i18n/locale";
-import type { SupportedLocale } from "@/i18n/locale";
+import { getFirstParam, resolvePageI18n } from "@/i18n/request";
 import { signupAction } from "./actions";
 
 /**
@@ -20,24 +18,8 @@ export default async function SignUpPage({
   searchParams: Promise<{ error?: string | string[]; lang?: string | string[] }>;
 }) {
   const params = await searchParams;
-  const error =
-    typeof params.error === "string"
-      ? params.error
-      : Array.isArray(params.error)
-        ? (params.error[0] ?? null)
-        : null;
-
-  const langParam =
-    typeof params.lang === "string"
-      ? params.lang
-      : Array.isArray(params.lang)
-        ? (params.lang[0] ?? null)
-        : null;
-
-  const requestHeaders = await headers();
-  const acceptLanguage = requestHeaders.get("accept-language");
-  const locale: SupportedLocale = resolveLocale(acceptLanguage, langParam);
-  const messages = loadMessages(locale);
+  const error = getFirstParam(params.error);
+  const { messages } = await resolvePageI18n(getFirstParam(params.lang));
 
   return (
     <main className="kin-page">
