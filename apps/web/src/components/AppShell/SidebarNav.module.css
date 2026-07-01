@@ -70,10 +70,12 @@
   color: var(--fg);
 }
 
-/* Active nav item — accent-dim background, 3px left accent border. */
+/* Active nav item — accent-dim background, accent text, 3px left accent border.
+   Matches OpenDesign web-dashboard.html .nav-item.active (background --accent-dim,
+   color --accent). */
 .navItemActive {
   background: var(--accent-dim);
-  color: var(--fg);
+  color: var(--accent);
 }
 
 .navItemActive::before {
