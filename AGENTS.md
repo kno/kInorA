@@ -85,6 +85,8 @@ Implementation follows `openspec/specs/03-v1-quality-tdd/spec.md`.
 - Keep accessibility built in: semantic HTML, keyboard behavior, focus states, labels, and meaningful error text.
 - Do not hardcode one-off colors, spacing, typography, or breakpoints when tokens or primitives exist.
 - UI copy in source files defaults to English unless the product requirement explicitly says otherwise.
+- Keep user-facing literals in the i18n catalogs, not hardcoded in components. The web catalogs live at `apps/web/src/i18n/messages/en.json` and `es.json` (flat snake_case keys grouped by feature prefix, `{name}` interpolation placeholders).
+- Whenever you add, rename, or change a user-facing literal, update BOTH `en.json` and `es.json` in the same change. Every key must exist in both languages with matching placeholders. Spanish values use neutral/professional Spanish. The `catalog-parity` test (`apps/web/src/i18n/__tests__/catalog-parity.test.ts`) enforces this and must stay green.
 
 ## Dependency and library policy
 
