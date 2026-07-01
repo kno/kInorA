@@ -39,7 +39,7 @@ export const LOCATION_OPTIONS: readonly LocationOption[] = [
 
 export const FREQUENCY_OPTIONS: readonly number[] = [2, 3, 4, 5, 6];
 
-export const DURATION_OPTIONS: readonly number[] = [30, 45, 60, 90];
+export const DURATION_OPTIONS: readonly number[] = [15, 30, 45, 60, 90];
 
 export interface EquipmentOption {
   value: string;
@@ -76,4 +76,68 @@ export function equipmentForLocation(
 ): EquipmentOption[] {
   if (!location) return [];
   return EQUIPMENT_BY_LOCATION[location];
+}
+
+export interface EquipmentPhoto {
+  /** Public path under apps/web/public — served as a plain lazy <img>. */
+  src: string;
+  /** English alt-text literal (Option A — no i18n catalog keys). */
+  alt: string;
+}
+
+/**
+ * Optional, purely-presentational photos for the static equipment options
+ * (OpenDesign assets under `public/equipment/`). Keyed by the real
+ * {@link EQUIPMENT_BY_LOCATION} value, and only where an app value clearly
+ * corresponds to one of the six available assets. Values without an entry
+ * render with no photo (the equipment data model is unchanged).
+ */
+export const EQUIPMENT_PHOTO_BY_VALUE: Readonly<Record<string, EquipmentPhoto>> = {
+  dumbbells: {
+    src: "/equipment/equip-mancuernas.webp",
+    alt: "A pair of adjustable dumbbells",
+  },
+  barbell: {
+    src: "/equipment/equip-barras.webp",
+    alt: "An Olympic barbell loaded with plates",
+  },
+  resistance_bands: {
+    src: "/equipment/equip-bandas.webp",
+    alt: "A set of elastic resistance bands",
+  },
+  bodyweight: {
+    src: "/equipment/equip-peso-corporal.webp",
+    alt: "An athlete doing a one-arm push-up",
+  },
+  cable_machine: {
+    src: "/equipment/equip-maquinas.webp",
+    alt: "A cable pulley station in a gym",
+  },
+  pull_up_bar: {
+    src: "/equipment/equip-dominadas.webp",
+    alt: "Doorway pull-up bar",
+  },
+  kettlebell: {
+    src: "/equipment/equip-kettlebell.webp",
+    alt: "Kettlebell",
+  },
+  bench: {
+    src: "/equipment/equip-banco.webp",
+    alt: "Adjustable weight bench",
+  },
+  leg_press: {
+    src: "/equipment/equip-prensa.webp",
+    alt: "Leg press machine",
+  },
+  suspension_trainer: {
+    src: "/equipment/equip-trx.webp",
+    alt: "Suspension trainer straps",
+  },
+  // smith_machine has NO photo: design verified none of the source images
+  // depicts a Smith machine (equip-maquinas is a cable machine, used above).
+  // It falls back to the dumbbell icon.
+};
+
+export function equipmentPhotoForValue(value: string): EquipmentPhoto | undefined {
+  return EQUIPMENT_PHOTO_BY_VALUE[value];
 }

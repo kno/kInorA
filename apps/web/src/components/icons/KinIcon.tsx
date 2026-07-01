@@ -70,6 +70,13 @@ export const kinIconRegistry = {
       <path className={className} d="M3 9V15M21 9V15M6 7V17M18 7V17M6 12H18" />
     </>
   )),
+  // OpenDesign `dumbbell` glyph (docs/open-design/kinora/icons.html) — reused
+  // for the create-plan equipment options instead of introducing new imagery.
+  dumbbell: createOpenDesignIcon("Equipment", ({ className }) => (
+    <>
+      <path className={className} d="M3 9V15M21 9V15M6 7V17M18 7V17M6 12H18" />
+    </>
+  )),
   stats: createOpenDesignIcon("Statistics", ({ className }) => (
     <>
       <path className={className} d="M4 20V13M10 20V8M16 20V4" />
