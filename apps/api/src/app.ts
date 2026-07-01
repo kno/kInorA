@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import fastifyWebsocket from "@fastify/websocket";
+import fastifyCookie from "@fastify/cookie";
 import type { Database } from "./db/client.js";
 import { createDbClient } from "./db/client.js";
 import { AuthService, AuthError } from "./auth/service.js";
@@ -113,6 +114,13 @@ export async function buildApp(
 
   // Auth plugin adds request.authContext decorator + onRequest session extraction.
   await app.register(authPlugin, { db: database });
+
+  // @fastify/cookie parses request.cookies. Needed so wsRoutes can read the
+  // kinora_session cookie on the same-origin browser WS upgrade (issue #42):
+  // the httpOnly session token authenticates the WS without being exposed to
+  // client JS or placed in the WS URL. Registered globally (harmless for other
+  // routes; only wsRoutes reads request.cookies today).
+  await app.register(fastifyCookie);
 
   // Health routes
   await app.register(healthRoute);

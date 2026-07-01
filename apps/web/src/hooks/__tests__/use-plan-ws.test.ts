@@ -33,7 +33,7 @@ import {
 // ---------------------------------------------------------------------------
 
 describe("buildWsUrl", () => {
-  it("builds the wss URL with the token as a query param", () => {
+  it("builds the wss URL with the token as a query param when a token is given", () => {
     const url = buildWsUrl("wss://api.test", "tok-abc");
     expect(url).toBe("wss://api.test/ws/plans?token=tok-abc");
   });
@@ -41,6 +41,19 @@ describe("buildWsUrl", () => {
   it("uses the configured WS_BASE_URL", () => {
     const url = buildWsUrl("wss://kinora.io", "tok-xyz");
     expect(url).toBe("wss://kinora.io/ws/plans?token=tok-xyz");
+  });
+
+  // Issue #42: browsers rely on the same-origin kinora_session cookie, so no
+  // token is passed. The URL must NOT contain ?token= (no token in the WS URL).
+  it("builds the URL WITHOUT a token query param when no token is given", () => {
+    const url = buildWsUrl("wss://api.test");
+    expect(url).toBe("wss://api.test/ws/plans");
+    expect(url).not.toContain("token");
+  });
+
+  it("builds the URL without ?token= when token is undefined", () => {
+    const url = buildWsUrl("wss://api.test", undefined);
+    expect(url).toBe("wss://api.test/ws/plans");
   });
 });
 
@@ -419,7 +432,7 @@ describe("usePlanWs hook — unmount cleanup", () => {
   });
 });
 
-describe("usePlanWs hook — no token starts polling immediately", () => {
+describe("usePlanWs hook — no token, no WebSocket available → polling", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -427,7 +440,7 @@ describe("usePlanWs hook — no token starts polling immediately", () => {
     vi.useRealTimers();
   });
 
-  it("polls GET /workout-plans/:id immediately when no token is provided", async () => {
+  it("polls GET /workout-plans/:id when no token AND no WebSocket impl is available (SSR/Node)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ status: "generating" }), {
         status: 200,
@@ -435,24 +448,67 @@ describe("usePlanWs hook — no token starts polling immediately", () => {
       }),
     );
 
-    renderHook(() =>
+    // Simulate an environment with NO WebSocket (SSR/Node). jsdom provides a
+    // global WebSocket, so remove it for this test to exercise the poll branch.
+    const originalWs = globalThis.WebSocket;
+    // @ts-expect-error — deliberately removing the global for this scenario.
+    delete globalThis.WebSocket;
+
+    try {
+      renderHook(() =>
+        usePlanWs("plan-1", {
+          token: undefined,
+          initialStatus: "generating",
+          apiBase: "http://api.test",
+          fetchImpl,
+          // No WebSocketImpl and no global WebSocket → poll fallback.
+        }),
+      );
+
+      await act(async () => {
+        vi.advanceTimersByTime(6000);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(fetchImpl).toHaveBeenCalledWith(
+        "http://api.test/workout-plans/plan-1",
+        expect.objectContaining({}),
+      );
+    } finally {
+      globalThis.WebSocket = originalWs;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #42: browser same-origin cookie path — no token in JS or WS URL.
+// When no token is provided but a WebSocket is available (browser), the hook
+// must still open the WS (relying on the auto-sent same-origin cookie) instead
+// of immediately falling back to polling. The WS URL must carry NO ?token=.
+// ---------------------------------------------------------------------------
+describe("usePlanWs hook — no token but WebSocket available → cookie WS path (Fix #42)", () => {
+  it("opens the WS without a token and without ?token= in the URL", () => {
+    const { FakeWs, instances } = createFakeWsClass();
+
+    const { result } = renderHook(() =>
       usePlanWs("plan-1", {
         token: undefined,
         initialStatus: "generating",
-        apiBase: "http://api.test",
-        fetchImpl,
+        wsBase: "ws://api.test",
+        WebSocketImpl: FakeWs,
       }),
     );
 
-    await act(async () => {
-      vi.advanceTimersByTime(6000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    // A WS connection must have been attempted (cookie auth), not polling.
+    expect(instances).toHaveLength(1);
+    expect(instances[0]!.url).toBe("ws://api.test/ws/plans");
+    expect(instances[0]!.url).not.toContain("token");
 
-    expect(fetchImpl).toHaveBeenCalledWith(
-      "http://api.test/workout-plans/plan-1",
-      expect.objectContaining({}),
-    );
+    // And it still processes status pushes normally.
+    const ws = instances[0]!;
+    act(() => ws.simulateOpen());
+    act(() => ws.simulateMessage(JSON.stringify({ planId: "plan-1", status: "ready" })));
+    expect(result.current.status).toBe("ready");
   });
 });

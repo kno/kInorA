@@ -4,9 +4,10 @@
  * PlanStatusClient — client component that wires the WS subscription.
  *
  * Wraps PlanStatusView and:
- *   1. Subscribes to wss://.../ws/plans?token=<sessionToken> via usePlanWs.
- *      ALLOWED: usePlanWs uses NEXT_PUBLIC_API_BASE_URL (public origin) for the
- *      WebSocket — browsers cannot proxy WebSocket connections through Next.js.
+ *   1. Subscribes to wss://.../ws/plans via usePlanWs. Authentication uses the
+ *      same-origin, httpOnly kinora_session cookie the browser auto-sends on
+ *      the WS upgrade — NO session token is passed to client JS or placed in
+ *      the WS URL (issue #42). The server (routes/ws.ts) reads the cookie.
  *   2. Merges WS-pushed status with the server-fetched initial status.
  *   3. When WS pushes "ready" but the initial render had no program (was still
  *      "generating" at SSR), calls getPlanStatusAction (a server action) to
@@ -14,16 +15,11 @@
  *   4. Handles the "Regenerate" button via regeneratePlanAction (a server
  *      action in create-plan/actions.ts) — the browser never fetches the API.
  *
- * Token-in-URL tradeoff (v1): the session token is read server-side from the
- * httpOnly kinora_session cookie and passed as a prop to avoid client-side
- * httpOnly access (which would fail). It is forwarded to usePlanWs which
- * appends it as ?token=... on the WS URL. Both paths (WS URL param + API
- * Bearer header) use the same short-lived opaque TLS-protected token.
- *
- * Cookie-on-WS upgrade (preferred v2 path) requires same-origin deployment
- * (web + API on the same domain) and @fastify/cookie on the server — deferred
- * because the dev setup runs web:3000 / api:4000 (cross-origin). Tracked for
- * the v2 architecture pass.
+ * Security (issue #42): this component no longer receives the session token.
+ * The httpOnly cookie stays httpOnly; nothing leaks into the RSC payload or the
+ * WS URL. In cross-origin local dev (web:3000 / api:4000) the cookie is not
+ * sent on the WS upgrade, so usePlanWs falls back to polling — an accepted
+ * tradeoff. Prod proxies the API same-origin so the cookie path works.
  */
 import { useCallback, useEffect, useState } from "react";
 import { usePlanWs } from "@/hooks/use-plan-ws";
@@ -38,8 +34,6 @@ export interface PlanStatusClientProps {
   specId?: string;
   initialStatus: string;
   initialProgram?: WorkoutProgram;
-  /** Session token read by the server component (passed as prop). */
-  token: string | undefined;
   messages?: Messages;
 }
 
@@ -48,7 +42,6 @@ export function PlanStatusClient({
   specId,
   initialStatus,
   initialProgram,
-  token,
   messages,
 }: PlanStatusClientProps) {
   const [program, setProgram] = useState<WorkoutProgram | undefined>(
@@ -58,10 +51,10 @@ export function PlanStatusClient({
 
   // usePlanWs opens the WebSocket and updates status on push messages.
   // Falls back to polling GET /workout-plans/:id if the WS connect fails.
-  // ALLOWED: usePlanWs uses NEXT_PUBLIC_API_BASE_URL (public origin) for the
-  // WebSocket connection — browsers cannot proxy WebSockets through Next.js.
+  // Issue #42: no token is passed — the browser authenticates the WS upgrade
+  // via the same-origin, httpOnly kinora_session cookie, so the token never
+  // touches client JS or the WS URL.
   const { status } = usePlanWs(planId, {
-    token,
     initialStatus,
   });
 
