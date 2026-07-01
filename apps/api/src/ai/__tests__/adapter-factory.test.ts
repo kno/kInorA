@@ -9,6 +9,7 @@ const mockWithStructuredOutput = vi.fn(() => ({ invoke: mockInvoke }));
 const MockChatOpenAI = vi.fn(() => ({
   withStructuredOutput: mockWithStructuredOutput,
 }));
+const mockFlushAsync = vi.fn();
 
 vi.mock("@langchain/openai", () => ({
   ChatOpenAI: MockChatOpenAI,
@@ -22,8 +23,9 @@ vi.mock("@langchain/google-genai", () => ({
   ChatGoogleGenerativeAI: vi.fn(() => ({ withStructuredOutput: mockWithStructuredOutput })),
 }));
 
+const MockCallbackHandler = vi.fn(() => ({ flushAsync: mockFlushAsync }));
 vi.mock("langfuse-langchain", () => ({
-  CallbackHandler: vi.fn(() => ({})),
+  CallbackHandler: MockCallbackHandler,
 }));
 
 // ---------------------------------------------------------------------------
@@ -53,6 +55,8 @@ const mockProgram: WorkoutProgram = {
 beforeEach(() => {
   vi.clearAllMocks();
   mockInvoke.mockResolvedValue(mockProgram);
+  delete process.env["LANGFUSE_BASEURL"];
+  delete process.env["LANGFUSE_HOST"];
 });
 
 // ---------------------------------------------------------------------------
@@ -113,5 +117,93 @@ describe("openrouter adapter still uses jsonSchema", () => {
       expect.anything(),
       expect.objectContaining({ method: "jsonSchema" })
     );
+  });
+});
+
+describe("Langfuse observability", () => {
+  it("maps LANGFUSE_HOST to LANGFUSE_BASEURL before constructing the callback handler", async () => {
+    process.env["LANGFUSE_HOST"] = "https://langfuse.example.test";
+
+    const adapters = buildAdapters();
+    const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
+    await adapter.generate(baseSpec);
+
+    expect(process.env["LANGFUSE_BASEURL"]).toBe("https://langfuse.example.test");
+    expect(MockCallbackHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tags: ["plan-generation"],
+        metadata: expect.objectContaining({
+          feature: "plan-generation",
+          provider: "openrouter",
+          model: "openai/gpt-4o-mini",
+        }),
+      })
+    );
+  });
+
+  it("does not overwrite LANGFUSE_BASEURL when both Langfuse URL env vars are set", async () => {
+    process.env["LANGFUSE_BASEURL"] = "https://canonical-langfuse.example.test";
+    process.env["LANGFUSE_HOST"] = "https://legacy-langfuse.example.test";
+
+    const adapters = buildAdapters();
+    const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
+    await adapter.generate(baseSpec);
+
+    expect(process.env["LANGFUSE_BASEURL"]).toBe("https://canonical-langfuse.example.test");
+  });
+
+  it("passes non-sensitive run metadata to the LangChain invoke config", async () => {
+    const adapters = buildAdapters();
+    const adapter = adapters["openai"]!("gpt-4o-mini");
+    await adapter.generate(baseSpec);
+
+    const config = mockInvoke.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(config).toEqual(
+      expect.objectContaining({
+        runName: "plan-generation",
+        metadata: expect.objectContaining({
+          feature: "plan-generation",
+          provider: "openai",
+          model: "gpt-4o-mini",
+        }),
+      })
+    );
+  });
+
+  it("flushes the Langfuse handler after a successful invoke", async () => {
+    const adapters = buildAdapters();
+    const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
+    await adapter.generate(baseSpec);
+
+    expect(mockFlushAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("flushes the Langfuse handler when the LLM invoke fails", async () => {
+    mockInvoke.mockRejectedValueOnce(new Error("llm failed"));
+
+    const adapters = buildAdapters();
+    const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
+
+    await expect(adapter.generate(baseSpec)).rejects.toThrow("llm failed");
+    expect(mockFlushAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves the original LLM error when Langfuse flush also fails", async () => {
+    mockInvoke.mockRejectedValueOnce(new Error("llm failed"));
+    mockFlushAsync.mockRejectedValueOnce(new Error("flush failed"));
+
+    const adapters = buildAdapters();
+    const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
+
+    await expect(adapter.generate(baseSpec)).rejects.toThrow("llm failed");
+  });
+
+  it("does not fail plan generation when only Langfuse flush fails", async () => {
+    mockFlushAsync.mockRejectedValueOnce(new Error("flush failed"));
+
+    const adapters = buildAdapters();
+    const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
+
+    await expect(adapter.generate(baseSpec)).resolves.toEqual(mockProgram);
   });
 });
