@@ -1,3 +1,4 @@
+import { getFirstParam, resolvePageI18n } from "@/i18n/request";
 import { loginAction } from "./actions";
 
 /**
@@ -9,26 +10,23 @@ import { loginAction } from "./actions";
  * hits the web social-login proxy (`/auth/social/login?provider=google`)
  * which redirects the user-agent to Google's OIDC authorization URL.
  *
- * Styled with the kInorA design-system tokens (globals.css). UI copy is
- * English by default per the project convention.
+ * Styled with the kInorA design-system tokens (globals.css). User-facing copy
+ * comes from the i18n catalogs (see `@/i18n/locale`), resolved from the
+ * `?lang=` query parameter or the `Accept-Language` header.
  */
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string | string[] }>;
+  searchParams: Promise<{ error?: string | string[]; lang?: string | string[] }>;
 }) {
   const params = await searchParams;
-  const error =
-    typeof params.error === "string"
-      ? params.error
-      : Array.isArray(params.error)
-        ? (params.error[0] ?? null)
-        : null;
+  const error = getFirstParam(params.error);
+  const { messages } = await resolvePageI18n(getFirstParam(params.lang));
 
   return (
     <main className="kin-page">
       <div className="kin-card">
-        <h1 className="kin-title kin-title--center">Log in</h1>
+        <h1 className="kin-title kin-title--center">{messages.auth_login_title}</h1>
 
         {error ? (
           <p role="alert" className="kin-error">
@@ -38,7 +36,7 @@ export default async function LoginPage({
 
         <form action={loginAction} className="kin-form">
           <label className="kin-field">
-            <span className="kin-label">Email</span>
+            <span className="kin-label">{messages.auth_email_label}</span>
             <input
               name="email"
               type="email"
@@ -49,7 +47,7 @@ export default async function LoginPage({
           </label>
 
           <label className="kin-field">
-            <span className="kin-label">Password</span>
+            <span className="kin-label">{messages.auth_password_label}</span>
             <input
               name="password"
               type="password"
@@ -60,7 +58,7 @@ export default async function LoginPage({
           </label>
 
           <button type="submit" className="kin-btn kin-btn--accent">
-            Log in
+            {messages.auth_login_submit}
           </button>
         </form>
 
@@ -68,13 +66,13 @@ export default async function LoginPage({
           href="/auth/social/login?provider=google"
           className="kin-btn kin-btn--ghost"
         >
-          Sign in with Google
+          {messages.auth_login_google}
         </a>
 
         <p className="kin-switch">
-          Don&apos;t have an account?{" "}
+          {messages.auth_login_switch_prompt}{" "}
           <a href="/sign-up" className="kin-switch-link">
-            Sign up
+            {messages.auth_login_switch_link}
           </a>
         </p>
       </div>

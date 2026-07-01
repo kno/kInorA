@@ -1,11 +1,22 @@
 import type { ReactElement, ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { headers } from "next/headers";
 import SignUpPage from "../page";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
 
+vi.mock("next/headers", () => ({
+  headers: vi.fn(),
+}));
+
+const mockedHeaders = vi.mocked(headers);
+
 describe("SignUpPage", () => {
+  beforeEach(() => {
+    mockedHeaders.mockResolvedValue(new Headers({ "accept-language": "en-US,en;q=0.9" }));
+  });
+
   it("renders an email/password form and a Google sign-up link", async () => {
     const page = await SignUpPage({ searchParams: Promise.resolve({}) });
 
@@ -49,6 +60,26 @@ describe("SignUpPage", () => {
       (el) => typeof el.props.href === "string" && el.props.href === "/login"
     );
     expect(loginLink).toBeDefined();
+  });
+
+  it("renders English copy from the i18n catalog when lang=en", async () => {
+    const page = await SignUpPage({ searchParams: Promise.resolve({ lang: "en" }) });
+    const text = textOf(page);
+
+    expect(text).toContain("Sign up");
+    expect(text).toContain("Email");
+    expect(text).toContain("Password");
+    expect(text).toContain("Already have an account?");
+  });
+
+  it("renders Spanish copy from the i18n catalog when lang=es", async () => {
+    const page = await SignUpPage({ searchParams: Promise.resolve({ lang: "es" }) });
+    const text = textOf(page);
+
+    expect(text).toContain("Crear cuenta");
+    expect(text).toContain("Correo electrónico");
+    expect(text).toContain("Contraseña");
+    expect(text).toContain("¿Ya tienes una cuenta?");
   });
 });
 
