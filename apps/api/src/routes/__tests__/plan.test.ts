@@ -4,6 +4,12 @@ import { authPlugin } from "../../auth/plugin.js";
 import { planRoutes } from "../plan.js";
 import type { Database } from "../../db/client.js";
 import type { WorkoutPlanRepository } from "../../db/repositories/workout-plan.js";
+import {
+  createAuthMockDb,
+  buildActiveMembershipRow,
+  MEMBERSHIP_SELECT_INDEX,
+  type AuthMockDb,
+} from "../../test-support/auth-mocks.js";
 
 // --- Shared test fixtures ---
 
@@ -51,31 +57,33 @@ const SESSION_HASH = "b".repeat(64); // mock hash for the token
 
 // --- Mock DB builder ---
 //
-// The auth plugin's onRequest hook calls:
-//   db.select().from(sessions).where(eq(sessions.tokenHash, hash))
-// to find the session. All mock DBs must cover this first select.
-//
-// Plan route mocks need additional select/insert/delete calls.
-// We pass them as chained mockReturnValue sequences on the same `select` mock.
+// The auth plugin's onRequest hook calls, in order:
+//   1. db.select().from(sessions).where(eq(sessions.tokenHash, hash))          → session
+//   2. db.select().from(memberships).where(and(tenantId, userId))              → membership
+// The membership select is the tenant-scoped re-check (MembershipRepository
+// .findByTenantAndUser) that the user is still `active` for the session's tenant
+// (fail-secure suspension enforcement). All mock DBs must cover BOTH auth
+// selects; an active membership row is returned EXPLICITLY for the second select
+// so route-level selects keep their order and a suspended scenario is
+// representable by overriding it.
 
+const ACTIVE_MEMBERSHIP_ROW = buildActiveMembershipRow({
+  tenantId: TENANT_A,
+  userId: USER_A,
+});
+
+// Build the ordered auth+route select mock via the shared helper. It resolves
+// session (0) → tenant-scoped membership (1) → any route selects (2+) and
+// records `resolvedByCall` so ordering can be asserted. `MEMBERSHIP_SELECT_INDEX`
+// (imported) is the ordinal of the membership re-check.
 function sessionSelectChain(
   sessionRows: unknown[],
-  additionalRows: unknown[][] = []
-) {
-  const allRows = [sessionRows, ...additionalRows];
-  let callCount = 0;
-
-  const selectMock = vi.fn().mockImplementation(() => {
-    const rows = allRows[callCount] ?? [];
-    callCount++;
-    return {
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue(rows),
-      }),
-    };
-  });
-
-  return selectMock;
+  additionalRows: unknown[][] = [],
+  membershipRows: unknown[] = [ACTIVE_MEMBERSHIP_ROW]
+): ReturnType<typeof vi.fn> & { resolvedByCall: AuthMockDb["resolvedByCall"] } {
+  const mock = createAuthMockDb({ sessionRows, membershipRows, additionalRows });
+  return Object.assign(mock.select, { resolvedByCall: mock.resolvedByCall }) as
+    ReturnType<typeof vi.fn> & { resolvedByCall: AuthMockDb["resolvedByCall"] };
 }
 
 function buildMockDb(opts: {
@@ -686,8 +694,18 @@ describe("Plan routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      // select was called twice: once for session lookup, once for findCurrent
-      expect(select).toHaveBeenCalledTimes(2);
+      // select was called three times: session lookup, membership re-check,
+      // then findCurrent.
+      expect(select).toHaveBeenCalledTimes(3);
+      // Raw-select ordering assertion (kept intentionally): the plan route runs
+      // the auth pipeline via db.select directly — there is no injected
+      // MembershipRepository to spy on here — so this is the query-shape /
+      // ordering coverage. The repo-level equivalent (findByTenantAndUser called
+      // with the session's tenantId+userId) is asserted in plugin.test.ts.
+      const resolved = (
+        select as unknown as { resolvedByCall: unknown[][] }
+      ).resolvedByCall;
+      expect(resolved[MEMBERSHIP_SELECT_INDEX]).toEqual([ACTIVE_MEMBERSHIP_ROW]);
     });
 
     it("POST /plan-specs (promote) — transaction uses authContext tenantId+userId, body values are ignored", async () => {

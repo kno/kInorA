@@ -2,22 +2,23 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
 import { authPlugin } from "../../auth/plugin.js";
 import { adminAiConfigRoutes } from "../admin-ai-config.js";
+import {
+  VALID_TOKEN,
+  createAuthMockDb,
+  buildSessionRow,
+  buildActiveMembershipRow,
+} from "../../test-support/auth-mocks.js";
 
 // --- Fixtures ---
 
 const USER_ID = "aaaaaaaa-0000-0000-0000-000000000001";
 const TENANT_ID = "bbbbbbbb-0000-0000-0000-000000000001";
 
-// A 64-char token satisfies the format check in isValidTokenFormat
-const VALID_TOKEN = "a".repeat(64);
-
-const SESSION_ROW = {
+const SESSION_ROW = buildSessionRow({
   tokenHash: "hash-of-token",
-  userId: USER_ID,
   tenantId: TENANT_ID,
-  createdAt: new Date(),
-  expiresAt: new Date(Date.now() + 3_600_000),
-};
+  userId: USER_ID,
+});
 
 const ADMIN_USER_ROW = { id: USER_ID, email: "admin@test.com", isAdmin: true };
 const NONADMIN_USER_ROW = { id: USER_ID, email: "user@test.com", isAdmin: false };
@@ -30,35 +31,31 @@ const CONFIG_ROW = {
 
 // --- Mock DB builder ---
 //
-// The auth plugin's onRequest hook calls:
-//   db.select().from(sessions).where(...) → session row (first select)
+// The auth plugin's onRequest hook calls, in order:
+//   1. db.select().from(sessions).where(...)            → session row
+//   2. db.select().from(memberships).where(and(tenantId, userId)) → membership row
+//      (fail-secure, TENANT-SCOPED re-check that the user is still `active`)
 //
-// requireAdmin calls via UserRepository:
-//   db.select().from(users).where(eq(users.id, ...)) → user row (second select)
+// requireAdmin then calls via UserRepository:
+//   3. db.select().from(users).where(eq(users.id, ...)) → user row
+//
+// The shared createAuthMockDb models selects 1+2; the user row is passed as an
+// additional (3rd) ordered select.
 
-function buildSelectChain(rows: unknown[][]) {
-  let callCount = 0;
-  return vi.fn().mockImplementation(() => {
-    const batch = rows[callCount] ?? [];
-    callCount++;
-    return {
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue(batch),
-      }),
-    };
-  });
-}
+const ACTIVE_MEMBERSHIP_ROW = buildActiveMembershipRow({
+  tenantId: TENANT_ID,
+  userId: USER_ID,
+});
 
 function buildMockDb(
   sessionRow: typeof SESSION_ROW | null,
   userRow: typeof ADMIN_USER_ROW | typeof NONADMIN_USER_ROW | null
 ) {
-  const sessionRows = sessionRow ? [sessionRow] : [];
-  const userRows = userRow ? [userRow] : [];
-
-  return {
-    select: buildSelectChain([sessionRows, userRows]),
-  };
+  return createAuthMockDb({
+    sessionRows: sessionRow ? [sessionRow] : [],
+    membershipRows: [ACTIVE_MEMBERSHIP_ROW],
+    additionalRows: [userRow ? [userRow] : []],
+  }).db;
 }
 
 // --- Config repo mock ---
