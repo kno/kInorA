@@ -41,7 +41,12 @@ function ensureLangfuseBaseUrlEnv(): void {
 async function flushLangfuseHandler(handler: LangfuseHandlerWithFlush): Promise<void> {
   const flush = handler.flushAsync ?? handler.flush ?? handler.shutdownAsync;
   if (flush) {
-    await flush.call(handler);
+    try {
+      await flush.call(handler);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn("[ai] Langfuse flush failed", { message });
+    }
   }
 }
 
