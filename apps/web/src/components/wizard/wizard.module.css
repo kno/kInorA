@@ -90,3 +90,12 @@
   font-size: 13px;
   color: var(--danger, #ff6b6b);
 }
+
+.optionPhoto {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--r-card);
+  display: block;
+}

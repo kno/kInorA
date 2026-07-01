@@ -77,3 +77,44 @@ export function equipmentForLocation(
   if (!location) return [];
   return EQUIPMENT_BY_LOCATION[location];
 }
+
+export interface EquipmentPhoto {
+  /** Public path under apps/web/public — served as a plain lazy <img>. */
+  src: string;
+  /** English alt-text literal (Option A — no i18n catalog keys). */
+  alt: string;
+}
+
+/**
+ * Optional, purely-presentational photos for the static equipment options
+ * (OpenDesign assets under `public/equipment/`). Keyed by the real
+ * {@link EQUIPMENT_BY_LOCATION} value, and only where an app value clearly
+ * corresponds to one of the six available assets. Values without an entry
+ * render with no photo (the equipment data model is unchanged).
+ */
+export const EQUIPMENT_PHOTO_BY_VALUE: Readonly<Record<string, EquipmentPhoto>> = {
+  dumbbells: {
+    src: "/equipment/equip-mancuernas.webp",
+    alt: "A pair of adjustable dumbbells",
+  },
+  barbell: {
+    src: "/equipment/equip-barras.webp",
+    alt: "An Olympic barbell loaded with plates",
+  },
+  resistance_bands: {
+    src: "/equipment/equip-bandas.webp",
+    alt: "A set of elastic resistance bands",
+  },
+  bodyweight: {
+    src: "/equipment/equip-peso-corporal.webp",
+    alt: "An athlete doing a one-arm push-up",
+  },
+  cable_machine: {
+    src: "/equipment/equip-maquinas.webp",
+    alt: "A cable pulley station in a gym",
+  },
+};
+
+export function equipmentPhotoForValue(value: string): EquipmentPhoto | undefined {
+  return EQUIPMENT_PHOTO_BY_VALUE[value];
+}
