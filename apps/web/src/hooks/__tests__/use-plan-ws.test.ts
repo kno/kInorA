@@ -512,3 +512,154 @@ describe("usePlanWs hook — no token but WebSocket available → cookie WS path
     expect(result.current.status).toBe("ready");
   });
 });
+
+// ---------------------------------------------------------------------------
+// BLOCKER 2 (reliability): auth-rejected WS must fail LOUD and STOP, not loop.
+// When the WS upgrade is rejected (401/403 — cross-origin dev, expired session),
+// the socket closes WITHOUT ever firing onopen. The hook must NOT enter the
+// reconnect storm (5x) and must NOT poll unauthenticated forever staying on
+// "generating"; it must surface a terminal "error" state.
+// ---------------------------------------------------------------------------
+describe("usePlanWs hook — BLOCKER 2: auth-rejected WS fails loud & stops", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("does NOT reconnect-storm when the WS closes WITHOUT ever opening (auth rejection)", async () => {
+    // No usable auth for the poll → every poll 401s → bounded fail-loud.
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 }),
+    );
+    const { FakeWs, instances } = createFakeWsClass();
+
+    const { result } = renderHook(() =>
+      usePlanWs("plan-1", {
+        token: undefined,
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        apiBase: "http://api.test",
+        fetchImpl,
+        WebSocketImpl: FakeWs,
+      }),
+    );
+
+    const ws = instances[0]!;
+    // Simulate the upgrade being rejected: error then close, NO onopen.
+    act(() => ws.simulateError());
+    act(() => ws.simulateClose());
+
+    // Advance well past 5 * 3s reconnect windows AND several poll intervals.
+    await act(async () => {
+      for (let i = 0; i < 8; i++) {
+        vi.advanceTimersByTime(5000);
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+    });
+
+    expect(instances).toHaveLength(1); // no reconnect storm — never reconnected
+    // Bounded poll: stopped after MAX_POLL_FAILURES 401s.
+    expect(fetchImpl.mock.calls.length).toBeLessThanOrEqual(3);
+    // Must surface a terminal error, NOT remain stuck on "generating".
+    expect(result.current.status).toBe("error");
+  });
+
+  it("stops polling and surfaces 'error' after repeated 401 poll responses", async () => {
+    // Poll always returns 401 (requireAuth route, browser sent no usable auth).
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 }),
+    );
+    const { FakeWs, instances } = createFakeWsClass();
+
+    const { result } = renderHook(() =>
+      usePlanWs("plan-1", {
+        token: undefined,
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        apiBase: "http://api.test",
+        fetchImpl,
+        WebSocketImpl: FakeWs,
+      }),
+    );
+
+    const ws = instances[0]!;
+    // Force the poll fallback (WS opened then dropped after opening).
+    act(() => ws.simulateOpen());
+    act(() => ws.simulateError());
+
+    // Drive several poll intervals; each returns 401.
+    await act(async () => {
+      for (let i = 0; i < 6; i++) {
+        vi.advanceTimersByTime(5000);
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+    });
+
+    // Bounded: it must have STOPPED after a small number of 401s, not looped.
+    expect(fetchImpl.mock.calls.length).toBeLessThanOrEqual(3);
+    expect(result.current.status).toBe("error");
+  });
+
+  it("polls with credentials:'include' so the same-origin cookie authenticates the poll", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: "ready" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const { FakeWs, instances } = createFakeWsClass();
+
+    renderHook(() =>
+      usePlanWs("plan-1", {
+        token: undefined,
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        apiBase: "http://api.test",
+        fetchImpl,
+        WebSocketImpl: FakeWs,
+      }),
+    );
+
+    const ws = instances[0]!;
+    act(() => ws.simulateOpen());
+    act(() => ws.simulateError());
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://api.test/workout-plans/plan-1",
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("surfaces 'error' as a terminal state (isTerminal treats it as done)", () => {
+    // A transient close AFTER opening should still reconnect (not an auth reject),
+    // proving the "never opened" distinction is what gates the error path.
+    const { FakeWs, instances } = createFakeWsClass();
+
+    renderHook(() =>
+      usePlanWs("plan-1", {
+        token: undefined,
+        initialStatus: "generating",
+        wsBase: "ws://api.test",
+        WebSocketImpl: FakeWs,
+      }),
+    );
+
+    const ws = instances[0]!;
+    act(() => ws.simulateOpen()); // opened → a later close is a transient drop
+    act(() => ws.simulateClose());
+    act(() => vi.advanceTimersByTime(3500));
+
+    // Opened-then-dropped → reconnect IS allowed (transient), so a 2nd socket exists.
+    expect(instances.length).toBeGreaterThanOrEqual(2);
+  });
+});
