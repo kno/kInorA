@@ -113,22 +113,56 @@ describe("UserRepository", () => {
 // --- MembershipRepository ---
 
 describe("MembershipRepository", () => {
-  it("returns the first membership for a user", async () => {
-    const mockSelect = vi.fn().mockReturnValue(selectChain([membership]));
-    const repo = new MembershipRepository({ select: mockSelect } as never);
+  describe("findFirstByUserId", () => {
+    it("returns the first membership for a user", async () => {
+      const mockSelect = vi.fn().mockReturnValue(selectChain([membership]));
+      const repo = new MembershipRepository({ select: mockSelect } as never);
 
-    const result = await repo.findFirstByUserId("user-uuid-1");
+      const result = await repo.findFirstByUserId("user-uuid-1");
 
-    expect(result).toEqual(membership);
+      expect(result).toEqual(membership);
+    });
+
+    it("returns null when the user has no memberships", async () => {
+      const mockSelect = vi.fn().mockReturnValue(selectChain([]));
+      const repo = new MembershipRepository({ select: mockSelect } as never);
+
+      const result = await repo.findFirstByUserId("orphan");
+
+      expect(result).toBeNull();
+    });
   });
 
-  it("returns null when the user has no memberships", async () => {
-    const mockSelect = vi.fn().mockReturnValue(selectChain([]));
-    const repo = new MembershipRepository({ select: mockSelect } as never);
+  describe("findActiveByUserId", () => {
+    it("returns the active membership for a user", async () => {
+      const mockSelect = vi.fn().mockReturnValue(selectChain([membership]));
+      const repo = new MembershipRepository({ select: mockSelect } as never);
 
-    const result = await repo.findFirstByUserId("orphan");
+      const result = await repo.findActiveByUserId("user-uuid-1");
 
-    expect(result).toBeNull();
+      expect(result).toEqual(membership);
+      expect(result?.status).toBe("active");
+    });
+
+    it("returns null when the user has no memberships", async () => {
+      const mockSelect = vi.fn().mockReturnValue(selectChain([]));
+      const repo = new MembershipRepository({ select: mockSelect } as never);
+
+      const result = await repo.findActiveByUserId("orphan");
+
+      expect(result).toBeNull();
+    });
+
+    it("returns null when the active-only filter excludes non-active memberships", async () => {
+      // The DB-level filter (status = "active") returns empty for suspended/invited users.
+      // This simulates the active-only WHERE clause filtering out non-active rows.
+      const mockSelect = vi.fn().mockReturnValue(selectChain([]));
+      const repo = new MembershipRepository({ select: mockSelect } as never);
+
+      const result = await repo.findActiveByUserId("suspended-user");
+
+      expect(result).toBeNull();
+    });
   });
 
   describe("findByTenantAndUser", () => {
