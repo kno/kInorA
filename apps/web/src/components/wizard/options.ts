@@ -39,7 +39,7 @@ export const LOCATION_OPTIONS: readonly LocationOption[] = [
 
 export const FREQUENCY_OPTIONS: readonly number[] = [2, 3, 4, 5, 6];
 
-export const DURATION_OPTIONS: readonly number[] = [30, 45, 60, 90];
+export const DURATION_OPTIONS: readonly number[] = [15, 30, 45, 60, 90];
 
 export interface EquipmentOption {
   value: string;
