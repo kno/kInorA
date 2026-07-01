@@ -264,8 +264,8 @@
       "name": "screens/web-create-plan.html",
       "path": "screens/web-create-plan.html",
       "type": "file",
-      "size": 50946,
-      "mtime": 1782389159166.8206,
+      "size": 52790,
+      "mtime": 1782919082741.9573,
       "kind": "html",
       "mime": "text/html; charset=utf-8",
       "artifactKind": "html",
@@ -282,8 +282,11 @@
           "zip"
         ],
         "metadata": {
-          "inferred": true
-        }
+          "inferred": true,
+          "reconciled": true
+        },
+        "createdAt": "2026-07-01T15:18:02.741Z",
+        "updatedAt": "2026-07-01T15:18:02.741Z"
       }
     },
     {
@@ -403,6 +406,66 @@
       "mtime": 1781942348488.6355,
       "kind": "code",
       "mime": "text/css; charset=utf-8",
+      "artifactManifest": null
+    },
+    {
+      "name": "assets/equip-peso-corporal.webp",
+      "path": "assets/equip-peso-corporal.webp",
+      "type": "file",
+      "size": 10498,
+      "mtime": 1782919002420.6294,
+      "kind": "image",
+      "mime": "image/webp",
+      "artifactManifest": null
+    },
+    {
+      "name": "assets/equip-gimnasio.webp",
+      "path": "assets/equip-gimnasio.webp",
+      "type": "file",
+      "size": 10970,
+      "mtime": 1782919002386.7761,
+      "kind": "image",
+      "mime": "image/webp",
+      "artifactManifest": null
+    },
+    {
+      "name": "assets/equip-maquinas.webp",
+      "path": "assets/equip-maquinas.webp",
+      "type": "file",
+      "size": 10768,
+      "mtime": 1782919002354.7717,
+      "kind": "image",
+      "mime": "image/webp",
+      "artifactManifest": null
+    },
+    {
+      "name": "assets/equip-barras.webp",
+      "path": "assets/equip-barras.webp",
+      "type": "file",
+      "size": 10432,
+      "mtime": 1782919002323.4731,
+      "kind": "image",
+      "mime": "image/webp",
+      "artifactManifest": null
+    },
+    {
+      "name": "assets/equip-bandas.webp",
+      "path": "assets/equip-bandas.webp",
+      "type": "file",
+      "size": 10048,
+      "mtime": 1782919002291.2478,
+      "kind": "image",
+      "mime": "image/webp",
+      "artifactManifest": null
+    },
+    {
+      "name": "assets/equip-mancuernas.webp",
+      "path": "assets/equip-mancuernas.webp",
+      "type": "file",
+      "size": 9718,
+      "mtime": 1782918989853.064,
+      "kind": "image",
+      "mime": "image/webp",
       "artifactManifest": null
     }
   ]
