@@ -35,11 +35,21 @@ import { useEffect, useRef, useState, useCallback } from "react";
 // Status rank — monotonicity guard (Fix B)
 // ---------------------------------------------------------------------------
 
-/** Numeric rank for status strings. Higher rank = cannot be overwritten. */
+/**
+ * Numeric rank for status strings. Higher rank = cannot be overwritten.
+ *
+ * "error" is a client-side terminal state (rank 1) used when the realtime
+ * channel can neither connect (auth-rejected WS) nor poll (repeated 401s), so
+ * the UI fails loud instead of silently staying on "generating" forever
+ * (issue #42 reliability review). It ranks with ready/failed so a genuine
+ * later "ready"/"failed" push can still supersede it, but a stale "generating"
+ * cannot resurrect a dead channel.
+ */
 export const STATUS_RANK: Record<string, number> = {
   generating: 0,
   ready: 1,
   failed: 1,
+  error: 1,
 };
 
 /**
@@ -135,10 +145,22 @@ export function getApiBase(): string {
 const MAX_RECONNECTS = 5;
 const RECONNECT_DELAY_MS = 3000;
 const POLL_INTERVAL_MS = 5000;
+/**
+ * Max consecutive failed polls (network error OR non-OK response) before the
+ * hook gives up and surfaces "error". Bounds the previously-unbounded poll loop
+ * that would spin forever on 401s (issue #42 reliability review).
+ */
+const MAX_POLL_FAILURES = 3;
 
-/** Returns true when a status value represents a terminal state. */
+/** Terminal client-side error state — realtime + poll both unavailable. */
+export const ERROR_STATUS = "error";
+
+/**
+ * Returns true when a status value represents a terminal state (no further
+ * updates expected). "error" is terminal so the failure path stops for good.
+ */
 function isTerminal(s: string): boolean {
-  return s === "ready" || s === "failed";
+  return s === "ready" || s === "failed" || s === ERROR_STATUS;
 }
 
 // ---------------------------------------------------------------------------
@@ -192,6 +214,12 @@ export function usePlanWs(
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const isMounted = useRef(true);
+  // Reliability (issue #42): track whether the current socket ever opened, so a
+  // close that never opened is treated as an auth/handshake REJECTION (fail
+  // loud, no reconnect storm) rather than a transient drop (reconnect ok).
+  const everOpenedRef = useRef(false);
+  // Consecutive failed polls; bounds the poll loop so 401s don't spin forever.
+  const pollFailuresRef = useRef(0);
 
   /** Update both state and the ref atomically. */
   const updateStatus = useCallback((next: string) => {
@@ -206,20 +234,48 @@ export function usePlanWs(
     }
   }, []);
 
+  /**
+   * Fail loud: stop the realtime channel and surface a terminal "error" state
+   * so the UI does not sit on "generating" forever. Idempotent and monotonic —
+   * a real "ready"/"failed" that already arrived is never downgraded to "error".
+   */
+  const failLoud = useCallback(() => {
+    stopPolling();
+    if (!isMounted.current) return;
+    if (isStatusAllowed(currentStatusRef.current, ERROR_STATUS) &&
+        !isTerminal(currentStatusRef.current)) {
+      updateStatus(ERROR_STATUS);
+    }
+  }, [stopPolling, updateStatus]);
+
   const startPolling = useCallback(() => {
     if (pollTimerRef.current !== null) return; // already polling
     const base = apiBase ?? getApiBase();
     const url = buildPollUrl(base, planId);
+    pollFailuresRef.current = 0;
 
     pollTimerRef.current = setInterval(() => {
       void (async () => {
         if (!isMounted.current) return;
         try {
           const res = await fetchImpl(url, {
+            // Retain the Bearer header for non-browser/token callers. Browsers
+            // (no token) authenticate the same-origin poll via the cookie, so
+            // credentials:"include" is required (issue #42 reliability review).
             headers: token ? { authorization: `Bearer ${token}` } : {},
+            credentials: "include",
             cache: "no-store",
           });
-          if (!res.ok) return;
+          if (!res.ok) {
+            // Bound the loop: a run of failures (e.g. 401 when the browser has
+            // no valid session) must STOP and fail loud, not spin forever.
+            pollFailuresRef.current += 1;
+            if (pollFailuresRef.current >= MAX_POLL_FAILURES) {
+              failLoud();
+            }
+            return;
+          }
+          pollFailuresRef.current = 0; // reset on any successful response
           const body = (await res.json()) as { status?: string };
           if (body.status && isMounted.current) {
             // Fix B: apply monotonicity guard on poll results too
@@ -232,11 +288,16 @@ export function usePlanWs(
             }
           }
         } catch {
-          // Network error during poll — keep trying
+          // Network error during poll — also bounded so a persistently
+          // unreachable API surfaces an error instead of looping silently.
+          pollFailuresRef.current += 1;
+          if (pollFailuresRef.current >= MAX_POLL_FAILURES) {
+            failLoud();
+          }
         }
       })();
     }, POLL_INTERVAL_MS);
-  }, [planId, token, apiBase, fetchImpl, stopPolling, updateStatus]);
+  }, [planId, token, apiBase, fetchImpl, stopPolling, updateStatus, failLoud]);
 
   useEffect(() => {
     isMounted.current = true;
@@ -263,6 +324,10 @@ export function usePlanWs(
       // token is optional: when undefined, buildWsUrl omits ?token= and the
       // browser authenticates via the same-origin kinora_session cookie (#42).
       const url = buildWsUrl(base, token);
+      // New connection attempt: assume not-yet-opened until onopen fires. This
+      // is how we distinguish an auth-rejected upgrade (never opens) from a
+      // transient drop (opened, then closed).
+      everOpenedRef.current = false;
       let ws: WebSocket;
       try {
         ws = new WS!(url);
@@ -275,7 +340,9 @@ export function usePlanWs(
       wsRef.current = ws;
 
       ws.onopen = () => {
+        everOpenedRef.current = true;
         reconnectCount.current = 0;
+        pollFailuresRef.current = 0;
         stopPolling(); // WS connected — no need to poll
       };
 
@@ -297,7 +364,10 @@ export function usePlanWs(
       };
 
       ws.onerror = () => {
-        // On error, fall back to polling (only start once)
+        // Fall back to polling on the FIRST error. Polling is bounded
+        // (MAX_POLL_FAILURES) and uses credentials:"include", so a working
+        // token/cookie recovers while a persistent auth failure fails loud —
+        // no infinite unauthenticated loop (issue #42 reliability review).
         if (reconnectCount.current === 0) {
           startPolling();
         }
@@ -306,6 +376,18 @@ export function usePlanWs(
       ws.onclose = () => {
         wsRef.current = null;
         if (!isMounted.current) return;
+
+        // Auth/handshake rejection: the upgrade closed WITHOUT ever opening.
+        // Do NOT reconnect — that would hammer the server with more
+        // unauthenticated upgrades (reconnect storm). Instead rely on the
+        // BOUNDED poll fallback (already started by onerror, or started here):
+        // it recovers if auth works and fails loud after MAX_POLL_FAILURES 401s
+        // instead of spinning forever (issue #42 reliability review).
+        if (!everOpenedRef.current) {
+          startPolling();
+          return;
+        }
+
         // Fix A: read currentStatusRef (live value), NOT the stale closure `status`.
         // This prevents a spurious reconnect after the socket closes following a
         // "ready"/"failed" message (the onmessage handler updates the ref before

@@ -171,8 +171,39 @@ export async function buildApp(
   // notifications from the generation background task reach connected clients.
   // db is passed so wsRoutes can resolve ?token= query-param auth using the
   // same SessionRepository + resolveAuthContextFromToken as the Bearer path.
+  // allowedOrigins drives the CSWSH gate on the cookie/browser WS path (#42):
+  // sourced from WEB_PUBLIC_ORIGIN (the same web-origin config used for social
+  // redirect URIs), with an optional comma-separated WS_ALLOWED_ORIGINS override
+  // for multi-origin deployments (e.g. staging + prod).
   await app.register(fastifyWebsocket);
-  await app.register(wsRoutes, { registry, db: database });
+  await app.register(wsRoutes, {
+    registry,
+    db: database,
+    allowedOrigins: resolveWsAllowedOrigins(),
+  });
 
   return app;
+}
+
+/**
+ * Build the WS Origin allowlist from environment configuration.
+ *
+ * Priority: an explicit comma-separated `WS_ALLOWED_ORIGINS` list wins; otherwise
+ * fall back to the single `WEB_PUBLIC_ORIGIN` (the app's canonical web origin).
+ * Returns an empty list when neither is set — the CSWSH gate then fails closed
+ * for browsers (no Origin is allowed → browsers poll), while non-browser
+ * (no-Origin) Bearer/?token= clients continue to work.
+ */
+export function resolveWsAllowedOrigins(
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
+  const explicit = env.WS_ALLOWED_ORIGINS;
+  if (explicit && explicit.trim() !== "") {
+    return explicit
+      .split(",")
+      .map((o) => o.trim())
+      .filter((o) => o !== "");
+  }
+  const webOrigin = env.WEB_PUBLIC_ORIGIN;
+  return webOrigin && webOrigin.trim() !== "" ? [webOrigin.trim()] : [];
 }
