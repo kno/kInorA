@@ -128,7 +128,7 @@ may ship as one PR; otherwise apply the chained slices above.
     - `plan_day_detail_close`: "Close" / "Cerrar"
   - Conventional commit: `feat(web): plan-week-view CSS module + i18n keys`
 
-- [ ] T4: Wire `PlanWeekView` into `/plan/page.tsx`  _(PR #2)_
+- [x] T4: Wire `PlanWeekView` into `/plan/page.tsx`  _(PR #2)_
   - File: `apps/web/src/app/(app)/plan/page.tsx`
   - In the `status === "ready"` branch, replace:
     ```tsx
@@ -143,7 +143,7 @@ may ship as one PR; otherwise apply the chained slices above.
     used for the failed branch — if so, keep the import)
   - Conventional commit: `feat(web): /plan page — use PlanWeekView for ready state`
 
-- [ ] T5: Extend page tests + verify 09b states  _(PR #2)_
+- [x] T5: Extend page tests + verify 09b states  _(PR #2)_
   - File: `apps/web/src/app/(app)/plan/__tests__/page.test.tsx` (extend existing)
   - Add test: ready plan renders `PlanWeekView` (assert by querying a summary-strip element
     or a day-card element); does NOT render the old "Your plan is ready" heading
