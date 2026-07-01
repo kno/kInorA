@@ -156,13 +156,43 @@ describe("EquipmentStep", () => {
       expect(img!.getAttribute("src")).toBe("/equipment/equip-mancuernas.webp");
     });
 
-    it("falls back to the OpenDesign dumbbell icon when a value has no photo", () => {
-      // "Pull-up bar" (home) has no mapped photo → no <img>, keeps the icon svg.
-      render(<EquipmentStep location="home" value={[]} onSelect={vi.fn()} />);
-      const pullUp = screen.getByRole("button", { name: /Pull-up bar/i });
-      expect(pullUp.querySelector("img")).toBeNull();
+    it.each([
+      ["Pull-up bar", "home", "/equipment/equip-dominadas.webp", /pull-up bar/i],
+      ["Kettlebell", "home", "/equipment/equip-kettlebell.webp", /kettlebell/i],
+      ["Bench", "home", "/equipment/equip-banco.webp", /bench/i],
+      ["Leg press", "gym", "/equipment/equip-prensa.webp", /leg press/i],
+      [
+        "Suspension trainer",
+        "outdoor",
+        "/equipment/equip-trx.webp",
+        /suspension trainer/i,
+      ],
+    ] as const)(
+      "renders the mapped photo for %s",
+      (label, location, src, altPattern) => {
+        render(
+          <EquipmentStep
+            location={location as "home" | "gym" | "outdoor"}
+            value={[]}
+            onSelect={vi.fn()}
+          />,
+        );
+        const card = screen.getByRole("button", { name: new RegExp(label, "i") });
+        const img = card.querySelector("img");
+        expect(img).not.toBeNull();
+        expect(img!.getAttribute("src")).toBe(src);
+        expect(img!.getAttribute("loading")).toBe("lazy");
+        expect(img!.getAttribute("alt")).toMatch(altPattern);
+      },
+    );
+
+    it("keeps smith_machine on the icon fallback (no mapped photo)", () => {
+      // design verified none of the source images depict a Smith machine.
+      render(<EquipmentStep location="gym" value={[]} onSelect={vi.fn()} />);
+      const smith = screen.getByRole("button", { name: /Smith machine/i });
+      expect(smith.querySelector("img")).toBeNull();
       // OrbitSelectableCard draws the check svg; the fallback icon adds another.
-      expect(pullUp.querySelectorAll("svg").length).toBeGreaterThan(1);
+      expect(smith.querySelectorAll("svg").length).toBeGreaterThan(1);
     });
 
     it("keeps the data model unchanged — a photo card still toggles its value", () => {
