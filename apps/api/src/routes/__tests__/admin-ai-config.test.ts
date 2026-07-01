@@ -30,11 +30,22 @@ const CONFIG_ROW = {
 
 // --- Mock DB builder ---
 //
-// The auth plugin's onRequest hook calls:
-//   db.select().from(sessions).where(...) → session row (first select)
+// The auth plugin's onRequest hook calls, in order:
+//   1. db.select().from(sessions).where(...)            → session row
+//   2. db.select().from(memberships).where(and(tenantId, userId)) → membership row
+//      (fail-secure, TENANT-SCOPED re-check that the user is still `active`)
 //
-// requireAdmin calls via UserRepository:
-//   db.select().from(users).where(eq(users.id, ...)) → user row (second select)
+// requireAdmin then calls via UserRepository:
+//   3. db.select().from(users).where(eq(users.id, ...)) → user row
+
+const ACTIVE_MEMBERSHIP_ROW = {
+  id: "membership-uuid-1",
+  tenantId: TENANT_ID,
+  userId: USER_ID,
+  role: "owner" as const,
+  status: "active" as const,
+  createdAt: new Date(),
+};
 
 function buildSelectChain(rows: unknown[][]) {
   let callCount = 0;
@@ -57,7 +68,8 @@ function buildMockDb(
   const userRows = userRow ? [userRow] : [];
 
   return {
-    select: buildSelectChain([sessionRows, userRows]),
+    // session → membership (active) → user
+    select: buildSelectChain([sessionRows, [ACTIVE_MEMBERSHIP_ROW], userRows]),
   };
 }
 

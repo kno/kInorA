@@ -40,16 +40,45 @@ function buildSessionRow(tenantId = TENANT_A, userId = USER_A) {
   };
 }
 
+// Explicit active-membership row for the tenant-scoped re-check
+// (MembershipRepository.findByTenantAndUser). Kept DISTINCT from the session row
+// so the membership query is represented as its own result, not blended.
+function buildActiveMembershipRow(tenantId = TENANT_A, userId = USER_A) {
+  return {
+    id: "membership-uuid-1",
+    tenantId,
+    userId,
+    role: "owner" as const,
+    status: "active" as const,
+    createdAt: new Date(),
+  };
+}
+
 /**
- * Build a mock DB that returns the given session row on EVERY select call.
- * Uses unlimited mockReturnValue so multiple select() calls (bearer + query param) work.
+ * Build a mock DB for the WS auth flow. Every authenticated WS request performs
+ * exactly two ordered selects — session lookup then tenant-scoped membership
+ * re-check — via either the Bearer onRequest hook or the ?token= preValidation
+ * path (never interleaved). The mock therefore alternates results pairwise:
+ * odd-indexed call (0,2,4,...) → session rows, even-indexed (1,3,5,...) →
+ * membership rows. Passing a null session yields the unauthenticated case.
  */
-function buildSessionDb(sessionRow?: unknown): Database {
-  const rows = sessionRow ? [sessionRow] : [];
-  const selectMock = vi.fn().mockReturnValue({
-    from: vi.fn().mockReturnValue({
-      where: vi.fn().mockResolvedValue(rows),
-    }),
+function buildSessionDb(
+  sessionRow?: unknown,
+  membershipRow: unknown = buildActiveMembershipRow()
+): Database {
+  const sessionRows = sessionRow ? [sessionRow] : [];
+  // Membership is only meaningful when there is a session to authenticate.
+  const membershipRows = sessionRow ? [membershipRow] : [];
+  let call = 0;
+  const selectMock = vi.fn().mockImplementation(() => {
+    const isSessionCall = call % 2 === 0;
+    call++;
+    const rows = isSessionCall ? sessionRows : membershipRows;
+    return {
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue(rows),
+      }),
+    };
   });
   return { select: selectMock } as unknown as Database;
 }
