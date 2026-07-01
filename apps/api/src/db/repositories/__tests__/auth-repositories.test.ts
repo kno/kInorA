@@ -11,6 +11,7 @@ import {
   type MembershipRecord,
   type TenantRecord,
 } from "../auth-context.js";
+import { selectChain } from "../../../test-support/auth-mocks.js";
 
 // --- Test fixtures ---
 
@@ -44,14 +45,8 @@ const tenant: TenantRecord = {
 };
 
 // --- Mock helpers ---
-
-function selectChain(rows: unknown[] = []) {
-  return {
-    from: vi.fn().mockReturnValue({
-      where: vi.fn().mockResolvedValue(rows),
-    }),
-  };
-}
+// selectChain (the low-level `select().from().where()` chain) is shared with the
+// auth suites via the test-support module.
 
 // --- CredentialsRepository ---
 
@@ -134,6 +129,33 @@ describe("MembershipRepository", () => {
     const result = await repo.findFirstByUserId("orphan");
 
     expect(result).toBeNull();
+  });
+
+  describe("findByTenantAndUser", () => {
+    it("returns the membership scoped to the (tenantId, userId) pair", async () => {
+      const mockSelect = vi.fn().mockReturnValue(selectChain([membership]));
+      const repo = new MembershipRepository({ select: mockSelect } as never);
+
+      const result = await repo.findByTenantAndUser(
+        "tenant-uuid-1",
+        "user-uuid-1"
+      );
+
+      expect(result).toEqual(membership);
+      expect(mockSelect).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns null when the user has no membership in that tenant", async () => {
+      const mockSelect = vi.fn().mockReturnValue(selectChain([]));
+      const repo = new MembershipRepository({ select: mockSelect } as never);
+
+      const result = await repo.findByTenantAndUser(
+        "tenant-other",
+        "user-uuid-1"
+      );
+
+      expect(result).toBeNull();
+    });
   });
 });
 

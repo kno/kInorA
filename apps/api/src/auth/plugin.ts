@@ -6,6 +6,7 @@ import type {
 } from "fastify";
 import type { Database } from "../db/client.js";
 import { SessionRepository } from "../db/repositories/session.js";
+import { MembershipRepository } from "../db/repositories/auth-context.js";
 import { computeTokenHash } from "./session.js";
 import { isValidTokenFormat, isSessionExpired } from "@kinora/domain";
 import type { SessionContext, UserId, TenantId, SessionId } from "@kinora/contracts";
@@ -21,19 +22,54 @@ import type { SessionContext, UserId, TenantId, SessionId } from "@kinora/contra
  * This is the ONLY place that performs session validation. Do NOT duplicate
  * this logic — always call this function.
  *
+ * Validation chain: format → hash → session lookup → expiry → (optional)
+ * membership status re-check.
+ *
+ * Membership re-check (fail-secure): when `membershipRepo` is provided, the
+ * caller's membership is re-read on every request and access is denied unless
+ * `status === "active"`. This closes the window where a user suspended AFTER
+ * their session was issued would otherwise keep access until token expiry.
+ *
+ * The re-check is TENANT-SCOPED: it looks up the membership by BOTH the
+ * session's `tenantId` and `userId` (the `(tenantId, userId)` unique index), so
+ * it validates the membership FOR THE TENANT THE SESSION IS SCOPED TO. A user
+ * can belong to multiple tenants with different statuses; a by-user-only lookup
+ * would nondeterministically read another tenant's `active` row and re-open the
+ * exact suspension bypass this guard closes.
+ *
+ * The check is fail-secure: a missing membership, any non-active status
+ * (invited/suspended), or a repository error (the rejected promise propagates
+ * to the caller, which denies) all result in no access. It is OPTIONAL so
+ * unauthenticated / public paths that only extract context can skip the query.
+ *
  * @param token  Raw token string (already stripped of "Bearer " prefix)
- * @param deps   Dependencies: SessionRepository for DB lookup
+ * @param deps   SessionRepository for lookup; optional MembershipRepository
+ *               to re-check that the tenant-scoped membership is still active.
  * @returns      Resolved SessionContext on success, null on any failure
  */
 export async function resolveAuthContextFromToken(
   token: string,
-  deps: { sessionRepo: Pick<SessionRepository, "findByTokenHash"> }
+  deps: {
+    sessionRepo: Pick<SessionRepository, "findByTokenHash">;
+    membershipRepo?: Pick<MembershipRepository, "findByTenantAndUser">;
+  }
 ): Promise<SessionContext | null> {
   if (!isValidTokenFormat(token)) return null;
 
   const tokenHash = computeTokenHash(token);
   const session = await deps.sessionRepo.findByTokenHash(tokenHash);
   if (!session || isSessionExpired(session.expiresAt)) return null;
+
+  // Fail-secure tenant-scoped membership re-check: deny if the membership for
+  // THIS session's tenant is gone or no longer active, regardless of how long
+  // the session token is still valid or of the user's status in other tenants.
+  if (deps.membershipRepo) {
+    const membership = await deps.membershipRepo.findByTenantAndUser(
+      session.tenantId,
+      session.userId
+    );
+    if (!membership || membership.status !== "active") return null;
+  }
 
   return {
     userId: session.userId as UserId,
@@ -62,7 +98,10 @@ const rawPlugin: FastifyPluginAsync<AuthPluginOptions> = async (
   options: AuthPluginOptions
 ) => {
   const sessionRepo = new SessionRepository(options.db);
-  const deps = { sessionRepo };
+  const membershipRepo = new MembershipRepository(options.db);
+  // membershipRepo is passed so every Bearer request re-checks that the
+  // membership is still active (fail-secure suspension enforcement).
+  const deps = { sessionRepo, membershipRepo };
 
   fastify.decorateRequest("authContext", null);
   fastify.decorateReply("authError", null);
@@ -108,9 +147,11 @@ export const authPlugin = rawPlugin;
 function sendUnauthorized(
   reply: FastifyReply,
   reason: string
-): void {
+): FastifyReply {
   reply.authError = reason;
-  reply.code(401).send({ error: "unauthorized" });
+  // Return the reply so callers can `return sendUnauthorized(...)` and Fastify
+  // treats the request as handled, guaranteeing the guard short-circuits.
+  return reply.code(401).send({ error: "unauthorized" });
 }
 
 /**
@@ -122,11 +163,15 @@ function sendUnauthorized(
  *
  * This is NOT a throw — it uses reply.send() so Fastify short-circuits
  * the request lifecycle cleanly and the onSend hook still fires.
+ *
+ * The guard RETURNS the sent reply so no statement after the unauthorized
+ * send can ever run on an already-sent reply. This removes the footgun where
+ * future code appended to this preHandler would execute post-send.
  */
 export function requireAuth() {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     if (!request.authContext) {
-      sendUnauthorized(reply, "missing_session");
+      return sendUnauthorized(reply, "missing_session");
     }
   };
 }
