@@ -187,4 +187,23 @@ describe("Langfuse observability", () => {
     await expect(adapter.generate(baseSpec)).rejects.toThrow("llm failed");
     expect(mockFlushAsync).toHaveBeenCalledTimes(1);
   });
+
+  it("preserves the original LLM error when Langfuse flush also fails", async () => {
+    mockInvoke.mockRejectedValueOnce(new Error("llm failed"));
+    mockFlushAsync.mockRejectedValueOnce(new Error("flush failed"));
+
+    const adapters = buildAdapters();
+    const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
+
+    await expect(adapter.generate(baseSpec)).rejects.toThrow("llm failed");
+  });
+
+  it("does not fail plan generation when only Langfuse flush fails", async () => {
+    mockFlushAsync.mockRejectedValueOnce(new Error("flush failed"));
+
+    const adapters = buildAdapters();
+    const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
+
+    await expect(adapter.generate(baseSpec)).resolves.toEqual(mockProgram);
+  });
 });
