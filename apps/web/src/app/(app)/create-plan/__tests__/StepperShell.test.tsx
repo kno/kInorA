@@ -41,16 +41,25 @@ describe("StepperShell", () => {
   });
 
   it("disables Continue until the current required step has a value", () => {
+    // The duration step (4) keeps the classic "select then Continue" flow
+    // because it also offers a custom input, so it is not an auto-advance step.
     render(
-      <StepperShell saveDraftAction={noopSave} confirmPlanSpecAction={noopConfirm} />,
+      <StepperShell
+        saveDraftAction={noopSave}
+        confirmPlanSpecAction={noopConfirm}
+        initialDraft={{
+          step: 4,
+          spec: { goal: "strength", location: "gym", daysPerWeek: 3 },
+        }}
+      />,
     );
     const cont = screen.getByRole("button", { name: /Continue/i }) as HTMLButtonElement;
     expect(cont.disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: /Strength/i }));
+    fireEvent.click(screen.getByRole("button", { name: /60 min/i }));
     expect(cont.disabled).toBe(false);
   });
 
-  it("advances to the next step and saves a draft on Continue", async () => {
+  it("advances to the next step and saves a draft when a single choice is made", async () => {
     const saveDraftAction =
       vi.fn<(step: number, spec: Partial<PlanSpec>) => Promise<void>>().mockResolvedValue(
         undefined,
@@ -61,13 +70,13 @@ describe("StepperShell", () => {
         confirmPlanSpecAction={noopConfirm}
       />,
     );
+    // Single-choice step: picking the goal advances without a Continue click.
     fireEvent.click(screen.getByRole("button", { name: /Strength/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Continue/i }));
 
     await waitFor(() => {
       expect(saveDraftAction).toHaveBeenCalledTimes(1);
     });
-    // After Continue we are on step 2 (location)
+    // We are now on step 2 (location)
     expect(screen.getByText("2 / 6")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Home/i })).toBeTruthy();
     // The draft submission carried step 2 and the chosen goal
@@ -248,5 +257,112 @@ describe("StepperShell", () => {
     expect(
       screen.getByRole("button", { name: /Strength/i }).getAttribute("aria-pressed"),
     ).toBe("false");
+  });
+
+  describe("auto-advance on single-choice steps", () => {
+    it("advances to the next step immediately after picking a goal (step 1)", async () => {
+      const saveDraftAction = vi.fn().mockResolvedValue(undefined);
+      render(
+        <StepperShell
+          saveDraftAction={saveDraftAction}
+          confirmPlanSpecAction={noopConfirm}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /Strength/i }));
+      // No explicit Continue click — selection alone advances to step 2.
+      await waitFor(() => expect(screen.getByText("2 / 6")).toBeTruthy());
+      expect(screen.getByRole("button", { name: /Home/i })).toBeTruthy();
+      const [step, spec] = saveDraftAction.mock.calls[0]!;
+      expect(step).toBe(2);
+      expect(spec.goal).toBe("strength");
+    });
+
+    it("advances after picking a location (step 2)", async () => {
+      const saveDraftAction = vi.fn().mockResolvedValue(undefined);
+      render(
+        <StepperShell
+          saveDraftAction={saveDraftAction}
+          confirmPlanSpecAction={noopConfirm}
+          initialDraft={{ step: 2, spec: { goal: "strength" } }}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /Gym/i }));
+      await waitFor(() => expect(screen.getByText("3 / 6")).toBeTruthy());
+    });
+
+    it("advances after picking a frequency (step 3)", async () => {
+      const saveDraftAction = vi.fn().mockResolvedValue(undefined);
+      render(
+        <StepperShell
+          saveDraftAction={saveDraftAction}
+          confirmPlanSpecAction={noopConfirm}
+          initialDraft={{ step: 3, spec: { goal: "strength", location: "gym" } }}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /4 days/i }));
+      await waitFor(() => expect(screen.getByText("4 / 6")).toBeTruthy());
+    });
+
+    it("does NOT auto-advance on the duration step (step 4 has a custom input)", async () => {
+      const saveDraftAction = vi.fn().mockResolvedValue(undefined);
+      render(
+        <StepperShell
+          saveDraftAction={saveDraftAction}
+          confirmPlanSpecAction={noopConfirm}
+          initialDraft={{
+            step: 4,
+            spec: { goal: "strength", location: "gym", daysPerWeek: 3 },
+          }}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /60 min/i }));
+      // Still on step 4 — the user confirms duration with Continue.
+      expect(screen.getByText("4 / 6")).toBeTruthy();
+      expect(saveDraftAction).not.toHaveBeenCalled();
+    });
+
+    it("does NOT auto-advance on the equipment step (step 5, multi-choice)", async () => {
+      const saveDraftAction = vi.fn().mockResolvedValue(undefined);
+      render(
+        <StepperShell
+          saveDraftAction={saveDraftAction}
+          confirmPlanSpecAction={noopConfirm}
+          initialDraft={{
+            step: 5,
+            spec: {
+              goal: "strength",
+              location: "gym",
+              daysPerWeek: 3,
+              sessionDurationMinutes: 60,
+              equipment: [],
+            },
+          }}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /Barbell/i }));
+      // Multi-choice: stay so the user can pick more before Continue.
+      expect(screen.getByText("5 / 6")).toBeTruthy();
+      expect(saveDraftAction).not.toHaveBeenCalled();
+    });
+
+    it("keeps a picked value selected after navigating Back to a single-choice step", async () => {
+      const saveDraftAction = vi.fn().mockResolvedValue(undefined);
+      render(
+        <StepperShell
+          saveDraftAction={saveDraftAction}
+          confirmPlanSpecAction={noopConfirm}
+          initialDraft={{ step: 2, spec: { goal: "strength" } }}
+        />,
+      );
+      // Pick a location → auto-advance to step 3.
+      fireEvent.click(screen.getByRole("button", { name: /Gym/i }));
+      await waitFor(() => expect(screen.getByText("3 / 6")).toBeTruthy());
+      // Back to step 2 → the earlier location is still selected.
+      fireEvent.click(screen.getByRole("button", { name: /Back/i }));
+      expect(screen.getByText("2 / 6")).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: /Gym/i }).getAttribute("aria-pressed"),
+      ).toBe("true");
+    });
   });
 });
