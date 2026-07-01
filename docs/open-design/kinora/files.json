@@ -467,6 +467,56 @@
       "kind": "image",
       "mime": "image/webp",
       "artifactManifest": null
+    },
+    {
+      "name": "assets/equip-dominadas.webp",
+      "path": "assets/equip-dominadas.webp",
+      "type": "file",
+      "size": 4372,
+      "mtime": 1782919477286.215,
+      "kind": "image",
+      "mime": "image/webp",
+      "artifactManifest": null
+    },
+    {
+      "name": "assets/equip-kettlebell.webp",
+      "path": "assets/equip-kettlebell.webp",
+      "type": "file",
+      "size": 7548,
+      "mtime": 1782919477316.7913,
+      "kind": "image",
+      "mime": "image/webp",
+      "artifactManifest": null
+    },
+    {
+      "name": "assets/equip-banco.webp",
+      "path": "assets/equip-banco.webp",
+      "type": "file",
+      "size": 7234,
+      "mtime": 1782919477347.3567,
+      "kind": "image",
+      "mime": "image/webp",
+      "artifactManifest": null
+    },
+    {
+      "name": "assets/equip-prensa.webp",
+      "path": "assets/equip-prensa.webp",
+      "type": "file",
+      "size": 12734,
+      "mtime": 1782919477507.8257,
+      "kind": "image",
+      "mime": "image/webp",
+      "artifactManifest": null
+    },
+    {
+      "name": "assets/equip-trx.webp",
+      "path": "assets/equip-trx.webp",
+      "type": "file",
+      "size": 8874,
+      "mtime": 1782919477663.5605,
+      "kind": "image",
+      "mime": "image/webp",
+      "artifactManifest": null
     }
   ]
 }
