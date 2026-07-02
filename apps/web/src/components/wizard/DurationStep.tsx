@@ -6,14 +6,22 @@ import { OrbitSelectableCard } from "@/components/orbit";
 import { DURATION_OPTIONS } from "./options";
 import styles from "./wizard.module.css";
 
+/** Where the committed duration came from — a preset card or the custom input. */
+export type DurationSource = "preset" | "custom";
+
 export interface DurationStepProps {
   value?: number;
-  onSelect: (sessionDurationMinutes: number) => void;
+  /**
+   * Commits a valid duration. `source` distinguishes a preset card click from
+   * a confirmed custom entry so the shell can auto-advance on either (typing
+   * never triggers this) while keeping a single commit path.
+   */
+  onSelect: (sessionDurationMinutes: number, source: DurationSource) => void;
   messages?: Record<string, string>;
 }
 
 /**
- * Step 4 — session duration in minutes.
+ * Step 5 — session duration in minutes.
  *
  * Offers the static {@link DURATION_OPTIONS} plus a numeric input for a custom
  * duration. Custom input is validated against the domain bounds
@@ -43,7 +51,7 @@ export function DurationStep({ value, onSelect, messages = {} }: DurationStepPro
       return;
     }
     setError(null);
-    onSelect(result.minutes);
+    onSelect(result.minutes, "custom");
   };
 
   return (
@@ -56,7 +64,7 @@ export function DurationStep({ value, onSelect, messages = {} }: DurationStepPro
             selected={value === minutes}
             onSelect={() => {
               setError(null);
-              onSelect(minutes);
+              onSelect(minutes, "preset");
             }}
           >
             {minutes <= 30

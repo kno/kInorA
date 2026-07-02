@@ -41,21 +41,22 @@ describe("StepperShell", () => {
   });
 
   it("disables Continue until the current required step has a value", () => {
-    // The duration step (4) keeps the classic "select then Continue" flow
-    // because it also offers a custom input, so it is not an auto-advance step.
+    // The equipment step (3) keeps the classic "select then Continue" flow
+    // because it is multi-choice, so it never auto-advances. Here we resume at
+    // step 3 with no equipment yet visited to observe Continue enabling.
     render(
       <StepperShell
         saveDraftAction={noopSave}
         confirmPlanSpecAction={noopConfirm}
         initialDraft={{
-          step: 4,
-          spec: { goal: "strength", location: "gym", daysPerWeek: 3 },
+          step: 3,
+          spec: { goal: "strength", location: "gym" },
         }}
       />,
     );
     const cont = screen.getByRole("button", { name: /Continue/i }) as HTMLButtonElement;
     expect(cont.disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: /60 min/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Barbell/i }));
     expect(cont.disabled).toBe(false);
   });
 
@@ -112,13 +113,13 @@ describe("StepperShell", () => {
         saveDraftAction={noopSave}
         confirmPlanSpecAction={noopConfirm}
         initialDraft={{
-          step: 3,
-          spec: { goal: "strength", location: "gym" },
+          step: 4,
+          spec: { goal: "strength", location: "gym", equipment: [] },
         }}
       />,
     );
-    expect(screen.getByText("3 / 6")).toBeTruthy();
-    // Step 3 is frequency
+    expect(screen.getByText("4 / 6")).toBeTruthy();
+    // Step 4 is frequency
     expect(screen.getByRole("button", { name: /3 days/i })).toBeTruthy();
   });
 
@@ -185,7 +186,7 @@ describe("StepperShell", () => {
     });
   });
 
-  it("renders the equipment step and defaults equipment to [] when entered", async () => {
+  it("renders the equipment step (step 3) and defaults equipment to [] when entered", async () => {
     const saveDraftAction =
       vi.fn<(step: number, spec: Partial<PlanSpec>) => Promise<void>>().mockResolvedValue(
         undefined,
@@ -195,19 +196,19 @@ describe("StepperShell", () => {
         saveDraftAction={saveDraftAction}
         confirmPlanSpecAction={noopConfirm}
         initialDraft={{
-          step: 4,
-          spec: { goal: "strength", location: "gym", daysPerWeek: 3 },
+          step: 2,
+          spec: { goal: "strength" },
         }}
       />,
     );
-    // step 4 (duration) → pick 60 → Continue lands on step 5 (equipment)
-    fireEvent.click(screen.getByRole("button", { name: /60 min/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Continue/i }));
-    await waitFor(() => expect(screen.getByText("5 / 6")).toBeTruthy());
+    // step 2 (location) → pick gym auto-advances to step 3 (equipment)
+    fireEvent.click(screen.getByRole("button", { name: /Gym/i }));
+    await waitFor(() => expect(screen.getByText("3 / 6")).toBeTruthy());
     // Equipment options for gym are shown
     expect(screen.getByRole("button", { name: /Barbell/i })).toBeTruthy();
-    // The draft submitted for step 5 carries an empty equipment array
-    const [, spec] = saveDraftAction.mock.calls[0]!;
+    // The draft submitted for step 3 carries an empty equipment array default
+    const [step, spec] = saveDraftAction.mock.calls[0]!;
+    expect(step).toBe(3);
     expect(spec.equipment).toEqual([]);
   });
 
@@ -290,20 +291,7 @@ describe("StepperShell", () => {
       await waitFor(() => expect(screen.getByText("3 / 6")).toBeTruthy());
     });
 
-    it("advances after picking a frequency (step 3)", async () => {
-      const saveDraftAction = vi.fn().mockResolvedValue(undefined);
-      render(
-        <StepperShell
-          saveDraftAction={saveDraftAction}
-          confirmPlanSpecAction={noopConfirm}
-          initialDraft={{ step: 3, spec: { goal: "strength", location: "gym" } }}
-        />,
-      );
-      fireEvent.click(screen.getByRole("button", { name: /4 days/i }));
-      await waitFor(() => expect(screen.getByText("4 / 6")).toBeTruthy());
-    });
-
-    it("does NOT auto-advance on the duration step (step 4 has a custom input)", async () => {
+    it("advances after picking a frequency (step 4)", async () => {
       const saveDraftAction = vi.fn().mockResolvedValue(undefined);
       render(
         <StepperShell
@@ -311,17 +299,15 @@ describe("StepperShell", () => {
           confirmPlanSpecAction={noopConfirm}
           initialDraft={{
             step: 4,
-            spec: { goal: "strength", location: "gym", daysPerWeek: 3 },
+            spec: { goal: "strength", location: "gym", equipment: [] },
           }}
         />,
       );
-      fireEvent.click(screen.getByRole("button", { name: /60 min/i }));
-      // Still on step 4 — the user confirms duration with Continue.
-      expect(screen.getByText("4 / 6")).toBeTruthy();
-      expect(saveDraftAction).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: /4 days/i }));
+      await waitFor(() => expect(screen.getByText("5 / 6")).toBeTruthy());
     });
 
-    it("does NOT auto-advance on the equipment step (step 5, multi-choice)", async () => {
+    it("auto-advances when a duration PRESET is picked (step 5)", async () => {
       const saveDraftAction = vi.fn().mockResolvedValue(undefined);
       render(
         <StepperShell
@@ -332,8 +318,86 @@ describe("StepperShell", () => {
             spec: {
               goal: "strength",
               location: "gym",
+              equipment: [],
               daysPerWeek: 3,
-              sessionDurationMinutes: 60,
+            },
+          }}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /60 min/i }));
+      // A preset click commits and advances to step 6 (limitations).
+      await waitFor(() => expect(screen.getByText("6 / 6")).toBeTruthy());
+      const [step, spec] = saveDraftAction.mock.calls[0]!;
+      expect(step).toBe(6);
+      expect(spec.sessionDurationMinutes).toBe(60);
+    });
+
+    it("auto-advances when a VALID custom duration is confirmed (step 5)", async () => {
+      const saveDraftAction = vi.fn().mockResolvedValue(undefined);
+      render(
+        <StepperShell
+          saveDraftAction={saveDraftAction}
+          confirmPlanSpecAction={noopConfirm}
+          initialDraft={{
+            step: 5,
+            spec: {
+              goal: "strength",
+              location: "gym",
+              equipment: [],
+              daysPerWeek: 3,
+            },
+          }}
+        />,
+      );
+      const input = screen.getByRole("spinbutton", { name: /custom duration/i });
+      // Typing alone must NOT advance.
+      fireEvent.change(input, { target: { value: "75" } });
+      expect(screen.getByText("5 / 6")).toBeTruthy();
+      expect(saveDraftAction).not.toHaveBeenCalled();
+      // Confirming the valid custom value commits and advances.
+      fireEvent.click(screen.getByRole("button", { name: /set duration/i }));
+      await waitFor(() => expect(screen.getByText("6 / 6")).toBeTruthy());
+      const [, spec] = saveDraftAction.mock.calls[0]!;
+      expect(spec.sessionDurationMinutes).toBe(75);
+    });
+
+    it("does NOT auto-advance on an INVALID custom duration (step 5)", async () => {
+      const saveDraftAction = vi.fn().mockResolvedValue(undefined);
+      render(
+        <StepperShell
+          saveDraftAction={saveDraftAction}
+          confirmPlanSpecAction={noopConfirm}
+          initialDraft={{
+            step: 5,
+            spec: {
+              goal: "strength",
+              location: "gym",
+              equipment: [],
+              daysPerWeek: 3,
+            },
+          }}
+        />,
+      );
+      const input = screen.getByRole("spinbutton", { name: /custom duration/i });
+      fireEvent.change(input, { target: { value: "0" } });
+      fireEvent.click(screen.getByRole("button", { name: /set duration/i }));
+      // Invalid: inline error, no commit, stay on step 5.
+      expect(screen.getByRole("alert")).toBeTruthy();
+      expect(screen.getByText("5 / 6")).toBeTruthy();
+      expect(saveDraftAction).not.toHaveBeenCalled();
+    });
+
+    it("does NOT auto-advance on the equipment step (step 3, multi-choice)", async () => {
+      const saveDraftAction = vi.fn().mockResolvedValue(undefined);
+      render(
+        <StepperShell
+          saveDraftAction={saveDraftAction}
+          confirmPlanSpecAction={noopConfirm}
+          initialDraft={{
+            step: 3,
+            spec: {
+              goal: "strength",
+              location: "gym",
               equipment: [],
             },
           }}
@@ -341,7 +405,7 @@ describe("StepperShell", () => {
       );
       fireEvent.click(screen.getByRole("button", { name: /Barbell/i }));
       // Multi-choice: stay so the user can pick more before Continue.
-      expect(screen.getByText("5 / 6")).toBeTruthy();
+      expect(screen.getByText("3 / 6")).toBeTruthy();
       expect(saveDraftAction).not.toHaveBeenCalled();
     });
 
