@@ -96,6 +96,25 @@ Implementation follows `openspec/specs/03-v1-quality-tdd/spec.md`.
 - Add a dependency only when it reduces long-term complexity more than it increases maintenance, bundle, security, or review cost.
 - Keep abstractions honest. Build the simplest thing that satisfies current specs; avoid speculative extension points.
 
+## Workspace package export conditions
+
+Workspace libraries (`packages/*`) that ship TypeScript source expose it through a custom `"source"` export condition so imports resolve consistently across every consumer. Follow this exact shape for each entry in `exports`:
+
+```jsonc
+"exports": {
+  ".": {
+    "source": "./src/index.ts",  // Vite/vitest ONLY (opt-in via resolve.conditions)
+    "types": "./src/index.ts",    // type-check needs no prebuilt dist
+    "default": "./dist/index.js"  // Turbopack (next dev) + production build
+  }
+}
+```
+
+- Use `"source"`, never `"development"`. Turbopack (`next dev`) activates `"development"` and would resolve the source barrel, whose NodeNext `.js` specifiers it cannot map back to `.ts` — breaking any client component that imports a runtime **value**. `"source"` is a custom condition only Vite/vitest opt into. It must be enabled once in the shared vitest config (`vitest.shared.ts`, exported as `resolveConfig` with `conditions: ["source"]`) and spread into every workspace vitest project's top-level `resolve` block — not configured per-app — so every workspace (api, web, contracts, domain) resolves `@kinora` packages to source in tests without a prebuilt dist. Turbopack and the production build fall through to `"default"` → prebuilt `dist`. Node-environment projects (e.g. `apps/api`) additionally need `ssrResolveConfig` spread into their top-level `ssr.resolve` block: Vite's SSR pipeline externalizes CJS-adjacent deps (e.g. langchain packages) through a separate resolver that does not inherit `resolve.conditions`, so any module importing a workspace package alongside one of those deps would otherwise fall back to `"default"` and fail with no dist built.
+- Keep condition order `source` → `types` → `default` (first match wins).
+- Because non-test consumers use `dist`, the E2E stack (`scripts/e2e-with-stack.mjs`) and CI must build workspace libs before running the api/web dev servers. Add any new source-exposing package to that build step.
+- A guard test asserts this shape (e.g. `packages/contracts/src/__tests__/exports-conditions.test.ts`). Mirror it for new packages.
+
 ## File and module discipline
 
 - One file should have one clear reason to change.
