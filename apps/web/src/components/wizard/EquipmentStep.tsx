@@ -12,6 +12,7 @@ export interface EquipmentStepProps {
   /** The location selected in the previous step — constrains the options. */
   location?: TrainingLocation;
   onSelect: (equipment: string[]) => void;
+  messages?: Record<string, string>;
 }
 
 /**
@@ -25,7 +26,13 @@ export interface EquipmentStepProps {
  * selection and the static option values/labels. An empty selection remains
  * valid (the step is complete once visited).
  */
-export function EquipmentStep({ value = [], location, onSelect }: EquipmentStepProps) {
+export function EquipmentStep({
+  value = [],
+  location,
+  onSelect,
+  messages = {},
+}: EquipmentStepProps) {
+  const t = (key: string, fallback: string): string => messages[key] ?? fallback;
   const options = equipmentForLocation(location);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -44,18 +51,23 @@ export function EquipmentStep({ value = [], location, onSelect }: EquipmentStepP
     [
       ...value,
       ...options.map((o) => o.value),
-      ...options.map((o) => o.label),
+      ...options.map((o) => t(o.labelKey, o.labelFallback)),
     ].map((v) => v.toLowerCase()),
   );
 
   const addCustom = () => {
     const text = draft.trim();
     if (text === "") {
-      setError("Enter an equipment name.");
+      setError(t("wizard_equipment_error_empty", "Enter an equipment name."));
       return;
     }
     if (reserved.has(text.toLowerCase())) {
-      setError("That equipment is already in your list.");
+      setError(
+        t(
+          "wizard_equipment_error_duplicate",
+          "That equipment is already in your list.",
+        ),
+      );
       return;
     }
     setError(null);
@@ -75,14 +87,14 @@ export function EquipmentStep({ value = [], location, onSelect }: EquipmentStepP
           return (
             <OrbitSelectableCard
               key={option.value}
-              label={option.label}
+              label={t(option.labelKey, option.labelFallback)}
               selected={value.includes(option.value)}
               onSelect={() => toggle(option.value)}
               icon={
                 photo ? (
                   <img
                     src={photo.src}
-                    alt={photo.alt}
+                    alt={t(photo.altKey, photo.altFallback)}
                     width={294}
                     height={294}
                     loading="lazy"
@@ -101,8 +113,8 @@ export function EquipmentStep({ value = [], location, onSelect }: EquipmentStepP
         <input
           type="text"
           className={styles.input}
-          aria-label="Add equipment"
-          placeholder="e.g. sled"
+          aria-label={t("wizard_equipment_add_aria", "Add equipment")}
+          placeholder={t("wizard_equipment_add_placeholder", "e.g. sled")}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -113,7 +125,7 @@ export function EquipmentStep({ value = [], location, onSelect }: EquipmentStepP
           }}
         />
         <button type="button" className={styles.addButton} onClick={addCustom}>
-          Add
+          {t("wizard_equipment_add_button", "Add")}
         </button>
       </div>
 
@@ -131,7 +143,10 @@ export function EquipmentStep({ value = [], location, onSelect }: EquipmentStepP
               <button
                 type="button"
                 className={styles.chipRemove}
-                aria-label={`Remove ${entry}`}
+                aria-label={t("wizard_chip_remove_aria", "Remove {name}").replace(
+                  "{name}",
+                  entry,
+                )}
                 onClick={() => onSelect(value.filter((v) => v !== entry))}
               >
                 ×
