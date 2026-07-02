@@ -8,20 +8,23 @@ import styles from "./wizard.module.css";
 export interface LocationStepProps {
   value?: TrainingLocation;
   onSelect: (location: TrainingLocation) => void;
+  messages?: Record<string, string>;
 }
 
 /** Step 2 — where the user trains. Drives the equipment options downstream. */
-export function LocationStep({ value, onSelect }: LocationStepProps) {
+export function LocationStep({ value, onSelect, messages = {} }: LocationStepProps) {
+  const t = (key: string, fallback: string): string => messages[key] ?? fallback;
+
   return (
     <div className={styles.grid}>
       {LOCATION_OPTIONS.map((option) => (
         <OrbitSelectableCard
           key={option.value}
-          label={option.label}
+          label={t(option.labelKey, option.labelFallback)}
           selected={value === option.value}
           onSelect={() => onSelect(option.value)}
         >
-          {option.description}
+          {t(option.descriptionKey, option.descriptionFallback)}
         </OrbitSelectableCard>
       ))}
     </div>
