@@ -261,5 +261,22 @@
   "wizard_limitations_add_placeholder": "p. ej. dolor de rodilla",
   "wizard_limitations_add_button": "Añadir",
 
-  "wizard_chip_remove_aria": "Eliminar {name}"
+  "wizard_chip_remove_aria": "Eliminar {name}",
+
+  "dashboard_title": "Panel",
+  "dashboard_authenticated": "Has iniciado sesión.",
+  "dashboard_logout": "Cerrar sesión",
+
+  "exercises_title": "Ejercicios",
+  "exercises_description": "Explora y busca en la biblioteca de ejercicios para tus entrenamientos.",
+
+  "stats_title": "Estadísticas",
+  "stats_description": "Sigue tu progreso y revisa tu historial de entrenamiento.",
+
+  "profile_title": "Perfil",
+  "profile_description": "Gestiona los ajustes y las preferencias de tu cuenta.",
+
+  "offline_title": "Estás sin conexión",
+  "offline_description": "Parece que en este momento no tienes conexión a internet. Comprueba tu conexión e inténtalo de nuevo.",
+  "offline_sync_note": "Tus datos se sincronizarán cuando vuelvas a tener conexión."
 }

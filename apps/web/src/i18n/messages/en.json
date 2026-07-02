@@ -261,5 +261,22 @@
   "wizard_limitations_add_placeholder": "e.g. knee pain",
   "wizard_limitations_add_button": "Add",
 
-  "wizard_chip_remove_aria": "Remove {name}"
+  "wizard_chip_remove_aria": "Remove {name}",
+
+  "dashboard_title": "Dashboard",
+  "dashboard_authenticated": "You are authenticated.",
+  "dashboard_logout": "Log out",
+
+  "exercises_title": "Exercises",
+  "exercises_description": "Browse and search the exercise library for your workouts.",
+
+  "stats_title": "Statistics",
+  "stats_description": "Track your progress and review your training history.",
+
+  "profile_title": "Profile",
+  "profile_description": "Manage your account settings and preferences.",
+
+  "offline_title": "You're Offline",
+  "offline_description": "It looks like you're currently disconnected from the internet. Please check your connection and try again.",
+  "offline_sync_note": "Your data will be synced once you're back online."
 }
