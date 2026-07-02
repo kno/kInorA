@@ -10,7 +10,11 @@ const loadCurrentDraft = vi.fn();
 
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({ get: cookieGet })),
+  headers: vi.fn(async () => ({ get: () => null })),
 }));
+
+/** Minimal searchParams stub — the page resolves i18n from `?lang=`. */
+const noSearchParams = Promise.resolve({});
 
 vi.mock("../actions", () => ({
   saveDraftAction: vi.fn(),
@@ -41,19 +45,24 @@ describe("CreatePlanPage", () => {
     cookieGet.mockReturnValue({ value: "tok-1" });
     loadCurrentDraft.mockResolvedValue({ step: 3, spec: { goal: "strength" } });
 
-    const page = (await CreatePlanPage()) as AnyElement;
+    const page = (await CreatePlanPage({
+      searchParams: noSearchParams,
+    })) as AnyElement;
 
     expect(loadCurrentDraft).toHaveBeenCalledWith("tok-1");
     expect(page.props.initialDraft).toEqual({ step: 3, spec: { goal: "strength" } });
     expect(page.props.saveDraftAction).toBeDefined();
     expect(page.props.confirmPlanSpecAction).toBeDefined();
+    expect(page.props.messages).toBeDefined();
   });
 
   it("starts the stepper with no draft when the API has none", async () => {
     cookieGet.mockReturnValue({ value: "tok-2" });
     loadCurrentDraft.mockResolvedValue(null);
 
-    const page = (await CreatePlanPage()) as AnyElement;
+    const page = (await CreatePlanPage({
+      searchParams: noSearchParams,
+    })) as AnyElement;
 
     expect(page.props.initialDraft).toBeUndefined();
   });
@@ -62,7 +71,7 @@ describe("CreatePlanPage", () => {
     cookieGet.mockReturnValue(undefined);
     loadCurrentDraft.mockResolvedValue(null);
 
-    await CreatePlanPage();
+    await CreatePlanPage({ searchParams: noSearchParams });
 
     expect(loadCurrentDraft).toHaveBeenCalledWith(undefined);
   });
