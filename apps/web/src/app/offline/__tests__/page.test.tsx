@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { headers } from "next/headers";
-import ExercisesPage from "../page";
+import OfflinePage from "../page";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
@@ -12,34 +12,39 @@ vi.mock("next/headers", () => ({
 
 const mockedHeaders = vi.mocked(headers);
 
-describe("ExercisesPage", () => {
+describe("OfflinePage", () => {
   beforeEach(() => {
     mockedHeaders.mockResolvedValue(new Headers({ "accept-language": "en-US,en;q=0.9" }));
   });
 
-  it("renders the exercises heading", async () => {
-    const page = await ExercisesPage({ searchParams: Promise.resolve({ lang: "en" }) });
-    expect(textOf(page)).toContain("Exercises");
+  it("renders the offline heading", async () => {
+    const page = await OfflinePage({ searchParams: Promise.resolve({ lang: "en" }) });
+    expect(textOf(page)).toContain("You're Offline");
   });
 
-  it("renders placeholder description text", async () => {
-    const page = await ExercisesPage({ searchParams: Promise.resolve({ lang: "en" }) });
-    expect(textOf(page)).toContain("exercise library");
+  it("renders the offline description and sync note", async () => {
+    const page = await OfflinePage({ searchParams: Promise.resolve({ lang: "en" }) });
+    const text = textOf(page);
+    expect(text).toContain("disconnected from the internet");
+    expect(text).toContain("synced once you're back online");
   });
 
-  it("renders inside a kin-page wrapper", async () => {
-    const page = await ExercisesPage({ searchParams: Promise.resolve({ lang: "en" }) });
-    const main = findFirst(page, (el) => el.type === "main");
-    expect(main).toBeDefined();
-    expect(main?.props?.className).toContain("kin-page");
+  it("renders inside a kin-offline wrapper", async () => {
+    const page = await OfflinePage({ searchParams: Promise.resolve({ lang: "en" }) });
+    const wrapper = findFirst(
+      page,
+      (el) => typeof el.props.className === "string" && el.props.className.includes("kin-offline"),
+    );
+    expect(wrapper).toBeDefined();
   });
 
   it("renders Spanish copy from the i18n catalog when lang=es", async () => {
-    const page = await ExercisesPage({ searchParams: Promise.resolve({ lang: "es" }) });
+    const page = await OfflinePage({ searchParams: Promise.resolve({ lang: "es" }) });
     const text = textOf(page);
 
-    expect(text).toContain("Ejercicios");
-    expect(text).toContain("biblioteca de ejercicios");
+    expect(text).toContain("Estás sin conexión");
+    expect(text).toContain("conexión a internet");
+    expect(text).toContain("se sincronizarán");
   });
 });
 
