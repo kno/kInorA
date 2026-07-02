@@ -16,7 +16,7 @@ export interface EquipmentStepProps {
 }
 
 /**
- * Step 5 — available equipment. Multi-select, filtered by the chosen location,
+ * Step 3 — available equipment. Multi-select, filtered by the chosen location,
  * plus free-text entries for gear that isn't in the static catalogue.
  *
  * Static options and manual entries share the one `string[]` the PlanSpec
@@ -84,14 +84,17 @@ export function EquipmentStep({
       <div className={styles.grid}>
         {options.map((option) => {
           const photo = equipmentPhotoForValue(option.value);
-          return (
-            <OrbitSelectableCard
-              key={option.value}
-              label={t(option.labelKey, option.labelFallback)}
-              selected={value.includes(option.value)}
-              onSelect={() => toggle(option.value)}
-              icon={
-                photo ? (
+          // Photo-backed cards use the full-bleed media variant (image fills
+          // the card, label overprinted, no checkmark — selection is the accent
+          // border). Values without a photo keep the classic icon-box card.
+          if (photo) {
+            return (
+              <OrbitSelectableCard
+                key={option.value}
+                label={t(option.labelKey, option.labelFallback)}
+                selected={value.includes(option.value)}
+                onSelect={() => toggle(option.value)}
+                mediaBackground={
                   <img
                     src={photo.src}
                     alt={t(photo.altKey, photo.altFallback)}
@@ -100,10 +103,17 @@ export function EquipmentStep({
                     loading="lazy"
                     className={styles.optionPhoto}
                   />
-                ) : (
-                  <KinIcon name="dumbbell" size={22} />
-                )
-              }
+                }
+              />
+            );
+          }
+          return (
+            <OrbitSelectableCard
+              key={option.value}
+              label={t(option.labelKey, option.labelFallback)}
+              selected={value.includes(option.value)}
+              onSelect={() => toggle(option.value)}
+              icon={<KinIcon name="dumbbell" size={22} />}
             />
           );
         })}
