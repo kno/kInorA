@@ -96,6 +96,25 @@ Implementation follows `openspec/specs/03-v1-quality-tdd/spec.md`.
 - Add a dependency only when it reduces long-term complexity more than it increases maintenance, bundle, security, or review cost.
 - Keep abstractions honest. Build the simplest thing that satisfies current specs; avoid speculative extension points.
 
+## Workspace package export conditions
+
+Workspace libraries (`packages/*`) that ship TypeScript source expose it through a custom `"source"` export condition so imports resolve consistently across every consumer. Follow this exact shape for each entry in `exports`:
+
+```jsonc
+"exports": {
+  ".": {
+    "source": "./src/index.ts",  // Vite/vitest ONLY (opt-in via resolve.conditions)
+    "types": "./src/index.ts",    // type-check needs no prebuilt dist
+    "default": "./dist/index.js"  // Turbopack (next dev) + production build
+  }
+}
+```
+
+- Use `"source"`, never `"development"`. Turbopack (`next dev`) activates `"development"` and would resolve the source barrel, whose NodeNext `.js` specifiers it cannot map back to `.ts` — breaking any client component that imports a runtime **value**. `"source"` is a custom condition only Vite/vitest opt into via `resolve.conditions: ["source"]` in `apps/web/vitest.config.ts`; Turbopack and the production build fall through to `"default"` → prebuilt `dist`.
+- Keep condition order `source` → `types` → `default` (first match wins).
+- Because non-test consumers use `dist`, the E2E stack (`scripts/e2e-with-stack.mjs`) and CI must build workspace libs before running the api/web dev servers. Add any new source-exposing package to that build step.
+- A guard test asserts this shape (e.g. `packages/contracts/src/__tests__/exports-conditions.test.ts`). Mirror it for new packages.
+
 ## File and module discipline
 
 - One file should have one clear reason to change.
