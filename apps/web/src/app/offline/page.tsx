@@ -14,9 +14,9 @@ import { getFirstParam, resolvePageI18n } from "@/i18n/request";
 export default async function OfflinePage({
   searchParams,
 }: {
-  searchParams?: Promise<{ lang?: string | string[] }>;
-} = {}) {
-  const params = (await searchParams) ?? {};
+  searchParams: Promise<{ lang?: string | string[] }>;
+}) {
+  const params = await searchParams;
   const { messages } = await resolvePageI18n(getFirstParam(params.lang));
 
   return (
