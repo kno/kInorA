@@ -1,26 +1,45 @@
 import type { ReactElement, ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { headers } from "next/headers";
 import StatsPage from "../page";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
 
+vi.mock("next/headers", () => ({
+  headers: vi.fn(),
+}));
+
+const mockedHeaders = vi.mocked(headers);
+
 describe("StatsPage", () => {
+  beforeEach(() => {
+    mockedHeaders.mockResolvedValue(new Headers({ "accept-language": "en-US,en;q=0.9" }));
+  });
+
   it("renders the statistics heading", async () => {
-    const page = await StatsPage();
+    const page = await StatsPage({ searchParams: Promise.resolve({ lang: "en" }) });
     expect(textOf(page)).toContain("Statistics");
   });
 
   it("renders placeholder description text", async () => {
-    const page = await StatsPage();
+    const page = await StatsPage({ searchParams: Promise.resolve({ lang: "en" }) });
     expect(textOf(page)).toContain("progress");
   });
 
   it("renders inside a kin-page wrapper", async () => {
-    const page = await StatsPage();
+    const page = await StatsPage({ searchParams: Promise.resolve({ lang: "en" }) });
     const main = findFirst(page, (el) => el.type === "main");
     expect(main).toBeDefined();
     expect(main?.props?.className).toContain("kin-page");
+  });
+
+  it("renders Spanish copy from the i18n catalog when lang=es", async () => {
+    const page = await StatsPage({ searchParams: Promise.resolve({ lang: "es" }) });
+    const text = textOf(page);
+
+    expect(text).toContain("Estadísticas");
+    expect(text).toContain("progreso");
   });
 });
 
