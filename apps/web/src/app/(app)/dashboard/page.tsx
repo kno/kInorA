@@ -17,9 +17,9 @@ import { logoutAction } from "./actions";
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ lang?: string | string[] }>;
-} = {}) {
-  const params = (await searchParams) ?? {};
+  searchParams: Promise<{ lang?: string | string[] }>;
+}) {
+  const params = await searchParams;
   const { messages } = await resolvePageI18n(getFirstParam(params.lang));
 
   return (
