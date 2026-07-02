@@ -40,18 +40,17 @@ async function registerFreshUser(page: Page) {
 }
 
 /**
- * Click a single-choice option card. For steps 1-3 (goal / location /
- * frequency) the wizard auto-advances on selection (issue #52), so no
- * explicit Continue click is needed or wanted.
+ * Click a single-choice option card. Goal (1), location (2), frequency (4)
+ * and a duration PRESET (5) all auto-advance on selection (issues #52/#53),
+ * so no explicit Continue click is needed or wanted.
  */
 async function chooseAutoAdvance(page: Page, optionName: RegExp) {
   await page.getByRole("button", { name: optionName }).first().click();
 }
 
 /**
- * Click a selectable option card and then click Continue. Used for steps
- * that require an explicit Continue after selection (duration step 4, and
- * the multi-select equipment step 5 after picking options).
+ * Click a selectable option card and then click Continue. Used for the
+ * multi-select equipment step (3), which never auto-advances.
  */
 async function chooseAndContinue(page: Page, optionName: RegExp) {
   await page.getByRole("button", { name: optionName }).first().click();
@@ -74,32 +73,33 @@ test.describe("Create-plan wizard (07)", () => {
     await expect(page.getByText("2 / 6")).toBeVisible();
     await chooseAutoAdvance(page, /Gym/i);
 
-    // Step 3 — frequency (auto-advances on selection). Exit mid-flow AFTER
-    // this step is saved to prove the server draft resumes at the right place.
+    // Step 3 — equipment (multi-select; needs an explicit Continue). Selecting
+    // by ACCESSIBLE NAME works even though the label is overprinted on the
+    // full-bleed photo, because it is real, visible text.
     await expect(page.getByText("3 / 6")).toBeVisible();
+    await chooseAndContinue(page, /Barbell/i);
+
+    // Step 4 — frequency (auto-advances on selection). Exit mid-flow AFTER
+    // this step is saved to prove the server draft resumes at the right place.
+    await expect(page.getByText("4 / 6")).toBeVisible();
     await chooseAutoAdvance(page, /3 days/i);
 
-    // Now on step 4 (duration). Navigate away (exit the wizard).
-    await expect(page.getByText("4 / 6")).toBeVisible();
+    // Now on step 5 (duration). Navigate away (exit the wizard).
+    await expect(page.getByText("5 / 6")).toBeVisible();
     await page.goto("/dashboard");
 
-    // Re-enter — the wizard resumes from the server-persisted draft at step 4
+    // Re-enter — the wizard resumes from the server-persisted draft at step 5
     // with the prior answers intact.
     await page.goto("/create-plan");
-    await expect(page.getByText("4 / 6")).toBeVisible();
-    // Going back shows the previously chosen gym selection still pressed.
-    await page.getByRole("button", { name: /Back/i }).click();
-    await expect(page.getByText("3 / 6")).toBeVisible();
-    await page.getByRole("button", { name: /Continue/i }).click();
-
-    // Step 4 — duration
-    await expect(page.getByText("4 / 6")).toBeVisible();
-    await chooseAndContinue(page, /60 min/i);
-
-    // Step 5 — equipment (empty selection is valid)
     await expect(page.getByText("5 / 6")).toBeVisible();
-    await page.getByRole("button", { name: /Barbell/i }).click();
-    await page.getByRole("button", { name: /Continue/i }).click();
+    // Going back to frequency shows the previously chosen 3-days still pressed.
+    await page.getByRole("button", { name: /Back/i }).click();
+    await expect(page.getByText("4 / 6")).toBeVisible();
+    await chooseAutoAdvance(page, /3 days/i);
+
+    // Step 5 — duration. A PRESET click now auto-advances (no Continue).
+    await expect(page.getByText("5 / 6")).toBeVisible();
+    await chooseAutoAdvance(page, /60 min/i);
 
     // Step 6 — limitations (empty list valid) → Finish
     await expect(page.getByText("6 / 6")).toBeVisible();

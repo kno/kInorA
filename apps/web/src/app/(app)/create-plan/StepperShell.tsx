@@ -42,9 +42,9 @@ export interface StepperShellProps {
 const STEP_QUESTIONS: readonly { key: string; fallback: string }[] = [
   { key: "wizard_step_goal_title", fallback: "What is your main goal?" },
   { key: "wizard_step_location_title", fallback: "Where will you train?" },
+  { key: "wizard_step_equipment_title", fallback: "What equipment do you have?" },
   { key: "wizard_step_frequency_title", fallback: "How many days per week?" },
   { key: "wizard_step_duration_title", fallback: "How long is each session?" },
-  { key: "wizard_step_equipment_title", fallback: "What equipment do you have?" },
   {
     key: "wizard_step_limitations_title",
     fallback: "Any limitations to keep in mind?",
@@ -84,11 +84,11 @@ export function StepperShell({
       case 2:
         return spec.location != null;
       case 3:
-        return spec.daysPerWeek != null;
-      case 4:
-        return spec.sessionDurationMinutes != null;
-      case 5:
         return spec.equipment != null; // empty array is valid once visited
+      case 4:
+        return spec.daysPerWeek != null;
+      case 5:
+        return spec.sessionDurationMinutes != null;
       case 6:
         return spec.limitations != null; // empty array is valid once visited
       default:
@@ -115,7 +115,7 @@ export function StepperShell({
     // On entering the equipment/limitations steps, treat them as visited with
     // an empty default so "skip with empty" resolves to a valid array.
     const patched: Partial<PlanSpec> = { ...currentSpec };
-    if (nextStep === 5 && patched.equipment == null) patched.equipment = [];
+    if (nextStep === 3 && patched.equipment == null) patched.equipment = [];
     if (nextStep === 6 && patched.limitations == null) patched.limitations = [];
     setSpec(patched);
     setBusy(true);
@@ -131,9 +131,10 @@ export function StepperShell({
 
   /**
    * Steps that accept exactly one value auto-advance on selection (issue #52).
-   * The duration step (4) is excluded because it also offers a custom numeric
-   * input; auto-advancing there would fight the user typing. Multi-choice
-   * steps (equipment 5, limitations 6) never auto-advance.
+   * Goal (1), location (2) and frequency (4) auto-advance. The duration step
+   * (5) auto-advances only for preset cards and valid custom confirms — typing
+   * never advances. Multi-choice steps (equipment 3, limitations 6) never
+   * auto-advance.
    */
   const selectAndAdvance = (patch: Partial<PlanSpec>) => {
     void advance({ ...spec, ...patch });
@@ -185,28 +186,33 @@ export function StepperShell({
         );
       case 3:
         return (
+          <EquipmentStep
+            value={spec.equipment ?? []}
+            location={spec.location}
+            onSelect={(equipment: string[]) => update({ equipment })}
+            messages={messages}
+          />
+        );
+      case 4:
+        return (
           <FrequencyStep
             value={spec.daysPerWeek}
             onSelect={(daysPerWeek: number) => selectAndAdvance({ daysPerWeek })}
             messages={messages}
           />
         );
-      case 4:
+      case 5:
         return (
           <DurationStep
             value={spec.sessionDurationMinutes}
-            onSelect={(sessionDurationMinutes: number) =>
-              update({ sessionDurationMinutes })
-            }
-            messages={messages}
-          />
-        );
-      case 5:
-        return (
-          <EquipmentStep
-            value={spec.equipment ?? []}
-            location={spec.location}
-            onSelect={(equipment: string[]) => update({ equipment })}
+            onSelect={(sessionDurationMinutes: number, source) => {
+              if (source === "preset" || source === "custom") {
+                // A preset click or a valid custom confirm commits and advances.
+                selectAndAdvance({ sessionDurationMinutes });
+              } else {
+                update({ sessionDurationMinutes });
+              }
+            }}
             messages={messages}
           />
         );

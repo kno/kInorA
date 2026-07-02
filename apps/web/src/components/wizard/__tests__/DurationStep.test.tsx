@@ -20,11 +20,12 @@ describe("DurationStep", () => {
     expect(screen.getByRole("button", { name: /15 min/i })).toBeTruthy();
   });
 
-  it("calls onSelect with the duration in minutes", () => {
+  it("calls onSelect with the duration and a preset source on preset click", () => {
     const onSelect = vi.fn();
     render(<DurationStep onSelect={onSelect} />);
     fireEvent.click(screen.getByRole("button", { name: /45 min/i }));
-    expect(onSelect).toHaveBeenCalledWith(45);
+    // A preset click commits with source "preset" so the shell auto-advances.
+    expect(onSelect).toHaveBeenCalledWith(45, "preset");
   });
 
   it("reflects the pre-selected duration", () => {
@@ -42,13 +43,24 @@ describe("DurationStep", () => {
       expect(input.getAttribute("type")).toBe("number");
     });
 
-    it("calls onSelect with a valid typed duration on Set", () => {
+    it("calls onSelect with a valid typed duration and a custom source on Set", () => {
       const onSelect = vi.fn();
       render(<DurationStep onSelect={onSelect} />);
       const input = screen.getByRole("spinbutton", { name: /custom duration/i });
       fireEvent.change(input, { target: { value: "75" } });
       fireEvent.click(screen.getByRole("button", { name: /set duration/i }));
-      expect(onSelect).toHaveBeenCalledWith(75);
+      expect(onSelect).toHaveBeenCalledWith(75, "custom");
+    });
+
+    it("does NOT commit while typing — only on the Set confirm", () => {
+      const onSelect = vi.fn();
+      render(<DurationStep onSelect={onSelect} />);
+      const input = screen.getByRole("spinbutton", { name: /custom duration/i });
+      // Typing a valid number must not commit/advance until confirmed.
+      fireEvent.change(input, { target: { value: "75" } });
+      expect(onSelect).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: /set duration/i }));
+      expect(onSelect).toHaveBeenCalledWith(75, "custom");
     });
 
     it("submits the typed duration on Enter", () => {
@@ -57,7 +69,7 @@ describe("DurationStep", () => {
       const input = screen.getByRole("spinbutton", { name: /custom duration/i });
       fireEvent.change(input, { target: { value: "50" } });
       fireEvent.keyDown(input, { key: "Enter" });
-      expect(onSelect).toHaveBeenCalledWith(50);
+      expect(onSelect).toHaveBeenCalledWith(50, "custom");
     });
 
     it("rejects an empty custom value", () => {
@@ -107,7 +119,7 @@ describe("DurationStep", () => {
       expect(screen.getByRole("alert")).toBeTruthy();
       fireEvent.change(input, { target: { value: "40" } });
       fireEvent.click(screen.getByRole("button", { name: /set duration/i }));
-      expect(onSelect).toHaveBeenCalledWith(40);
+      expect(onSelect).toHaveBeenCalledWith(40, "custom");
       expect(screen.queryByRole("alert")).toBeNull();
     });
 
