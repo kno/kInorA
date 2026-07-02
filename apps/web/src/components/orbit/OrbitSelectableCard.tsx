@@ -18,6 +18,16 @@ export interface OrbitSelectableCardProps {
   disabled?: boolean;
   /** Style hook. */
   className?: string;
+  /**
+   * Opt-in full-bleed media treatment. When provided, the node (typically an
+   * `<img>`) fills the entire card as its background and the label is
+   * overprinted on a legibility scrim. The icon box and description are not
+   * rendered in this variant; selection is conveyed by the accent border and
+   * `aria-pressed` only. Used by the equipment step.
+   */
+  mediaBackground?: React.ReactNode;
+  /** Hides the check indicator (implied by, and default for, the media variant). */
+  hideCheck?: boolean;
 }
 
 /**
@@ -35,9 +45,17 @@ export function OrbitSelectableCard({
   onSelect,
   disabled = false,
   className,
+  mediaBackground,
+  hideCheck,
 }: OrbitSelectableCardProps) {
+  const isMedia = mediaBackground != null;
+  // The check is hidden explicitly, or implicitly whenever the media variant
+  // is active (selection there is conveyed by the accent border alone).
+  const showCheck = !(hideCheck ?? isMedia);
+
   const classes = [
     styles.card,
+    isMedia ? styles.media : "",
     selected ? styles.selected : "",
     disabled ? styles.disabled : "",
     className,
@@ -50,6 +68,33 @@ export function OrbitSelectableCard({
     onSelect?.();
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      activate();
+    }
+  };
+
+  if (isMedia) {
+    return (
+      <div
+        className={classes}
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        aria-pressed={selected}
+        aria-disabled={disabled}
+        onClick={activate}
+        onKeyDown={handleKeyDown}
+      >
+        <span className={styles.mediaFill} aria-hidden="true">
+          {mediaBackground}
+        </span>
+        <span className={styles.mediaScrim} aria-hidden="true" />
+        <span className={styles.mediaLabel}>{label}</span>
+      </div>
+    );
+  }
+
   return (
     <div
       className={classes}
@@ -58,21 +103,18 @@ export function OrbitSelectableCard({
       aria-pressed={selected}
       aria-disabled={disabled}
       onClick={activate}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          activate();
-        }
-      }}
+      onKeyDown={handleKeyDown}
     >
       {icon && <span className={styles.icon}>{icon}</span>}
       <span className={styles.name}>{label}</span>
       {children && <span className={styles.desc}>{children}</span>}
-      <span className={styles.check} aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M5 13l4 4L19 7" />
-        </svg>
-      </span>
+      {showCheck && (
+        <span className={styles.check} aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 13l4 4L19 7" />
+          </svg>
+        </span>
+      )}
     </div>
   );
 }
