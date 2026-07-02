@@ -1,18 +1,15 @@
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
-import { coverageConfig, testConfig } from "../../vitest.shared";
+import { coverageConfig, resolveConfig, testConfig } from "../../vitest.shared";
 
 export default defineConfig({
   esbuild: {
     jsx: "automatic",
   },
   resolve: {
-    // The "source" condition lets Vite/vitest resolve @kinora workspace
-    // packages to their TypeScript source (via the "source" export condition)
-    // without requiring a pre-built dist. Vite handles .js→.ts extension
-    // aliasing natively; Turbopack (next dev) does not recognise "source" and
-    // correctly falls through to the "default" dist entry instead.
-    conditions: ["source"],
+    // "source" condition resolution comes from the shared resolveConfig —
+    // see vitest.shared.ts for the full explanation.
+    ...resolveConfig,
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
       // server-only always throws at runtime — stub it out in the test
