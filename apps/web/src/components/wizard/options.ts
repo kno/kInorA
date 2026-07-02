@@ -254,9 +254,11 @@ export const EQUIPMENT_PHOTO_BY_VALUE: Readonly<Record<string, EquipmentPhoto>> 
     altKey: "wizard_equipment_suspension_trainer_alt",
     altFallback: "Suspension trainer straps",
   },
-  // smith_machine has NO photo: design verified none of the source images
-  // depicts a Smith machine (equip-maquinas is a cable machine, used above).
-  // It falls back to the dumbbell icon.
+  smith_machine: {
+    src: "/equipment/equip-gimnasio.webp",
+    altKey: "wizard_equipment_smith_machine_alt",
+    altFallback: "A Smith machine with guided barbell rails",
+  },
 };
 
 export function equipmentPhotoForValue(value: string): EquipmentPhoto | undefined {
