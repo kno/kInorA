@@ -69,4 +69,57 @@ describe("OrbitSelectableCard", () => {
     fireEvent.click(card);
     expect(onSelect).not.toHaveBeenCalled();
   });
+
+  it("renders the check indicator on a default (non-media) card", () => {
+    render(<OrbitSelectableCard label="Default" selected />);
+    const card = screen.getByRole("button", { name: /Default/ });
+    // The check glyph path is present on the default treatment.
+    expect(card.querySelector('path[d="M5 13l4 4L19 7"]')).not.toBeNull();
+  });
+
+  describe("media variant", () => {
+    it("renders the media background and hides the checkmark", () => {
+      render(
+        <OrbitSelectableCard
+          label="Barbell"
+          mediaBackground={<img src="/x.webp" alt="a barbell" />}
+        />,
+      );
+      const card = screen.getByRole("button", { name: /Barbell/ });
+      // The media node is rendered.
+      const img = card.querySelector("img");
+      expect(img).not.toBeNull();
+      expect(img!.getAttribute("src")).toBe("/x.webp");
+      // No checkmark in the media variant.
+      expect(card.querySelector('path[d="M5 13l4 4L19 7"]')).toBeNull();
+    });
+
+    it("keeps role=button, aria-pressed and an accessible name in media mode", () => {
+      render(
+        <OrbitSelectableCard
+          label="Kettlebell"
+          selected
+          mediaBackground={<img src="/k.webp" alt="a kettlebell" />}
+        />,
+      );
+      // Accessible name resolves from the overprinted, real label text.
+      const card = screen.getByRole("button", { name: "Kettlebell" });
+      expect(card.getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("activates via click and keyboard in media mode", () => {
+      const onSelect = vi.fn();
+      render(
+        <OrbitSelectableCard
+          label="Bench"
+          onSelect={onSelect}
+          mediaBackground={<img src="/b.webp" alt="a bench" />}
+        />,
+      );
+      const card = screen.getByRole("button", { name: /Bench/ });
+      fireEvent.click(card);
+      fireEvent.keyDown(card, { key: "Enter" });
+      expect(onSelect).toHaveBeenCalledTimes(2);
+    });
+  });
 });

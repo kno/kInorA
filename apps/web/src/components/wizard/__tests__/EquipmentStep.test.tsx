@@ -186,13 +186,14 @@ describe("EquipmentStep", () => {
       },
     );
 
-    it("keeps smith_machine on the icon fallback (no mapped photo)", () => {
-      // design verified none of the source images depict a Smith machine.
+    it("maps smith_machine to the gym (Smith machine) photo", () => {
       render(<EquipmentStep location="gym" value={[]} onSelect={vi.fn()} />);
       const smith = screen.getByRole("button", { name: /Smith machine/i });
-      expect(smith.querySelector("img")).toBeNull();
-      // OrbitSelectableCard draws the check svg; the fallback icon adds another.
-      expect(smith.querySelectorAll("svg").length).toBeGreaterThan(1);
+      const img = smith.querySelector("img");
+      expect(img).not.toBeNull();
+      expect(img!.getAttribute("src")).toBe("/equipment/equip-gimnasio.webp");
+      expect(img!.getAttribute("loading")).toBe("lazy");
+      expect(img!.getAttribute("alt")).toMatch(/smith machine/i);
     });
 
     it("keeps the data model unchanged — a photo card still toggles its value", () => {
@@ -200,6 +201,32 @@ describe("EquipmentStep", () => {
       render(<EquipmentStep location="gym" value={[]} onSelect={onSelect} />);
       fireEvent.click(screen.getByRole("button", { name: /Barbell/i }));
       expect(onSelect).toHaveBeenCalledWith(["barbell"]);
+    });
+
+    it("uses the full-bleed media treatment: no checkmark on a photo card", () => {
+      // The media card omits the check indicator; its only SVG-free content is
+      // the image + the overprinted label. The check <path d="M5 13l4 4L19 7">
+      // must NOT be present.
+      render(<EquipmentStep location="gym" value={["barbell"]} onSelect={vi.fn()} />);
+      const barbell = screen.getByRole("button", { name: /Barbell/i });
+      expect(barbell.querySelector("img")).not.toBeNull();
+      expect(barbell.querySelector('path[d="M5 13l4 4L19 7"]')).toBeNull();
+    });
+
+    it("conveys selection via aria-pressed (not a checkmark) on a photo card", () => {
+      render(<EquipmentStep location="gym" value={["barbell"]} onSelect={vi.fn()} />);
+      const barbell = screen.getByRole("button", { name: /Barbell/i });
+      expect(barbell.getAttribute("aria-pressed")).toBe("true");
+      const dumbbells = screen.getByRole("button", { name: /Dumbbells/i });
+      expect(dumbbells.getAttribute("aria-pressed")).toBe("false");
+    });
+
+    it("exposes an accessible name equal to the equipment label", () => {
+      render(<EquipmentStep location="gym" value={[]} onSelect={vi.fn()} />);
+      // getByRole by name resolves only because the overprinted label is real,
+      // visible text — screen readers read it as the button's name.
+      expect(screen.getByRole("button", { name: "Barbell" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Smith machine" })).toBeTruthy();
     });
   });
 });
