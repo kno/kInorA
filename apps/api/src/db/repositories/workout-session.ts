@@ -50,6 +50,14 @@ interface SetRecordRow {
 
 type StartTx = Pick<Database, "insert">;
 
+export interface UpdateSetRecordInput {
+  actualReps?: number;
+  weightKg?: number;
+  rpe?: number;
+  completed: boolean;
+  notes?: string;
+}
+
 export class WorkoutSessionRepository {
   constructor(private db: Database) {}
 
@@ -127,6 +135,67 @@ export class WorkoutSessionRepository {
             .where(inArray(setRecords.sessionExerciseId, exerciseIds))) as SetRecordRow[]);
 
     return mapWorkoutSessionRecord(sessionRow, exerciseRows, setRows);
+  }
+
+  async recordSet(
+    tenantId: string,
+    userId: string,
+    sessionId: string,
+    setId: string,
+    input: UpdateSetRecordInput
+  ): Promise<WorkoutSessionRecord | undefined> {
+    const session = await this.findById(tenantId, userId, sessionId);
+    if (!session || session.status !== "active") {
+      return undefined;
+    }
+
+    const ownsSet = session.exercises.some((exercise) =>
+      exercise.setRecords.some((setRecord) => setRecord.id === setId)
+    );
+    if (!ownsSet) {
+      return undefined;
+    }
+
+    const rows = await this.db
+      .update(setRecords)
+      .set({
+        actualReps: input.actualReps ?? null,
+        weightKg: input.weightKg === undefined ? null : input.weightKg.toString(),
+        rpe: input.rpe ?? null,
+        completed: input.completed,
+        notes: input.notes ?? null,
+      })
+      .where(eq(setRecords.id, setId))
+      .returning();
+    if (rows.length === 0) {
+      return undefined;
+    }
+
+    return this.findById(tenantId, userId, sessionId);
+  }
+
+  async completeSession(
+    tenantId: string,
+    userId: string,
+    id: string
+  ): Promise<WorkoutSessionRecord | undefined> {
+    const rows = await this.db
+      .update(workoutSessions)
+      .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.id, id),
+          eq(workoutSessions.status, "active")
+        )
+      )
+      .returning();
+    if (rows.length === 0) {
+      return undefined;
+    }
+
+    return this.findById(tenantId, userId, id);
   }
 
   private async findLatestActiveSession(
