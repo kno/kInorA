@@ -10,6 +10,9 @@ export type { PlanDraft } from "./plan/plan-draft.js";
 
 export { derivePreferenceScores } from "./plan/derive-preference-scores.js";
 
+export { validateRpe } from "./plan/rpe.js";
+export type { RpeValidation } from "./plan/rpe.js";
+
 export { applyEquipmentSubstitutions } from "./plan/equipment-substitution.js";
 export { injectLimitationWarnings } from "./plan/limitation-warnings.js";
 export { assertNoDiagnosticLanguage } from "./plan/diagnostic-guard.js";
