@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { validateRpe } from "../plan/rpe.js";
 
-describe("RPE domain rules", () => {
-  it("accepts inclusive RPE bounds and a typical in-range value", () => {
+describe("Rate of Perceived Exertion (RPE) domain rules", () => {
+  it("accepts inclusive Rate of Perceived Exertion bounds and a typical in-range value", () => {
     expect(validateRpe(0)).toEqual({ ok: true, rpe: 0 });
     expect(validateRpe(5)).toEqual({ ok: true, rpe: 5 });
     expect(validateRpe(10)).toEqual({ ok: true, rpe: 10 });
