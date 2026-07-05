@@ -9,7 +9,9 @@ import {
   jsonb,
   boolean,
   index,
+  numeric,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * Membership role: owner is the tenant creator; member is an invited user.
@@ -228,6 +230,88 @@ export const workoutPlans = pgTable(
       table.tenantId,
       table.planSpecId
     ),
+  })
+);
+
+/**
+ * Workout session status — active while the workout is in progress, completed once closed.
+ */
+export const workoutSessionStatusEnum = pgEnum("workout_session_status", [
+  "active",
+  "completed",
+]);
+
+/**
+ * Workout sessions — one relational snapshot root per live or completed workout.
+ * The partial unique index guarantees at most one active session per tenant/user pair.
+ */
+export const workoutSessions = pgTable(
+  "workout_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workoutPlanId: uuid("workout_plan_id")
+      .notNull()
+      .references(() => workoutPlans.id, { onDelete: "cascade" }),
+    status: workoutSessionStatusEnum("status").notNull().default("active"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantUserIdx: index("workout_sessions_tenant_user_idx").on(table.tenantId, table.userId),
+    singleActivePerUser: uniqueIndex("workout_sessions_single_active_per_user_unique")
+      .on(table.tenantId, table.userId)
+      .where(sql`${table.status} = 'active'`),
+  })
+);
+
+/**
+ * Session exercises — immutable exercise snapshot rows copied from the workout plan.
+ */
+export const sessionExercises = pgTable(
+  "session_exercises",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workoutSessionId: uuid("workout_session_id")
+      .notNull()
+      .references(() => workoutSessions.id, { onDelete: "cascade" }),
+    exerciseIndex: integer("exercise_index").notNull(),
+    title: text("title").notNull(),
+    restSeconds: integer("rest_seconds").notNull(),
+    notes: text("notes"),
+  },
+  (table) => ({
+    workoutSessionIdx: index("session_exercises_workout_session_idx").on(table.workoutSessionId),
+  })
+);
+
+/**
+ * Set records — planned targets plus logged execution values for each set.
+ */
+export const setRecords = pgTable(
+  "set_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionExerciseId: uuid("session_exercise_id")
+      .notNull()
+      .references(() => sessionExercises.id, { onDelete: "cascade" }),
+    setIndex: integer("set_index").notNull(),
+    targetReps: text("target_reps").notNull(),
+    actualReps: integer("actual_reps"),
+    weightKg: numeric("weight_kg", { precision: 6, scale: 2 }),
+    rpe: integer("rpe"),
+    completed: boolean("completed").notNull().default(false),
+    notes: text("notes"),
+  },
+  (table) => ({
+    sessionExerciseIdx: index("set_records_session_exercise_idx").on(table.sessionExerciseId),
   })
 );
 

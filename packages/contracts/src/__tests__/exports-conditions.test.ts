@@ -1,6 +1,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import type {
+  SessionExerciseRecord,
+  SetRecordDTO,
+  WorkoutExercise,
+  WorkoutSession,
+  WorkoutSessionRecord,
+} from "../index.js";
 
 /**
  * Regression guard for the workspace "source" export-condition convention.
@@ -28,6 +35,11 @@ const packageJson = JSON.parse(
   exports: { ".": Record<string, string | undefined> };
 };
 
+const contractsSource = readFileSync(
+  fileURLToPath(new URL("../index.ts", import.meta.url)),
+  "utf8",
+);
+
 describe("@kinora/contracts export conditions (source-condition convention)", () => {
   const root = packageJson.exports["."];
 
@@ -49,5 +61,50 @@ describe("@kinora/contracts export conditions (source-condition convention)", ()
 
   it("orders conditions source → types → default (first match wins)", () => {
     expect(Object.keys(root)).toEqual(["source", "types", "default"]);
+  });
+
+  it("exports workout tracking DTO names without colliding with generated-plan WorkoutSession", () => {
+    expect(contractsSource).toContain("export interface WorkoutSessionRecord");
+    expect(contractsSource).toContain("export interface SessionExerciseRecord");
+    expect(contractsSource).toContain("export interface SetRecordDTO");
+
+    expectTypeOf<WorkoutSession>().toEqualTypeOf<{
+      day: number;
+      title: string;
+      exercises: WorkoutExercise[];
+    }>();
+
+    expectTypeOf<WorkoutSessionRecord>().toEqualTypeOf<{
+      id: string;
+      workoutPlanId: string;
+      status: "active" | "completed";
+      exercises: SessionExerciseRecord[];
+      startedAt: string;
+      completedAt?: string;
+    }>();
+  });
+
+  it("exports set-level tracking DTOs with snapshot and logging fields", () => {
+    expectTypeOf<SessionExerciseRecord>().toEqualTypeOf<{
+      id: string;
+      workoutSessionId: string;
+      exerciseIndex: number;
+      title: string;
+      restSeconds: number;
+      notes?: string;
+      setRecords: SetRecordDTO[];
+    }>();
+
+    expectTypeOf<SetRecordDTO>().toEqualTypeOf<{
+      id: string;
+      sessionExerciseId: string;
+      setIndex: number;
+      targetReps: string;
+      actualReps?: number;
+      weightKg?: number;
+      rpe?: number;
+      completed: boolean;
+      notes?: string;
+    }>();
   });
 });
