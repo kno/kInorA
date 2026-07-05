@@ -27,9 +27,9 @@
 
 ### Test Summary
 
-- **Total tests written**: 21 (4 domain + 7 contracts assertions/guards total file count + 10 api schema)
-- **Total tests passing**: 91 targeted tests (14 domain + 26 contracts + 51 api)
-- **Layers used**: Unit (21 new checks)
+- **Total tests written**: 22 (5 domain + 7 contracts assertions/guards total file count + 10 API schema)
+- **Total tests passing**: 92 targeted tests (15 domain + 26 contracts + 51 API)
+- **Layers used**: Unit (22 new checks)
 - **Approval tests**: None — no behavioral refactor of legacy logic
 - **Pure functions created**: 1 (`validateRpe`)
 

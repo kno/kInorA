@@ -13,6 +13,10 @@ describe("RPE domain rules", () => {
     expect(validateRpe(11).ok).toBe(false);
   });
 
+  it("rejects fractional values to match the persisted integer scale", () => {
+    expect(validateRpe(7.5).ok).toBe(false);
+  });
+
   it("rejects non-numeric values", () => {
     expect(validateRpe("5").ok).toBe(false);
     expect(validateRpe(Number.NaN).ok).toBe(false);

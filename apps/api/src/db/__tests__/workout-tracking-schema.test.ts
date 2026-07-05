@@ -71,6 +71,8 @@ describe("set_records schema shape", () => {
     expect(cols.targetReps.columnType).toBe("PgText");
     expect(cols.actualReps.columnType).toBe("PgInteger");
     expect(cols.weightKg.columnType).toBe("PgNumeric");
+    expect(cols.weightKg.precision).toBe(6);
+    expect(cols.weightKg.scale).toBe(2);
     expect(cols.rpe.columnType).toBe("PgInteger");
     expect(cols.completed.columnType).toBe("PgBoolean");
     expect(cols.notes.columnType).toBe("PgText");
