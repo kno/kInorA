@@ -38,6 +38,39 @@ export interface WorkoutProgram {
   limitationWarnings: string[];
 }
 
+export type WorkoutSessionRecordStatus = "active" | "completed";
+
+export interface SetRecordDTO {
+  id: string;
+  sessionExerciseId: string;
+  setIndex: number;
+  targetReps: string;
+  actualReps?: number;
+  weightKg?: number;
+  rpe?: number;
+  completed: boolean;
+  notes?: string;
+}
+
+export interface SessionExerciseRecord {
+  id: string;
+  workoutSessionId: string;
+  exerciseIndex: number;
+  title: string;
+  restSeconds: number;
+  notes?: string;
+  setRecords: SetRecordDTO[];
+}
+
+export interface WorkoutSessionRecord {
+  id: string;
+  workoutPlanId: string;
+  status: WorkoutSessionRecordStatus;
+  exercises: SessionExerciseRecord[];
+  startedAt: string;
+  completedAt?: string;
+}
+
 export { WorkoutProgramSchema } from "./workout-program.schema.js";
 
 export interface HealthResponse {
