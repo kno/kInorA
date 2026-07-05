@@ -1,7 +1,7 @@
 # Apply Progress: implement-09a-v1-workout-tracking-core
 
-**Batch**: PR2a — API repository read model
-**Branch**: feat/09a-tracking-api
+**Batch**: PR2b — API repository session start
+**Branch**: feat/09a-tracking-start
 **Mode**: Strict TDD
 **Date**: 2026-07-05
 
@@ -14,6 +14,7 @@
 - [x] 1.3 GREEN: added `WorkoutSessionRecord`, `SessionExerciseRecord`, `SetRecordDTO`, and `WorkoutSessionRecordStatus` to `packages/contracts/src/index.ts`.
 - [x] 1.4 RED/GREEN: added `apps/api/src/db/__tests__/workout-tracking-schema.test.ts`, created `workout_sessions`, `session_exercises`, `set_records` in `apps/api/src/db/schema.ts`, and added `apps/api/drizzle/0005_workout_tracking.sql` with the partial unique active-session guard.
 - [x] 2.1 RED/GREEN: added `apps/api/src/db/repositories/__tests__/workout-session.test.ts` and `apps/api/src/db/repositories/workout-session.ts` for tenant/user-scoped session reads with exercises and set records.
+- [x] 2.2 RED/GREEN: extended the workout-session repository to start immutable ready-plan snapshots and reuse the existing active session.
 
 ---
 
@@ -26,12 +27,13 @@
 | 1.3 | `packages/contracts/src/__tests__/exports-conditions.test.ts` | Unit | ✅ contracts 5/5 | ✅ Written in 1.1 | ✅ 7/7 | ✅ session record + exercise record + set DTO shape checks | ➖ None needed |
 | 1.4 | `apps/api/src/db/__tests__/workout-tracking-schema.test.ts` | Unit | ✅ schema baseline 41/41 | ✅ Written (migration file missing) | ✅ 10/10 | ✅ enum values + 3 table shapes + partial unique index migration guard | ➖ None needed |
 | 2.1 | `apps/api/src/db/repositories/__tests__/workout-session.test.ts` | Integration | N/A (new) | ✅ Written (`workout-session.js` missing) | ✅ 3/3 | ✅ session read + tenant no-data + user no-data | ✅ kept DTO mapping local to repository |
+| 2.2 | `apps/api/src/db/repositories/__tests__/workout-session.test.ts` | Integration | ✅ 2.1 read-model tests 3/3 | ✅ Added start/reuse tests before implementation | ✅ 5/5 | ✅ immutable snapshot + existing active reuse | ✅ reused read-model mapper for start output |
 
 ### Test Summary
 
-- **Total tests written**: 25 (22 prior + 3 new Phase 2a checks)
-- **Total tests passing**: 56 targeted API tests in the latest PR2a run; Phase 1 verification remains captured below
-- **Layers used**: Unit (22), Integration (3)
+- **Total tests written**: 27 (22 prior + 5 Phase 2 repository checks)
+- **Total tests passing**: 58 targeted API tests in the latest PR2b run; Phase 1 verification remains captured below
+- **Layers used**: Unit (22), Integration (5)
 - **Approval tests**: None — no behavioral refactor of legacy logic
 - **Pure functions created**: 1 (`validateRpe`)
 
@@ -48,35 +50,20 @@
 | `packages/contracts/src/index.ts` | Modified | Added workout tracking DTOs with non-colliding names |
 | `packages/contracts/src/__tests__/exports-conditions.test.ts` | Modified | Added source-export guards and type-shape checks for tracking DTOs |
 | `apps/api/src/db/__tests__/workout-tracking-schema.test.ts` | Created | Schema and migration tests for workout tracking foundation |
-| `apps/api/src/db/repositories/__tests__/workout-session.test.ts` | Created | Strict-TDD repository coverage for tenant/user-scoped session reads |
-| `apps/api/src/db/repositories/workout-session.ts` | Created | Tenant/user-scoped workout session repository read model with exercise/set DTO mapping |
+| `apps/api/src/db/repositories/__tests__/workout-session.test.ts` | Modified | Added strict-TDD repository coverage for snapshot start and active-session reuse |
+| `apps/api/src/db/repositories/workout-session.ts` | Modified | Added tenant/user-scoped `startSession` with ready-plan snapshot creation and active-session reuse |
 | `apps/api/src/db/schema.ts` | Modified | Added workout tracking enum/tables/indexes |
 | `apps/api/drizzle/0005_workout_tracking.sql` | Created | Additive SQL migration with single-active-session unique guard |
-| `openspec/changes/implement-09a-v1-workout-tracking-core/tasks.md` | Modified | Marked Phase 1 and Phase 2a repository tasks complete |
-| `openspec/changes/implement-09a-v1-workout-tracking-core/apply-progress.md` | Modified | Merged cumulative PR1 + PR2a strict-TDD progress and evidence |
+| `openspec/changes/implement-09a-v1-workout-tracking-core/tasks.md` | Modified | Marked 2.2 complete while keeping mutations/routes pending |
+| `openspec/changes/implement-09a-v1-workout-tracking-core/apply-progress.md` | Modified | Merged cumulative PR1 + PR2a + PR2b strict-TDD progress and evidence |
 
 ---
 
 ## Verification Results
 
 ```text
-pnpm --filter @kinora/domain test src/__tests__/rpe.test.ts src/plan/__tests__/session-duration.test.ts
-  2 files passed, 14 tests passed
-```
-
-```text
-pnpm --filter @kinora/contracts test src/__tests__/exports-conditions.test.ts src/contracts.test.ts src/__tests__/workout-program.test.ts
-  3 files passed, 26 tests passed
-```
-
-```text
-pnpm --filter api test src/db/__tests__/auth-schema.test.ts src/db/__tests__/plan-schema.test.ts src/db/__tests__/workout-plan-schema.test.ts src/db/__tests__/workout-tracking-schema.test.ts
-  4 files passed, 51 tests passed
-```
-
-```text
 pnpm --filter api test "src/db/repositories/__tests__/workout-session.test.ts" "src/routes/__tests__/plan.test.ts" "src/routes/__tests__/plan-generation.test.ts"
-  3 files passed, 56 tests passed.
+  3 files passed, 58 tests passed.
 ```
 
 ```text
@@ -88,22 +75,21 @@ pnpm type-check
 
 ## Deviations from Design
 
-None — implementation matches the split Phase 2a boundary. This PR establishes tenant/user-scoped session reads; snapshot start, active-session reuse, set mutations, and route wiring stay in child PRs.
+None — implementation matches the split Phase 2b boundary. This PR adds snapshot start and active-session reuse; set mutations and route wiring stay in child PRs.
 
 ---
 
 ## Workload / PR Boundary
 
 - Mode: stacked PR slice
-- Current work unit: PR2a session repository read model
-- Boundary: includes only `apps/api` workout-session repository `findById` and repository tests; excludes snapshot start, active-session reuse, set writes, completion, route tests, route registration, web tracker/actions, and Phase 4 guardrail sweeps
-- Estimated review budget impact: small and focused to persistence read behavior only
+- Current work unit: PR2b session repository start/reuse
+- Boundary: includes only `apps/api` workout-session repository `startSession` behavior and repository tests; excludes set writes, completion, route tests, route registration, web tracker/actions, and Phase 4 guardrail sweeps
+- Estimated review budget impact: small and focused to persistence start behavior only
 
 ---
 
 ## Remaining Tasks
 
-- [ ] 2.2 RED/GREEN: add repository tests and implementation for immutable snapshot start plus active-session reuse.
 - [ ] 2.3 RED/GREEN: extend repository tests and implementation for set writes and session completion.
 - [ ] 2.4 RED/GREEN: add route tests in `apps/api/src/routes/__tests__/workout-session.test.ts` for 401, 404, 422, and “start existing active session” behavior.
 - [ ] 2.5 GREEN: create `apps/api/src/routes/workout-session.ts` and register it in `apps/api/src/app.ts`; map bad RPE/body to 422 and mismatches to 404.
