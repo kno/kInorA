@@ -1,11 +1,21 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type {
   SessionExerciseRecord,
   SetRecordDTO,
+  WorkoutExercise,
+  WorkoutProgram,
   WorkoutSessionRecord,
 } from "@kinora/contracts";
 import type { Database } from "../client.js";
-import { sessionExercises, setRecords, workoutSessions } from "../schema.js";
+import { sessionExercises, setRecords, workoutPlans, workoutSessions } from "../schema.js";
+
+interface WorkoutPlanRow {
+  id: string;
+  tenantId: string;
+  userId: string;
+  status: "generating" | "ready" | "failed";
+  programJson: WorkoutProgram | null;
+}
 
 interface WorkoutSessionRow {
   id: string;
@@ -38,8 +48,48 @@ interface SetRecordRow {
   notes: string | null;
 }
 
+type StartTx = Pick<Database, "insert">;
+
 export class WorkoutSessionRepository {
   constructor(private db: Database) {}
+
+  async startSession(
+    tenantId: string,
+    userId: string,
+    workoutPlanId: string,
+    day: number
+  ): Promise<WorkoutSessionRecord | undefined> {
+    const existingActive = await this.findLatestActiveSession(tenantId, userId);
+    if (existingActive) {
+      return this.findById(tenantId, userId, existingActive.id);
+    }
+
+    const plan = await this.findReadyPlan(tenantId, userId, workoutPlanId);
+    if (!plan?.programJson) {
+      return undefined;
+    }
+
+    const plannedSession = plan.programJson.weeklySessions.find((session) => session.day === day);
+    if (!plannedSession) {
+      return undefined;
+    }
+
+    return this.db.transaction(async (tx) => {
+      const sessionRows = await tx
+        .insert(workoutSessions)
+        .values({ tenantId, userId, workoutPlanId, status: "active" })
+        .returning();
+      const sessionRow = sessionRows[0] as WorkoutSessionRow | undefined;
+      if (!sessionRow) {
+        return undefined;
+      }
+
+      const exerciseRows = await this.insertSessionExercises(tx, sessionRow.id, plannedSession.exercises);
+      const setRows = await this.insertSetRecords(tx, exerciseRows, plannedSession.exercises);
+
+      return mapWorkoutSessionRecord(sessionRow, exerciseRows, setRows);
+    });
+  }
 
   async findById(
     tenantId: string,
@@ -77,6 +127,98 @@ export class WorkoutSessionRepository {
             .where(inArray(setRecords.sessionExerciseId, exerciseIds))) as SetRecordRow[]);
 
     return mapWorkoutSessionRecord(sessionRow, exerciseRows, setRows);
+  }
+
+  private async findLatestActiveSession(
+    tenantId: string,
+    userId: string
+  ): Promise<WorkoutSessionRow | undefined> {
+    const rows = await this.db
+      .select()
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.status, "active")
+        )
+      )
+      .orderBy(desc(workoutSessions.startedAt))
+      .limit(1);
+
+    return rows[0] as WorkoutSessionRow | undefined;
+  }
+
+  private async findReadyPlan(
+    tenantId: string,
+    userId: string,
+    workoutPlanId: string
+  ): Promise<WorkoutPlanRow | undefined> {
+    const rows = await this.db
+      .select()
+      .from(workoutPlans)
+      .where(
+        and(
+          eq(workoutPlans.tenantId, tenantId),
+          eq(workoutPlans.userId, userId),
+          eq(workoutPlans.id, workoutPlanId),
+          eq(workoutPlans.status, "ready")
+        )
+      );
+
+    return rows[0] as WorkoutPlanRow | undefined;
+  }
+
+  private async insertSessionExercises(
+    tx: StartTx,
+    workoutSessionId: string,
+    exercises: WorkoutExercise[]
+  ): Promise<SessionExerciseRow[]> {
+    if (exercises.length === 0) {
+      return [];
+    }
+
+    const rows = await tx
+      .insert(sessionExercises)
+      .values(
+        exercises.map((exercise, exerciseIndex) => ({
+          workoutSessionId,
+          exerciseIndex,
+          title: exercise.name,
+          restSeconds: exercise.restSeconds,
+          notes: combineExerciseNotes(exercise),
+        }))
+      )
+      .returning();
+
+    return rows as SessionExerciseRow[];
+  }
+
+  private async insertSetRecords(
+    tx: StartTx,
+    exerciseRows: SessionExerciseRow[],
+    exercises: WorkoutExercise[]
+  ): Promise<SetRecordRow[]> {
+    const values = exerciseRows.flatMap((exerciseRow) => {
+      const sourceExercise = exercises[exerciseRow.exerciseIndex];
+      if (!sourceExercise) {
+        return [];
+      }
+
+      return Array.from({ length: sourceExercise.sets }, (_, setIndex) => ({
+        sessionExerciseId: exerciseRow.id,
+        setIndex,
+        targetReps: sourceExercise.reps,
+        completed: false,
+      }));
+    });
+
+    if (values.length === 0) {
+      return [];
+    }
+
+    const rows = await tx.insert(setRecords).values(values).returning();
+    return rows as SetRecordRow[];
   }
 }
 
@@ -126,6 +268,13 @@ function mapWorkoutSessionRecord(
     startedAt: sessionRow.startedAt.toISOString(),
     completedAt: sessionRow.completedAt?.toISOString() ?? undefined,
   };
+}
+
+function combineExerciseNotes(exercise: WorkoutExercise): string | null {
+  const notes = [exercise.notes, exercise.substitutionNote].filter(
+    (value): value is string => typeof value === "string" && value.trim() !== ""
+  );
+  return notes.length === 0 ? null : notes.join("\n\n");
 }
 
 function toOptionalNumber(value: number | string | null): number | undefined {
