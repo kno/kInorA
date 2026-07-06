@@ -3,6 +3,33 @@
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { fetchPlanStatus, type FetchPlanResult } from "@/app/(app)/create-plan/plan-draft-client";
+import {
+  completeWorkoutSession,
+  fetchWorkoutSession,
+  recordWorkoutSet,
+  startWorkoutSession,
+} from "./tracker-client";
+import type { WorkoutSetUpdateInput } from "./tracker-types";
+import type { WorkoutSessionRecord } from "@kinora/contracts";
+
+async function sessionToken(): Promise<string | undefined> {
+  const jar = await cookies();
+  return jar.get(SESSION_COOKIE)?.value;
+}
+
+async function unwrapWorkoutSession(
+  resultPromise: Promise<
+    | { kind: "ok"; session: WorkoutSessionRecord }
+    | { kind: "error"; message: string }
+  >,
+): Promise<WorkoutSessionRecord> {
+  const result = await resultPromise;
+  if (result.kind === "error") {
+    throw new Error(result.message);
+  }
+
+  return result.session;
+}
 
 /**
  * Server Action for fetching plan status.
@@ -17,7 +44,37 @@ import { fetchPlanStatus, type FetchPlanResult } from "@/app/(app)/create-plan/p
  * and the session token stays server-side.
  */
 export async function getPlanStatusAction(planId: string): Promise<FetchPlanResult> {
-  const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
+  const token = await sessionToken();
   return fetchPlanStatus(planId, token);
+}
+
+export async function startWorkoutSessionAction(
+  planId: string,
+  day: number,
+): Promise<WorkoutSessionRecord> {
+  const token = await sessionToken();
+  return unwrapWorkoutSession(startWorkoutSession(planId, day, token));
+}
+
+export async function getWorkoutSessionAction(
+  sessionId: string,
+): Promise<WorkoutSessionRecord> {
+  const token = await sessionToken();
+  return unwrapWorkoutSession(fetchWorkoutSession(sessionId, token));
+}
+
+export async function recordWorkoutSetAction(
+  sessionId: string,
+  setId: string,
+  input: WorkoutSetUpdateInput,
+): Promise<WorkoutSessionRecord> {
+  const token = await sessionToken();
+  return unwrapWorkoutSession(recordWorkoutSet(sessionId, setId, input, token));
+}
+
+export async function completeWorkoutSessionAction(
+  sessionId: string,
+): Promise<WorkoutSessionRecord> {
+  const token = await sessionToken();
+  return unwrapWorkoutSession(completeWorkoutSession(sessionId, token));
 }

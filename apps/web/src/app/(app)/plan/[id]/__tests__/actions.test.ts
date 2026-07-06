@@ -1,8 +1,38 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import type { WorkoutSessionRecord } from "@kinora/contracts";
 
 // --- Module mocks ---
 const cookieGet = vi.fn();
 const fetchPlanStatus = vi.fn();
+const startWorkoutSession = vi.fn();
+const fetchWorkoutSession = vi.fn();
+const recordWorkoutSet = vi.fn();
+const completeWorkoutSession = vi.fn();
+
+const sessionRecord: WorkoutSessionRecord = {
+  id: "session-1",
+  workoutPlanId: "plan-1",
+  status: "active",
+  startedAt: "2026-07-06T09:00:00.000Z",
+  exercises: [
+    {
+      id: "exercise-1",
+      workoutSessionId: "session-1",
+      exerciseIndex: 0,
+      title: "Barbell Squat",
+      restSeconds: 120,
+      setRecords: [
+        {
+          id: "set-1",
+          sessionExerciseId: "exercise-1",
+          setIndex: 0,
+          targetReps: "8",
+          completed: false,
+        },
+      ],
+    },
+  ],
+};
 
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({ get: cookieGet })),
@@ -12,7 +42,20 @@ vi.mock("@/app/(app)/create-plan/plan-draft-client", () => ({
   fetchPlanStatus: (...args: unknown[]) => fetchPlanStatus(...args),
 }));
 
-import { getPlanStatusAction } from "../actions";
+vi.mock("../tracker-client", () => ({
+  startWorkoutSession: (...args: unknown[]) => startWorkoutSession(...args),
+  fetchWorkoutSession: (...args: unknown[]) => fetchWorkoutSession(...args),
+  recordWorkoutSet: (...args: unknown[]) => recordWorkoutSet(...args),
+  completeWorkoutSession: (...args: unknown[]) => completeWorkoutSession(...args),
+}));
+
+import {
+  completeWorkoutSessionAction,
+  getPlanStatusAction,
+  getWorkoutSessionAction,
+  recordWorkoutSetAction,
+  startWorkoutSessionAction,
+} from "../actions";
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -68,5 +111,61 @@ describe("getPlanStatusAction", () => {
     await getPlanStatusAction("plan-1");
 
     expect(fetchPlanStatus).toHaveBeenCalledWith("plan-1", undefined);
+  });
+});
+
+describe("workout tracker server actions", () => {
+  it("calls startWorkoutSession with the plan id, day, and session token from the cookie", async () => {
+    cookieGet.mockReturnValue({ value: "session-tok-abc" });
+    startWorkoutSession.mockResolvedValue({ kind: "ok", session: sessionRecord });
+
+    const result = await startWorkoutSessionAction("plan-1", 1);
+
+    expect(startWorkoutSession).toHaveBeenCalledWith("plan-1", 1, "session-tok-abc");
+    expect(result.id).toBe("session-1");
+  });
+
+  it("calls fetchWorkoutSession with the session id and session token from the cookie", async () => {
+    cookieGet.mockReturnValue({ value: "tok" });
+    fetchWorkoutSession.mockResolvedValue({ kind: "ok", session: sessionRecord });
+
+    const result = await getWorkoutSessionAction("session-1");
+
+    expect(fetchWorkoutSession).toHaveBeenCalledWith("session-1", "tok");
+    expect(result.exercises[0]?.title).toBe("Barbell Squat");
+  });
+
+  it("calls recordWorkoutSet with parsed input and session token from the cookie", async () => {
+    cookieGet.mockReturnValue({ value: "tok" });
+    recordWorkoutSet.mockResolvedValue({ kind: "ok", session: sessionRecord });
+
+    await recordWorkoutSetAction("session-1", "set-1", {
+      actualReps: 8,
+      weightKg: 80,
+      rpe: 8,
+      completed: true,
+      notes: "Felt strong",
+    });
+
+    expect(recordWorkoutSet).toHaveBeenCalledWith("session-1", "set-1", {
+      actualReps: 8,
+      weightKg: 80,
+      rpe: 8,
+      completed: true,
+      notes: "Felt strong",
+    }, "tok");
+  });
+
+  it("calls completeWorkoutSession with the session id and session token from the cookie", async () => {
+    cookieGet.mockReturnValue({ value: "tok" });
+    completeWorkoutSession.mockResolvedValue({
+      kind: "ok",
+      session: { ...sessionRecord, status: "completed", completedAt: "2026-07-06T10:00:00.000Z" },
+    });
+
+    const result = await completeWorkoutSessionAction("session-1");
+
+    expect(completeWorkoutSession).toHaveBeenCalledWith("session-1", "tok");
+    expect(result.status).toBe("completed");
   });
 });

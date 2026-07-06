@@ -25,6 +25,7 @@ export interface PlanStatusViewProps {
   specId?: string;
   messages?: Record<string, string>;
   onRegenerate?: () => void;
+  onStartWorkout?: (day: number) => void;
 }
 
 export function PlanStatusView({
@@ -33,6 +34,7 @@ export function PlanStatusView({
   program,
   messages,
   onRegenerate,
+  onStartWorkout,
 }: PlanStatusViewProps) {
   const t = (key: string, fallback: string): string =>
     messages?.[key] ?? fallback;
@@ -143,6 +145,15 @@ export function PlanStatusView({
               </li>
             ))}
           </ul>
+          {onStartWorkout && (
+            <button
+              type="button"
+              className="kin-btn kin-btn--primary"
+              onClick={() => onStartWorkout(session.day)}
+            >
+              {t("tracker_start_cta", "Start workout")}
+            </button>
+          )}
         </section>
       ))}
       {program?.limitationWarnings && program.limitationWarnings.length > 0 && (

@@ -213,6 +213,58 @@ describe("WorkoutSessionRepository", () => {
       });
     });
 
+    it("snapshots exercise context so later plan edits do not leak into the started session", async () => {
+      const { db } = createStartDb();
+      const repo = new WorkoutSessionRepository(db as never);
+
+      const started = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 1);
+
+      // Mutating the source plan program after the snapshot is taken must not
+      // change the persisted relational session that was already returned.
+      readyProgram.weeklySessions[0]!.exercises[0]!.name = "Mutated After Snapshot";
+      readyProgram.weeklySessions[0]!.exercises[0]!.restSeconds = 999;
+
+      expect(started?.exercises[0]?.title).toBe("Bench Press");
+      expect(started?.exercises[0]?.restSeconds).toBe(90);
+
+      // Restore for other tests that share the module-level fixture.
+      readyProgram.weeklySessions[0]!.exercises[0]!.name = "Bench Press";
+      readyProgram.weeklySessions[0]!.exercises[0]!.restSeconds = 90;
+    });
+
+    it("returns undefined and performs no insert when the plan is not in a ready state", async () => {
+      // workoutSessions queue: no active session → falls through to plan lookup
+      // workoutPlans queue: empty → plan not found (not ready / wrong owner / wrong id)
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[]]],
+        [workoutPlans, [[]]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const transaction = vi.fn();
+      const repo = new WorkoutSessionRepository({ select, transaction } as never);
+
+      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 1);
+
+      expect(result).toBeUndefined();
+      expect(transaction).not.toHaveBeenCalled();
+    });
+
+    it("returns undefined and performs no insert when the requested day does not exist in the plan", async () => {
+      // Day 99 is not present in readyProgram which only has day 1.
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[]]],
+        [workoutPlans, [[readyPlanRow]]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const transaction = vi.fn();
+      const repo = new WorkoutSessionRepository({ select, transaction } as never);
+
+      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 99);
+
+      expect(result).toBeUndefined();
+      expect(transaction).not.toHaveBeenCalled();
+    });
+
     it("returns the existing active session instead of creating a duplicate", async () => {
       const queues = new Map<object, unknown[][]>([
         [workoutSessions, [[sessionRow], [sessionRow]]],
@@ -346,6 +398,21 @@ describe("WorkoutSessionRepository", () => {
       expect(result).toBeUndefined();
       expect(update).not.toHaveBeenCalled();
     });
+
+    it("does not write a set for a session owned by another user in the same tenant", async () => {
+      // The scoped session read finds nothing for USER_B, so no set write happens.
+      const queues = new Map<object, unknown[][]>([[workoutSessions, [[]]]]);
+      const select = createQueuedSelectDb(queues).select;
+      const update = vi.fn();
+      const repo = new WorkoutSessionRepository({ select, update } as never);
+
+      const result = await repo.recordSet(TENANT_A, USER_B, SESSION_ID, SET_1_ID, {
+        completed: true,
+      });
+
+      expect(result).toBeUndefined();
+      expect(update).not.toHaveBeenCalled();
+    });
   });
 
   describe("completeSession", () => {
@@ -367,6 +434,20 @@ describe("WorkoutSessionRepository", () => {
       expect(update).toHaveBeenCalledTimes(1);
       expect(result?.status).toBe("completed");
       expect(result?.completedAt).toBe("2026-07-04T09:20:00.000Z");
+    });
+
+    it("does not complete a session owned by another user in the same tenant", async () => {
+      // The user-scoped completion update matches no row, so nothing is returned.
+      const select = createQueuedSelectDb(new Map<object, unknown[][]>()).select;
+      const returning = vi.fn().mockResolvedValue([]);
+      const where = vi.fn().mockReturnValue({ returning });
+      const set = vi.fn().mockReturnValue({ where });
+      const update = vi.fn().mockReturnValue({ set });
+      const repo = new WorkoutSessionRepository({ select, update } as never);
+
+      const result = await repo.completeSession(TENANT_A, USER_B, SESSION_ID);
+
+      expect(result).toBeUndefined();
     });
   });
 });
