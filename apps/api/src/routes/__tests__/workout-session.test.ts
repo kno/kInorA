@@ -176,6 +176,22 @@ describe("Workout session routes", () => {
     expect(response.json().error).toBe("not_found");
   });
 
+  it("returns 404 when start is called for a plan that is not ready", async () => {
+    const repo = buildRepoMock({ startSession: vi.fn().mockResolvedValue(undefined) });
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/workout-sessions",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { workoutPlanId: PLAN_ID, day: 1 },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error).toBe("not_found");
+    expect(repo.startSession).toHaveBeenCalledWith(TENANT_A, USER_A, PLAN_ID, 1);
+  });
+
   it("returns the existing active session when start is called again", async () => {
     const repo = buildRepoMock({ startSession: vi.fn().mockResolvedValue(activeSession) });
     app = await buildTestApp(repo);

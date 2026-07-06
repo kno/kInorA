@@ -232,6 +232,39 @@ describe("WorkoutSessionRepository", () => {
       readyProgram.weeklySessions[0]!.exercises[0]!.restSeconds = 90;
     });
 
+    it("returns undefined and performs no insert when the plan is not in a ready state", async () => {
+      // workoutSessions queue: no active session → falls through to plan lookup
+      // workoutPlans queue: empty → plan not found (not ready / wrong owner / wrong id)
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[]]],
+        [workoutPlans, [[]]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const transaction = vi.fn();
+      const repo = new WorkoutSessionRepository({ select, transaction } as never);
+
+      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 1);
+
+      expect(result).toBeUndefined();
+      expect(transaction).not.toHaveBeenCalled();
+    });
+
+    it("returns undefined and performs no insert when the requested day does not exist in the plan", async () => {
+      // Day 99 is not present in readyProgram which only has day 1.
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[]]],
+        [workoutPlans, [[readyPlanRow]]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const transaction = vi.fn();
+      const repo = new WorkoutSessionRepository({ select, transaction } as never);
+
+      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 99);
+
+      expect(result).toBeUndefined();
+      expect(transaction).not.toHaveBeenCalled();
+    });
+
     it("returns the existing active session instead of creating a duplicate", async () => {
       const queues = new Map<object, unknown[][]>([
         [workoutSessions, [[sessionRow], [sessionRow]]],
