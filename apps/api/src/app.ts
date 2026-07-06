@@ -166,7 +166,6 @@ export async function buildApp(
   });
 
   await app.register(workoutSessionRoutes, {
-    db: database,
     repo: workoutSessionRepo,
   });
 

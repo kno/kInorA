@@ -1,18 +1,44 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
-import type { Database } from "../db/client.js";
 import { requireAuth } from "../auth/plugin.js";
-import {
-  WorkoutSessionRepository,
-  type UpdateSetRecordInput,
-} from "../db/repositories/workout-session.js";
 import { validateRpe } from "@kinora/domain";
+import type { WorkoutSessionRecord } from "@kinora/contracts";
+
+interface UpdateSetBody {
+  actualReps?: number;
+  weightKg?: number;
+  rpe?: number;
+  completed: boolean;
+  notes?: string;
+}
+
+export interface WorkoutSessionRouteRepo {
+  startSession(
+    tenantId: string,
+    userId: string,
+    workoutPlanId: string,
+    day: number
+  ): Promise<WorkoutSessionRecord | undefined>;
+  findById(
+    tenantId: string,
+    userId: string,
+    id: string
+  ): Promise<WorkoutSessionRecord | undefined>;
+  recordSet(
+    tenantId: string,
+    userId: string,
+    sessionId: string,
+    setId: string,
+    input: UpdateSetBody
+  ): Promise<WorkoutSessionRecord | undefined>;
+  completeSession(
+    tenantId: string,
+    userId: string,
+    id: string
+  ): Promise<WorkoutSessionRecord | undefined>;
+}
 
 export interface WorkoutSessionRoutesOptions {
-  db: Database;
-  repo?: Pick<
-    WorkoutSessionRepository,
-    "startSession" | "findById" | "recordSet" | "completeSession"
-  >;
+  repo: WorkoutSessionRouteRepo;
 }
 
 const startSessionSchema = {
@@ -46,7 +72,7 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
   fastify,
   options
 ) => {
-  const repo = options.repo ?? new WorkoutSessionRepository(options.db);
+  const repo = options.repo;
 
   fastify.post(
     "/workout-sessions",
@@ -86,7 +112,7 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { tenantId, userId } = request.authContext!;
       const { id, setId } = request.params as { id: string; setId: string };
-      const body = request.body as UpdateSetRecordInput;
+      const body = request.body as UpdateSetBody;
 
       if (body.rpe !== undefined) {
         const rpeValidation = validateRpe(body.rpe);

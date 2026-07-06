@@ -33,7 +33,7 @@
 | 2.2 | `apps/api/src/db/repositories/__tests__/workout-session.test.ts` | Integration | ✅ 2.1 read-model tests 3/3 | ✅ Added start/reuse tests before implementation | ✅ 5/5 | ✅ immutable snapshot + existing active reuse | ✅ reused read-model mapper for start output |
 | 2.3 | `apps/api/src/db/repositories/__tests__/workout-session.test.ts` | Integration | ✅ 2.1/2.2 repository tests 5/5 | ✅ Added record-set and complete-session tests before implementation | ✅ 8/8 repository tests, 61/61 targeted API tests | ✅ set ownership guard + active-session completion | ✅ kept route concerns out of repository slice |
 | 2.4 | `apps/api/src/routes/__tests__/workout-session.test.ts` | Integration | ✅ existing auth/plan route tests | ✅ Added route tests before route registration | ✅ 7/7 route tests, 68/68 targeted API tests | ✅ 401, 404, 422 body, 422 RPE, active-session reuse, set recording, completion | ✅ injected repository mock to isolate route behavior |
-| 2.5 | `apps/api/src/routes/__tests__/workout-session.test.ts` | Integration | ✅ route tests from 2.4 | ✅ Route tests failed while route module/app registration were absent | ✅ 7/7 route tests, 68/68 targeted API tests | ✅ start/read/record/complete route wiring | ✅ reused repository methods rather than duplicating persistence logic in routes |
+| 2.5 | `apps/api/src/routes/__tests__/workout-session.test.ts` | Integration | ✅ route tests from 2.4 | ✅ Route tests failed while route module/app registration were absent | ✅ 7/7 route tests, 68/68 targeted API tests | ✅ start/read/record/complete route wiring | ✅ route depends on an injected repo port; app composition wires the concrete repository |
 
 ### Test Summary
 
@@ -59,7 +59,7 @@
 | `apps/api/src/db/repositories/__tests__/workout-session.test.ts` | Modified | Repository coverage from earlier PR2 repository slices |
 | `apps/api/src/db/repositories/workout-session.ts` | Modified | Repository implementation from earlier PR2 repository slices |
 | `apps/api/src/routes/__tests__/workout-session.test.ts` | Created | Protected workout-session route tests for auth/error paths and endpoint wiring |
-| `apps/api/src/routes/workout-session.ts` | Created | Protected workout-session routes for start/read/set update/complete |
+| `apps/api/src/routes/workout-session.ts` | Created | Protected workout-session routes for start/read/set update/complete using an injected repository port |
 | `apps/api/src/app.ts` | Modified | Registers workout-session routes with repository dependency |
 | `apps/api/src/db/schema.ts` | Modified | Added workout tracking enum/tables/indexes |
 | `apps/api/drizzle/0005_workout_tracking.sql` | Created | Additive SQL migration with single-active-session unique guard |
@@ -88,6 +88,11 @@ pnpm type-check
 ```text
 pnpm architecture
   Passed dependency-cruiser and negative architecture guards.
+```
+
+```text
+pnpm --filter api test "src/routes/__tests__/workout-session.test.ts" && pnpm type-check && pnpm architecture
+  Passed after decoupling the route plugin from the concrete DB repository adapter.
 ```
 
 ```text

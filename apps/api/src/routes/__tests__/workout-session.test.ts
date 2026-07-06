@@ -73,7 +73,7 @@ async function buildTestApp(repo = buildRepoMock(), db = buildSessionDb()): Prom
   });
 
   await app.register(authPlugin, { db });
-  await app.register(workoutSessionRoutes, { db, repo: repo as never });
+  await app.register(workoutSessionRoutes, { repo: repo as never });
   return app;
 }
 
