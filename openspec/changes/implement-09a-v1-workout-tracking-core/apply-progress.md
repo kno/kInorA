@@ -59,7 +59,7 @@
 | `apps/api/src/db/repositories/__tests__/workout-session.test.ts` | Modified | Repository coverage from earlier PR2 repository slices |
 | `apps/api/src/db/repositories/workout-session.ts` | Modified | Repository implementation from earlier PR2 repository slices |
 | `apps/api/src/routes/__tests__/workout-session.test.ts` | Created | Protected workout-session route tests for auth/error paths and endpoint wiring |
-| `apps/api/src/routes/workout-session.ts` | Created | Protected workout-session routes for start/read/set update/complete using an injected repository port |
+| `apps/api/src/routes/workout-session.ts` | Created | Protected workout-session routes for start/read/set update/complete using an injected repository port and typed Fastify route bodies/params |
 | `apps/api/src/app.ts` | Modified | Registers workout-session routes with repository dependency |
 | `apps/api/src/db/schema.ts` | Modified | Added workout tracking enum/tables/indexes |
 | `apps/api/drizzle/0005_workout_tracking.sql` | Created | Additive SQL migration with single-active-session unique guard |
@@ -93,6 +93,11 @@ pnpm architecture
 ```text
 pnpm --filter api test "src/routes/__tests__/workout-session.test.ts" && pnpm type-check && pnpm architecture
   Passed after decoupling the route plugin from the concrete DB repository adapter.
+```
+
+```text
+pnpm --filter api test "src/routes/__tests__/workout-session.test.ts" && pnpm type-check
+  Passed after replacing manual request.body/request.params casts with Fastify route generics.
 ```
 
 ```text

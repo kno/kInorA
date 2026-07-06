@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyPluginAsync } from "fastify";
 import { requireAuth } from "../auth/plugin.js";
 import { validateRpe } from "@kinora/domain";
 import type { WorkoutSessionRecord } from "@kinora/contracts";
@@ -9,6 +9,19 @@ interface UpdateSetBody {
   rpe?: number;
   completed: boolean;
   notes?: string;
+}
+
+interface StartSessionBody {
+  workoutPlanId: string;
+  day: number;
+}
+
+interface SessionParams {
+  id: string;
+}
+
+interface SetParams extends SessionParams {
+  setId: string;
 }
 
 export interface WorkoutSessionRouteRepo {
@@ -74,14 +87,14 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
 ) => {
   const repo = options.repo;
 
-  fastify.post(
+  fastify.post<{ Body: StartSessionBody }>(
     "/workout-sessions",
     { schema: startSessionSchema, preHandler: requireAuth() },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request, reply) => {
       const { tenantId, userId } = request.authContext!;
-      const body = request.body as { workoutPlanId: string; day: number };
+      const { workoutPlanId, day } = request.body;
 
-      const session = await repo.startSession(tenantId, userId, body.workoutPlanId, body.day);
+      const session = await repo.startSession(tenantId, userId, workoutPlanId, day);
       if (!session) {
         return reply.code(404).send({ error: "not_found" });
       }
@@ -90,12 +103,12 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
     }
   );
 
-  fastify.get(
+  fastify.get<{ Params: SessionParams }>(
     "/workout-sessions/:id",
     { preHandler: requireAuth() },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request, reply) => {
       const { tenantId, userId } = request.authContext!;
-      const { id } = request.params as { id: string };
+      const { id } = request.params;
 
       const session = await repo.findById(tenantId, userId, id);
       if (!session) {
@@ -106,13 +119,13 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
     }
   );
 
-  fastify.patch(
+  fastify.patch<{ Params: SetParams; Body: UpdateSetBody }>(
     "/workout-sessions/:id/sets/:setId",
     { schema: updateSetSchema, preHandler: requireAuth() },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request, reply) => {
       const { tenantId, userId } = request.authContext!;
-      const { id, setId } = request.params as { id: string; setId: string };
-      const body = request.body as UpdateSetBody;
+      const { id, setId } = request.params;
+      const body = request.body;
 
       if (body.rpe !== undefined) {
         const rpeValidation = validateRpe(body.rpe);
@@ -130,12 +143,12 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
     }
   );
 
-  fastify.post(
+  fastify.post<{ Params: SessionParams }>(
     "/workout-sessions/:id/complete",
     { preHandler: requireAuth() },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request, reply) => {
       const { tenantId, userId } = request.authContext!;
-      const { id } = request.params as { id: string };
+      const { id } = request.params;
 
       const session = await repo.completeSession(tenantId, userId, id);
       if (!session) {
