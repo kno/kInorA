@@ -37,8 +37,8 @@ Chain strategy: stacked-to-main
 - [x] 2.1 RED/GREEN: add `findById` repository tests and implementation for tenant/user-scoped session reads with exercises and set records.
 - [x] 2.2 RED/GREEN: add repository tests and implementation for immutable snapshot start plus active-session reuse.
 - [x] 2.3 RED/GREEN: extend repository tests and implementation for set writes and session completion.
-- [ ] 2.4 RED/GREEN: add route tests in `apps/api/src/routes/__tests__/workout-session.test.ts` for 401, 404, 422, and “start existing active session” behavior.
-- [ ] 2.5 GREEN: create `apps/api/src/routes/workout-session.ts` and register it in `apps/api/src/app.ts`; map bad RPE/body to 422 and mismatches to 404.
+- [x] 2.4 RED/GREEN: add route tests in `apps/api/src/routes/__tests__/workout-session.test.ts` for 401, 404, 422, and “start existing active session” behavior.
+- [x] 2.5 GREEN: create `apps/api/src/routes/workout-session.ts` and register it in `apps/api/src/app.ts`; map bad RPE/body to 422 and mismatches to 404.
 
 ## Phase 3: Web Tracker Surface
 
