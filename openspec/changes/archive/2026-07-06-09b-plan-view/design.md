@@ -20,19 +20,13 @@ No new DB schema; no new plan renderer (reuse `PlanStatusView`).
 
 **Rationale**: The selector needs the full list anyway. Adding `/latest` would duplicate the
 newest-first contract the list already guarantees and create a second route to keep consistent.
-Deriving the default from `list[0]` is DRY and removes a route. The earlier `/workout-plans/latest`
-+ `findLatestByUser` plan is dropped in favor of `findAllByUser` + `list[0]`.
+Deriving the default from `list[0]` is DRY and removes a route.
 
 ### Decision: Selector via query-param navigation (no client→API fetch)
 
 **Choice**: The selector is a small client component (`<select>`). On change it calls
 `router.push("/plan?planId=" + id)`. The `/plan` server component reads `searchParams.planId`,
-resolves the selected plan server-side, and re-renders. When the param is absent it defaults to
-`list[0]` (latest).
-
-**Alternatives considered**: Client component fetching the selected plan via a server action into
-local state (more JS, a loading flicker, and diverges from the SSR-friendly URL-as-state model);
-direct browser→API fetch (forbidden by `ui-api-guard.mjs`).
+resolves the selected plan server-side, and re-renders.
 
 **Rationale**: Query-param navigation keeps ALL data-fetching server-side, makes the selection
 shareable/bookmarkable, satisfies "shows on the same page" (same `/plan` route re-rendered with the
@@ -43,29 +37,17 @@ new param), and needs only a tiny client component for the `<select>` + `router.
 **Choice**: `/plan/page.tsx` is an async server component that calls `listPlansAction()` and
 `getPlanStatusAction(selectedId)` at render time — same pattern as `/plan/[id]/page.tsx`.
 
-**Rationale**: Server components give zero-JS data fetching, SSR HTML for first paint, and trivially
-enforce the browser-never-calls-API constraint. The only client island is the selector.
-
 ### Decision: Per-selection states; redirect in-flight plans to /plan/[id]
 
-**Choice** (locked): the selected plan resolves to one of four states.
 - `generating` → **`redirect("/plan/${id}")`** so the user lands on the live WebSocket status view.
-- `failed` → render `PlanStatusView` failed state with a **link** to `/plan/[id]` (Regenerate + live status live there). No Regenerate button on `/plan`.
+- `failed` → render `PlanStatusView` failed state with a **link** to `/plan/[id]`. No Regenerate button on `/plan`.
 - `ready` → render `PlanStatusView`.
-- The `empty` state applies only when the user has NO plans at all (no selector shown).
-
-**Rationale**: The WS hook (`use-plan-ws.ts`) is client-side and already lives at `/plan/[id]`;
-duplicating it on the nav tab adds weight. The selector shows generating/failed plans as options,
-but selecting them routes to the appropriate live/detail screen.
+- `empty` state applies only when the user has NO plans at all (no selector shown).
 
 ### Decision: Fail-open on action error / unowned planId
 
-**Choice**: When `listPlansAction()` errors → render empty state with CTA. When `?planId` is not
+When `listPlansAction()` errors → render empty state with CTA. When `?planId` is not
 owned/found (detail 404) → fall back to the latest plan (or empty when none).
-
-**Rationale**: A missing plan is normal for new users; a transient error or a stale/tampered planId
-must not break the nav tab or leak another user's plan. Tenant scoping on the detail route already
-returns 404 for unowned ids.
 
 ## Data Flow
 
@@ -97,43 +79,35 @@ PlanSelector onChange ──→ router.push("/plan?planId=<id>") ──→ serve
 | `apps/api/src/db/repositories/workout-plan.ts` | Modify | Add `findAllByUser(tenantId, userId)` → summaries, newest first |
 | `apps/api/src/routes/plan.ts` | Modify | Register `GET /workout-plans` (list); extend `planRepo` option Pick to include `findAllByUser` |
 | `apps/web/src/app/(app)/create-plan/plan-draft-client.ts` | Modify | Add `fetchUserPlans(token, options)` (list) alongside `fetchPlanStatus` |
-| `apps/web/src/app/(app)/plan/actions.ts` | Create | `listPlansAction()` — `"use server"`, reads cookie, calls `fetchUserPlans`. (Detail reuses existing `getPlanStatusAction` in `plan/[id]/actions.ts`.) |
+| `apps/web/src/app/(app)/plan/actions.ts` | Create | `listPlansAction()` — `"use server"`, reads cookie, calls `fetchUserPlans` |
 | `apps/web/src/app/(app)/plan/PlanSelector.tsx` | Create | Client component: `<select>` of summaries; `router.push("/plan?planId=<id>")` on change |
-| `apps/web/src/app/(app)/plan/page.tsx` | Modify | Replace placeholder with async server component: reads `searchParams.planId`, lists plans, resolves selected (default `list[0]`), renders selector + state |
-| `apps/web/src/i18n/messages/en.json` | Modify | Add keys: `plan_nav_empty_*` + `plan_selector_label`, `plan_selector_option` (date + status formatting) |
+| `apps/web/src/app/(app)/plan/page.tsx` | Modify | Replace placeholder with async server component |
+| `apps/web/src/i18n/messages/en.json` | Modify | Add keys: `plan_nav_empty_*` + `plan_selector_label`, `plan_selector_option` |
 | `apps/web/src/i18n/messages/es.json` | Modify | Same keys in Spanish |
 | `apps/api/src/db/repositories/__tests__/workout-plan.test.ts` | Modify | Add tests for `findAllByUser` |
-| `apps/api/src/routes/__tests__/plan.test.ts` | Modify | Add tests for `GET /workout-plans` (200 array/empty, 401, scoping) |
+| `apps/api/src/routes/__tests__/plan.test.ts` | Modify | Add tests for `GET /workout-plans` |
 | `apps/web/src/app/(app)/plan/__tests__/page.test.tsx` | Create | Tests: selector + ready/failed/empty + default-latest + `?planId` selection |
 | `apps/web/src/app/(app)/plan/__tests__/PlanSelector.test.tsx` | Create | Tests: renders options newest-first; onChange pushes `/plan?planId=<id>` |
 
 ## Interfaces / Contracts
 
 ```ts
-// apps/api/src/db/repositories/workout-plan.ts — new method (summaries, newest first)
+// New repo method
 export interface WorkoutPlanSummary {
   id: string;
   status: "generating" | "ready" | "failed";
   createdAt: Date;
 }
-async findAllByUser(
-  tenantId: string,
-  userId: string
-): Promise<WorkoutPlanSummary[]>
+async findAllByUser(tenantId: string, userId: string): Promise<WorkoutPlanSummary[]>
 
-// apps/web/src/app/(app)/create-plan/plan-draft-client.ts — new function
-export interface PlanSummary { id: string; status: string; createdAt: string; }
-export type FetchUserPlansResult =
-  | { kind: "ok"; plans: PlanSummary[] }
-  | { kind: "error"; message: string };
+// New client function
 export async function fetchUserPlans(
   token: string | undefined,
   options?: ClientOptions
 ): Promise<FetchUserPlansResult>
 
-// apps/web/src/app/(app)/plan/actions.ts — new server action
+// New server action
 export async function listPlansAction(): Promise<FetchUserPlansResult>
-// Detail reuses existing getPlanStatusAction(planId) from plan/[id]/actions.ts
 ```
 
 List route DTO:
@@ -141,28 +115,17 @@ List route DTO:
 // GET /workout-plans → 200
 Array<{ id: string; status: string; createdAt: string }>   // newest first; [] when none
 ```
-Detail route DTO (unchanged, existing GET /workout-plans/:id):
-```ts
-{ id: string; status: string; program?: WorkoutProgram; specId?: string }
-```
 
 ## Testing Strategy
 
 | Layer | What to Test | Approach |
 |-------|-------------|----------|
 | Unit — repo | `findAllByUser`: newest-first order; only tenant+user rows; empty array for unknown user; cross-tenant/cross-user excluded | Vitest + mock Drizzle db |
-| Unit — web client | `fetchUserPlans`: 200 array → `kind:"ok"`; 401 → error; no token → error; empty array preserved | Vitest + `fetchImpl` mock |
-| Integration — route | `GET /workout-plans`: 200 array (DTO shape, ordering); 200 [] when none; 401 unauthenticated; scoping (only own plans) | Vitest + in-memory Fastify + mock planRepo |
-| Unit — selector | renders options newest-first with current selection marked; onChange → `router.push("/plan?planId=<id>")` | Vitest + RTL + mocked next/navigation router |
-| Unit — web page | default-latest when no param; `?planId` selects that plan; unowned id falls back; ready renders sessions; failed renders link-out; empty renders CTA (no selector) | Vitest + RTL, mock `listPlansAction` + `getPlanStatusAction` |
+| Integration — route | `GET /workout-plans`: 200 array (DTO shape, ordering); 200 [] when none; 401 unauthenticated; scoping | Vitest + in-memory Fastify + mock planRepo |
+| Unit — selector | renders options newest-first; onChange → `router.push("/plan?planId=<id>")` | Vitest + RTL + mocked next/navigation |
+| Unit — web page | default-latest; `?planId` selection; unowned fallback; ready/failed/empty states | Vitest + RTL, mock actions |
 
 ## Migration / Rollout
 
-No migration required. `findAllByUser` is a pure read query on the existing `workout_plans` table;
-no schema change. The new `GET /workout-plans` route is additive. The `/plan` page replacement plus
-the new `PlanSelector` client island is a single atomic swap with no backward-compatibility concern.
-
-## Open Questions
-
-- [ ] Selector option label v1: created date + status only (workout_plans has no name). A richer
-      label via a join to the plan spec's goal is deferred to a follow-up.
+No migration required. `findAllByUser` is a pure read query on the existing `workout_plans` table.
+The new `GET /workout-plans` route is additive. The `/plan` page replacement is an atomic swap.
