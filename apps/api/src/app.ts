@@ -9,6 +9,7 @@ import { authRoutes } from "./routes/auth.js";
 import { healthRoute } from "./routes/health.js";
 import { socialRoutes } from "./routes/social.js";
 import { planRoutes } from "./routes/plan.js";
+import { workoutSessionRoutes } from "./routes/workout-session.js";
 import { wsRoutes } from "./routes/ws.js";
 import { WorkoutPlanRepository } from "./db/repositories/workout-plan.js";
 import { PlanSpecRepository } from "./db/repositories/plan-spec.js";
@@ -21,6 +22,7 @@ import { adminAiConfigRoutes } from "./routes/admin-ai-config.js";
 import { WsRegistry } from "./ws/registry.js";
 import type { PlanGenerator } from "./ai/port.js";
 import type { SocialAuthService } from "./auth/social.js";
+import { WorkoutSessionRepository } from "./db/repositories/workout-session.js";
 
 export interface BuildAppOptions {
   db?: Database;
@@ -146,6 +148,7 @@ export async function buildApp(
   const configRepo = new AiProviderConfigRepository(database);
   const generator = planGenerator ?? new DynamicPlanGenerator(configRepo, buildAdapters());
   const workoutPlanRepo = new WorkoutPlanRepository(database);
+  const workoutSessionRepo = new WorkoutSessionRepository(database);
   const planSpecRepo = new PlanSpecRepository(database);
   const planGenerationService = new PlanGenerationService(
     generator,
@@ -160,6 +163,11 @@ export async function buildApp(
     generationService: planGenerationService,
     planRepo: workoutPlanRepo,
     specRepo: planSpecRepo,
+  });
+
+  await app.register(workoutSessionRoutes, {
+    db: database,
+    repo: workoutSessionRepo,
   });
 
   // Admin AI config routes — GET/PUT /admin/ai-config (requireAuth + requireAdmin).
