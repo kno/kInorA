@@ -12,7 +12,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
 import { authPlugin } from "../../auth/plugin.js";
-import { planRoutes } from "../plan.js";
+import { planRoutes, type PlanRouteRepo } from "../plan.js";
 import type { Database } from "../../db/client.js";
 import type { WorkoutPlanRecord } from "../../db/repositories/workout-plan.js";
 import type { WorkoutProgram } from "@kinora/contracts";
@@ -30,17 +30,6 @@ const USER_A = "aaaaaaaa-0000-0000-0000-000000000002";
 const TENANT_B = "bbbbbbbb-0000-0000-0000-000000000001";
 const SPEC_ID = "spec-uuid-1";
 const PLAN_ID = "plan-uuid-1";
-
-const confirmedSpecJson = {
-  goal: "strength",
-  daysPerWeek: 3,
-  sessionDurationMinutes: 60,
-  location: "gym",
-  equipment: ["barbell"],
-  limitations: [],
-  preferenceScores: { strength: 0.9, hypertrophy: 0.6, endurance: 0.2, mobility: 0.3 },
-  confirmed: true,
-};
 
 const mockProgram: WorkoutProgram = {
   weeklySessions: [
@@ -141,20 +130,12 @@ function buildMockPlanRepo(opts: {
   };
 }
 
-function buildMockSpecRepo(specRow?: unknown) {
-  return {
-    findConfirmedById: vi.fn().mockResolvedValue(specRow ?? { specJson: confirmedSpecJson }),
-    create: vi.fn(),
-  };
-}
-
 // --- App builder ---
 
 async function buildTestApp(opts: {
   db: Database;
   generationService?: ReturnType<typeof buildMockGenerationService>;
   planRepo?: ReturnType<typeof buildMockPlanRepo>;
-  specRepo?: ReturnType<typeof buildMockSpecRepo>;
 }): Promise<FastifyInstance> {
   const app = Fastify();
 
@@ -178,11 +159,35 @@ async function buildTestApp(opts: {
     startGeneration: vi.fn().mockRejectedValue(new Error("unexpected call")),
   };
 
+  // Build the PlanRouteRepo port from the mock repos. The port's findPlanById /
+  // findLatestPlanBySpec / findAllPlansByUser REUSE the same vi.fn() spies from
+  // planRepo so existing `expect(planRepo.findById).toHaveBeenCalledWith(...)`
+  // assertions still hold.
+  //
+  // The generation routes exercised here (confirm/regenerate + the plan GETs)
+  // NEVER touch the wizard draft port (upsertDraft/findCurrentDraft/
+  // promoteDraftToSpec). Those methods are therefore FAIL-FAST stubs: if a route
+  // change accidentally introduces a dependency on the draft flow, the test
+  // surfaces it loudly instead of silently returning a canned value.
+  const planRepoMock = opts.planRepo ?? buildMockPlanRepo();
+  const repo: PlanRouteRepo = {
+    upsertDraft: vi.fn(() => {
+      throw new Error("unexpected call: upsertDraft");
+    }),
+    findCurrentDraft: vi.fn(() => {
+      throw new Error("unexpected call: findCurrentDraft");
+    }),
+    promoteDraftToSpec: vi.fn(() => {
+      throw new Error("unexpected call: promoteDraftToSpec");
+    }),
+    findPlanById: planRepoMock.findById,
+    findLatestPlanBySpec: planRepoMock.findLatestByPlanSpec,
+    findAllPlansByUser: planRepoMock.findAllByUser,
+  };
+
   await app.register(planRoutes, {
-    db: opts.db,
+    repo,
     generationService: svc as never,
-    planRepo: opts.planRepo as never,
-    specRepo: opts.specRepo as never,
   });
 
   return app;

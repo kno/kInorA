@@ -1,16 +1,72 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
-import type { Database } from "../db/client.js";
 import { requireAuth } from "../auth/plugin.js";
-import { PlanDraftRepository } from "../db/repositories/plan-draft.js";
-import { PlanSpecRepository } from "../db/repositories/plan-spec.js";
-import { WorkoutPlanRepository } from "../db/repositories/workout-plan.js";
 import { assertPlanSpecInput, assertPlanSpecShape } from "../plan/boundary.js";
 import { derivePreferenceScores } from "@kinora/domain";
 import type { PlanSpec } from "@kinora/contracts";
 import type { PlanGenerationService } from "../ai/generation-service.js";
 
+/**
+ * A workout plan record as returned to the route (structural shape, declared
+ * inline so the route layer never imports the DB layer). Mirrors the fields the
+ * route maps into the client DTO.
+ */
+interface PlanRecord {
+  id: string;
+  status: string;
+  programJson?: unknown;
+  planSpecId: string;
+}
+
+/** Lightweight plan summary for the list endpoint. */
+interface PlanSummary {
+  id: string;
+  status: string;
+  createdAt: Date;
+}
+
+/**
+ * Route port for the plan wizard + generation endpoints. Encapsulates the
+ * draft/spec/plan reads and — critically — the cross-repo atomic promote
+ * (promoteDraftToSpec), whose db.transaction lives in the app.ts adapter. The
+ * route calls only these methods and never touches the DB layer or a
+ * transaction primitive.
+ */
+export interface PlanRouteRepo {
+  upsertDraft(
+    tenantId: string,
+    userId: string,
+    step: number,
+    spec: Partial<PlanSpec>
+  ): Promise<{ step: number; specJson: unknown }>;
+  findCurrentDraft(
+    tenantId: string,
+    userId: string
+  ): Promise<{ step: number; specJson: unknown } | null>;
+  /** Atomic: insert confirmed spec + delete draft in ONE db.transaction (owned by app.ts). */
+  promoteDraftToSpec(
+    tenantId: string,
+    userId: string,
+    spec: PlanSpec
+  ): Promise<{ id: string; spec: PlanSpec }>;
+  findPlanById(
+    tenantId: string,
+    userId: string,
+    id: string
+  ): Promise<PlanRecord | undefined>;
+  findLatestPlanBySpec(
+    tenantId: string,
+    userId: string,
+    specId: string
+  ): Promise<PlanRecord | undefined>;
+  findAllPlansByUser(tenantId: string, userId: string): Promise<PlanSummary[]>;
+}
+
 export interface PlanRoutesOptions {
-  db: Database;
+  /**
+   * Route port — constructed in app.ts (the sole composition root). Encapsulates
+   * all draft/spec/plan persistence and the atomic promote transaction.
+   */
+  repo: PlanRouteRepo;
   /**
    * Generation service — REQUIRED. Provide a real PlanGenerationService in
    * production (wired in buildApp) or a MockPlanGenerator-backed instance in tests.
@@ -18,16 +74,6 @@ export interface PlanRoutesOptions {
    * is caught at boot, not at the first request.
    */
   generationService: Pick<PlanGenerationService, "startGeneration">;
-  /**
-   * Injectable WorkoutPlanRepository — defaults to constructing from db.
-   * Pass a mock in tests.
-   */
-  planRepo?: Pick<WorkoutPlanRepository, "findById" | "findLatestByPlanSpec" | "findAllByUser">;
-  /**
-   * Injectable PlanSpecRepository — defaults to constructing from db.
-   * Pass a mock in tests to control findConfirmedById results.
-   */
-  specRepo?: Pick<PlanSpecRepository, "findConfirmedById" | "create">;
 }
 
 /**
@@ -75,16 +121,13 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   fastify,
   options
 ) => {
-  const { db } = options;
+  const { repo } = options;
 
   // Assert DI contract at registration time — fail fast if the caller forgot to wire the service.
   if (!options.generationService) {
     throw new Error("generationService is required for plan generation routes");
   }
 
-  const draftRepo = new PlanDraftRepository(db);
-  const specRepo = options.specRepo ?? new PlanSpecRepository(db);
-  const planRepo = options.planRepo ?? new WorkoutPlanRepository(db);
   const generationService = options.generationService;
 
   // POST /plan-specs/drafts
@@ -97,7 +140,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       const { tenantId, userId } = request.authContext!;
       const body = request.body as { step: number; spec: Partial<PlanSpec> };
 
-      const draft = await draftRepo.upsert(tenantId, userId, body.step, body.spec);
+      const draft = await repo.upsertDraft(tenantId, userId, body.step, body.spec);
       return reply.code(200).send({ step: draft.step, spec: draft.specJson });
     }
   );
@@ -110,7 +153,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { tenantId, userId } = request.authContext!;
 
-      const draft = await draftRepo.findCurrent(tenantId, userId);
+      const draft = await repo.findCurrentDraft(tenantId, userId);
       if (!draft) {
         return reply.code(204).send();
       }
@@ -130,7 +173,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { tenantId, userId } = request.authContext!;
 
-      const draft = await draftRepo.findCurrent(tenantId, userId);
+      const draft = await repo.findCurrentDraft(tenantId, userId);
       if (!draft) {
         return reply.code(409).send({ error: "no_active_draft" });
       }
@@ -158,14 +201,10 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       // This should always pass given correct derivation; if it throws, it is a server bug.
       assertPlanSpecShape(confirmedSpec);
 
-      // Insert the confirmed plan_specs row and delete the draft in a single
-      // transaction so that either both succeed or neither does — no orphan
-      // draft or duplicate spec row on partial failure.
-      const result = await db.transaction(async (tx) => {
-        const specResult = await specRepo.create(tenantId, userId, confirmedSpec, tx);
-        await draftRepo.delete(tenantId, userId, tx);
-        return specResult;
-      });
+      // Insert the confirmed plan_specs row and delete the draft atomically.
+      // The single db.transaction wrapping both writes is owned by the app.ts
+      // adapter behind this port method — the route never sees a transaction.
+      const result = await repo.promoteDraftToSpec(tenantId, userId, confirmedSpec);
 
       return reply.code(201).send({ id: result.id, spec: result.spec });
     }
@@ -226,7 +265,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
     { preHandler: requireAuth() },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { tenantId, userId } = request.authContext!;
-      const summaries = await planRepo.findAllByUser(tenantId, userId);
+      const summaries = await repo.findAllPlansByUser(tenantId, userId);
       return reply.code(200).send(
         summaries.map((s) => ({
           id: s.id,
@@ -250,7 +289,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       const { tenantId, userId } = request.authContext!;
       const { id } = request.params as { id: string };
 
-      const plan = await planRepo.findById(tenantId, userId, id);
+      const plan = await repo.findPlanById(tenantId, userId, id);
       if (!plan) {
         return reply.code(404).send({ error: "not_found" });
       }
@@ -282,7 +321,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       const { tenantId, userId } = request.authContext!;
       const { id } = request.params as { id: string };
 
-      const plan = await planRepo.findLatestByPlanSpec(tenantId, userId, id);
+      const plan = await repo.findLatestPlanBySpec(tenantId, userId, id);
       if (!plan) {
         return reply.code(404).send({ error: "not_found" });
       }

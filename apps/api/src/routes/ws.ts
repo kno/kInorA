@@ -47,9 +47,45 @@ import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import type { WsRegistry } from "../ws/registry.js";
 import type { WebSocket } from "@fastify/websocket";
 import { resolveAuthContextFromToken } from "../auth/plugin.js";
-import { SessionRepository } from "../db/repositories/session.js";
-import { MembershipRepository } from "../db/repositories/auth-context.js";
-import type { Database } from "../db/client.js";
+
+/**
+ * Session row shape the auth resolver reads. Declared inline (structural) so the
+ * route layer never imports the DB layer directly; app.ts injects a concrete
+ * SessionRepository-backed adapter whose result is structurally compatible.
+ */
+export interface WsSessionRecord {
+  tokenHash: string;
+  userId: string;
+  tenantId: string;
+  createdAt: Date;
+  expiresAt: Date;
+}
+
+/**
+ * Membership row shape used by the tenant-scoped fail-secure re-check.
+ */
+export interface WsMembershipRecord {
+  id: string;
+  tenantId: string;
+  userId: string;
+  role: "owner" | "member";
+  status: "invited" | "active" | "suspended";
+  createdAt: Date;
+}
+
+/**
+ * Route port for the WS auth flow. Encapsulates the two lookups the cookie/
+ * ?token= paths need — the session by token hash and the tenant-scoped
+ * membership — so the route never touches the DB layer. Structurally
+ * compatible with the resolveAuthContextFromToken dependency shape.
+ */
+export interface WsRouteRepo {
+  findByTokenHash(tokenHash: string): Promise<WsSessionRecord | null>;
+  findByTenantAndUser(
+    tenantId: string,
+    userId: string
+  ): Promise<WsMembershipRecord | null>;
+}
 
 /**
  * Session cookie name — MUST match the web app's SESSION_COOKIE
@@ -61,8 +97,12 @@ const SESSION_COOKIE = "kinora_session";
 
 export interface WsRoutesOptions {
   registry: WsRegistry;
-  /** DB instance for query-param token resolution. Injected from app.ts. */
-  db: Database;
+  /**
+   * Route port backing cookie/?token= auth resolution. Injected from app.ts
+   * (constructed from SessionRepository + MembershipRepository). The route never
+   * touches the DB layer directly.
+   */
+  repo: WsRouteRepo;
   /**
    * Origin allowlist for the CSWSH gate. A browser WS upgrade (one carrying an
    * `Origin` header) is accepted ONLY when its Origin is in this list. Sourced
@@ -116,8 +156,7 @@ function isOriginAllowed(
 async function wsAuthPreValidation(
   request: FastifyRequest<{ Querystring: { token?: string } }>,
   reply: FastifyReply,
-  sessionRepo: Pick<SessionRepository, "findByTokenHash">,
-  membershipRepo: Pick<MembershipRepository, "findByTenantAndUser">,
+  repo: WsRouteRepo,
   allowedOrigins: readonly string[]
 ): Promise<void> {
   // CSWSH gate — runs BEFORE auth so a cross-site Origin never reaches the
@@ -141,8 +180,8 @@ async function wsAuthPreValidation(
   const cookieToken = request.cookies?.[SESSION_COOKIE];
   if (cookieToken) {
     const ctx = await resolveAuthContextFromToken(cookieToken, {
-      sessionRepo,
-      membershipRepo,
+      sessionRepo: repo,
+      membershipRepo: repo,
     });
     if (ctx) {
       request.authContext = ctx;
@@ -157,8 +196,8 @@ async function wsAuthPreValidation(
   const queryToken = request.query.token;
   if (queryToken) {
     const ctx = await resolveAuthContextFromToken(queryToken, {
-      sessionRepo,
-      membershipRepo,
+      sessionRepo: repo,
+      membershipRepo: repo,
     });
     if (ctx) {
       request.authContext = ctx;
@@ -180,9 +219,7 @@ export const wsRoutes: FastifyPluginAsync<WsRoutesOptions> = async (
   fastify,
   options
 ) => {
-  const { registry, db } = options;
-  const sessionRepo = new SessionRepository(db);
-  const membershipRepo = new MembershipRepository(db);
+  const { registry, repo } = options;
   // Normalize once at registration. Empty list → fail-closed for browsers
   // (any Origin header is rejected); non-browser no-Origin clients still work.
   const allowedOrigins = options.allowedOrigins ?? [];
@@ -198,8 +235,7 @@ export const wsRoutes: FastifyPluginAsync<WsRoutesOptions> = async (
           wsAuthPreValidation(
             request as FastifyRequest<{ Querystring: { token?: string } }>,
             reply,
-            sessionRepo,
-            membershipRepo,
+            repo,
             allowedOrigins
           ),
       ],
