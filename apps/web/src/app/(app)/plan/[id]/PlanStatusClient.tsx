@@ -23,11 +23,18 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { usePlanWs } from "@/hooks/use-plan-ws";
-import { getPlanStatusAction } from "./actions";
+import {
+  completeWorkoutSessionAction,
+  getPlanStatusAction,
+  recordWorkoutSetAction,
+  startWorkoutSessionAction,
+} from "./actions";
 import { regeneratePlanAction } from "@/app/(app)/create-plan/actions";
 import { PlanStatusView } from "./PlanStatusView";
-import type { WorkoutProgram } from "@kinora/contracts";
+import { TrackerPanel } from "./TrackerPanel";
+import type { WorkoutProgram, WorkoutSessionRecord } from "@kinora/contracts";
 import type { Messages } from "@/i18n/locale";
+import type { WorkoutSetUpdateInput } from "./tracker-types";
 
 export interface PlanStatusClientProps {
   planId: string;
@@ -48,6 +55,7 @@ export function PlanStatusClient({
     initialProgram,
   );
   const [regenerating, setRegenerating] = useState(false);
+  const [activeSession, setActiveSession] = useState<WorkoutSessionRecord | undefined>();
 
   // usePlanWs opens the WebSocket and updates status on push messages.
   // Falls back to polling GET /workout-plans/:id if the WS connect fails.
@@ -91,6 +99,33 @@ export function PlanStatusClient({
     }
   }, [specId]);
 
+  const handleStartWorkout = useCallback(async (day: number) => {
+    const session = await startWorkoutSessionAction(planId, day);
+    setActiveSession(session);
+  }, [planId]);
+
+  const handleRecordSet = useCallback(async (setId: string, input: WorkoutSetUpdateInput) => {
+    if (!activeSession) return;
+    const session = await recordWorkoutSetAction(activeSession.id, setId, input);
+    setActiveSession(session);
+  }, [activeSession]);
+
+  const handleCompleteWorkout = useCallback(async (sessionId: string) => {
+    const session = await completeWorkoutSessionAction(sessionId);
+    setActiveSession(session);
+  }, []);
+
+  if (activeSession) {
+    return (
+      <TrackerPanel
+        session={activeSession}
+        messages={messages as Record<string, string> | undefined}
+        onRecordSet={handleRecordSet}
+        onCompleteSession={handleCompleteWorkout}
+      />
+    );
+  }
+
   return (
     <PlanStatusView
       planId={planId}
@@ -99,6 +134,7 @@ export function PlanStatusClient({
       specId={specId}
       messages={messages as Record<string, string> | undefined}
       onRegenerate={handleRegenerate}
+      onStartWorkout={handleStartWorkout}
     />
   );
 }
