@@ -107,7 +107,9 @@ pnpm --filter web test "src/app/(app)/plan/[id]/__tests__/actions.test.ts" "src/
 
 ## Deviations from Design
 
-None — implementation matches the Phase 3 web tracker boundary and keeps analytics/offline plus issue #85 guardrails out of scope.
+- **Helper file naming** — `design.md` specified helper files named `plan-draft-client.ts` and `boundary.ts`. The implementation used `tracker-client.ts` (server-only API helpers) and route-local Fastify JSON schemas instead of a separate `boundary.ts`. Functionally equivalent and structurally cleaner; no behavioral impact.
+
+Phase 3 web tracker boundary is otherwise matched exactly. Analytics/offline controls and issue #85 route-layer guardrails remain intentionally out of scope.
 
 ---
 
@@ -154,6 +156,13 @@ New tests added: 5 (3 repository, 2 route). Targeted API run:
 because the underlying behavior already existed from Phase 1-3, these function as
 characterization/coverage tests rather than new-behavior RED cycles — documented
 honestly here per strict-TDD reporting.
+
+- **(d) Start requires a ready plan → no session is created** — SPEC SCENARIO GAP filled (Warning 1).
+  Added repository tests `returns undefined and performs no insert when the plan is not in a ready state`
+  and `returns undefined and performs no insert when the requested day does not exist in the plan`,
+  plus route test `returns 404 when start is called for a plan that is not ready`.
+  All three are characterization tests — the behavior was already correct and implemented.
+  Targeted run after additions: `2 files passed, 23 tests passed` (was 20; +3).
 
 ### 4.2 Verification sweep (actual output)
 
