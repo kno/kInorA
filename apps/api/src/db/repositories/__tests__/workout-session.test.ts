@@ -59,6 +59,13 @@ const sessionRow = {
   updatedAt: new Date("2026-07-04T08:30:00Z"),
 };
 
+const completedSessionRow = {
+  ...sessionRow,
+  status: "completed" as const,
+  completedAt: new Date("2026-07-04T09:20:00Z"),
+  updatedAt: new Date("2026-07-04T09:20:00Z"),
+};
+
 const exerciseRows = [
   {
     id: EXERCISE_1_ID,
@@ -115,7 +122,14 @@ const initialSetRows = [
 ];
 
 const completedSetRows = [
-  { ...initialSetRows[0], actualReps: 10, weightKg: "80.50", rpe: 8, completed: true, notes: "Strong set" },
+  {
+    ...initialSetRows[0],
+    actualReps: 10,
+    weightKg: "80.50",
+    rpe: 8,
+    completed: true,
+    notes: "Strong set",
+  },
 ];
 
 function createQueuedSelectDb(queues: Map<object, unknown[][]>) {
@@ -255,6 +269,104 @@ describe("WorkoutSessionRepository", () => {
       const result = await repo.findById(TENANT_A, USER_B, SESSION_ID);
 
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe("recordSet", () => {
+    it("writes actual set data and returns the refreshed session snapshot", async () => {
+      const updatedSetRows = [
+        {
+          ...initialSetRows[0],
+          actualReps: 10,
+          weightKg: "80",
+          rpe: 8,
+          completed: true,
+          notes: "Strong set",
+        },
+        initialSetRows[1],
+        initialSetRows[2],
+      ];
+
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[sessionRow], [sessionRow]]],
+        [sessionExercises, [exerciseRows, exerciseRows]],
+        [setRecords, [initialSetRows, updatedSetRows]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const returning = vi.fn().mockResolvedValue([updatedSetRows[0]]);
+      const where = vi.fn().mockReturnValue({ returning });
+      const set = vi.fn().mockReturnValue({ where });
+      const update = vi.fn().mockReturnValue({ set });
+      const repo = new WorkoutSessionRepository({ select, update } as never);
+
+      const result = await repo.recordSet(TENANT_A, USER_A, SESSION_ID, SET_1_ID, {
+        actualReps: 10,
+        weightKg: 80,
+        rpe: 8,
+        completed: true,
+        notes: "Strong set",
+      });
+
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(set).toHaveBeenCalledWith({
+        actualReps: 10,
+        weightKg: "80",
+        rpe: 8,
+        completed: true,
+        notes: "Strong set",
+      });
+      expect(result?.exercises[0]?.setRecords[0]).toMatchObject({
+        id: SET_1_ID,
+        actualReps: 10,
+        weightKg: 80,
+        rpe: 8,
+        completed: true,
+        notes: "Strong set",
+      });
+    });
+
+    it("returns undefined when the set does not belong to the active session", async () => {
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[sessionRow]]],
+        [sessionExercises, [exerciseRows]],
+        [setRecords, [initialSetRows]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const update = vi.fn();
+      const repo = new WorkoutSessionRepository({ select, update } as never);
+
+      const result = await repo.recordSet(
+        TENANT_A,
+        USER_A,
+        SESSION_ID,
+        "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        { completed: true }
+      );
+
+      expect(result).toBeUndefined();
+      expect(update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("completeSession", () => {
+    it("marks the active session as completed and returns completed state", async () => {
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[completedSessionRow]]],
+        [sessionExercises, [exerciseRows]],
+        [setRecords, [initialSetRows]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const returning = vi.fn().mockResolvedValue([completedSessionRow]);
+      const where = vi.fn().mockReturnValue({ returning });
+      const set = vi.fn().mockReturnValue({ where });
+      const update = vi.fn().mockReturnValue({ set });
+      const repo = new WorkoutSessionRepository({ select, update } as never);
+
+      const result = await repo.completeSession(TENANT_A, USER_A, SESSION_ID);
+
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(result?.status).toBe("completed");
+      expect(result?.completedAt).toBe("2026-07-04T09:20:00.000Z");
     });
   });
 });
