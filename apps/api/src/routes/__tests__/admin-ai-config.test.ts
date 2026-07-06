@@ -29,46 +29,50 @@ const CONFIG_ROW = {
   updatedAt: new Date("2026-06-30T00:00:00Z"),
 };
 
-// --- Mock DB builder ---
+// --- Mock DB builder (auth plugin ONLY) ---
 //
 // The auth plugin's onRequest hook calls, in order:
 //   1. db.select().from(sessions).where(...)            → session row
 //   2. db.select().from(memberships).where(and(tenantId, userId)) → membership row
 //      (fail-secure, TENANT-SCOPED re-check that the user is still `active`)
 //
-// requireAdmin then calls via UserRepository:
-//   3. db.select().from(users).where(eq(users.id, ...)) → user row
-//
-// The shared createAuthMockDb models selects 1+2; the user row is passed as an
-// additional (3rd) ordered select.
+// requireAdmin now reads the user via the injected AdminAiConfigRouteRepo
+// (repo.findUserById), NOT via a db select — so the db mock only needs the two
+// auth selects. The user row is provided through the port mock below.
 
 const ACTIVE_MEMBERSHIP_ROW = buildActiveMembershipRow({
   tenantId: TENANT_ID,
   userId: USER_ID,
 });
 
-function buildMockDb(
-  sessionRow: typeof SESSION_ROW | null,
-  userRow: typeof ADMIN_USER_ROW | typeof NONADMIN_USER_ROW | null
-) {
+function buildMockDb(sessionRow: typeof SESSION_ROW | null) {
   return createAuthMockDb({
     sessionRows: sessionRow ? [sessionRow] : [],
     membershipRows: [ACTIVE_MEMBERSHIP_ROW],
-    additionalRows: [userRow ? [userRow] : []],
   }).db;
 }
 
-// --- Config repo mock ---
+// --- AdminAiConfigRouteRepo port mock ---
+//
+// Collapses the former db-backed user lookup + configRepo into a single port.
+// findUserById feeds buildRequireAdmin (via { findById: repo.findUserById });
+// getActiveConfig / upsertConfig replace the old configRepo methods.
 
-function buildConfigRepo(activeRow: typeof CONFIG_ROW | null = CONFIG_ROW) {
+function buildAdminRepo(
+  userRow: typeof ADMIN_USER_ROW | typeof NONADMIN_USER_ROW | null,
+  activeRow: typeof CONFIG_ROW | null = CONFIG_ROW
+) {
   return {
-    getActive: vi.fn().mockResolvedValue(activeRow),
-    upsert: vi.fn().mockImplementation(async (provider: string, model: string) => ({
-      ...CONFIG_ROW,
-      provider,
-      model,
-      updatedAt: new Date(),
-    })),
+    findUserById: vi.fn().mockResolvedValue(userRow),
+    getActiveConfig: vi.fn().mockResolvedValue(activeRow),
+    upsertConfig: vi
+      .fn()
+      .mockImplementation(async (provider: string, model: string) => ({
+        ...CONFIG_ROW,
+        provider,
+        model,
+        updatedAt: new Date(),
+      })),
   };
 }
 
@@ -77,9 +81,9 @@ function buildConfigRepo(activeRow: typeof CONFIG_ROW | null = CONFIG_ROW) {
 async function buildTestApp(
   userRow: typeof ADMIN_USER_ROW | typeof NONADMIN_USER_ROW | null,
   sessionExists = true,
-  configRepo = buildConfigRepo()
+  repo = buildAdminRepo(userRow)
 ): Promise<FastifyInstance> {
-  const db = buildMockDb(sessionExists ? SESSION_ROW : null, userRow) as never;
+  const db = buildMockDb(sessionExists ? SESSION_ROW : null) as never;
 
   const app = Fastify();
   app.setErrorHandler((error: unknown, _req, reply) => {
@@ -94,8 +98,9 @@ async function buildTestApp(
     return reply.code(500).send({ error: "Internal Server Error" });
   });
 
+  // Auth plugin keeps its own db mock; the route receives the port only.
   await app.register(authPlugin, { db });
-  await app.register(adminAiConfigRoutes, { db, configRepo });
+  await app.register(adminAiConfigRoutes, { repo });
 
   return app;
 }
@@ -149,7 +154,7 @@ describe("GET /admin/ai-config", () => {
   });
 
   it("returns null when no config row exists", async () => {
-    app = await buildTestApp(ADMIN_USER_ROW, true, buildConfigRepo(null));
+    app = await buildTestApp(ADMIN_USER_ROW, true, buildAdminRepo(ADMIN_USER_ROW, null));
 
     const res = await app.inject({
       method: "GET",
@@ -199,8 +204,8 @@ describe("PUT /admin/ai-config", () => {
 
   // SC-05: valid payload → 200, config updated
   it("returns 200 with updated config for a valid payload (SC-05)", async () => {
-    const configRepo = buildConfigRepo();
-    app = await buildTestApp(ADMIN_USER_ROW, true, configRepo);
+    const repo = buildAdminRepo(ADMIN_USER_ROW);
+    app = await buildTestApp(ADMIN_USER_ROW, true, repo);
 
     const res = await app.inject({
       method: "PUT",
@@ -213,7 +218,7 @@ describe("PUT /admin/ai-config", () => {
     const body = res.json() as { provider: string; model: string };
     expect(body.provider).toBe("openai");
     expect(body.model).toBe("gpt-4o");
-    expect(configRepo.upsert).toHaveBeenCalledWith("openai", "gpt-4o");
+    expect(repo.upsertConfig).toHaveBeenCalledWith("openai", "gpt-4o");
   });
 
   it("returns 422 when model is an empty string", async () => {
