@@ -137,6 +137,45 @@ describe("Workout session routes", () => {
     expect(response.json().error).toContain("RPE");
   });
 
+  it("accepts inclusive RPE boundary values and records the set", async () => {
+    for (const rpe of [0, 10]) {
+      const repo = buildRepoMock({ recordSet: vi.fn().mockResolvedValue(activeSession) });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/workout-sessions/${SESSION_ID}/sets/${SET_ID}`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: { actualReps: 8, weightKg: 80, rpe, completed: true },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(repo.recordSet).toHaveBeenCalledWith(TENANT_A, USER_A, SESSION_ID, SET_ID, {
+        actualReps: 8,
+        weightKg: 80,
+        rpe,
+        completed: true,
+      });
+
+      await app.close();
+    }
+  });
+
+  it("returns 404 when recording a set for another user's session in the same tenant", async () => {
+    const repo = buildRepoMock({ recordSet: vi.fn().mockResolvedValue(undefined) });
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/workout-sessions/${SESSION_ID}/sets/${SET_ID}`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { actualReps: 8, weightKg: 80, rpe: 8, completed: true },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error).toBe("not_found");
+  });
+
   it("returns the existing active session when start is called again", async () => {
     const repo = buildRepoMock({ startSession: vi.fn().mockResolvedValue(activeSession) });
     app = await buildTestApp(repo);
