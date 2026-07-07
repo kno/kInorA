@@ -11,6 +11,13 @@ export interface WorkoutPlanSummary {
   id: string;
   status: "generating" | "ready" | "failed";
   createdAt: Date;
+  /**
+   * Raw user-supplied plan name (#93). Nullable: legacy rows and blank wizard
+   * submissions are stored as NULL. The repo returns the raw column value; the
+   * blank→default rule is applied once in the app.ts adapter via
+   * `defaultPlanName(name, createdAt)` (single default layer).
+   */
+  name?: string | null;
 }
 
 /**
@@ -22,6 +29,8 @@ export interface WorkoutPlanRecord {
   userId: string;
   planSpecId: string;
   status: "generating" | "ready" | "failed";
+  /** Raw user-supplied plan name (#93). See WorkoutPlanSummary.name. */
+  name: string | null;
   programJson: WorkoutProgram | null;
   errorMessage: string | null;
   createdAt: Date;
@@ -48,15 +57,22 @@ export class WorkoutPlanRepository {
    * Called immediately when a confirm/regenerate request is received, before
    * the background LLM generation task starts.
    * Returns the persisted { id, status }.
+   *
+   * `name` (#93) is the optional user-supplied plan name carried on the confirmed
+   * PlanSpec (spec_json) and threaded here by the generation service. It is
+   * written verbatim to `workout_plans.name`. A blank submission arrives as null
+   * and is stored as null — the blank→default rule is applied ONLY on read via
+   * `defaultPlanName`, never at write time, so the date-based default stays dynamic.
    */
   async createGenerating(
     tenantId: string,
     userId: string,
-    planSpecId: string
+    planSpecId: string,
+    name?: string | null
   ): Promise<{ id: string; status: "generating" }> {
     const rows = await this.db
       .insert(workoutPlans)
-      .values({ tenantId, userId, planSpecId, status: "generating" })
+      .values({ tenantId, userId, planSpecId, status: "generating", name: name ?? null })
       .returning();
     const row = rows[0] as WorkoutPlanRecord;
     return { id: row.id, status: "generating" };
@@ -148,6 +164,7 @@ export class WorkoutPlanRepository {
         id: workoutPlans.id,
         status: workoutPlans.status,
         createdAt: workoutPlans.createdAt,
+        name: workoutPlans.name,
       })
       .from(workoutPlans)
       .where(

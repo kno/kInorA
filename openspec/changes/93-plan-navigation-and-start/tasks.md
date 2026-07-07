@@ -84,31 +84,38 @@ Each slice fits within the 400-line budget on its own. No further splitting requ
 
 ### Phase 2.1: API — Plan Repo + Adapters
 
-- [ ] 2.1.1 [RED] Write/extend `apps/api/src/db/repositories/__tests__/workout-plan.test.ts`: `findAllByUser` projection includes `name`; null `name` row returns non-null `name` after adapter.
-- [ ] 2.1.2 [GREEN] Modify `apps/api/src/db/repositories/workout-plan.ts`: add `name: workoutPlans.name` to `findAllByUser` `.select({…})` projection; `WorkoutPlanSummary` (repo) gains `name?: string | null`.
-- [ ] 2.1.3 Modify `apps/api/src/app.ts`: in `findAllPlansByUser` adapter map `name: defaultPlanName(row.name, row.createdAt)`; in `findPlanById` adapter do the same (single default layer).
-- [ ] 2.1.4 [RED] Write/extend `apps/api/src/routes/__tests__/plan.test.ts`: `GET /workout-plans` response items include `name`; `GET /workout-plans/:id` response includes `name`; `GET /plan-specs/:id/workout-plan` response includes `name`.
-- [ ] 2.1.5 [GREEN] Modify `apps/api/src/routes/plan.ts`: inline `PlanRecord.name?` + `PlanSummary.name`; map `name` into all three route response shapes.
+- [x] 2.1.1 [RED] Write/extend `apps/api/src/db/repositories/__tests__/workout-plan.test.ts`: `findAllByUser` projection includes `name`; null `name` row returns non-null `name` after adapter.
+- [x] 2.1.2 [GREEN] Modify `apps/api/src/db/repositories/workout-plan.ts`: add `name: workoutPlans.name` to `findAllByUser` `.select({…})` projection; `WorkoutPlanSummary` (repo) gains `name?: string | null`.
+- [x] 2.1.3 Adapter is `createPlanRouteRepo` in `apps/api/src/plan-route-repo.ts` (the composition-root adapter wired by app.ts; lives outside routes/ so it may import db+domain). `findPlanById`, `findLatestPlanBySpec`, and `findAllPlansByUser` map `name: defaultPlanName(row.name, row.createdAt)` — single default layer. Covered by `src/__tests__/plan-route-repo.test.ts`.
+- [x] 2.1.4 [RED] Write/extend `apps/api/src/routes/__tests__/plan.test.ts`: `GET /workout-plans` response items include `name`; `GET /workout-plans/:id` response includes `name`; `GET /plan-specs/:id/workout-plan` response includes `name`.
+- [x] 2.1.5 [GREEN] Modify `apps/api/src/routes/plan.ts`: inline `PlanRecord.name?` + `PlanSummary.name`; map `name` into all three route response shapes.
+- [x] 2.1.6 [WRITE-PATH — closes the round-trip gap] The name is captured by the wizard and resolved/displayed on read, but was NEVER written to `workout_plans.name` (`createGenerating` inserted no `name`), so user input was silently dropped. Persistence path chosen: carry the optional `name?: string | null` on the confirmed `PlanSpec` (rides in `plan_specs.spec_json`) because promote (`POST /plan-specs`) and generation (`POST /plan-specs/:id/confirm`) are two separate requests and the draft is deleted on promote — so the spec is the only durable carrier to generation time.
+  - [x] 2.1.6a [RED+GREEN] `packages/contracts/src/index.ts`: add optional nullable `name?` to `PlanSpec`; contracts `plan-spec.test.ts` asserts it.
+  - [x] 2.1.6b [RED+GREEN] `apps/api/src/plan/boundary.ts`: `assertPlanSpecShape` accepts an optional `name` that must be `string | null`; `boundary.test.ts` covers accept/reject.
+  - [x] 2.1.6c [RED+GREEN] `apps/api/src/routes/plan.ts` promote handler: preserve the wizard-captured `name` onto the confirmed spec (previously dropped by the input `Pick`), normalizing blank/whitespace/non-string → `null` (no write-time default); `plan.test.ts` regression covers preserve + normalize.
+  - [x] 2.1.6d [RED+GREEN] `apps/api/src/db/repositories/workout-plan.ts`: `createGenerating(tenantId, userId, planSpecId, name?)` writes `name ?? null` to `workout_plans.name`; `workout-plan.test.ts` covers persist + null-when-blank.
+  - [x] 2.1.6e [RED+GREEN] `apps/api/src/ai/generation-service.ts`: thread `spec.name ?? null` from the confirmed spec into `createGenerating`; `generation-service.test.ts` covers null-when-absent + name passthrough.
+  - [x] 2.1.6f [RED+GREEN] Round-trip test `apps/api/src/__tests__/plan-name-roundtrip.test.ts`: write via `createGenerating` → read via `createPlanRouteRepo` adapter proves a user-entered name surfaces as that exact name (list + detail) AND a blank name persists as `null` and surfaces as the `defaultPlanName` default. This is the test that would have caught the gap.
 
 ### Phase 2.2: Web — Types + Wizard
 
-- [ ] 2.2.1 Modify `apps/web/src/app/(app)/create-plan/plan-draft-client.ts`: add `name?` to `PlanSummary` and `PlanStatusResponse`; `FetchPlanResult.plan` carries `name`.
-- [ ] 2.2.2 [RED] Write wizard test asserting optional name field renders, blank submission advances without error, non-blank value is included in the submitted `PlanSpec`.
-- [ ] 2.2.3 [GREEN] Modify wizard components under `apps/web/src/app/(app)/create-plan/` to add an optional name input step/field; pipe value into `PlanSpec`/draft output. Blank → `null` (server resolves via `defaultPlanName`).
+- [x] 2.2.1 Modify `apps/web/src/app/(app)/create-plan/plan-draft-client.ts`: add `name?` to `PlanSummary` and `PlanStatusResponse`; `FetchPlanResult.plan` carries `name`.
+- [x] 2.2.2 [RED] Write wizard test asserting optional name field renders, blank submission advances without error, non-blank value is included in the submitted `PlanSpec`.
+- [x] 2.2.3 [GREEN] Added a `DraftSpec = Partial<PlanSpec> & { name?: string | null }` type + optional name `<input>` on the final wizard step (StepperShell.tsx). Blank/whitespace → `null` (trimmed otherwise); threaded into the final `saveDraftAction` draft. Server resolves the default via `defaultPlanName`.
 
 ### Phase 2.3: Web — UI Display
 
-- [ ] 2.3.1 [RED] Write unit test for `PlanSelector`: two plans with distinct names render distinct labels; null-name plan renders auto-default (plan.name already resolved server-side).
-- [ ] 2.3.2 [GREEN] Modify `apps/web/src/app/(app)/plan/PlanSelector.tsx`: use `plan.name` as primary option label.
-- [ ] 2.3.3 [RED] Write unit test for plan header in `PlanWeekView` or `plan/page.tsx`: renders `plan.name`.
-- [ ] 2.3.4 [GREEN] Modify `apps/web/src/app/(app)/plan/PlanWeekView.tsx` (or `plan/page.tsx`) to display plan name in header area.
+- [x] 2.3.1 [RED] Write unit test for `PlanSelector`: two plans with distinct names render distinct labels; null-name plan renders auto-default (plan.name already resolved server-side).
+- [x] 2.3.2 [GREEN] Modify `apps/web/src/app/(app)/plan/PlanSelector.tsx`: use `plan.name` as primary option label.
+- [x] 2.3.3 [RED] Write unit test for plan header in `PlanWeekView`: renders `plan.name` (h1), omits when absent.
+- [x] 2.3.4 [GREEN] Added `planName?` prop + `<h1>` header to `PlanWeekView.tsx`; `plan/page.tsx` threads `plan.name` (server-resolved).
 
 ### Phase 2.4: i18n
 
-- [ ] 2.4.1 Add keys to `apps/web/src/i18n/en.json`: `plan_name_field_label`, `plan_name_placeholder`, `plan_name_default`.
-- [ ] 2.4.2 Add same keys to `apps/web/src/i18n/es.json` with Spanish translations.
-- [ ] 2.4.3 Replace any inline strings in wizard name field and plan selector label with i18n calls.
-- [ ] 2.4.4 Run `pnpm test` — suite MUST be green.
+- [x] 2.4.1 Added keys to `apps/web/src/i18n/messages/en.json`: `plan_name_field_label`, `plan_name_placeholder`, `plan_name_default`.
+- [x] 2.4.2 Added same keys to `apps/web/src/i18n/messages/es.json` with Spanish translations (catalog-parity test green).
+- [x] 2.4.3 Wizard name field uses `t("plan_name_field_label")`/`t("plan_name_placeholder")`; PlanSelector uses `plan.name` primary + `t("plan_selector_option")` fallback — no inline literals introduced.
+- [x] 2.4.4 Web + api vitest suites green (see verification evidence).
 
 ---
 

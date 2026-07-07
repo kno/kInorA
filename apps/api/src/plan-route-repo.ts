@@ -4,6 +4,7 @@ import type { PlanDraftRepository } from "./db/repositories/plan-draft.js";
 import type { WorkoutPlanRepository } from "./db/repositories/workout-plan.js";
 import type { PlanRouteRepo } from "./routes/plan.js";
 import type { PlanSpec } from "@kinora/contracts";
+import { defaultPlanName } from "@kinora/domain";
 
 /**
  * Composition-root factory for the plan route port.
@@ -47,11 +48,28 @@ export function createPlanRouteRepo(deps: {
         await planDraftRepo.delete(tenantId, userId, tx);
         return result;
       }),
+    // #93: the plan name blank→default rule is resolved HERE, in the single
+    // composition-root adapter layer, so list, detail, selector, and header all
+    // render the SAME label. defaultPlanName(row.name, row.createdAt) returns the
+    // trimmed name or a date-based fallback; clients never branch on null.
     findPlanById: (tenantId, userId, id) =>
-      workoutPlanRepo.findById(tenantId, userId, id),
+      workoutPlanRepo.findById(tenantId, userId, id).then((row) =>
+        row
+          ? { ...row, name: defaultPlanName(row.name, row.createdAt) }
+          : row
+      ),
     findLatestPlanBySpec: (tenantId, userId, specId) =>
-      workoutPlanRepo.findLatestByPlanSpec(tenantId, userId, specId),
+      workoutPlanRepo.findLatestByPlanSpec(tenantId, userId, specId).then((row) =>
+        row
+          ? { ...row, name: defaultPlanName(row.name, row.createdAt) }
+          : row
+      ),
     findAllPlansByUser: (tenantId, userId) =>
-      workoutPlanRepo.findAllByUser(tenantId, userId),
+      workoutPlanRepo.findAllByUser(tenantId, userId).then((rows) =>
+        rows.map((row) => ({
+          ...row,
+          name: defaultPlanName(row.name, row.createdAt),
+        }))
+      ),
   };
 }

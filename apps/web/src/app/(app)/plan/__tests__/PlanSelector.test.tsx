@@ -127,6 +127,66 @@ describe("PlanSelector", () => {
     expect(routerPush).toHaveBeenCalledWith("/plan?planId=plan-newer");
   });
 
+  it("renders the resolved plan name as the option label (#93)", () => {
+    const named: PlanSummaryItem[] = [
+      { id: "p1", status: "ready", createdAt: "2026-06-29T10:00:00.000Z", name: "Summer Cut" },
+      { id: "p2", status: "ready", createdAt: "2026-06-28T09:00:00.000Z", name: "Winter Bulk" },
+    ];
+    const view = PlanSelector({ summaries: named, selectedId: "p1" });
+    const text = textOf(view);
+    expect(text).toContain("Summer Cut");
+    expect(text).toContain("Winter Bulk");
+  });
+
+  it("two plans with distinct names render distinct labels (#93)", () => {
+    const named: PlanSummaryItem[] = [
+      { id: "p1", status: "ready", createdAt: "2026-06-29T10:00:00.000Z", name: "Alpha" },
+      { id: "p2", status: "ready", createdAt: "2026-06-28T09:00:00.000Z", name: "Beta" },
+    ];
+    const view = PlanSelector({ summaries: named, selectedId: "p1" });
+    const options: AnyElement[] = [];
+    function collect(node: ReactNode) {
+      if (typeof node === "object" && node !== null && "props" in node) {
+        const el = node as AnyElement;
+        if (el.type === "option") options.push(el);
+        collect(el.props.children);
+      }
+      if (Array.isArray(node)) node.forEach(collect);
+    }
+    collect(view);
+    const labels = options.map((o) => textOf(o.props.children));
+    expect(labels).toContain("Alpha");
+    expect(labels).toContain("Beta");
+    expect(labels[0]).not.toBe(labels[1]);
+  });
+
+  it("renders the server-resolved default label when name is a resolved fallback (#93)", () => {
+    // The server always resolves name via defaultPlanName, so the client renders
+    // it verbatim with NO client-side fallback branching.
+    const resolved: PlanSummaryItem[] = [
+      { id: "p1", status: "ready", createdAt: "2026-06-29T10:00:00.000Z", name: "Plan 2026-06-29" },
+    ];
+    const view = PlanSelector({ summaries: resolved, selectedId: "p1" });
+    expect(textOf(view)).toContain("Plan 2026-06-29");
+  });
+
+  it("renders the date/status fallback label when a summary has no name (#93 legacy safety)", () => {
+    // The name field is optional; a legacy/undefined summary must NOT crash and
+    // must fall back to the "{date} ({status})" template.
+    const noName: PlanSummaryItem[] = [
+      { id: "p1", status: "ready", createdAt: "2026-06-29T10:00:00.000Z" },
+    ];
+    let view: ReturnType<typeof PlanSelector> | undefined;
+    expect(() => {
+      view = PlanSelector({ summaries: noName, selectedId: "p1" });
+    }).not.toThrow();
+    const text = textOf(view);
+    // Status appears via the fallback template; the option is not blank.
+    expect(text).toContain("ready");
+    const expectedDate = new Date("2026-06-29T10:00:00.000Z").toLocaleDateString();
+    expect(text).toContain(expectedDate);
+  });
+
   it("renders option values matching plan ids", () => {
     const view = PlanSelector({ summaries, selectedId: "plan-newer" });
     // Find all <option> elements and check their values

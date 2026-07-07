@@ -448,6 +448,145 @@ describe("Plan routes", () => {
       expect(body.spec).toBeDefined();
     });
 
+    // #93: the wizard captures an optional plan name into the draft JSON. On
+    // promote the route rebuilds the confirmed spec from the input fields; the
+    // name MUST survive into the confirmed spec (it is the durable carrier to the
+    // later generation request, where the draft is already deleted). Regression
+    // for the gap where the name was silently dropped by the input Pick.
+    it("preserves a user-entered plan name from the draft into the confirmed spec (#93)", async () => {
+      const promoteDraftToSpec = vi.fn().mockResolvedValue(planSpecRow);
+      const repo = buildPlanRepo({
+        findCurrentDraft: vi.fn().mockResolvedValue({
+          step: 6,
+          specJson: {
+            goal: "strength",
+            daysPerWeek: 3,
+            sessionDurationMinutes: 60,
+            location: "gym",
+            equipment: ["barbell"],
+            limitations: [],
+            name: "Summer Cut",
+          },
+        }),
+        promoteDraftToSpec,
+      });
+      app = await buildTestApp(buildSessionDb(), repo);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/plan-specs",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(promoteDraftToSpec).toHaveBeenCalledTimes(1);
+      const [, , specArg] = promoteDraftToSpec.mock.calls[0];
+      expect(specArg.name).toBe("Summer Cut");
+      expect(specArg.confirmed).toBe(true);
+    });
+
+    it("normalizes a blank/absent plan name to null in the confirmed spec (#93)", async () => {
+      const promoteDraftToSpec = vi.fn().mockResolvedValue(planSpecRow);
+      const repo = buildPlanRepo({
+        findCurrentDraft: vi.fn().mockResolvedValue({
+          step: 6,
+          specJson: {
+            goal: "strength",
+            daysPerWeek: 3,
+            sessionDurationMinutes: 60,
+            location: "gym",
+            equipment: ["barbell"],
+            limitations: [],
+            name: "   ",
+          },
+        }),
+        promoteDraftToSpec,
+      });
+      app = await buildTestApp(buildSessionDb(), repo);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/plan-specs",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(201);
+      const [, , specArg] = promoteDraftToSpec.mock.calls[0];
+      // Whitespace-only → null so the read-side default stays dynamic; never "".
+      expect(specArg.name).toBeNull();
+    });
+
+    // #93 BLOCKER: workout_plans.name is VARCHAR(120). Without a boundary length
+    // guard an over-long name passes validation and blows up the DB INSERT as a
+    // 500. The route must reject it as a clean 4xx BEFORE the write. Negative
+    // control: this test fails (gets 500/201) if the length bound is removed.
+    it("rejects a plan name longer than 120 chars with a 4xx, not a 500 (#93)", async () => {
+      const promoteDraftToSpec = vi.fn().mockResolvedValue(planSpecRow);
+      const repo = buildPlanRepo({
+        findCurrentDraft: vi.fn().mockResolvedValue({
+          step: 6,
+          specJson: {
+            goal: "strength",
+            daysPerWeek: 3,
+            sessionDurationMinutes: 60,
+            location: "gym",
+            equipment: ["barbell"],
+            limitations: [],
+            name: "a".repeat(121),
+          },
+        }),
+        promoteDraftToSpec,
+      });
+      app = await buildTestApp(buildSessionDb(), repo);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/plan-specs",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: {},
+      });
+
+      // Clean client error — never a 500, and the write never runs.
+      expect(response.statusCode).toBeGreaterThanOrEqual(400);
+      expect(response.statusCode).toBeLessThan(500);
+      expect(promoteDraftToSpec).not.toHaveBeenCalled();
+    });
+
+    it("accepts a plan name of exactly 120 chars (#93 boundary)", async () => {
+      const promoteDraftToSpec = vi.fn().mockResolvedValue(planSpecRow);
+      const name120 = "a".repeat(120);
+      const repo = buildPlanRepo({
+        findCurrentDraft: vi.fn().mockResolvedValue({
+          step: 6,
+          specJson: {
+            goal: "strength",
+            daysPerWeek: 3,
+            sessionDurationMinutes: 60,
+            location: "gym",
+            equipment: ["barbell"],
+            limitations: [],
+            name: name120,
+          },
+        }),
+        promoteDraftToSpec,
+      });
+      app = await buildTestApp(buildSessionDb(), repo);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/plan-specs",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(promoteDraftToSpec).toHaveBeenCalledTimes(1);
+      const [, , specArg] = promoteDraftToSpec.mock.calls[0];
+      expect(specArg.name).toBe(name120);
+    });
+
     // Atomicity is now encapsulated behind the port. The route must delegate to
     // repo.promoteDraftToSpec exactly once — the app.ts adapter owns the single
     // db.transaction wrapping specRepo.create + draftRepo.delete. This replaces
@@ -665,6 +804,28 @@ describe("Plan routes", () => {
       expect(body[1].id).toBe("plan-older");
     });
 
+    it("maps the resolved plan name into each list item (#93)", async () => {
+      const summaries = [
+        { id: "plan-newer", status: "ready", createdAt: new Date("2026-06-29T10:00:00Z"), name: "Summer Cut" },
+        { id: "plan-older", status: "generating", createdAt: new Date("2026-06-28T09:00:00Z"), name: "Plan 2026-06-28" },
+      ];
+      const repo = buildPlanRepo({
+        findAllPlansByUser: vi.fn().mockResolvedValue(summaries),
+      });
+      app = await buildTestApp(buildSessionDb(), repo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/workout-plans",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as Array<{ id: string; name?: string }>;
+      expect(body[0].name).toBe("Summer Cut");
+      expect(body[1].name).toBe("Plan 2026-06-28");
+    });
+
     it("calls findAllPlansByUser with tenantId+userId from authContext (SC-04, tenant+user scoping)", async () => {
       const repo = buildPlanRepo({ findAllPlansByUser: vi.fn().mockResolvedValue([]) });
       app = await buildTestApp(buildSessionDb(TENANT_A, USER_A), repo);
@@ -828,6 +989,88 @@ describe("Plan routes", () => {
       });
 
       expect(findPlanById).toHaveBeenCalledWith(TENANT_A, USER_A, PLAN_ID);
+    });
+
+    it("maps the resolved plan name into the detail response (#93)", async () => {
+      const repo = buildPlanRepo({
+        findPlanById: vi
+          .fn()
+          .mockResolvedValue({ ...readyPlanRecord, name: "Summer Cut" }),
+      });
+      app = await buildTestApp(buildSessionDb(TENANT_A, USER_A), repo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/workout-plans/${PLAN_ID}`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.name).toBe("Summer Cut");
+    });
+  });
+
+  // --- GET /plan-specs/:id/workout-plan ---
+
+  describe("GET /plan-specs/:id/workout-plan", () => {
+    const SPEC_ID = "spec-uuid-1";
+    const PLAN_ID = "plan-uuid-1";
+
+    const readyPlanRecord = {
+      id: PLAN_ID,
+      tenantId: TENANT_A,
+      userId: USER_A,
+      planSpecId: SPEC_ID,
+      status: "ready" as const,
+      name: "Summer Cut",
+      programJson: {
+        weeklySessions: [
+          {
+            day: 1,
+            title: "Upper Body",
+            exercises: [{ name: "Squat", sets: 4, reps: "8-12", restSeconds: 90 }],
+          },
+        ],
+        limitationWarnings: [],
+      },
+      errorMessage: null,
+      createdAt: new Date("2026-06-29T12:00:00Z"),
+      updatedAt: new Date("2026-06-29T12:01:00Z"),
+    };
+
+    it("maps the resolved plan name into the spec-detail response (#93)", async () => {
+      const repo = buildPlanRepo({
+        findLatestPlanBySpec: vi.fn().mockResolvedValue(readyPlanRecord),
+      });
+      app = await buildTestApp(buildSessionDb(TENANT_A, USER_A), repo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/plan-specs/${SPEC_ID}/workout-plan`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.id).toBe(PLAN_ID);
+      expect(body.name).toBe("Summer Cut");
+      expect(body.specId).toBe(SPEC_ID);
+    });
+
+    it("returns 404 when no plan exists for the spec", async () => {
+      const repo = buildPlanRepo({
+        findLatestPlanBySpec: vi.fn().mockResolvedValue(undefined),
+      });
+      app = await buildTestApp(buildSessionDb(TENANT_A, USER_A), repo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/plan-specs/${SPEC_ID}/workout-plan`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(404);
     });
   });
 });

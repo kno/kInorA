@@ -164,7 +164,7 @@ describe("PlanGenerationService", () => {
       vi.useRealTimers();
     });
 
-    it("calls createGenerating with tenantId, userId, planSpecId", async () => {
+    it("calls createGenerating with tenantId, userId, planSpecId, and the spec name (null when absent)", async () => {
       const specRow = { specJson: confirmedSpec };
       const specRepo = buildMockSpecRepo(specRow);
       const planRepo = buildMockPlanRepo();
@@ -172,7 +172,25 @@ describe("PlanGenerationService", () => {
 
       await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
 
-      expect(planRepo.createGenerating).toHaveBeenCalledWith(TENANT_A, USER_A, SPEC_ID);
+      // #93: the confirmed spec carries no name here, so null is threaded through
+      // to createGenerating; the read-side default is applied later by the adapter.
+      expect(planRepo.createGenerating).toHaveBeenCalledWith(TENANT_A, USER_A, SPEC_ID, null);
+    });
+
+    it("threads the confirmed spec's user-supplied name into createGenerating (#93)", async () => {
+      const specRow = { specJson: { ...confirmedSpec, name: "Summer Cut" } };
+      const specRepo = buildMockSpecRepo(specRow);
+      const planRepo = buildMockPlanRepo();
+      const service = new PlanGenerationService(generator, specRepo as never, planRepo as never);
+
+      await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
+
+      expect(planRepo.createGenerating).toHaveBeenCalledWith(
+        TENANT_A,
+        USER_A,
+        SPEC_ID,
+        "Summer Cut"
+      );
     });
   });
 
