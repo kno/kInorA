@@ -293,20 +293,16 @@ describe("assertPlanSpecShape — updated for 07-v1-plan-wizard", () => {
     );
   });
 
-  // #93 BLOCKER: name is bounded to the DB column (VARCHAR(120)) at the boundary.
-  it("accepts a PlanSpec with a name of exactly 120 chars (#93 boundary)", () => {
+  // #93: the boundary validates the name TYPE only. Length (VARCHAR(120)) is a
+  // route concern surfaced as 422 plan_name_too_long — the shape validator does
+  // NOT reject on length, so a name of any length passes the type check here.
+  it("accepts a PlanSpec with a name of exactly 120 chars (#93)", () => {
     const spec = { ...VALID_SPEC, name: "a".repeat(120) };
     expect(() => assertPlanSpecShape(spec)).not.toThrow();
   });
 
-  it("rejects a PlanSpec with a name longer than 120 chars (#93)", () => {
-    const invalid = { ...VALID_SPEC, name: "a".repeat(121) };
-    expect(() => assertPlanSpecShape(invalid)).toThrow(/name.*120|at most/i);
-  });
-
-  it("bounds the TRIMMED length — surrounding whitespace does not count (#93)", () => {
-    // 120 real chars padded with whitespace stays under the bound once trimmed.
-    const spec = { ...VALID_SPEC, name: `   ${"a".repeat(120)}   ` };
+  it("does not reject on length — an over-120-char name passes the type check (#93)", () => {
+    const spec = { ...VALID_SPEC, name: "a".repeat(121) };
     expect(() => assertPlanSpecShape(spec)).not.toThrow();
   });
 
@@ -401,9 +397,9 @@ describe("assertPlanSpecInput — wizard input validator", () => {
     ).toThrow(/limitations\[0\].*isWarning|isWarning.*boolean/i);
   });
 
-  // #93 CRITICAL: the route calls assertPlanSpecInput on the RAW draft, so the
-  // name guarantee (type + VARCHAR(120) bound) must be enforced HERE, not only
-  // implicitly by the route's inline guard.
+  // #93: the route calls assertPlanSpecInput on the RAW draft, so the name TYPE
+  // guarantee (string|null) is enforced HERE. Length (VARCHAR(120)) is NOT — it
+  // is a route concern surfaced as a distinct 422 plan_name_too_long.
   it("accepts input with an absent name (#93 — optional)", () => {
     expect(() => assertPlanSpecInput(VALID_INPUT)).not.toThrow();
   });
@@ -430,10 +426,10 @@ describe("assertPlanSpecInput — wizard input validator", () => {
     ).toThrow(/name.*string/i);
   });
 
-  it("rejects input with a name longer than 120 chars (#93)", () => {
+  it("does not reject input on length — length is a route (422) concern, not a boundary one (#93)", () => {
     expect(() =>
       assertPlanSpecInput({ ...VALID_INPUT, name: "a".repeat(121) })
-    ).toThrow(/name.*120|at most/i);
+    ).not.toThrow();
   });
 });
 

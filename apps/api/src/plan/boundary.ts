@@ -1,22 +1,24 @@
 import type { PlanSpec } from "@kinora/contracts";
 
 /**
- * Maximum length of a plan `name` at the API boundary (#93). Mirrors the
- * `workout_plans.name` column (`VARCHAR(120)`) so an over-long name is rejected
- * as a clean 4xx at the boundary instead of blowing up the DB INSERT as a 500.
- * The name is trimmed BEFORE this bound is applied.
+ * Maximum length of a plan `name` (#93). Mirrors the `workout_plans.name` column
+ * (`VARCHAR(120)`) so the promote route can reject an over-long name as a clean
+ * `422 plan_name_too_long` instead of blowing up the DB INSERT as a 500. The
+ * name is trimmed BEFORE this bound is applied. Consumed by the route, not the
+ * type validators below.
  */
 export const PLAN_NAME_MAX_LENGTH = 120;
 
 /**
- * Validates the optional plan `name` (#93). When present it must be a string or
- * null; a string is bounded to PLAN_NAME_MAX_LENGTH after trimming (the DB
- * column is VARCHAR(120)). Absent is valid (legacy specs and callers that never
- * set it). Throws with a descriptive message on violation.
+ * Validates the optional plan `name` TYPE (#93): when present it must be a
+ * string or null. Absent is valid (legacy specs and callers that never set it).
  *
- * Shared by both assertPlanSpecInput (raw wizard input) and assertPlanSpecShape
- * (full confirmed spec) so the length guarantee holds at whichever boundary the
- * route actually calls.
+ * Length is NOT enforced here. The VARCHAR(120) bound is a storage concern
+ * mapped to a distinct `422 plan_name_too_long` by the promote route (see
+ * apps/api/src/routes/plan.ts). Enforcing length here would surface as the
+ * route's generic `409 incomplete_spec` instead — a misleading error — and make
+ * the route's explicit 422 branch unreachable. Type violations stay a boundary
+ * concern, shared by assertPlanSpecInput and assertPlanSpecShape.
  */
 function assertPlanName(name: unknown): void {
   if (name === undefined || name === null) {
@@ -24,11 +26,6 @@ function assertPlanName(name: unknown): void {
   }
   if (typeof name !== "string") {
     throw new Error("PlanSpec.name must be a string or null when present");
-  }
-  if (name.trim().length > PLAN_NAME_MAX_LENGTH) {
-    throw new Error(
-      `PlanSpec.name must be at most ${PLAN_NAME_MAX_LENGTH} characters`
-    );
   }
 }
 
@@ -86,10 +83,8 @@ function assertInputFields(obj: Record<string, unknown>): void {
     }
   }
 
-  // Optional plan name (#93) — validated in the shared input fields so BOTH
-  // assertPlanSpecInput (the raw wizard draft the route promotes) and
-  // assertPlanSpecShape (the full confirmed spec) enforce the string|null type
-  // and the VARCHAR(120) length bound at the boundary the route actually calls.
+  // Optional plan name (#93) — TYPE only (string|null). Length (VARCHAR(120)) is
+  // enforced by the promote route as a distinct 422 plan_name_too_long, not here.
   assertPlanName(obj.name);
 }
 
