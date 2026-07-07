@@ -54,6 +54,7 @@ export default async function PlanStatusPage({ params }: PlanPageProps) {
     <PlanStatusClient
       planId={planId}
       specId={plan.specId}
+      planName={"name" in plan ? plan.name : undefined}
       initialStatus={plan.status}
       initialProgram={
         plan.status === "ready" ? (plan.program as WorkoutProgram) : undefined

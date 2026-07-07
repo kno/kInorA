@@ -23,12 +23,52 @@ const DETAIL_PANEL_ID = "day-detail-panel";
 export interface DayDetailPanelProps {
   sessions: WorkoutSession[];
   messages: Record<string, string>;
+  /**
+   * Per-day start handler (#93 Slice 3). When provided, each open day panel
+   * shows a "Start session" CTA that calls this with the day number. When
+   * absent, the panel stays purely presentational — the legacy `/plan/[id]`
+   * flow (PlanStatusClient) renders its own start buttons and never passes it.
+   */
+  onStartWorkout?: (day: number) => void;
+  /**
+   * Active-session conflict scope (#93 Slice 3). Set when a start attempt
+   * returns a 409 `active_session_conflict`. Renders a localized banner naming
+   * the plan/day the user must resume or finish first. The single-active
+   * invariant is enforced server-side; this only surfaces it.
+   */
+  conflict?: { activePlanName?: string; activeDay: number | null };
 }
 
-export function DayDetailPanel({ sessions, messages }: DayDetailPanelProps) {
+export function DayDetailPanel({
+  sessions,
+  messages,
+  onStartWorkout,
+  conflict,
+}: DayDetailPanelProps) {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
   const t = (key: string, fallback: string): string => messages[key] ?? fallback;
+
+  // Derived localized conflict message (readability: no per-render fn, no
+  // side effects). Empty string when there is no conflict.
+  const conflictText = ((): string => {
+    if (!conflict) return "";
+    if (!conflict.activePlanName) {
+      return t(
+        "plan_start_conflict_generic",
+        "You already have an active workout session.",
+      );
+    }
+    if (conflict.activeDay == null) {
+      return t("plan_start_conflict_no_day", "You have an active session for {plan}.").replace(
+        "{plan}",
+        conflict.activePlanName,
+      );
+    }
+    return t("plan_start_conflict", "You have an active session for {plan} · Day {n}.")
+      .replace("{plan}", conflict.activePlanName)
+      .replace("{n}", String(conflict.activeDay));
+  })();
 
   function handleCardClick(day: number): void {
     setSelectedDay((prev) => (prev === day ? null : day));
@@ -45,6 +85,14 @@ export function DayDetailPanel({ sessions, messages }: DayDetailPanelProps) {
 
   return (
     <div>
+      {/* Active-session conflict banner (#93 Slice 3) — localized, names the
+          plan/day the user must resume or finish before starting another. */}
+      {conflict && (
+        <div className={styles.conflictBanner} role="alert" data-testid="start-conflict">
+          {conflictText}
+        </div>
+      )}
+
       {/* Day card grid */}
       <div className={styles.dayGrid}>
         {sessions.map((session) => {
@@ -171,7 +219,20 @@ export function DayDetailPanel({ sessions, messages }: DayDetailPanelProps) {
               ))}
             </tbody>
           </table>
-          {/* Empezar sesión CTA — deferred to 09a */}
+
+          {/* Per-day Start CTA (#93 Slice 3). Only rendered when a start
+              handler is provided (the `/plan` inline flow). On `/plan` the
+              page renders this panel only for a `ready` plan, so the plan is
+              startable by construction. */}
+          {onStartWorkout && (
+            <button
+              type="button"
+              className="kin-btn kin-btn--primary"
+              onClick={() => onStartWorkout(selectedSession.day)}
+            >
+              {t("plan_day_start_cta", "Start session")}
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -1,7 +1,19 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import type { WorkoutProgram } from "@kinora/contracts";
+
+// Rendering PlanWeekView exercises its child PlanTrackerClient, which imports
+// the "use server" actions and a CSS module — both must be neutralised in jsdom.
+vi.mock("../plan-week-view.module.css", () => ({
+  default: new Proxy({}, { get: (_t, k) => String(k) }),
+}));
+vi.mock("../[id]/actions", () => ({
+  startWorkoutSessionAction: vi.fn(),
+  recordWorkoutSetAction: vi.fn(),
+  completeWorkoutSessionAction: vi.fn(),
+}));
 
 // --- React tree inspection helpers ---
 
@@ -78,6 +90,7 @@ const messages: Record<string, string> = {
   plan_table_rest: "Rest",
   plan_limitation_title: "Important note",
   plan_day_detail_close: "Close",
+  plan_day_start_cta: "Start session",
 };
 
 const twoSessionProgram: WorkoutProgram = {
@@ -134,6 +147,7 @@ describe("PlanWeekView — plan name header (#93)", () => {
       program: twoSessionProgram,
       messages,
       planName: "Summer Cut",
+      planId: "plan-x",
     });
     const heading = findFirst(view, (el) => el.type === "h1" || el.type === "h2");
     expect(heading).toBeDefined();
@@ -145,12 +159,13 @@ describe("PlanWeekView — plan name header (#93)", () => {
       program: twoSessionProgram,
       messages,
       planName: "Winter Bulk",
+      planId: "plan-x",
     });
     expect(textOf(view)).toContain("Winter Bulk");
   });
 
   it("omits the name heading when planName is absent", () => {
-    const view = PlanWeekView({ program: twoSessionProgram, messages });
+    const view = PlanWeekView({ program: twoSessionProgram, messages, planId: "plan-x" });
     const heading = findFirst(view, (el) => el.type === "h1" || el.type === "h2");
     expect(heading).toBeUndefined();
   });
@@ -158,7 +173,7 @@ describe("PlanWeekView — plan name header (#93)", () => {
 
 describe("PlanWeekView — summary strip", () => {
   it("SC-01: session count tile shows the number of weeklySessions (2 sessions)", () => {
-    const view = PlanWeekView({ program: twoSessionProgram, messages });
+    const view = PlanWeekView({ program: twoSessionProgram, messages, planId: "plan-x" });
     const text = textOf(view);
     // The sessions count value should be "2"
     expect(text).toContain("2");
@@ -166,7 +181,7 @@ describe("PlanWeekView — summary strip", () => {
   });
 
   it("SC-01 triangulation: session count tile shows correct number for 5 sessions", () => {
-    const view = PlanWeekView({ program: fiveSessionProgram, messages });
+    const view = PlanWeekView({ program: fiveSessionProgram, messages, planId: "plan-x" });
     const text = textOf(view);
     expect(text).toContain("5");
     expect(text).toContain("Planned sessions");
@@ -186,7 +201,7 @@ describe("PlanWeekView — summary strip", () => {
       ],
       limitationWarnings: [],
     };
-    const view = PlanWeekView({ program: oneSessionProgram, messages });
+    const view = PlanWeekView({ program: oneSessionProgram, messages, planId: "plan-x" });
     // Find the summary tile that contains "Rest days" label
     const restTile = findFirst(
       view,
@@ -214,7 +229,7 @@ describe("PlanWeekView — summary strip", () => {
       })),
       limitationWarnings: [],
     };
-    const view = PlanWeekView({ program: sixSessionProgram, messages });
+    const view = PlanWeekView({ program: sixSessionProgram, messages, planId: "plan-x" });
     const restTile = findFirst(
       view,
       (el) =>
@@ -230,21 +245,21 @@ describe("PlanWeekView — summary strip", () => {
   });
 
   it("SC-03: estimated duration tile shows correct derived value (2 sessions = 21 min)", () => {
-    const view = PlanWeekView({ program: twoSessionProgram, messages });
+    const view = PlanWeekView({ program: twoSessionProgram, messages, planId: "plan-x" });
     const text = textOf(view);
     expect(text).toContain("21");
     expect(text).toContain("Estimated duration");
   });
 
   it("SC-03 triangulation: duration for 5 sessions each with 1 squat (3×150s → 8min each, total 40 min)", () => {
-    const view = PlanWeekView({ program: fiveSessionProgram, messages });
+    const view = PlanWeekView({ program: fiveSessionProgram, messages, planId: "plan-x" });
     const text = textOf(view);
     expect(text).toContain("40");
     expect(text).toContain("Estimated duration");
   });
 
   it("SC-04: volume tile renders the — placeholder, not a real value", () => {
-    const view = PlanWeekView({ program: twoSessionProgram, messages });
+    const view = PlanWeekView({ program: twoSessionProgram, messages, planId: "plan-x" });
     const text = textOf(view);
     expect(text).toContain("—");
     expect(text).toContain("Target volume");
@@ -257,7 +272,7 @@ describe("PlanWeekView — limitation warning banner", () => {
       ...twoSessionProgram,
       limitationWarnings: ["Avoid overhead movements", "Limit knee flexion"],
     };
-    const view = PlanWeekView({ program: programWithWarnings, messages });
+    const view = PlanWeekView({ program: programWithWarnings, messages, planId: "plan-x" });
     const text = textOf(view);
     expect(text).toContain("Important note");
     expect(text).toContain("Avoid overhead movements");
@@ -265,42 +280,40 @@ describe("PlanWeekView — limitation warning banner", () => {
   });
 
   it("SC-17: banner is absent when limitationWarnings is empty", () => {
-    const view = PlanWeekView({ program: twoSessionProgram, messages });
+    const view = PlanWeekView({ program: twoSessionProgram, messages, planId: "plan-x" });
     const text = textOf(view);
     // The limitation title should NOT appear when warnings array is empty
     expect(text).not.toContain("Important note");
   });
 });
 
-describe("PlanWeekView — DayDetailPanel integration", () => {
-  it("SC-06: DayDetailPanel receives the sessions array with correct length", () => {
-    // We inspect the rendered tree to verify DayDetailPanel is rendered
-    // with sessions prop matching weeklySessions.length
-    const view = PlanWeekView({ program: twoSessionProgram, messages });
-    // Find the DayDetailPanel in the tree by looking for a node with sessions prop
-    // Since DayDetailPanel is a client component, PlanWeekView renders it as a React element
-    // We check that it exists in the tree with the right sessions count
-    const ddPanel = findFirst(
-      view,
-      (el) =>
-        typeof el.type === "function" &&
-        (el.type as { displayName?: string; name?: string }).name === "DayDetailPanel" &&
-        Array.isArray(el.props.sessions) &&
-        (el.props.sessions as unknown[]).length === 2,
+describe("PlanWeekView — interactive day grid + start CTA (#93 Slice 3)", () => {
+  // Behavior-first: assert what the USER sees (a startable day grid rendered by
+  // the wrapping client island), not the internal component identity. A rename
+  // of the wrapper no longer silently breaks or passes these tests.
+  it("SC-06: renders one interactive day card per session (2 sessions) with a working Start CTA", () => {
+    render(
+      <>{PlanWeekView({ program: twoSessionProgram, messages, planId: "plan-x" })}</>,
     );
-    expect(ddPanel).toBeDefined();
+
+    // Two day cards, addressable by their aria-label.
+    expect(screen.getByRole("button", { name: "Day 1" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Day 2" })).toBeDefined();
+
+    // The per-day Start CTA is wired (proves PlanTrackerClient passed
+    // onStartWorkout down); it appears once a day is opened.
+    expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+    fireEvent.click(screen.getByText("Push Day"));
+    expect(screen.getByRole("button", { name: "Start session" })).toBeDefined();
   });
 
-  it("SC-06 triangulation: DayDetailPanel receives 5 sessions for 5-session program", () => {
-    const view = PlanWeekView({ program: fiveSessionProgram, messages });
-    const ddPanel = findFirst(
-      view,
-      (el) =>
-        typeof el.type === "function" &&
-        (el.type as { displayName?: string; name?: string }).name === "DayDetailPanel" &&
-        Array.isArray(el.props.sessions) &&
-        (el.props.sessions as unknown[]).length === 5,
+  it("SC-06 triangulation: renders one day card per session for a 5-session program", () => {
+    render(
+      <>{PlanWeekView({ program: fiveSessionProgram, messages, planId: "plan-x" })}</>,
     );
-    expect(ddPanel).toBeDefined();
+
+    for (const day of [1, 2, 3, 4, 5]) {
+      expect(screen.getByRole("button", { name: `Day ${day}` })).toBeDefined();
+    }
   });
 });
