@@ -71,6 +71,17 @@
   margin-bottom: 24px;
 }
 
+/* Active-session conflict banner (#93 Slice 3). */
+.conflictBanner {
+  background: var(--surface);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--r-card);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  font-size: 14px;
+  color: var(--fg);
+}
+
 .limitationBannerTitle {
   font-size: 13px;
   font-weight: 600;

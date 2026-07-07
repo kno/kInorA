@@ -26,6 +26,10 @@ const messages: Record<string, string> = {
   plan_table_rest: "Rest",
   plan_limitation_title: "Important note",
   plan_day_detail_close: "Close",
+  plan_day_start_cta: "Start session",
+  plan_start_conflict: "You have an active session for {plan} · Day {n}.",
+  plan_start_conflict_no_day: "You have an active session for {plan}.",
+  plan_start_conflict_generic: "You already have an active workout session.",
 };
 
 const sessions: WorkoutSession[] = [
@@ -94,6 +98,16 @@ describe("DayDetailPanel — day card grid (SC-06, SC-07, SC-08)", () => {
     // Sessions 2 and 3 have 1 exercise each → "1 exercises" (×2)
     const oneEx = screen.getAllByText(/1 exercises/);
     expect(oneEx.length).toBe(2);
+  });
+
+  it("SC-07: card meta line joins count and duration with the '·' separator", () => {
+    render(<DayDetailPanel sessions={sessions} messages={messages} />);
+    // Assert the exact composed meta text (count · est. N min) so a broken
+    // separator or ordering fails loudly instead of passing on a partial match.
+    // Session 1: 2 exercises; Bench Press 4×(90+30)=480 + Overhead 3×(60+30)=270
+    //   = 750s → ceil(750/60) = 13 min.
+    const meta = screen.getByText(/2 exercises · est\. 13 min/);
+    expect(meta).toBeDefined();
   });
 
   it("SC-08: day cards have role='button' and tabIndex=0", () => {
@@ -317,5 +331,108 @@ describe("DayDetailPanel — keyboard interaction (SC-08, Fix 6)", () => {
     // Press Enter again to close (toggle)
     fireEvent.keyDown(pushDayCard, { key: "Enter" });
     expect(screen.queryByText("Bench Press")).toBeNull();
+  });
+});
+
+describe("DayDetailPanel — per-day Start CTA (#93 Slice 3)", () => {
+  it("renders a Start session CTA inside the open detail panel when onStartWorkout is provided", () => {
+    const onStartWorkout = vi.fn();
+    render(
+      <DayDetailPanel
+        sessions={sessions}
+        messages={messages}
+        onStartWorkout={onStartWorkout}
+      />,
+    );
+
+    // No CTA before a day is opened.
+    expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+
+    // Open Day 1.
+    fireEvent.click(screen.getByText("Push Day"));
+
+    const cta = screen.getByRole("button", { name: "Start session" });
+    expect(cta).toBeDefined();
+  });
+
+  it("clicking the Start CTA invokes onStartWorkout with the selected day", () => {
+    const onStartWorkout = vi.fn();
+    render(
+      <DayDetailPanel
+        sessions={sessions}
+        messages={messages}
+        onStartWorkout={onStartWorkout}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Pull Day")); // day 2
+    fireEvent.click(screen.getByRole("button", { name: "Start session" }));
+
+    expect(onStartWorkout).toHaveBeenCalledTimes(1);
+    expect(onStartWorkout).toHaveBeenCalledWith(2);
+  });
+
+  it("does NOT render the Start CTA when onStartWorkout is absent (legacy /plan/[id] callers)", () => {
+    render(<DayDetailPanel sessions={sessions} messages={messages} />);
+    fireEvent.click(screen.getByText("Push Day"));
+    expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+  });
+});
+
+describe("DayDetailPanel — conflict banner (#93 Slice 3)", () => {
+  it("renders a localized conflict banner naming the active plan and day when conflict is set", () => {
+    render(
+      <DayDetailPanel
+        sessions={sessions}
+        messages={messages}
+        onStartWorkout={vi.fn()}
+        conflict={{ activePlanName: "Summer Block", activeDay: 3 }}
+      />,
+    );
+
+    const banner = screen.getByRole("alert");
+    expect(banner.textContent).toContain("Summer Block");
+    expect(banner.textContent).toContain("3");
+  });
+
+  it("renders a no-day conflict variant when activeDay is null", () => {
+    render(
+      <DayDetailPanel
+        sessions={sessions}
+        messages={messages}
+        onStartWorkout={vi.fn()}
+        conflict={{ activePlanName: "Summer Block", activeDay: null }}
+      />,
+    );
+
+    const banner = screen.getByRole("alert");
+    expect(banner.textContent).toContain("Summer Block");
+    // The no-day variant has no "· Day" segment.
+    expect(banner.textContent).not.toContain("· Day");
+  });
+
+  it("renders a generic conflict banner when the active plan name is unknown", () => {
+    render(
+      <DayDetailPanel
+        sessions={sessions}
+        messages={messages}
+        onStartWorkout={vi.fn()}
+        conflict={{ activeDay: null }}
+      />,
+    );
+
+    const banner = screen.getByRole("alert");
+    expect(banner.textContent).toBe("You already have an active workout session.");
+  });
+
+  it("renders no conflict banner when conflict is undefined", () => {
+    render(
+      <DayDetailPanel
+        sessions={sessions}
+        messages={messages}
+        onStartWorkout={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

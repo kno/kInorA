@@ -23,22 +23,19 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { usePlanWs } from "@/hooks/use-plan-ws";
-import {
-  completeWorkoutSessionAction,
-  getPlanStatusAction,
-  recordWorkoutSetAction,
-  startWorkoutSessionAction,
-} from "./actions";
+import { getPlanStatusAction } from "./actions";
 import { regeneratePlanAction } from "@/app/(app)/create-plan/actions";
 import { PlanStatusView } from "./PlanStatusView";
 import { TrackerPanel } from "./TrackerPanel";
-import type { WorkoutProgram, WorkoutSessionRecord } from "@kinora/contracts";
+import { useWorkoutSession } from "@/app/(app)/plan/use-workout-session";
+import type { WorkoutProgram } from "@kinora/contracts";
 import type { Messages } from "@/i18n/locale";
-import type { WorkoutSetUpdateInput } from "./tracker-types";
 
 export interface PlanStatusClientProps {
   planId: string;
   specId?: string;
+  /** Resolved plan label — shown in the identity header while a session is active. */
+  planName?: string;
   initialStatus: string;
   initialProgram?: WorkoutProgram;
   messages?: Messages;
@@ -47,6 +44,7 @@ export interface PlanStatusClientProps {
 export function PlanStatusClient({
   planId,
   specId,
+  planName,
   initialStatus,
   initialProgram,
   messages,
@@ -55,13 +53,22 @@ export function PlanStatusClient({
     initialProgram,
   );
   const [regenerating, setRegenerating] = useState(false);
-  const [activeSession, setActiveSession] = useState<WorkoutSessionRecord | undefined>();
-  // #93 F1: a start attempt can return a 409 conflict (another day is already
-  // active). This must NOT crash the page — we hold the conflict scope in state
-  // and render a minimal inline message. The fully localized banner is Slice 3.
-  const [conflict, setConflict] = useState<
-    { activePlanName?: string; activeDay?: number | null } | undefined
-  >();
+  // #93 Slice 3: the start/record/complete lifecycle (including the 409-conflict
+  // branch, the completion-return-to-plan fix, the throw guard, and the day
+  // identity) lives in the shared useWorkoutSession hook so /plan and /plan/[id]
+  // stay in lockstep.
+  const {
+    activeSession,
+    activeDay,
+    conflict,
+    error,
+    handleStartWorkout: startWorkout,
+    handleRecordSet,
+    handleCompleteWorkout,
+  } = useWorkoutSession();
+
+  const t = (key: string, fallback: string): string =>
+    (messages as Record<string, string> | undefined)?.[key] ?? fallback;
 
   // usePlanWs opens the WebSocket and updates status on push messages.
   // Falls back to polling GET /workout-plans/:id if the WS connect fails.
@@ -105,53 +112,73 @@ export function PlanStatusClient({
     }
   }, [specId]);
 
-  const handleStartWorkout = useCallback(async (day: number) => {
-    const result = await startWorkoutSessionAction(planId, day);
-    // #93 F1: handle the conflict branch structurally — no throw, no crash.
-    if (result.kind === "conflict") {
-      setConflict({
-        activePlanName: result.activePlanName,
-        activeDay: result.activeDay,
-      });
-      return;
-    }
-    setConflict(undefined);
-    setActiveSession(result.session);
-  }, [planId]);
-
-  const handleRecordSet = useCallback(async (setId: string, input: WorkoutSetUpdateInput) => {
-    if (!activeSession) return;
-    const session = await recordWorkoutSetAction(activeSession.id, setId, input);
-    setActiveSession(session);
-  }, [activeSession]);
-
-  const handleCompleteWorkout = useCallback(async (sessionId: string) => {
-    const session = await completeWorkoutSessionAction(sessionId);
-    setActiveSession(session);
-  }, []);
+  // Bind the shared start handler to this plan's id (the hook is plan-agnostic).
+  const handleStartWorkout = useCallback(
+    (day: number) => startWorkout(planId, day),
+    [startWorkout, planId],
+  );
 
   if (activeSession) {
+    // The tracker takes over the whole view. Re-supply the plan name + day
+    // identity above it, and surface any non-conflict action error inline.
+    const dayLabel =
+      activeDay != null
+        ? t("tracker_tracking_day", "Day {n}").replace("{n}", String(activeDay))
+        : null;
     return (
-      <TrackerPanel
-        session={activeSession}
-        messages={messages as Record<string, string> | undefined}
-        onRecordSet={handleRecordSet}
-        onCompleteSession={handleCompleteWorkout}
-      />
+      <div>
+        {(planName || dayLabel) && (
+          <header data-testid="tracker-identity">
+            {planName && <h1>{planName}</h1>}
+            {dayLabel && <p>{dayLabel}</p>}
+          </header>
+        )}
+        {error && (
+          <p role="alert" data-testid="tracker-error">
+            {t(error, "Something went wrong. Please try again.")}
+          </p>
+        )}
+        <TrackerPanel
+          session={activeSession}
+          messages={messages as Record<string, string> | undefined}
+          onRecordSet={handleRecordSet}
+          onCompleteSession={handleCompleteWorkout}
+        />
+      </div>
     );
   }
+
+  // Localized conflict banner (#93 Slice 3) — reuses the plan_start_conflict*
+  // keys so /plan/[id] matches /plan.
+  const conflictText = (() => {
+    if (!conflict) return "";
+    if (!conflict.activePlanName) {
+      return t(
+        "plan_start_conflict_generic",
+        "You already have an active workout session.",
+      );
+    }
+    if (conflict.activeDay == null) {
+      return t(
+        "plan_start_conflict_no_day",
+        "You have an active session for {plan}.",
+      ).replace("{plan}", conflict.activePlanName);
+    }
+    return t("plan_start_conflict", "You have an active session for {plan} · Day {n}.")
+      .replace("{plan}", conflict.activePlanName)
+      .replace("{n}", String(conflict.activeDay));
+  })();
 
   return (
     <>
       {conflict && (
-        // #93 F1: minimal inline conflict notice (full localized banner is
-        // Slice 3). Rendered instead of crashing when start returns a 409.
         <p role="alert" data-testid="start-conflict">
-          {conflict.activePlanName
-            ? `You already have an active session for ${conflict.activePlanName}${
-                conflict.activeDay != null ? ` · Day ${conflict.activeDay}` : ""
-              }.`
-            : "You already have an active workout session."}
+          {conflictText}
+        </p>
+      )}
+      {error && (
+        <p role="alert" data-testid="tracker-error">
+          {t(error, "Something went wrong. Please try again.")}
         </p>
       )}
       <PlanStatusView
