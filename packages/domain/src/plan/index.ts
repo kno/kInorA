@@ -11,6 +11,8 @@ export type { PlanDraft } from "./plan-draft.js";
 
 export { derivePreferenceScores } from "./derive-preference-scores.js";
 
+export { defaultPlanName } from "./default-plan-name.js";
+
 export {
   SESSION_DURATION_LIMITS,
   validateSessionDuration,

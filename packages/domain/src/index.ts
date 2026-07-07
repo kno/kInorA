@@ -10,6 +10,8 @@ export type { PlanDraft } from "./plan/plan-draft.js";
 
 export { derivePreferenceScores } from "./plan/derive-preference-scores.js";
 
+export { defaultPlanName } from "./plan/default-plan-name.js";
+
 export { validateRpe } from "./plan/rpe.js";
 export type { RpeValidation } from "./plan/rpe.js";
 

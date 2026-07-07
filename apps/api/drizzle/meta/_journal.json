@@ -43,6 +43,13 @@
       "when": 1783149147538,
       "tag": "0005_workout_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783420610681,
+      "tag": "0006_lively_northstar",
+      "breakpoints": true
     }
   ]
 }

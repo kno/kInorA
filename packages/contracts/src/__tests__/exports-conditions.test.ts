@@ -81,6 +81,8 @@ describe("@kinora/contracts export conditions (source-condition convention)", ()
       exercises: SessionExerciseRecord[];
       startedAt: string;
       completedAt?: string;
+      // day is the additive scope column introduced by #93.
+      day?: number;
     }>();
   });
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { SQL } from "drizzle-orm";
 import type { WorkoutProgram } from "@kinora/contracts";
 import { WorkoutSessionRepository } from "../workout-session.js";
 import { sessionExercises, setRecords, workoutPlans, workoutSessions } from "../../schema.js";
@@ -53,6 +54,7 @@ const sessionRow = {
   userId: USER_A,
   workoutPlanId: PLAN_ID,
   status: "active" as const,
+  day: 1,
   startedAt: new Date("2026-07-04T08:30:00Z"),
   completedAt: null,
   createdAt: new Date("2026-07-04T08:30:00Z"),
@@ -180,7 +182,7 @@ function createStartDb() {
 
 describe("WorkoutSessionRepository", () => {
   describe("startSession", () => {
-    it("creates an immutable snapshot from the ready workout plan session", async () => {
+    it("Branch C — creates an immutable snapshot with the day persisted when no active session exists", async () => {
       const { db, insert, transaction } = createStartDb();
       const repo = new WorkoutSessionRepository(db as never);
 
@@ -189,27 +191,39 @@ describe("WorkoutSessionRepository", () => {
 
       expect(transaction).toHaveBeenCalledTimes(1);
       expect(insert).toHaveBeenCalledTimes(3);
+      expect(result.kind).toBe("started");
+      // The day must be written on the new session row.
+      const sessionInsert = insert.mock.results[0]!.value as {
+        values: ReturnType<typeof vi.fn>;
+      };
+      expect(sessionInsert.values).toHaveBeenCalledWith(
+        expect.objectContaining({ workoutPlanId: PLAN_ID, day: 1, status: "active" }),
+      );
       expect(result).toMatchObject({
-        id: SESSION_ID,
-        workoutPlanId: PLAN_ID,
-        status: "active",
-        exercises: [
-          {
-            id: EXERCISE_1_ID,
-            title: "Bench Press",
-            restSeconds: 90,
-            setRecords: [
-              { id: SET_1_ID, targetReps: "8-10", completed: false },
-              { id: SET_2_ID, targetReps: "8-10", completed: false },
-            ],
-          },
-          {
-            id: EXERCISE_2_ID,
-            title: "Chest Supported Row",
-            notes: "Use dumbbells if machine busy",
-            setRecords: [{ id: SET_3_ID, targetReps: "10-12", completed: false }],
-          },
-        ],
+        kind: "started",
+        session: {
+          id: SESSION_ID,
+          workoutPlanId: PLAN_ID,
+          status: "active",
+          day: 1,
+          exercises: [
+            {
+              id: EXERCISE_1_ID,
+              title: "Bench Press",
+              restSeconds: 90,
+              setRecords: [
+                { id: SET_1_ID, targetReps: "8-10", completed: false },
+                { id: SET_2_ID, targetReps: "8-10", completed: false },
+              ],
+            },
+            {
+              id: EXERCISE_2_ID,
+              title: "Chest Supported Row",
+              notes: "Use dumbbells if machine busy",
+              setRecords: [{ id: SET_3_ID, targetReps: "10-12", completed: false }],
+            },
+          ],
+        },
       });
     });
 
@@ -224,8 +238,11 @@ describe("WorkoutSessionRepository", () => {
       readyProgram.weeklySessions[0]!.exercises[0]!.name = "Mutated After Snapshot";
       readyProgram.weeklySessions[0]!.exercises[0]!.restSeconds = 999;
 
-      expect(started?.exercises[0]?.title).toBe("Bench Press");
-      expect(started?.exercises[0]?.restSeconds).toBe(90);
+      expect(started.kind).toBe("started");
+      if (started.kind === "started") {
+        expect(started.session.exercises[0]?.title).toBe("Bench Press");
+        expect(started.session.exercises[0]?.restSeconds).toBe(90);
+      }
 
       // Restore for other tests that share the module-level fixture.
       readyProgram.weeklySessions[0]!.exercises[0]!.name = "Bench Press";
@@ -265,7 +282,7 @@ describe("WorkoutSessionRepository", () => {
       expect(transaction).not.toHaveBeenCalled();
     });
 
-    it("returns the existing active session instead of creating a duplicate", async () => {
+    it("Branch A — resumes the active session when (planId, day) matches", async () => {
       const queues = new Map<object, unknown[][]>([
         [workoutSessions, [[sessionRow], [sessionRow]]],
         [sessionExercises, [exerciseRows]],
@@ -275,11 +292,121 @@ describe("WorkoutSessionRepository", () => {
       const transaction = vi.fn();
       const repo = new WorkoutSessionRepository({ select, transaction } as never);
 
+      // sessionRow.day === 1 and PLAN_ID matches → resume.
       const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 1);
 
       expect(transaction).not.toHaveBeenCalled();
-      expect(result?.id).toBe(SESSION_ID);
-      expect(result?.status).toBe("active");
+      expect(result.kind).toBe("resumed");
+      if (result.kind === "resumed") {
+        expect(result.session.id).toBe(SESSION_ID);
+        expect(result.session.status).toBe("active");
+      }
+    });
+
+    it("Branch B — reports a conflict when the active session is a different (planId, day)", async () => {
+      // Active session is (PLAN_ID, day 1); the caller requests day 2 → conflict.
+      // After the active-session read the repo looks up the active plan's name
+      // (tenant+user scoped) to populate activePlanName; that named plan row is
+      // queued as the SECOND workoutPlans read.
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[sessionRow]]],
+        [workoutPlans, [[{ name: "Summer Cut", createdAt: readyPlanRow.createdAt }]]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const transaction = vi.fn();
+      const repo = new WorkoutSessionRepository({ select, transaction } as never);
+
+      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 2);
+
+      expect(transaction).not.toHaveBeenCalled();
+      expect(result.kind).toBe("conflict");
+      if (result.kind === "conflict") {
+        expect(result.activePlanId).toBe(PLAN_ID);
+        expect(result.activeDay).toBe(1);
+        // F2/risk-CRITICAL: the name is honestly populated from the scoped
+        // plan lookup, not left undefined.
+        expect(result.activePlanName).toBe("Summer Cut");
+      }
+    });
+
+    it("Branch B — resolves a null plan name to the date-based default label (F2)", async () => {
+      // A blank/legacy plan name must resolve through defaultPlanName so the
+      // client still receives a non-empty label.
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[sessionRow]]],
+        [
+          workoutPlans,
+          [[{ name: null, createdAt: new Date("2026-07-06T09:30:00.000Z") }]],
+        ],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const repo = new WorkoutSessionRepository({ select, transaction: vi.fn() } as never);
+
+      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 2);
+
+      expect(result.kind).toBe("conflict");
+      if (result.kind === "conflict") {
+        expect(result.activePlanName).toBe("Plan 2026-07-06");
+      }
+    });
+
+    it("Branch B (legacy null-day) — reports a conflict and never resumes when the active session has no day", async () => {
+      const legacyRow = { ...sessionRow, day: null };
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[legacyRow]]],
+        [workoutPlans, [[{ name: "Summer Cut", createdAt: readyPlanRow.createdAt }]]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const transaction = vi.fn();
+      const repo = new WorkoutSessionRepository({ select, transaction } as never);
+
+      // Even requesting the SAME plan and day 1 must NOT resume a null-day row.
+      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 1);
+
+      expect(transaction).not.toHaveBeenCalled();
+      expect(result.kind).toBe("conflict");
+      if (result.kind === "conflict") {
+        expect(result.activePlanId).toBe(PLAN_ID);
+        expect(result.activeDay).toBeNull();
+      }
+    });
+
+    it("Branch A (defensive) — returns undefined when the active row cannot be re-read by findById (F5)", async () => {
+      // Simulated race/inconsistency: findLatestActiveSession returns an active
+      // row for the requested (planId, day), but the subsequent findById read
+      // returns nothing (e.g. concurrent completion). The intended, covered
+      // behavior is to return undefined so the route maps it to a 404 rather
+      // than a phantom resume — this test LOCKS that contract.
+      const queues = new Map<object, unknown[][]>([
+        // 1st workoutSessions read = active lookup (row present),
+        // 2nd = findById (empty → undefined).
+        [workoutSessions, [[sessionRow], []]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const transaction = vi.fn();
+      const repo = new WorkoutSessionRepository({ select, transaction } as never);
+
+      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 1);
+
+      expect(result).toBeUndefined();
+      expect(transaction).not.toHaveBeenCalled();
+    });
+
+    it("Multi-week — creates a new row for a (planId, day) with a completed history and no active row", async () => {
+      // No ACTIVE session (findLatestActiveSession filters on status='active'),
+      // so a prior completed session for the same (planId, day) does not block
+      // starting a fresh row on a later week.
+      const { db, insert, transaction } = createStartDb();
+      const repo = new WorkoutSessionRepository(db as never);
+
+      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 1);
+
+      expect(transaction).toHaveBeenCalledTimes(1);
+      expect(insert).toHaveBeenCalledTimes(3);
+      expect(result.kind).toBe("started");
+      if (result.kind === "started") {
+        expect(result.session.id).toBe(SESSION_ID);
+      }
     });
   });
 
@@ -296,6 +423,7 @@ describe("WorkoutSessionRepository", () => {
 
       const result = await repo.findById(TENANT_A, USER_A, SESSION_ID);
 
+      expect(result?.day).toBe(1);
       expect(result?.exercises[0]?.setRecords[0]).toMatchObject({
         id: SET_1_ID,
         actualReps: 10,
@@ -339,9 +467,11 @@ describe("WorkoutSessionRepository", () => {
         initialSetRows[2],
       ];
 
+      // sessionExercises is read 3×: findById(pre-check), the session-scoping
+      // subquery build in the UPDATE (risk-BLOCKER fix), and findById(refresh).
       const queues = new Map<object, unknown[][]>([
         [workoutSessions, [[sessionRow], [sessionRow]]],
-        [sessionExercises, [exerciseRows, exerciseRows]],
+        [sessionExercises, [exerciseRows, exerciseRows, exerciseRows]],
         [setRecords, [initialSetRows, updatedSetRows]],
       ]);
       const select = createQueuedSelectDb(queues).select;
@@ -375,6 +505,65 @@ describe("WorkoutSessionRepository", () => {
         completed: true,
         notes: "Strong set",
       });
+    });
+
+    it("NEGATIVE CONTROL (risk-BLOCKER/IDOR) — the UPDATE is scoped to the caller's session so a cross-session setId affects no rows", async () => {
+      // Attack shape: a caller who owns SESSION_ID passes a setId that actually
+      // belongs to ANOTHER session/user. Even if a pre-check were fooled, the
+      // write must be constrained to sets whose sessionExercise belongs to
+      // SESSION_ID — so the DB matches zero rows and recordSet returns undefined.
+      //
+      // Without the fix the UPDATE was `WHERE eq(setRecords.id, setId)` only:
+      // the foreign set WOULD be mutated. This test asserts (a) the .where()
+      // predicate is the composite session-scoped `and` (not a bare id eq), and
+      // (b) a zero-row result maps to undefined (no cross-tenant write).
+      const foreignSetId = "ffffffff-9999-9999-9999-999999999999";
+      // findById returns a session whose exercises DO contain the foreign set,
+      // simulating a pre-check that passed; the SQL scope is the real defense.
+      const sessionWithForeignSet = {
+        ...sessionRow,
+      };
+      const exercisesWithForeignSet = [
+        { ...exerciseRows[0] },
+      ];
+      const setRowsWithForeign = [
+        { ...initialSetRows[0], id: foreignSetId, sessionExerciseId: EXERCISE_1_ID },
+      ];
+
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[sessionWithForeignSet]]],
+        [sessionExercises, [exercisesWithForeignSet, exercisesWithForeignSet]],
+        [setRecords, [setRowsWithForeign]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      // The scoped UPDATE matches no row belonging to SESSION_ID → empty result.
+      const returning = vi.fn().mockResolvedValue([]);
+      const where = vi.fn().mockReturnValue({ returning });
+      const set = vi.fn().mockReturnValue({ where });
+      const update = vi.fn().mockReturnValue({ set });
+      const repo = new WorkoutSessionRepository({ select, update } as never);
+
+      const result = await repo.recordSet(TENANT_A, USER_A, SESSION_ID, foreignSetId, {
+        completed: true,
+      });
+
+      // No row updated → no cross-tenant write leaked back to the caller.
+      expect(result).toBeUndefined();
+      // The write predicate MUST be the composite session-scoped `and`
+      // (id-eq AND the sessionExercise-membership subquery), never a bare
+      // single-column `eq(setRecords.id, setId)`.
+      //
+      // Structural discriminator: drizzle's `and(...)` wraps its combined
+      // sub-conditions in a nested SQL chunk, so its queryChunks contain ≥1
+      // instance of SQL; a bare `eq` has ZERO nested SQL chunks (its middle
+      // chunk is the raw Column). Without the fix (bare eq), nestedSqlChunks
+      // is 0 and this assertion fails — the negative control.
+      expect(where).toHaveBeenCalledTimes(1);
+      const predicate = where.mock.calls[0]![0] as { queryChunks?: unknown[] };
+      const nestedSqlChunks = (predicate.queryChunks ?? []).filter(
+        (chunk) => chunk instanceof SQL,
+      ).length;
+      expect(nestedSqlChunks).toBeGreaterThanOrEqual(1);
     });
 
     it("returns undefined when the set does not belong to the active session", async () => {

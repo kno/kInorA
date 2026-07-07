@@ -122,7 +122,37 @@ describe("workout tracker server actions", () => {
     const result = await startWorkoutSessionAction("plan-1", 1);
 
     expect(startWorkoutSession).toHaveBeenCalledWith("plan-1", 1, "session-tok-abc");
-    expect(result.id).toBe("session-1");
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.session.id).toBe("session-1");
+    }
+  });
+
+  it("returns a structured conflict (does NOT throw) when start hits a 409 active_session_conflict (F1/F3)", async () => {
+    cookieGet.mockReturnValue({ value: "tok" });
+    // tracker-client maps the 409 to a kind:"error" with the conflict scope.
+    startWorkoutSession.mockResolvedValue({
+      kind: "error",
+      message: "active_session_conflict",
+      activePlanName: "Summer Cut",
+      activeDay: 3,
+    });
+
+    // The whole point of F1: this must resolve to a conflict branch, not reject.
+    const result = await startWorkoutSessionAction("plan-1", 1);
+
+    expect(result.kind).toBe("conflict");
+    if (result.kind === "conflict") {
+      expect(result.activePlanName).toBe("Summer Cut");
+      expect(result.activeDay).toBe(3);
+    }
+  });
+
+  it("still throws on a non-conflict start error (network / not_found)", async () => {
+    cookieGet.mockReturnValue({ value: "tok" });
+    startWorkoutSession.mockResolvedValue({ kind: "error", message: "api_unreachable" });
+
+    await expect(startWorkoutSessionAction("plan-1", 1)).rejects.toThrow("api_unreachable");
   });
 
   it("calls fetchWorkoutSession with the session id and session token from the cookie", async () => {
