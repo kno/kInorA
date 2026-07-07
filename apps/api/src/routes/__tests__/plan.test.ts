@@ -548,9 +548,10 @@ describe("Plan routes", () => {
         payload: {},
       });
 
-      // Clean client error — never a 500, and the write never runs.
-      expect(response.statusCode).toBeGreaterThanOrEqual(400);
-      expect(response.statusCode).toBeLessThan(500);
+      // Reachable 422 branch — the specific plan_name_too_long error (not the
+      // generic 409, and never a 500), and the write never runs.
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toMatchObject({ error: "plan_name_too_long" });
       expect(promoteDraftToSpec).not.toHaveBeenCalled();
     });
 
