@@ -16,7 +16,7 @@
 
 import type { WorkoutProgram } from "@kinora/contracts";
 import styles from "./plan-week-view.module.css";
-import { DayDetailPanel } from "./DayDetailPanel";
+import { PlanTrackerClient } from "./PlanTrackerClient";
 import { estimateSessionMinutes, restDays } from "./plan-utils";
 
 export interface PlanWeekViewProps {
@@ -28,9 +28,14 @@ export interface PlanWeekViewProps {
    * client-side fallback. Absent only for legacy callers.
    */
   planName?: string;
+  /**
+   * Plan id (#93 Slice 3). Threaded into `PlanTrackerClient` so the per-day
+   * Start CTA can call `startWorkoutSessionAction(planId, day)` inline.
+   */
+  planId: string;
 }
 
-export function PlanWeekView({ program, messages, planName }: PlanWeekViewProps) {
+export function PlanWeekView({ program, messages, planName, planId }: PlanWeekViewProps) {
   const t = (key: string, fallback: string): string => messages[key] ?? fallback;
 
   const sessions = program.weeklySessions;
@@ -45,7 +50,12 @@ export function PlanWeekView({ program, messages, planName }: PlanWeekViewProps)
     program.limitationWarnings.length > 0;
 
   return (
-    <div>
+    <PlanTrackerClient
+      program={program}
+      planId={planId}
+      messages={messages}
+      planName={planName}
+    >
       {/* Plan name header (#93) — server-resolved label, rendered verbatim. */}
       {planName && <h1 className={styles.planName}>{planName}</h1>}
 
@@ -114,8 +124,9 @@ export function PlanWeekView({ program, messages, planName }: PlanWeekViewProps)
         </div>
       )}
 
-      {/* Day-card grid + detail panel (client island) */}
-      <DayDetailPanel sessions={sessions} messages={messages} />
-    </div>
+      {/* Day-card grid + detail panel + per-day Start CTA are rendered by
+          PlanTrackerClient (the surrounding client wrapper), which owns the
+          inline session/conflict state-swap (#93 Slice 3). */}
+    </PlanTrackerClient>
   );
 }

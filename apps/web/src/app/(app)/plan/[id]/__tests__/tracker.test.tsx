@@ -162,7 +162,14 @@ describe("PlanStatusClient tracker flow", () => {
       expect(completeWorkoutSessionAction).toHaveBeenCalledWith("session-1");
     });
 
-    expect(await screen.findByText(/workout completed/i)).toBeTruthy();
+    // BLOCKER fix (#93): after a successful complete the tracker is dismissed
+    // and the plan view returns (no navigation dead-end). The completed session
+    // is persisted server-side; the live tracker must NOT linger.
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: /live workout/i })).toBeNull();
+    });
+    // The ready plan view (its "Start workout" CTA) is shown again.
+    expect(screen.getByRole("button", { name: /start workout/i })).toBeTruthy();
   });
 
   it("renders a conflict notice WITHOUT crashing when start returns a 409 conflict (F1/F3)", async () => {
@@ -186,6 +193,28 @@ describe("PlanStatusClient tracker flow", () => {
     expect(alert.textContent).toContain("Summer Cut");
     expect(alert.textContent).toContain("Day 3");
     expect(screen.queryByRole("heading", { name: /live workout/i })).toBeNull();
+  });
+
+  it("after a conflict, a subsequent successful start clears the banner and shows the tracker (retry)", async () => {
+    startWorkoutSessionAction
+      .mockResolvedValueOnce({
+        kind: "conflict",
+        activePlanName: "Summer Cut",
+        activeDay: 3,
+      })
+      .mockResolvedValueOnce({ kind: "ok", session: activeSession });
+
+    renderClient();
+
+    // First start → conflict banner.
+    fireEvent.click(screen.getByRole("button", { name: /start workout/i }));
+    await screen.findByTestId("start-conflict");
+
+    // Retry (the ready view is still shown) → success clears conflict, swaps view.
+    fireEvent.click(screen.getByRole("button", { name: /start workout/i }));
+
+    expect(await screen.findByRole("heading", { name: /live workout/i })).toBeTruthy();
+    expect(screen.queryByTestId("start-conflict")).toBeNull();
   });
 
   it("constrains RPE entry to whole values accepted by the API", async () => {
