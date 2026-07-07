@@ -32,7 +32,7 @@ scoped lookups.
 `startSession` MUST implement exactly three mutually exclusive branches based on the
 current active session state for the user:
 
-**Branch A — Resume**: no active session, or the active session matches `(planId, day)` → resume/return it.
+**Branch A — Resume**: the active session matches `(planId, day)` → resume/return it.
 **Branch B — Conflict**: an active session exists for a DIFFERENT `(planId, day)` → surface a conflict message
 containing the plan name and day of the blocking session; do NOT create a new session; do NOT return the
 wrong session.

@@ -6,7 +6,7 @@
 
 SC-01: GET /workout-plans — unauthenticated → 401
 SC-02: GET /workout-plans — authenticated, no plans exist for user → 200 [] (empty array, not 404)
-SC-03: GET /workout-plans — authenticated, plans exist → 200 array of summaries `{ id, status, createdAt }`, ordered newest-first (createdAt DESC)
+SC-03: GET /workout-plans — authenticated, plans exist → 200 array of summaries `{ id, status, createdAt, name }`, ordered newest-first (createdAt DESC). `name` is the stored plan name; for plans with `name = NULL` the value is the auto-generated default (not null, not empty string).
 SC-04: GET /workout-plans — user+tenant scoped: response contains only the requesting user's plans within the requesting tenant
 SC-05: GET /workout-plans — cross-tenant / cross-user isolation: another user's or another tenant's plans never appear in the array
 
@@ -35,7 +35,7 @@ SC-21: /plan page — list action fails (server action error) → renders empty 
 ### Web — selector behavior
 
 SC-22: Selector — changing the selection navigates to `/plan?planId=<chosen-id>` (query-param navigation via router.push); the server component re-renders the selected plan on the same route
-SC-23: Selector — labels each option by created date + status (workout_plans has no user-facing name); the selected option reflects the current `?planId` (or the latest when absent)
+SC-23: Selector — uses `name` as the primary option label. For plans with `name = NULL` the auto-default label is shown. The selected option reflects the current `?planId` (or the latest when absent). Two plans with distinct names are visually distinguishable. (Previously: labels used created date + status only — no name field existed.)
 SC-24: Web data flow — browser never calls API_BASE_URL directly: list via listPlansAction, detail via getPlanStatusAction, both server-side reading the kinora_session cookie
 
 ## Invariants
