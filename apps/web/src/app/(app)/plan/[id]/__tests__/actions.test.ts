@@ -122,8 +122,8 @@ describe("workout tracker server actions", () => {
     const result = await startWorkoutSessionAction("plan-1", 1);
 
     expect(startWorkoutSession).toHaveBeenCalledWith("plan-1", 1, "session-tok-abc");
-    expect(result.kind).toBe("resumed");
-    if (result.kind === "resumed") {
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
       expect(result.session.id).toBe("session-1");
     }
   });

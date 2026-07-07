@@ -91,7 +91,7 @@ function renderClient() {
 
 describe("PlanStatusClient tracker flow", () => {
   it("starts or resumes a workout from the ready plan and renders the live tracker", async () => {
-    startWorkoutSessionAction.mockResolvedValue({ kind: "resumed", session: activeSession });
+    startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: activeSession });
 
     renderClient();
 
@@ -109,7 +109,7 @@ describe("PlanStatusClient tracker flow", () => {
   });
 
   it("records sets and completes the workout through server actions", async () => {
-    startWorkoutSessionAction.mockResolvedValue({ kind: "resumed", session: activeSession });
+    startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: activeSession });
     recordWorkoutSetAction.mockResolvedValue({
       ...activeSession,
       exercises: [
@@ -189,7 +189,7 @@ describe("PlanStatusClient tracker flow", () => {
   });
 
   it("constrains RPE entry to whole values accepted by the API", async () => {
-    startWorkoutSessionAction.mockResolvedValue({ kind: "resumed", session: activeSession });
+    startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: activeSession });
 
     renderClient();
 

@@ -18,11 +18,14 @@ import type { WorkoutSessionRecord } from "@kinora/contracts";
  * Start is the ONE path that can hit a 409 `active_session_conflict` (the
  * `/plan/[id]` page renders a Start button per day). A conflict is a normal,
  * expected outcome — NOT an exception — so we surface it as a structured branch
- * instead of throwing. Throwing here would crash the page render. The
- * `started`/`resumed` success shape is unchanged for callers.
+ * instead of throwing. Throwing here would crash the page render.
+ *
+ * The HTTP boundary does not carry the started/resumed distinction (the API
+ * 200 response is the same shape for both); the web action normalises to a
+ * single `kind:"ok"` success branch.
  */
 export type StartWorkoutSessionActionResult =
-  | { kind: "started" | "resumed"; session: WorkoutSessionRecord }
+  | { kind: "ok"; session: WorkoutSessionRecord }
   | { kind: "conflict"; activePlanName?: string; activeDay?: number | null };
 
 async function sessionToken(): Promise<string | undefined> {
@@ -69,10 +72,7 @@ export async function startWorkoutSessionAction(
   const result = await startWorkoutSession(planId, day, token);
 
   if (result.kind === "ok") {
-    // The API distinguishes started vs resumed via HTTP status, but both return
-    // the same 200 session snapshot here; the client only needs the session, so
-    // we normalize to "resumed" (idempotent from the caller's perspective).
-    return { kind: "resumed", session: result.session };
+    return { kind: "ok", session: result.session };
   }
 
   // A 409 active_session_conflict is a structured branch, NOT a throw — throwing
