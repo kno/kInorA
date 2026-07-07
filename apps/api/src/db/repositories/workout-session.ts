@@ -19,11 +19,6 @@ interface WorkoutPlanRow {
   programJson: WorkoutProgram | null;
 }
 
-interface WorkoutPlanNameRow {
-  name: string | null;
-  createdAt: Date;
-}
-
 interface WorkoutSessionRow {
   id: string;
   tenantId: string;
@@ -292,7 +287,7 @@ export class WorkoutSessionRepository {
     userId: string,
     workoutPlanId: string
   ): Promise<string | undefined> {
-    const rows = (await this.db
+    const rows = await this.db
       .select({ name: workoutPlans.name, createdAt: workoutPlans.createdAt })
       .from(workoutPlans)
       .where(
@@ -301,7 +296,7 @@ export class WorkoutSessionRepository {
           eq(workoutPlans.userId, userId),
           eq(workoutPlans.id, workoutPlanId)
         )
-      )) as WorkoutPlanNameRow[];
+      );
 
     const row = rows[0];
     if (!row) {
