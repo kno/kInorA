@@ -13,16 +13,22 @@ import { workoutSessionRoutes } from "./routes/workout-session.js";
 import { wsRoutes } from "./routes/ws.js";
 import { WorkoutPlanRepository } from "./db/repositories/workout-plan.js";
 import { PlanSpecRepository } from "./db/repositories/plan-spec.js";
+import { PlanDraftRepository } from "./db/repositories/plan-draft.js";
 import { AiProviderConfigRepository } from "./db/repositories/ai-provider-config.js";
 import { PlanGenerationService } from "./ai/generation-service.js";
 import { warnIfAiConfigMissing } from "./ai/openrouter-generator.js";
 import { DynamicPlanGenerator } from "./ai/dynamic-generator.js";
 import { buildAdapters } from "./ai/adapter-factory.js";
 import { adminAiConfigRoutes } from "./routes/admin-ai-config.js";
+import { createPlanRouteRepo } from "./plan-route-repo.js";
 import { WsRegistry } from "./ws/registry.js";
 import type { PlanGenerator } from "./ai/port.js";
 import type { SocialAuthService } from "./auth/social.js";
 import { WorkoutSessionRepository } from "./db/repositories/workout-session.js";
+import { SessionRepository } from "./db/repositories/session.js";
+import { MembershipRepository, UserRepository } from "./db/repositories/auth-context.js";
+import type { WsRouteRepo } from "./routes/ws.js";
+import type { AdminAiConfigRouteRepo } from "./routes/admin-ai-config.js";
 
 export interface BuildAppOptions {
   db?: Database;
@@ -157,12 +163,21 @@ export async function buildApp(
     registry
   );
 
-  // Plan wizard + generation routes (draft, promote, confirm, regenerate, fetch)
+  // Plan wizard + generation routes (draft, promote, confirm, regenerate, fetch).
+  // Route port: constructs the draft/spec/plan repos here (composition root) and
+  // owns the promote atomicity — promoteDraftToSpec wraps specRepo.create +
+  // draftRepo.delete in a single database.transaction, reusing the repos'
+  // optional-executor (tx) signatures. The route never sees a transaction.
+  const planDraftRepo = new PlanDraftRepository(database);
+  const planRouteRepo = createPlanRouteRepo({
+    database,
+    planSpecRepo,
+    planDraftRepo,
+    workoutPlanRepo,
+  });
   await app.register(planRoutes, {
-    db: database,
+    repo: planRouteRepo,
     generationService: planGenerationService,
-    planRepo: workoutPlanRepo,
-    specRepo: planSpecRepo,
   });
 
   await app.register(workoutSessionRoutes, {
@@ -170,8 +185,16 @@ export async function buildApp(
   });
 
   // Admin AI config routes — GET/PUT /admin/ai-config (requireAuth + requireAdmin).
-  // Uses the same configRepo instance that powers DynamicPlanGenerator.
-  await app.register(adminAiConfigRoutes, { db: database, configRepo });
+  // Route port: findUserById feeds buildRequireAdmin; config ops reuse the same
+  // configRepo instance that powers DynamicPlanGenerator. Constructed here so the
+  // route stays free of any DB-layer import.
+  const adminUserRepo = new UserRepository(database);
+  const adminAiConfigRepo: AdminAiConfigRouteRepo = {
+    findUserById: (id) => adminUserRepo.findById(id),
+    getActiveConfig: () => configRepo.getActive(),
+    upsertConfig: (provider, model) => configRepo.upsert(provider, model),
+  };
+  await app.register(adminAiConfigRoutes, { repo: adminAiConfigRepo });
 
   // WebSocket plugin + authenticated plan-status route.
   // WsRegistry is shared between this route and PlanGenerationService so
@@ -183,9 +206,18 @@ export async function buildApp(
   // redirect URIs), with an optional comma-separated WS_ALLOWED_ORIGINS override
   // for multi-origin deployments (e.g. staging + prod).
   await app.register(fastifyWebsocket);
+  // Route port: constructs SessionRepository + MembershipRepository from the
+  // database here (composition root) so ws.ts stays free of any DB-layer import.
+  const wsSessionRepo = new SessionRepository(database);
+  const wsMembershipRepo = new MembershipRepository(database);
+  const wsRepo: WsRouteRepo = {
+    findByTokenHash: (hash) => wsSessionRepo.findByTokenHash(hash),
+    findByTenantAndUser: (tenantId, userId) =>
+      wsMembershipRepo.findByTenantAndUser(tenantId, userId),
+  };
   await app.register(wsRoutes, {
     registry,
-    db: database,
+    repo: wsRepo,
     allowedOrigins: resolveWsAllowedOrigins(),
   });
 

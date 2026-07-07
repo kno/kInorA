@@ -21,8 +21,45 @@ import fastifyWebsocket from "@fastify/websocket";
 import fastifyCookie from "@fastify/cookie";
 import { authPlugin } from "../../auth/plugin.js";
 import { wsRoutes } from "../ws.js";
+import type { WsSessionRecord, WsMembershipRecord } from "../ws.js";
 import { WsRegistry } from "../../ws/registry.js";
 import type { Database } from "../../db/client.js";
+import type { SessionRecord } from "../../db/repositories/session.js";
+import type { MembershipRecord } from "../../db/repositories/auth-context.js";
+
+// -----------------------------------------------------------------------------
+// Compile-time drift guard (Finding 3).
+//
+// ws.ts declares WsSessionRecord / WsMembershipRecord as INLINE structural shapes
+// so the route layer never imports the DB layer (the PR2 `routes-no-db-layer`
+// dependency-cruiser rule forbids `routes/** -> db/**` even for type-only imports,
+// because it runs with `tsPreCompilationDeps: true`). That inline duplication can
+// silently drift from the real SessionRecord / MembershipRecord.
+//
+// This assertion lives in the TEST file (carved out of the boundary rule via the
+// `__tests__/` pathNot) precisely so it CAN import both the DB types and the WS
+// shapes. It asserts BIDIRECTIONAL assignability: if a field is added, removed,
+// renamed, or its type changes on EITHER side, one of these type expressions
+// stops being `true` and `tsc --noEmit` fails the build. A one-way check would
+// miss drift in the other direction, so both directions are asserted.
+type Assignable<A, B> = A extends B ? true : false;
+// Real DB record must be usable wherever the WS shape is expected (adapter is
+// structurally compatible), AND the WS shape must not carry fields the DB record
+// lacks (no silent superset drift).
+type _AssertSession = [
+  Assignable<SessionRecord, WsSessionRecord>,
+  Assignable<WsSessionRecord, SessionRecord>,
+];
+type _AssertMembership = [
+  Assignable<MembershipRecord, WsMembershipRecord>,
+  Assignable<WsMembershipRecord, MembershipRecord>,
+];
+// Force evaluation: each element MUST be the literal `true`. If drift makes any
+// assignability `false`, this const declaration is a type error at compile time.
+const _sessionDriftGuard: _AssertSession = [true, true];
+const _membershipDriftGuard: _AssertMembership = [true, true];
+void _sessionDriftGuard;
+void _membershipDriftGuard;
 import {
   VALID_TOKEN,
   createCyclingAuthMockDb,
@@ -30,6 +67,35 @@ import {
   buildActiveMembershipRow,
   buildSuspendedMembershipRow,
 } from "../../test-support/auth-mocks.js";
+
+/**
+ * The route no longer receives `db`; it receives a `WsRouteRepo` port. Its two
+ * methods (findByTokenHash + findByTenantAndUser) back resolveAuthContextFromToken
+ * on the cookie/?token= paths. The Bearer path stays on the auth plugin's own db.
+ * findByTokenHash returns the session row regardless of the hash arg (mirroring
+ * the db mock, which resolves rows independent of the actual hash).
+ */
+interface WsRepoMock {
+  findByTokenHash: ReturnType<typeof vi.fn>;
+  findByTenantAndUser: ReturnType<typeof vi.fn>;
+}
+
+function buildWsRepo(
+  sessionRow?: unknown,
+  membershipRow: unknown = buildActiveMembershipRow({
+    tenantId: TENANT_A,
+    userId: USER_A,
+  })
+): WsRepoMock {
+  return {
+    findByTokenHash: vi
+      .fn()
+      .mockResolvedValue((sessionRow as SessionRecord | undefined) ?? null),
+    findByTenantAndUser: vi
+      .fn()
+      .mockResolvedValue((membershipRow as MembershipRecord | undefined) ?? null),
+  };
+}
 
 // --- Fixtures ---
 
@@ -72,8 +138,32 @@ function buildSessionDb(
 
 const ALLOWED_ORIGIN = "https://app.kinora.io";
 
+/**
+ * Build the auth plugin db mock AND the matching WsRouteRepo port from the same
+ * session/membership rows, so the Bearer path (db) and the cookie/?token= path
+ * (port) stay consistent within a single test.
+ */
+function buildAuth(
+  sessionRow?: unknown,
+  membershipRow: unknown = buildActiveMembershipRow({
+    tenantId: TENANT_A,
+    userId: USER_A,
+  })
+): { db: Database; repo: WsRepoMock } {
+  return {
+    db: buildSessionDb(sessionRow, membershipRow),
+    repo: buildWsRepo(sessionRow, membershipRow),
+  };
+}
+
 async function buildTestApp(opts: {
   db: Database;
+  /**
+   * WsRouteRepo port mock backing the cookie/?token= paths. When omitted, one is
+   * derived from a default active session/membership (rarely used directly —
+   * most tests build it via the same rows as `db`).
+   */
+  repo?: WsRepoMock;
   registry?: WsRegistry;
   /** Origin allowlist for the CSWSH gate. Defaults to [ALLOWED_ORIGIN]. */
   allowedOrigins?: string[];
@@ -88,17 +178,19 @@ async function buildTestApp(opts: {
     return reply.code(statusCode).send({ error: error.message ?? "Internal Server Error" });
   });
 
+  // Auth plugin keeps its own db mock (Bearer onRequest path). The route gets
+  // the injected WsRouteRepo port for the cookie/?token= paths.
   await app.register(authPlugin, { db: opts.db });
   // @fastify/cookie parses request.cookies so wsRoutes can read the
   // kinora_session cookie on the same-origin browser WS upgrade (issue #42).
   await app.register(fastifyCookie);
   await app.register(fastifyWebsocket);
-  // Pass db so wsRoutes can resolve cookie/?token= auth via the shared
-  // resolveAuthContextFromToken (same SessionRepository + tenant-scoped
-  // membershipRepo as the Bearer path). allowedOrigins drives the CSWSH gate.
+  // Inject the WsRouteRepo port; wsRoutes resolves cookie/?token= auth via the
+  // shared resolveAuthContextFromToken (same findByTokenHash + tenant-scoped
+  // findByTenantAndUser as the Bearer path). allowedOrigins drives the CSWSH gate.
   await app.register(wsRoutes, {
     registry: opts.registry ?? new WsRegistry(),
-    db: opts.db,
+    repo: opts.repo ?? buildWsRepo(),
     allowedOrigins: opts.allowedOrigins ?? [ALLOWED_ORIGIN],
   });
 
@@ -144,8 +236,8 @@ describe("WS route — GET /ws/plans", () => {
   // -------------------------------------------------------------------------
   describe("unauthenticated connection — exact 401", () => {
     it("returns HTTP 401 when no token is provided (HTTP-level assertion)", async () => {
-      const db = buildSessionDb(); // no session row → authContext = null
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(); // no session row → authContext = null
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       // Use app.inject() with Upgrade headers to get a real HTTP response before
@@ -166,8 +258,8 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("rejects injectWS with a non-101 error when no auth token is provided", async () => {
-      const db = buildSessionDb(); // no session row
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(); // no session row
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       await expect(
@@ -181,8 +273,8 @@ describe("WS route — GET /ws/plans", () => {
   // -------------------------------------------------------------------------
   describe("authenticated connection — Bearer header", () => {
     it("accepts the WS upgrade when a valid bearer token is provided (no Origin — non-browser)", async () => {
-      const db = buildSessionDb(buildSessionRow());
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(buildSessionRow());
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       // No Origin header → non-browser client; the CSWSH gate does not apply.
@@ -197,10 +289,10 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("registers the socket in the WsRegistry under the correct userId", async () => {
-      const db = buildSessionDb(buildSessionRow());
+      const { db, repo } = buildAuth(buildSessionRow());
       const registry = new WsRegistry();
       const registerSpy = vi.spyOn(registry, "register");
-      app = await buildTestApp({ db, registry });
+      app = await buildTestApp({ db, repo, registry });
       await app.ready();
 
       const ws = await app.injectWS("/ws/plans", {
@@ -219,8 +311,8 @@ describe("WS route — GET /ws/plans", () => {
   // -------------------------------------------------------------------------
   describe("authenticated connection — ?token= query param (browser WebSocket path)", () => {
     it("accepts the WS upgrade when a valid ?token= query param is provided (no Authorization header)", async () => {
-      const db = buildSessionDb(buildSessionRow());
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(buildSessionRow());
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       // Browser-style: no Authorization header, token in query string.
@@ -233,10 +325,10 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("registers the socket under the correct userId when authenticated via ?token=", async () => {
-      const db = buildSessionDb(buildSessionRow());
+      const { db, repo } = buildAuth(buildSessionRow());
       const registry = new WsRegistry();
       const registerSpy = vi.spyOn(registry, "register");
-      app = await buildTestApp({ db, registry });
+      app = await buildTestApp({ db, repo, registry });
       await app.ready();
 
       const ws = await app.injectWS(`/ws/plans?token=${VALID_TOKEN}`);
@@ -249,8 +341,8 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("returns HTTP 401 when ?token= is invalid/expired (HTTP-level assertion)", async () => {
-      const db = buildSessionDb(); // no session → resolves null
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(); // no session → resolves null
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       const response = await app.inject({
@@ -268,8 +360,8 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("rejects injectWS when ?token= is invalid (no session found)", async () => {
-      const db = buildSessionDb(); // no session row
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(); // no session row
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       await expect(
@@ -295,11 +387,11 @@ describe("WS route — GET /ws/plans", () => {
     };
 
     it("rejects the Bearer WS upgrade when the membership is suspended", async () => {
-      const db = buildSessionDb(
+      const { db, repo } = buildAuth(
         buildSessionRow(),
         buildSuspendedMembershipRow({ tenantId: TENANT_A, userId: USER_A })
       );
-      app = await buildTestApp({ db });
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       const response = await app.inject({
@@ -313,11 +405,11 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("rejects injectWS on the Bearer path when the membership is suspended", async () => {
-      const db = buildSessionDb(
+      const { db, repo } = buildAuth(
         buildSessionRow(),
         buildSuspendedMembershipRow({ tenantId: TENANT_A, userId: USER_A })
       );
-      app = await buildTestApp({ db });
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       await expect(
@@ -328,11 +420,11 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("rejects the ?token= WS upgrade when the membership is suspended", async () => {
-      const db = buildSessionDb(
+      const { db, repo } = buildAuth(
         buildSessionRow(),
         buildSuspendedMembershipRow({ tenantId: TENANT_A, userId: USER_A })
       );
-      app = await buildTestApp({ db });
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       const response = await app.inject({
@@ -347,8 +439,8 @@ describe("WS route — GET /ws/plans", () => {
 
     it("rejects the Bearer WS upgrade when the user has no membership for the session tenant", async () => {
       // Valid session, but no membership row for that tenant → fail-secure deny.
-      const db = buildSessionDb(buildSessionRow(), null);
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(buildSessionRow(), null);
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       const response = await app.inject({
@@ -362,8 +454,8 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("rejects the ?token= WS upgrade when the user has no membership for the session tenant", async () => {
-      const db = buildSessionDb(buildSessionRow(), null);
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(buildSessionRow(), null);
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       const response = await app.inject({
@@ -377,8 +469,8 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("rejects injectWS on the ?token= path when the membership is missing", async () => {
-      const db = buildSessionDb(buildSessionRow(), null);
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(buildSessionRow(), null);
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       await expect(
@@ -391,11 +483,11 @@ describe("WS route — GET /ws/plans", () => {
     // allowed Origin so the CSWSH gate passes and the failure is attributable to
     // the membership re-check, not the Origin gate.
     it("rejects the cookie WS upgrade when the membership is suspended (allowed Origin)", async () => {
-      const db = buildSessionDb(
+      const { db, repo } = buildAuth(
         buildSessionRow(),
         buildSuspendedMembershipRow({ tenantId: TENANT_A, userId: USER_A })
       );
-      app = await buildTestApp({ db });
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       const response = await app.inject({
@@ -413,8 +505,8 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("rejects the cookie WS upgrade when the user has no membership for the session tenant (allowed Origin)", async () => {
-      const db = buildSessionDb(buildSessionRow(), null);
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(buildSessionRow(), null);
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       const response = await app.inject({
@@ -432,8 +524,8 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("rejects injectWS on the cookie path when the membership is missing (allowed Origin)", async () => {
-      const db = buildSessionDb(buildSessionRow(), null);
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(buildSessionRow(), null);
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       await expect(
@@ -455,8 +547,8 @@ describe("WS route — GET /ws/plans", () => {
   // -------------------------------------------------------------------------
   describe("authenticated connection — kinora_session cookie (browser same-origin path)", () => {
     it("accepts the WS upgrade with a valid cookie AND an allowed Origin (no header, no query param)", async () => {
-      const db = buildSessionDb(buildSessionRow());
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(buildSessionRow());
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       // Browser same-origin: allowed Origin + cookie only (no Authorization, no ?token=).
@@ -471,10 +563,10 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("registers the socket under the correct userId when authenticated via the cookie with an allowed Origin", async () => {
-      const db = buildSessionDb(buildSessionRow());
+      const { db, repo } = buildAuth(buildSessionRow());
       const registry = new WsRegistry();
       const registerSpy = vi.spyOn(registry, "register");
-      app = await buildTestApp({ db, registry });
+      app = await buildTestApp({ db, repo, registry });
       await app.ready();
 
       const ws = await app.injectWS("/ws/plans", {
@@ -489,8 +581,8 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("returns HTTP 401 when the kinora_session cookie is invalid/expired (allowed Origin, HTTP-level assertion)", async () => {
-      const db = buildSessionDb(); // no session → resolves null
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(); // no session → resolves null
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       const response = await app.inject({
@@ -519,13 +611,10 @@ describe("WS route — GET /ws/plans", () => {
   describe("CSWSH Origin gate — cookie/browser path", () => {
     it("returns HTTP 403 when the Origin is cross-site, even with a valid cookie (rejected BEFORE auth)", async () => {
       // Session row present: proves rejection is by Origin, not auth failure.
-      const db = buildSessionDb(buildSessionRow());
-      const findSpy = vi.spyOn(
-        // Reach the underlying select to prove auth never ran.
-        db as unknown as { select: () => unknown },
-        "select"
-      );
-      app = await buildTestApp({ db });
+      // Uses the cookie path so the CSWSH gate is what rejects — and the port's
+      // findByTokenHash proves auth never ran.
+      const { db, repo } = buildAuth(buildSessionRow());
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       const response = await app.inject({
@@ -543,13 +632,20 @@ describe("WS route — GET /ws/plans", () => {
 
       expect(response.statusCode).toBe(403);
       expect(response.json()).toEqual({ error: "forbidden_origin" });
-      // Rejected BEFORE authentication → the session DB was never queried.
-      expect(findSpy).not.toHaveBeenCalled();
+      // Rejected BEFORE authentication → the route's own session lookup (port)
+      // never ran.
+      expect(repo.findByTokenHash).not.toHaveBeenCalled();
+      // AND the auth plugin's own DB lookup (the Bearer-path onRequest session
+      // select) never ran either. Together these prove the 403 short-circuits the
+      // ENTIRE auth chain — the CSWSH gate fires before ANY hook touches auth, so
+      // a hook-ordering regression (gate running after auth) would break this.
+      const dbSelect = (db as unknown as { select: ReturnType<typeof vi.fn> }).select;
+      expect(dbSelect).not.toHaveBeenCalled();
     });
 
     it("rejects injectWS from a cross-site Origin with a non-101 error", async () => {
-      const db = buildSessionDb(buildSessionRow());
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(buildSessionRow());
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       await expect(
@@ -560,8 +656,8 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("accepts a valid cookie when the Origin is in the allowlist", async () => {
-      const db = buildSessionDb(buildSessionRow());
-      app = await buildTestApp({ db, allowedOrigins: [ALLOWED_ORIGIN, "https://staging.kinora.io"] });
+      const { db, repo } = buildAuth(buildSessionRow());
+      app = await buildTestApp({ db, repo, allowedOrigins: [ALLOWED_ORIGIN, "https://staging.kinora.io"] });
       await app.ready();
 
       const ws = await app.injectWS("/ws/plans", {
@@ -573,8 +669,8 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("still accepts a Bearer client that sends NO Origin (gate applies only to browser/Origin requests)", async () => {
-      const db = buildSessionDb(buildSessionRow());
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(buildSessionRow());
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       // Non-browser client: no Origin, Bearer header. Must NOT be gated.
@@ -594,8 +690,8 @@ describe("WS route — GET /ws/plans", () => {
   // -------------------------------------------------------------------------
   describe("fail-secure — missing cookie AND missing token", () => {
     it("returns HTTP 401 when an unrelated cookie is present but there is no session cookie or token", async () => {
-      const db = buildSessionDb(); // no session row
-      app = await buildTestApp({ db });
+      const { db, repo } = buildAuth(); // no session row
+      app = await buildTestApp({ db, repo });
       await app.ready();
 
       const response = await app.inject({
@@ -620,9 +716,9 @@ describe("WS route — GET /ws/plans", () => {
   // -------------------------------------------------------------------------
   describe("WsRegistry.notify payload shape", () => {
     it("socket receives { planId, status } when registry.notify is called for the user", async () => {
-      const db = buildSessionDb(buildSessionRow());
+      const { db, repo } = buildAuth(buildSessionRow());
       const registry = new WsRegistry();
-      app = await buildTestApp({ db, registry });
+      app = await buildTestApp({ db, repo, registry });
       await app.ready();
 
       const ws = await app.injectWS("/ws/plans", {
@@ -656,9 +752,9 @@ describe("WS route — GET /ws/plans", () => {
     });
 
     it("socket receives correct payload for 'failed' status", async () => {
-      const db = buildSessionDb(buildSessionRow());
+      const { db, repo } = buildAuth(buildSessionRow());
       const registry = new WsRegistry();
-      app = await buildTestApp({ db, registry });
+      app = await buildTestApp({ db, repo, registry });
       await app.ready();
 
       const ws = await app.injectWS("/ws/plans", {
