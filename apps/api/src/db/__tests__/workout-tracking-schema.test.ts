@@ -7,12 +7,18 @@ import { getTableColumns } from "drizzle-orm/utils";
 import {
   sessionExercises,
   setRecords,
+  workoutPlans,
   workoutSessionStatusEnum,
   workoutSessions,
 } from "../schema.js";
 
 const migrationSql = readFileSync(
   fileURLToPath(new URL("../../../drizzle/0005_workout_tracking.sql", import.meta.url)),
+  "utf8",
+);
+
+const planNavMigrationSql = readFileSync(
+  fileURLToPath(new URL("../../../drizzle/0006_lively_northstar.sql", import.meta.url)),
   "utf8",
 );
 
@@ -41,6 +47,22 @@ describe("workout_sessions schema shape", () => {
     expect(cols.completedAt).toBeDefined();
     expect(cols.createdAt).toBeDefined();
     expect(cols.updatedAt).toBeDefined();
+  });
+
+  it("has a nullable day column scoping the session to a plan day (#93)", () => {
+    const cols = getTableColumns(workoutSessions);
+    expect(cols.day).toBeDefined();
+    expect(cols.day.columnType).toBe("PgSmallInt");
+    expect(cols.day.notNull).toBe(false);
+  });
+});
+
+describe("workout_plans schema shape (#93)", () => {
+  it("has a nullable name column (max length 120)", () => {
+    const cols = getTableColumns(workoutPlans);
+    expect(cols.name).toBeDefined();
+    expect(cols.name.columnType).toBe("PgVarchar");
+    expect(cols.name.notNull).toBe(false);
   });
 });
 
@@ -91,5 +113,28 @@ describe("workout tracking migration", () => {
     expect(migrationSql).toContain('CREATE TABLE "workout_sessions"');
     expect(migrationSql).toContain('CREATE TABLE "session_exercises"');
     expect(migrationSql).toContain('CREATE TABLE "set_records"');
+  });
+});
+
+describe("plan navigation migration (#93)", () => {
+  it("adds the workout_plans.name and workout_sessions.day columns", () => {
+    expect(planNavMigrationSql).toContain(
+      'ALTER TABLE "workout_plans" ADD COLUMN "name" varchar(120)',
+    );
+    expect(planNavMigrationSql).toContain(
+      'ALTER TABLE "workout_sessions" ADD COLUMN "day" smallint',
+    );
+  });
+
+  it("is purely additive — no DROP, no data backfill", () => {
+    expect(planNavMigrationSql).not.toMatch(/DROP\s/i);
+    expect(planNavMigrationSql).not.toMatch(/UPDATE\s/i);
+    expect(planNavMigrationSql).not.toMatch(/INSERT\s/i);
+  });
+
+  it("leaves the single-active-per-user index untouched", () => {
+    expect(planNavMigrationSql).not.toContain(
+      "workout_sessions_single_active_per_user_unique",
+    );
   });
 });

@@ -69,6 +69,51 @@ export interface WorkoutSessionRecord {
   exercises: SessionExerciseRecord[];
   startedAt: string;
   completedAt?: string;
+  /**
+   * Plan day this session is scoped to (#93). Optional/additive: pre-migration
+   * sessions have no day and legacy DTO consumers keep compiling.
+   */
+  day?: number;
+}
+
+/**
+ * Discriminated result of `startSession` (#93).
+ *
+ * `started` / `resumed` carry the session snapshot; `conflict` carries the
+ * currently-active scope so the caller can render a localized banner instead
+ * of silently resuming the wrong day or collapsing into a generic 404.
+ */
+export type StartSessionOutcome =
+  | { kind: "started" | "resumed"; session: WorkoutSessionRecord }
+  | {
+      kind: "conflict";
+      activePlanId: string;
+      activePlanName?: string;
+      activeDay: number | null;
+    };
+
+/**
+ * Shared plan list DTO (#93) — one source of truth for web and future mobile.
+ * `name` is resolved server-side via `defaultPlanName(row.name, row.createdAt)`
+ * before it reaches the contract, so clients receive a non-empty label.
+ */
+export interface WorkoutPlanSummary {
+  id: string;
+  status: string;
+  createdAt: string;
+  name?: string;
+}
+
+/**
+ * Shared plan detail DTO (#93) — matches the client DTO consumed by the plan
+ * page/selector. `name` is resolved server-side (see WorkoutPlanSummary).
+ */
+export interface WorkoutPlanDetail {
+  id: string;
+  status: string;
+  program?: WorkoutProgram;
+  specId: string;
+  name?: string;
 }
 
 export { WorkoutProgramSchema } from "./workout-program.schema.js";

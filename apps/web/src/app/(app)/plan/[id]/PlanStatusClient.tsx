@@ -56,6 +56,12 @@ export function PlanStatusClient({
   );
   const [regenerating, setRegenerating] = useState(false);
   const [activeSession, setActiveSession] = useState<WorkoutSessionRecord | undefined>();
+  // #93 F1: a start attempt can return a 409 conflict (another day is already
+  // active). This must NOT crash the page — we hold the conflict scope in state
+  // and render a minimal inline message. The fully localized banner is Slice 3.
+  const [conflict, setConflict] = useState<
+    { activePlanName?: string; activeDay?: number | null } | undefined
+  >();
 
   // usePlanWs opens the WebSocket and updates status on push messages.
   // Falls back to polling GET /workout-plans/:id if the WS connect fails.
@@ -100,8 +106,17 @@ export function PlanStatusClient({
   }, [specId]);
 
   const handleStartWorkout = useCallback(async (day: number) => {
-    const session = await startWorkoutSessionAction(planId, day);
-    setActiveSession(session);
+    const result = await startWorkoutSessionAction(planId, day);
+    // #93 F1: handle the conflict branch structurally — no throw, no crash.
+    if (result.kind === "conflict") {
+      setConflict({
+        activePlanName: result.activePlanName,
+        activeDay: result.activeDay,
+      });
+      return;
+    }
+    setConflict(undefined);
+    setActiveSession(result.session);
   }, [planId]);
 
   const handleRecordSet = useCallback(async (setId: string, input: WorkoutSetUpdateInput) => {
@@ -127,14 +142,27 @@ export function PlanStatusClient({
   }
 
   return (
-    <PlanStatusView
-      planId={planId}
-      status={regenerating ? "generating" : status}
-      program={program}
-      specId={specId}
-      messages={messages as Record<string, string> | undefined}
-      onRegenerate={handleRegenerate}
-      onStartWorkout={handleStartWorkout}
-    />
+    <>
+      {conflict && (
+        // #93 F1: minimal inline conflict notice (full localized banner is
+        // Slice 3). Rendered instead of crashing when start returns a 409.
+        <p role="alert" data-testid="start-conflict">
+          {conflict.activePlanName
+            ? `You already have an active session for ${conflict.activePlanName}${
+                conflict.activeDay != null ? ` · Day ${conflict.activeDay}` : ""
+              }.`
+            : "You already have an active workout session."}
+        </p>
+      )}
+      <PlanStatusView
+        planId={planId}
+        status={regenerating ? "generating" : status}
+        program={program}
+        specId={specId}
+        messages={messages as Record<string, string> | undefined}
+        onRegenerate={handleRegenerate}
+        onStartWorkout={handleStartWorkout}
+      />
+    </>
   );
 }
