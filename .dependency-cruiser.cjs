@@ -138,6 +138,17 @@ module.exports = {
         ],
       },
     },
+    {
+      name: "routes-no-db-layer",
+      comment:
+        "Route modules MUST NOT import the DB layer directly. Depend on an injected port (see workout-session.ts); app.ts is the sole composition root that constructs repositories.",
+      severity: "error",
+      from: {
+        path: "^apps/api/src/routes/",
+        pathNot: "^apps/api/src/routes/__tests__/",
+      },
+      to: { path: "^apps/api/src/db/" },
+    },
   ],
   options: {
     tsPreCompilationDeps: true,
