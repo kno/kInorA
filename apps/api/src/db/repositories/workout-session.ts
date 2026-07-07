@@ -1,7 +1,9 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
+import { defaultPlanName } from "@kinora/domain";
 import type {
   SessionExerciseRecord,
   SetRecordDTO,
+  StartSessionOutcome,
   WorkoutExercise,
   WorkoutProgram,
   WorkoutSessionRecord,
@@ -17,12 +19,18 @@ interface WorkoutPlanRow {
   programJson: WorkoutProgram | null;
 }
 
+interface WorkoutPlanNameRow {
+  name: string | null;
+  createdAt: Date;
+}
+
 interface WorkoutSessionRow {
   id: string;
   tenantId: string;
   userId: string;
   workoutPlanId: string;
   status: "active" | "completed";
+  day: number | null;
   startedAt: Date;
   completedAt: Date | null;
 }
@@ -61,15 +69,52 @@ export interface UpdateSetRecordInput {
 export class WorkoutSessionRepository {
   constructor(private db: Database) {}
 
+  /**
+   * Starts (or resumes) a day-scoped workout session (#93).
+   *
+   * The `singleActivePerUser` partial unique index guarantees ≤1 active row per
+   * (tenant, user), so we fetch the one active row and compare in code:
+   *   - Branch A: active row matches (planId, day)      → resume (findById)
+   *   - Branch B: active row is a different (planId, day) → conflict
+   *       (a legacy null-day row can never match, so it always conflicts)
+   *   - Branch C: no active row                          → create, persisting `day`
+   *
+   * Returns `undefined` only when the plan is not ready or the requested day is
+   * not part of the program (the route maps this to 404, unchanged).
+   */
   async startSession(
     tenantId: string,
     userId: string,
     workoutPlanId: string,
     day: number
-  ): Promise<WorkoutSessionRecord | undefined> {
+  ): Promise<StartSessionOutcome | undefined> {
     const existingActive = await this.findLatestActiveSession(tenantId, userId);
     if (existingActive) {
-      return this.findById(tenantId, userId, existingActive.id);
+      // Branch A — same plan and same day → resume the in-progress session.
+      if (existingActive.workoutPlanId === workoutPlanId && existingActive.day === day) {
+        const session = await this.findById(tenantId, userId, existingActive.id);
+        if (!session) {
+          return undefined;
+        }
+        return { kind: "resumed", session };
+      }
+
+      // Branch B — a different (planId, day), or a legacy null-day row.
+      // Resolve the active plan's display label so the client can render a
+      // meaningful banner. The lookup is scoped to (tenantId, userId) — NEVER
+      // an unscoped `WHERE id =` — so it can only surface the caller's own plan.
+      const activePlanName = await this.findActivePlanName(
+        tenantId,
+        userId,
+        existingActive.workoutPlanId
+      );
+
+      return {
+        kind: "conflict",
+        activePlanId: existingActive.workoutPlanId,
+        activePlanName,
+        activeDay: existingActive.day,
+      };
     }
 
     const plan = await this.findReadyPlan(tenantId, userId, workoutPlanId);
@@ -82,10 +127,11 @@ export class WorkoutSessionRepository {
       return undefined;
     }
 
+    // Branch C — no active session → create a new row, persisting the day.
     return this.db.transaction(async (tx) => {
       const sessionRows = await tx
         .insert(workoutSessions)
-        .values({ tenantId, userId, workoutPlanId, status: "active" })
+        .values({ tenantId, userId, workoutPlanId, status: "active", day })
         .returning();
       const sessionRow = sessionRows[0] as WorkoutSessionRow | undefined;
       if (!sessionRow) {
@@ -95,7 +141,7 @@ export class WorkoutSessionRepository {
       const exerciseRows = await this.insertSessionExercises(tx, sessionRow.id, plannedSession.exercises);
       const setRows = await this.insertSetRecords(tx, exerciseRows, plannedSession.exercises);
 
-      return mapWorkoutSessionRecord(sessionRow, exerciseRows, setRows);
+      return { kind: "started", session: mapWorkoutSessionRecord(sessionRow, exerciseRows, setRows) };
     });
   }
 
@@ -156,6 +202,21 @@ export class WorkoutSessionRepository {
       return undefined;
     }
 
+    // risk-BLOCKER (IDOR): the ownership pre-check above is necessary but NOT
+    // sufficient — the write itself must be constrained to a set that belongs
+    // to THIS session. Scoping only by `setId` would let a caller who owns
+    // session S1 mutate a set from another user's session S2 (cross-tenant
+    // write). We therefore require the set's `sessionExerciseId` to belong to
+    // an exercise of `sessionId`, enforced in SQL via a correlated subquery, so
+    // the UPDATE can physically affect only the caller's own session rows.
+    const setBelongsToSession = inArray(
+      setRecords.sessionExerciseId,
+      this.db
+        .select({ id: sessionExercises.id })
+        .from(sessionExercises)
+        .where(eq(sessionExercises.workoutSessionId, sessionId))
+    );
+
     const rows = await this.db
       .update(setRecords)
       .set({
@@ -165,7 +226,7 @@ export class WorkoutSessionRepository {
         completed: input.completed,
         notes: input.notes ?? null,
       })
-      .where(eq(setRecords.id, setId))
+      .where(and(eq(setRecords.id, setId), setBelongsToSession))
       .returning();
     if (rows.length === 0) {
       return undefined;
@@ -216,6 +277,38 @@ export class WorkoutSessionRepository {
       .limit(1);
 
     return rows[0] as WorkoutSessionRow | undefined;
+  }
+
+  /**
+   * Resolves the display label of an active session's plan for the conflict
+   * signal (#93 / risk-CRITICAL). Scoped to (tenantId, userId, planId) so a
+   * user can never learn another tenant's/user's plan name. A null stored name
+   * is resolved through `defaultPlanName(name, createdAt)` — the same rule the
+   * list/detail read paths apply — so the client always receives a non-empty
+   * label. Returns undefined only when the plan row is unexpectedly missing.
+   */
+  private async findActivePlanName(
+    tenantId: string,
+    userId: string,
+    workoutPlanId: string
+  ): Promise<string | undefined> {
+    const rows = (await this.db
+      .select({ name: workoutPlans.name, createdAt: workoutPlans.createdAt })
+      .from(workoutPlans)
+      .where(
+        and(
+          eq(workoutPlans.tenantId, tenantId),
+          eq(workoutPlans.userId, userId),
+          eq(workoutPlans.id, workoutPlanId)
+        )
+      )) as WorkoutPlanNameRow[];
+
+    const row = rows[0];
+    if (!row) {
+      return undefined;
+    }
+
+    return defaultPlanName(row.name, row.createdAt);
   }
 
   private async findReadyPlan(
@@ -333,6 +426,7 @@ function mapWorkoutSessionRecord(
     id: sessionRow.id,
     workoutPlanId: sessionRow.workoutPlanId,
     status: sessionRow.status,
+    day: sessionRow.day ?? undefined,
     exercises,
     startedAt: sessionRow.startedAt.toISOString(),
     completedAt: sessionRow.completedAt?.toISOString() ?? undefined,

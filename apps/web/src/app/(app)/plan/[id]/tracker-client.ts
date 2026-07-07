@@ -11,7 +11,17 @@ interface ClientOptions {
 
 export type WorkoutSessionResult =
   | { kind: "ok"; session: WorkoutSessionRecord }
-  | { kind: "error"; message: string };
+  | {
+      kind: "error";
+      message: string;
+      /**
+       * Populated only on a 409 `active_session_conflict` (#93). Carries the
+       * currently-active scope so the caller can render a banner instead of
+       * crashing. Absent on every other error.
+       */
+      activePlanName?: string;
+      activeDay?: number | null;
+    };
 
 function requireSessionToken(
   token: string | undefined,
@@ -54,7 +64,21 @@ async function parseWorkoutSessionResponse(
   res: Response,
 ): Promise<WorkoutSessionResult> {
   if (!res.ok) {
-    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    const payload = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      activePlanName?: string;
+      activeDay?: number | null;
+    };
+    // A 409 active_session_conflict carries the active scope; forward it so the
+    // client can render the conflict banner. Other errors map to a bare message.
+    if (res.status === 409 && payload.error === "active_session_conflict") {
+      return {
+        kind: "error",
+        message: "active_session_conflict",
+        activePlanName: payload.activePlanName,
+        activeDay: payload.activeDay,
+      };
+    }
     return {
       kind: "error",
       message: payload.error ?? "workout_session_request_failed",

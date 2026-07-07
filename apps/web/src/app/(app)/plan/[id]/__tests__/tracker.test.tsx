@@ -91,7 +91,7 @@ function renderClient() {
 
 describe("PlanStatusClient tracker flow", () => {
   it("starts or resumes a workout from the ready plan and renders the live tracker", async () => {
-    startWorkoutSessionAction.mockResolvedValue(activeSession);
+    startWorkoutSessionAction.mockResolvedValue({ kind: "resumed", session: activeSession });
 
     renderClient();
 
@@ -109,7 +109,7 @@ describe("PlanStatusClient tracker flow", () => {
   });
 
   it("records sets and completes the workout through server actions", async () => {
-    startWorkoutSessionAction.mockResolvedValue(activeSession);
+    startWorkoutSessionAction.mockResolvedValue({ kind: "resumed", session: activeSession });
     recordWorkoutSetAction.mockResolvedValue({
       ...activeSession,
       exercises: [
@@ -165,8 +165,31 @@ describe("PlanStatusClient tracker flow", () => {
     expect(await screen.findByText(/workout completed/i)).toBeTruthy();
   });
 
+  it("renders a conflict notice WITHOUT crashing when start returns a 409 conflict (F1/F3)", async () => {
+    // Regression guard: the old code threw on conflict, crashing the page.
+    startWorkoutSessionAction.mockResolvedValue({
+      kind: "conflict",
+      activePlanName: "Summer Cut",
+      activeDay: 3,
+    });
+
+    renderClient();
+
+    fireEvent.click(screen.getByRole("button", { name: /start workout/i }));
+
+    await waitFor(() => {
+      expect(startWorkoutSessionAction).toHaveBeenCalledWith("plan-1", 1);
+    });
+
+    // The conflict message is shown; the tracker is NOT rendered; no throw.
+    const alert = await screen.findByTestId("start-conflict");
+    expect(alert.textContent).toContain("Summer Cut");
+    expect(alert.textContent).toContain("Day 3");
+    expect(screen.queryByRole("heading", { name: /live workout/i })).toBeNull();
+  });
+
   it("constrains RPE entry to whole values accepted by the API", async () => {
-    startWorkoutSessionAction.mockResolvedValue(activeSession);
+    startWorkoutSessionAction.mockResolvedValue({ kind: "resumed", session: activeSession });
 
     renderClient();
 

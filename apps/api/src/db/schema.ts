@@ -10,6 +10,8 @@ import {
   boolean,
   index,
   numeric,
+  varchar,
+  smallint,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -220,6 +222,12 @@ export const workoutPlans = pgTable(
       .notNull()
       .references(() => planSpecs.id, { onDelete: "cascade" }),
     status: workoutPlanStatusEnum("status").notNull(),
+    /**
+     * User-supplied plan name (#93). Nullable/additive: legacy rows and blank
+     * wizard submissions store NULL; the effective label is resolved on read
+     * via the domain helper `defaultPlanName(name, createdAt)`.
+     */
+    name: varchar("name", { length: 120 }),
     programJson: jsonb("program_json"),
     errorMessage: text("error_message"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -259,6 +267,12 @@ export const workoutSessions = pgTable(
       .notNull()
       .references(() => workoutPlans.id, { onDelete: "cascade" }),
     status: workoutSessionStatusEnum("status").notNull().default("active"),
+    /**
+     * Plan day this session is scoped to (#93). Nullable/additive: legacy rows
+     * store NULL and therefore never match a (planId, day) resume comparison,
+     * forcing the conflict branch instead of a silent wrong-day resume.
+     */
+    day: smallint("day"),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
