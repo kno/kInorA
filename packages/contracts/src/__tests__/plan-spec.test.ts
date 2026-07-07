@@ -35,7 +35,16 @@ describe("PlanSpec contract types (07-v1-plan-wizard)", () => {
     expectTypeOf<PlanSpec>().toHaveProperty("preferenceScores").toEqualTypeOf<PlanPreferenceScores>();
   });
 
-  it("PlanSpec full shape with all required fields", () => {
+  // #93: the optional plan name rides on the confirmed spec (spec_json) so it
+  // survives the two-request promote → confirm flow. It is the durable carrier
+  // between promote (POST /plan-specs) and generation (POST /plan-specs/:id/confirm),
+  // where the draft is already deleted. It is nullable so a blank submission is
+  // stored as null and the date-based default is resolved on read.
+  it("PlanSpec includes an optional nullable name (#93)", () => {
+    expectTypeOf<PlanSpec>().toHaveProperty("name").toEqualTypeOf<string | null | undefined>();
+  });
+
+  it("PlanSpec full shape with all required fields plus optional name", () => {
     expectTypeOf<PlanSpec>().toEqualTypeOf<{
       goal: import("../index").PlanGoal;
       daysPerWeek: number;
@@ -45,6 +54,7 @@ describe("PlanSpec contract types (07-v1-plan-wizard)", () => {
       limitations: PlanLimitation[];
       preferenceScores: PlanPreferenceScores;
       confirmed: boolean;
+      name?: string | null;
     }>();
   });
 });

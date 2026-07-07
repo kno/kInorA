@@ -1,6 +1,35 @@
 import type { PlanSpec } from "@kinora/contracts";
 
 /**
+ * Maximum length of a plan `name` (#93). Mirrors the `workout_plans.name` column
+ * (`VARCHAR(120)`) so the promote route can reject an over-long name as a clean
+ * `422 plan_name_too_long` instead of blowing up the DB INSERT as a 500. The
+ * name is trimmed BEFORE this bound is applied. Consumed by the route, not the
+ * type validators below.
+ */
+export const PLAN_NAME_MAX_LENGTH = 120;
+
+/**
+ * Validates the optional plan `name` TYPE (#93): when present it must be a
+ * string or null. Absent is valid (legacy specs and callers that never set it).
+ *
+ * Length is NOT enforced here. The VARCHAR(120) bound is a storage concern
+ * mapped to a distinct `422 plan_name_too_long` by the promote route (see
+ * apps/api/src/routes/plan.ts). Enforcing length here would surface as the
+ * route's generic `409 incomplete_spec` instead — a misleading error — and make
+ * the route's explicit 422 branch unreachable. Type violations stay a boundary
+ * concern, shared by assertPlanSpecInput and assertPlanSpecShape.
+ */
+function assertPlanName(name: unknown): void {
+  if (name === undefined || name === null) {
+    return;
+  }
+  if (typeof name !== "string") {
+    throw new Error("PlanSpec.name must be a string or null when present");
+  }
+}
+
+/**
  * Validates the wizard input fields common to both assertPlanSpecInput and
  * assertPlanSpecShape: goal, daysPerWeek, sessionDurationMinutes, location,
  * equipment (string[]), and limitations (PlanLimitation[]).
@@ -53,6 +82,10 @@ function assertInputFields(obj: Record<string, unknown>): void {
       throw new Error(`PlanSpec.limitations[${i}].isWarning must be a boolean`);
     }
   }
+
+  // Optional plan name (#93) — TYPE only (string|null). Length (VARCHAR(120)) is
+  // enforced by the promote route as a distinct 422 plan_name_too_long, not here.
+  assertPlanName(obj.name);
 }
 
 /**
@@ -119,4 +152,9 @@ export function assertPlanSpecShape(input: unknown): asserts input is PlanSpec {
   if (typeof obj.confirmed !== "boolean") {
     throw new Error("PlanSpec.confirmed must be a boolean");
   }
+
+  // Optional plan name (#93) is validated by assertInputFields (called above)
+  // via assertPlanName: string|null type + VARCHAR(120) length bound. A blank
+  // wizard submission is normalized to null on promote so the read-side default
+  // stays dynamic; absent is valid (legacy specs).
 }

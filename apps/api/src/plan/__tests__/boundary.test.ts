@@ -269,6 +269,43 @@ describe("assertPlanSpecShape — updated for 07-v1-plan-wizard", () => {
     expect(() => assertPlanSpecShape(spec08)).not.toThrow();
   });
 
+  // --- optional plan name (#93) ---
+
+  it("accepts a PlanSpec with a non-blank string name (#93)", () => {
+    const spec = { ...VALID_SPEC, name: "Summer Cut" };
+    expect(() => assertPlanSpecShape(spec)).not.toThrow();
+  });
+
+  it("accepts a PlanSpec with a null name (#93 — blank submission stored as null)", () => {
+    const spec = { ...VALID_SPEC, name: null };
+    expect(() => assertPlanSpecShape(spec)).not.toThrow();
+  });
+
+  it("accepts a PlanSpec with an absent name (#93 — legacy/optional)", () => {
+    const { ...spec } = VALID_SPEC;
+    expect(() => assertPlanSpecShape(spec)).not.toThrow();
+  });
+
+  it("rejects a PlanSpec with a non-string, non-null name (#93)", () => {
+    const invalid = { ...VALID_SPEC, name: 42 };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /name.*string/i
+    );
+  });
+
+  // #93: the boundary validates the name TYPE only. Length (VARCHAR(120)) is a
+  // route concern surfaced as 422 plan_name_too_long — the shape validator does
+  // NOT reject on length, so a name of any length passes the type check here.
+  it("accepts a PlanSpec with a name of exactly 120 chars (#93)", () => {
+    const spec = { ...VALID_SPEC, name: "a".repeat(120) };
+    expect(() => assertPlanSpecShape(spec)).not.toThrow();
+  });
+
+  it("does not reject on length — an over-120-char name passes the type check (#93)", () => {
+    const spec = { ...VALID_SPEC, name: "a".repeat(121) };
+    expect(() => assertPlanSpecShape(spec)).not.toThrow();
+  });
+
   // --- assertPlanSpecInput — input-only validator (no preferenceScores, no confirmed) ---
 
 describe("assertPlanSpecInput — wizard input validator", () => {
@@ -358,6 +395,41 @@ describe("assertPlanSpecInput — wizard input validator", () => {
     expect(() =>
       assertPlanSpecInput({ ...VALID_INPUT, limitations: [{ text: "knee pain" }] })
     ).toThrow(/limitations\[0\].*isWarning|isWarning.*boolean/i);
+  });
+
+  // #93: the route calls assertPlanSpecInput on the RAW draft, so the name TYPE
+  // guarantee (string|null) is enforced HERE. Length (VARCHAR(120)) is NOT — it
+  // is a route concern surfaced as a distinct 422 plan_name_too_long.
+  it("accepts input with an absent name (#93 — optional)", () => {
+    expect(() => assertPlanSpecInput(VALID_INPUT)).not.toThrow();
+  });
+
+  it("accepts input with a null name (#93)", () => {
+    expect(() => assertPlanSpecInput({ ...VALID_INPUT, name: null })).not.toThrow();
+  });
+
+  it("accepts input with a non-blank string name (#93)", () => {
+    expect(() =>
+      assertPlanSpecInput({ ...VALID_INPUT, name: "Summer Cut" })
+    ).not.toThrow();
+  });
+
+  it("accepts input with a name of exactly 120 chars (#93 boundary)", () => {
+    expect(() =>
+      assertPlanSpecInput({ ...VALID_INPUT, name: "a".repeat(120) })
+    ).not.toThrow();
+  });
+
+  it("rejects input with a non-string, non-null name (#93)", () => {
+    expect(() =>
+      assertPlanSpecInput({ ...VALID_INPUT, name: 42 })
+    ).toThrow(/name.*string/i);
+  });
+
+  it("does not reject input on length — length is a route (422) concern, not a boundary one (#93)", () => {
+    expect(() =>
+      assertPlanSpecInput({ ...VALID_INPUT, name: "a".repeat(121) })
+    ).not.toThrow();
   });
 });
 

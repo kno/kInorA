@@ -22,9 +22,15 @@ import { estimateSessionMinutes, restDays } from "./plan-utils";
 export interface PlanWeekViewProps {
   program: WorkoutProgram;
   messages: Record<string, string>;
+  /**
+   * Resolved plan label (#93). Rendered as the view header. Already resolved
+   * server-side via `defaultPlanName`, so it is displayed verbatim with no
+   * client-side fallback. Absent only for legacy callers.
+   */
+  planName?: string;
 }
 
-export function PlanWeekView({ program, messages }: PlanWeekViewProps) {
+export function PlanWeekView({ program, messages, planName }: PlanWeekViewProps) {
   const t = (key: string, fallback: string): string => messages[key] ?? fallback;
 
   const sessions = program.weeklySessions;
@@ -40,6 +46,9 @@ export function PlanWeekView({ program, messages }: PlanWeekViewProps) {
 
   return (
     <div>
+      {/* Plan name header (#93) — server-resolved label, rendered verbatim. */}
+      {planName && <h1 className={styles.planName}>{planName}</h1>}
+
       {/* 4-tile summary strip */}
       <div className={styles.summaryStrip}>
         {/* Sesiones planificadas */}
