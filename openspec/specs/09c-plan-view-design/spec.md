@@ -59,8 +59,8 @@ SC-12: The detail panel shows for the selected session:
   - Eyebrow: "Día {N}" label + session title.
   - Subtitle: "{N} ejercicios · {M} min" metadata.
   - Exercise table with columns: Ejercicio · Series · Reps · Descanso.
-  - The "Peso" column is absent (deferred to 09a).
-  - "Empezar sesión de hoy" CTA is absent (deferred to 09a).
+  - The "Peso" column is absent (deferred).
+  - "Empezar sesión" CTA is present when the plan status is `ready`; it carries `(planId, day)` context and routes to the inline workout tracker. (Previously deferred to 09a; delivered in change 93.)
 
 SC-13: Each exercise row shows:
   - `exercise.name` in the first column (full width, font-weight 500).
@@ -106,9 +106,9 @@ SC-23: The rendered HTML must NOT contain:
   - A "Peso" column or any weight value.
   - Check-mark icons for completion state.
   - A "today" CSS class or accent indicator tied to the current date.
-  - An "Empezar sesión de hoy" button or any functional workout-start CTA.
   - Week navigation prev/next buttons tied to calendar dates.
   - A real "Volumen objetivo" value (the tile renders only an inert "—" placeholder).
+  Note: the "Empezar sesión" CTA is NO LONGER absent — it is present for ready plans (see SC-12). (Previously SC-23 listed the start CTA as absent/deferred; removed in change 93.)
 
 ## Invariants
 
