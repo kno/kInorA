@@ -1,10 +1,7 @@
 import { z } from "zod";
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
-import type { Database } from "../db/client.js";
 import { requireAuth } from "../auth/plugin.js";
 import { buildRequireAdmin } from "../auth/require-admin.js";
-import { UserRepository } from "../db/repositories/auth-context.js";
-import { AiProviderConfigRepository } from "../db/repositories/ai-provider-config.js";
 
 /**
  * Valid provider identifiers — must match the aiProviderEnum in schema.ts.
@@ -21,13 +18,24 @@ const upsertBodySchema = z.object({
   model: z.string().min(1),
 });
 
+/**
+ * Route port for the admin AI-config endpoints. Exposes what buildRequireAdmin
+ * needs (findUserById) plus the config read/write operations. The concrete
+ * adapter (UserRepository + AiProviderConfigRepository) is built in app.ts so
+ * this route never imports the DB layer.
+ */
+export interface AdminAiConfigRouteRepo {
+  /** Feeds buildRequireAdmin via { findById: repo.findUserById }. */
+  findUserById(id: string): Promise<{ id: string; isAdmin: boolean } | null>;
+  getActiveConfig(): Promise<{ provider: string; model: string; updatedAt: Date } | null>;
+  upsertConfig(
+    provider: string,
+    model: string
+  ): Promise<{ provider: string; model: string; updatedAt: Date }>;
+}
+
 export interface AdminAiConfigRoutesOptions {
-  db: Database;
-  /**
-   * Injectable AiProviderConfigRepository for tests.
-   * Defaults to constructing from db.
-   */
-  configRepo?: Pick<AiProviderConfigRepository, "getActive" | "upsert">;
+  repo: AdminAiConfigRouteRepo;
 }
 
 /**
@@ -47,12 +55,9 @@ export const adminAiConfigRoutes: FastifyPluginAsync<AdminAiConfigRoutesOptions>
   fastify,
   options
 ) => {
-  const { db } = options;
+  const { repo } = options;
 
-  const userRepo = new UserRepository(db);
-  const configRepo = options.configRepo ?? new AiProviderConfigRepository(db);
-
-  const requireAdmin = buildRequireAdmin(userRepo);
+  const requireAdmin = buildRequireAdmin({ findById: repo.findUserById });
 
   // GET /admin/ai-config
   // SC-01: no token → 401 (via requireAuth)
@@ -62,7 +67,7 @@ export const adminAiConfigRoutes: FastifyPluginAsync<AdminAiConfigRoutesOptions>
     "/admin/ai-config",
     { preHandler: [requireAuth(), requireAdmin] },
     async (_request: FastifyRequest, reply: FastifyReply) => {
-      const config = await configRepo.getActive();
+      const config = await repo.getActiveConfig();
       if (!config) {
         return reply.code(200).send(null);
       }
@@ -89,7 +94,7 @@ export const adminAiConfigRoutes: FastifyPluginAsync<AdminAiConfigRoutesOptions>
       }
 
       const { provider, model } = result.data;
-      const updated = await configRepo.upsert(provider, model);
+      const updated = await repo.upsertConfig(provider, model);
 
       return reply.code(200).send({
         provider: updated.provider,
