@@ -58,6 +58,7 @@ describe("shared contracts boundary", () => {
       limitations: PlanLimitation[];
       preferenceScores: PlanPreferenceScores;
       confirmed: boolean;
+      name?: string | null;
     }>();
   });
 
