@@ -2,6 +2,8 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
 import { authPlugin } from "../../auth/plugin.js";
 import { workoutSessionRoutes } from "../workout-session.js";
+import { WorkoutSessionRepository } from "../../db/repositories/workout-session.js";
+import { workoutPlans, workoutSessions } from "../../db/schema.js";
 import type { Database } from "../../db/client.js";
 import type { WorkoutSessionRecord } from "@kinora/contracts";
 import {
@@ -51,7 +53,7 @@ function buildSessionDb(): Database {
 
 function buildRepoMock(overrides: Partial<Record<keyof ReturnType<typeof buildRepoMock>, unknown>> = {}) {
   return {
-    startSession: vi.fn().mockResolvedValue(activeSession),
+    startSession: vi.fn().mockResolvedValue({ kind: "started", session: activeSession }),
     findById: vi.fn().mockResolvedValue(activeSession),
     recordSet: vi.fn().mockResolvedValue(activeSession),
     completeSession: vi.fn().mockResolvedValue({ ...activeSession, status: "completed", completedAt: "2026-07-04T09:20:00.000Z" }),
@@ -192,8 +194,40 @@ describe("Workout session routes", () => {
     expect(repo.startSession).toHaveBeenCalledWith(TENANT_A, USER_A, PLAN_ID, 1);
   });
 
-  it("returns the existing active session when start is called again", async () => {
-    const repo = buildRepoMock({ startSession: vi.fn().mockResolvedValue(activeSession) });
+  it("returns 422 when day exceeds the weekly maximum (risk-WARNING — day has an upper bound)", async () => {
+    app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/workout-sessions",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { workoutPlanId: PLAN_ID, day: 8 },
+    });
+
+    expect(response.statusCode).toBe(422);
+  });
+
+  it("accepts the inclusive weekly maximum day (7)", async () => {
+    const repo = buildRepoMock({
+      startSession: vi.fn().mockResolvedValue({ kind: "started", session: activeSession }),
+    });
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/workout-sessions",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { workoutPlanId: PLAN_ID, day: 7 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(repo.startSession).toHaveBeenCalledWith(TENANT_A, USER_A, PLAN_ID, 7);
+  });
+
+  it("returns the existing active session (200) when start resumes the same day", async () => {
+    const repo = buildRepoMock({
+      startSession: vi.fn().mockResolvedValue({ kind: "resumed", session: activeSession }),
+    });
     app = await buildTestApp(repo);
 
     const response = await app.inject({
@@ -206,6 +240,61 @@ describe("Workout session routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual(activeSession);
     expect(repo.startSession).toHaveBeenCalledWith(TENANT_A, USER_A, PLAN_ID, 1);
+  });
+
+  it("returns 409 with the honestly-populated active scope via the REAL repo conflict path (F2)", async () => {
+    // F2/risk-CRITICAL: rather than hard-coding activePlanName, wire the REAL
+    // WorkoutSessionRepository so the route surfaces the name the repo actually
+    // resolves from its (tenant+user scoped) plan lookup — proving the field is
+    // honestly populated end-to-end, not a route-side literal.
+    const activeSessionRow = {
+      id: SESSION_ID,
+      tenantId: TENANT_A,
+      userId: USER_A,
+      workoutPlanId: PLAN_ID,
+      status: "active" as const,
+      day: 3, // active on day 3; the caller requests day 1 → conflict.
+      startedAt: new Date("2026-07-04T08:30:00Z"),
+      completedAt: null,
+    };
+    // Scoped plan-name lookup returns the active plan's name + createdAt.
+    const planNameRow = { name: "Summer Cut", createdAt: new Date("2026-07-04T08:00:00Z") };
+
+    // Minimal queued select: workoutSessions → active row; workoutPlans → name.
+    const queues = new Map<object, unknown[][]>([
+      [workoutSessions, [[activeSessionRow]]],
+      [workoutPlans, [[planNameRow]]],
+    ]);
+    const select = vi.fn().mockReturnValue({
+      from: vi.fn().mockImplementation((table: object) => ({
+        where: vi.fn().mockImplementation(() => {
+          const q = queues.get(table) ?? [[]];
+          const rows = q.shift() ?? [];
+          queues.set(table, q);
+          return {
+            orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(rows) }),
+            then: (resolve: (v: unknown[]) => unknown) => Promise.resolve(resolve(rows)),
+          };
+        }),
+      })),
+    });
+    const realRepo = new WorkoutSessionRepository({ select, transaction: vi.fn() } as never);
+
+    app = await buildTestApp(realRepo as never);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/workout-sessions",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { workoutPlanId: PLAN_ID, day: 1 },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: "active_session_conflict",
+      activePlanName: "Summer Cut",
+      activeDay: 3,
+    });
   });
 
   it("records set progress for the authenticated user", async () => {

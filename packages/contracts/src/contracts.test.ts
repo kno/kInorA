@@ -14,10 +14,15 @@ import type {
   SessionContext,
   SessionId,
   SessionResponse,
+  StartSessionOutcome,
   TenantId,
   TenantQueryContextDTO,
   TrainingLocation,
   UserId,
+  WorkoutPlanDetail,
+  WorkoutPlanSummary,
+  WorkoutProgram,
+  WorkoutSessionRecord,
 } from "./index";
 
 describe("shared contracts boundary", () => {
@@ -89,6 +94,63 @@ describe("shared contracts boundary", () => {
       token: string;
       user: { id: UserId; email: string };
       tenant: { id: TenantId; name: string };
+    }>();
+  });
+
+  // ---------------------------------------------------------------------------
+  // 93-plan-navigation-and-start — day-scoped sessions + shared plan DTOs
+  // ---------------------------------------------------------------------------
+
+  it("exposes an optional numeric day on WorkoutSessionRecord (#93, additive)", () => {
+    expectTypeOf<WorkoutSessionRecord>().toHaveProperty("day").toEqualTypeOf<
+      number | undefined
+    >();
+  });
+
+  it("defines the StartSessionOutcome discriminated union (#93)", () => {
+    // started / resumed carry the session; conflict carries the active scope.
+    const started: StartSessionOutcome = {
+      kind: "started",
+      session: {} as WorkoutSessionRecord,
+    };
+    const resumed: StartSessionOutcome = {
+      kind: "resumed",
+      session: {} as WorkoutSessionRecord,
+    };
+    const conflict: StartSessionOutcome = {
+      kind: "conflict",
+      activePlanId: "plan-1",
+      activeDay: 2,
+    };
+    expect(started.kind).toBe("started");
+    expect(resumed.kind).toBe("resumed");
+    expect(conflict.kind).toBe("conflict");
+
+    // The conflict branch narrows to the active-scope fields.
+    if (conflict.kind === "conflict") {
+      expectTypeOf(conflict.activePlanId).toEqualTypeOf<string>();
+      expectTypeOf(conflict.activeDay).toEqualTypeOf<number | null>();
+      expectTypeOf(conflict.activePlanName).toEqualTypeOf<string | undefined>();
+    }
+    // The started/resumed branch narrows to the session.
+    if (started.kind === "started") {
+      expectTypeOf(started.session).toEqualTypeOf<WorkoutSessionRecord>();
+    }
+  });
+
+  it("defines shared plan DTOs with an optional name (#93, one source of truth)", () => {
+    expectTypeOf<WorkoutPlanSummary>().toEqualTypeOf<{
+      id: string;
+      status: string;
+      createdAt: string;
+      name?: string;
+    }>();
+    expectTypeOf<WorkoutPlanDetail>().toEqualTypeOf<{
+      id: string;
+      status: string;
+      program?: WorkoutProgram;
+      specId: string;
+      name?: string;
     }>();
   });
 });

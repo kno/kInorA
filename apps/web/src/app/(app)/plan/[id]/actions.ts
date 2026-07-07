@@ -12,6 +12,22 @@ import {
 import type { WorkoutSetUpdateInput } from "./tracker-types";
 import type { WorkoutSessionRecord } from "@kinora/contracts";
 
+/**
+ * Result of the start-workout server action (#93 F1).
+ *
+ * Start is the ONE path that can hit a 409 `active_session_conflict` (the
+ * `/plan/[id]` page renders a Start button per day). A conflict is a normal,
+ * expected outcome — NOT an exception — so we surface it as a structured branch
+ * instead of throwing. Throwing here would crash the page render.
+ *
+ * The HTTP boundary does not carry the started/resumed distinction (the API
+ * 200 response is the same shape for both); the web action normalises to a
+ * single `kind:"ok"` success branch.
+ */
+export type StartWorkoutSessionActionResult =
+  | { kind: "ok"; session: WorkoutSessionRecord }
+  | { kind: "conflict"; activePlanName?: string; activeDay?: number | null };
+
 async function sessionToken(): Promise<string | undefined> {
   const jar = await cookies();
   return jar.get(SESSION_COOKIE)?.value;
@@ -51,9 +67,27 @@ export async function getPlanStatusAction(planId: string): Promise<FetchPlanResu
 export async function startWorkoutSessionAction(
   planId: string,
   day: number,
-): Promise<WorkoutSessionRecord> {
+): Promise<StartWorkoutSessionActionResult> {
   const token = await sessionToken();
-  return unwrapWorkoutSession(startWorkoutSession(planId, day, token));
+  const result = await startWorkoutSession(planId, day, token);
+
+  if (result.kind === "ok") {
+    return { kind: "ok", session: result.session };
+  }
+
+  // A 409 active_session_conflict is a structured branch, NOT a throw — throwing
+  // would crash the /plan/[id] render (one Start button per day can trigger it).
+  if (result.message === "active_session_conflict") {
+    return {
+      kind: "conflict",
+      activePlanName: result.activePlanName,
+      activeDay: result.activeDay,
+    };
+  }
+
+  // Any other error (network, not_found, invalid_response) stays a throw so the
+  // existing error boundary behavior is preserved for genuinely broken states.
+  throw new Error(result.message);
 }
 
 export async function getWorkoutSessionAction(
