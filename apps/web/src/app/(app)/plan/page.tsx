@@ -133,6 +133,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
         program={plan.program as WorkoutProgram}
         messages={messages}
         planName={plan.name}
+        planId={resolvedId}
       />
     </main>
   );

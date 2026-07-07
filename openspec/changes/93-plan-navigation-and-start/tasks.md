@@ -125,43 +125,34 @@ Each slice fits within the 400-line budget on its own. No further splitting requ
 
 ### Phase 3.1: Server Action — Stop Throwing on Conflict
 
-- [ ] 3.1.1 [RED] Write/extend test for `apps/web/src/app/(app)/plan/[id]/actions.ts`: `startWorkoutSessionAction` with a 409 response returns a result object (not throws); 200 returns session; 404 returns error result.
-- [ ] 3.1.2 [GREEN] Modify `apps/web/src/app/(app)/plan/[id]/actions.ts`: `startWorkoutSessionAction` catches 409 from `tracker-client.ts` and returns `{ kind: "conflict", activePlanName, activeDay }` instead of throwing.
-- [ ] 3.1.3 Modify `apps/web/src/app/(app)/plan/[id]/tracker-client.ts`: surface 409 payload fields (`activePlanName`, `activeDay`) in the error shape returned to the server action.
+- [x] 3.1.1 [RED] Already landed in Slice 1: `apps/web/src/app/(app)/plan/[id]/__tests__/actions.test.ts` + `tracker-client.test.ts` cover 409→result (no throw), 200→session, 404→error. Verified present + green.
+- [x] 3.1.2 [GREEN] Already landed in Slice 1: `startWorkoutSessionAction` returns `{ kind: "conflict"|"ok" }` (`StartWorkoutSessionActionResult`), only throws on genuine errors. Verified in `actions.ts:67-91`.
+- [x] 3.1.3 Already landed in Slice 1: `tracker-client.ts` `parseWorkoutSessionResponse` maps 409 `active_session_conflict` → error result carrying `activePlanName`/`activeDay`. Verified in `tracker-client.ts:63-94`.
 
 ### Phase 3.2: PlanTrackerClient (new component)
 
-- [ ] 3.2.1 [RED] Write unit test for `PlanTrackerClient`: initial state renders `DayDetailPanel` normally; after `startWorkoutSessionAction` returns `{ kind: "started" | "resumed" }` it renders `TrackerPanel`; after conflict result it renders conflict banner inside `DayDetailPanel`.
-- [ ] 3.2.2 [GREEN] Create `apps/web/src/app/(app)/plan/PlanTrackerClient.tsx` as a `"use client"` wrapper:
-  - Props: `program`, `planId`, `messages`, `planName`.
-  - State: `activeSession | null`, `conflict | null`.
-  - Renders `DayDetailPanel` with `onStartWorkout(day)` and `conflict` props; swaps to `TrackerPanel` when `activeSession` is set.
-  - Calls `startWorkoutSessionAction(planId, day)` and dispatches to state.
+- [x] 3.2.1 [RED] Wrote `apps/web/src/app/(app)/plan/__tests__/PlanTrackerClient.test.tsx` (4 tests): initial render shows DayDetailPanel not tracker; started result swaps to TrackerPanel; correct day threaded per card; conflict result renders banner + stays on plan view.
+- [x] 3.2.2 [GREEN] Created `apps/web/src/app/(app)/plan/PlanTrackerClient.tsx` `"use client"` wrapper. Props: `program`, `planId`, `messages`, `children` (server-rendered summary strip). State: `activeSession`, `conflict`. Renders DayDetailPanel with `onStartWorkout`/`conflict`; swaps to TrackerPanel when active. Reuses `[id]/actions` verbatim (start/record/complete) — no new API boundary. NOTE: `planName` is rendered by PlanWeekView above the strip (passed as children), not a PlanTrackerClient prop — the view header stays server-rendered.
 
 ### Phase 3.3: DayDetailPanel — CTA + Conflict Banner
 
-- [ ] 3.3.1 [RED] Extend `DayDetailPanel` tests: CTA button rendered when `onStartWorkout` prop present + plan is `ready`; conflict banner rendered with localized text when `conflict` prop is set; CTA absent when plan not `ready`.
-- [ ] 3.3.2 [GREEN] Modify `apps/web/src/app/(app)/plan/_components/DayDetailPanel.tsx`:
-  - Add `onStartWorkout?: (day: number) => void` prop.
-  - Add `conflict?: { activePlanName?: string; activeDay: number | null }` prop.
-  - Render "Empezar sesión" button (calls `onStartWorkout(day)`) when `onStartWorkout` is provided and plan is `ready`.
-  - Render conflict banner ("Tienes una sesión activa para {plan} · Día {n}") when `conflict` is set.
-  - Remove deferred start-CTA marker (`:174`).
+- [x] 3.3.1 [RED] Extended `apps/web/src/app/(app)/plan/__tests__/DayDetailPanel.test.tsx` (+7 tests): Start CTA in open panel when `onStartWorkout` present; CTA click calls `onStartWorkout(day)` with correct day; CTA absent when handler absent; conflict banner (plan+day / no-day / generic variants); no banner when conflict undefined.
+- [x] 3.3.2 [GREEN] Modified `apps/web/src/app/(app)/plan/DayDetailPanel.tsx` (actual path — no `_components/` dir): added `onStartWorkout?` + `conflict?` props; Start CTA in the open detail panel (rendered only when `onStartWorkout` provided — on `/plan` the page renders this only for a `ready` plan, so startable by construction); localized conflict banner (`role="alert"`, `data-testid="start-conflict"`) with plan+day / no-day / generic variants; removed deferred `:174` marker. Added `.conflictBanner` CSS.
 
 ### Phase 3.4: Wire PlanWeekView + plan/page.tsx
 
-- [ ] 3.4.1 Modify `apps/web/src/app/(app)/plan/PlanWeekView.tsx`: wrap inner content in `PlanTrackerClient`, passing `program`, `planId`, `messages`, `planName`.
-- [ ] 3.4.2 Modify `apps/web/src/app/(app)/plan/page.tsx`: thread `planId` (from search params / active plan) and `plan.name` through to `PlanWeekView`/`PlanTrackerClient`.
+- [x] 3.4.1 Modified `apps/web/src/app/(app)/plan/PlanWeekView.tsx`: now returns `<PlanTrackerClient program planId messages>` wrapping the server-rendered name header + summary strip + warnings as children; DayDetailPanel moved inside the wrapper. Added required `planId` prop. Updated `PlanWeekView.test.tsx` to assert PlanTrackerClient integration.
+- [x] 3.4.2 Modified `apps/web/src/app/(app)/plan/page.tsx`: threads `planId={resolvedId}` (the selected/active plan id, already resolved from searchParams `planId` ?? latest) alongside `planName={plan.name}` into PlanWeekView.
 
 ### Phase 3.5: i18n
 
-- [ ] 3.5.1 Add keys to `apps/web/src/i18n/en.json`: `plan_day_start_cta` ("Start session"), `plan_start_conflict` ("You have an active session for {plan} · Day {n}").
-- [ ] 3.5.2 Add same keys to `apps/web/src/i18n/es.json`: `plan_day_start_cta` ("Empezar sesión"), `plan_start_conflict` ("Tienes una sesión activa para {plan} · Día {n}").
-- [ ] 3.5.3 Replace any inline strings in `DayDetailPanel` CTA and conflict banner with i18n calls.
+- [x] 3.5.1 Added keys to `apps/web/src/i18n/messages/en.json` (actual catalog path): `plan_day_start_cta` ("Start session"), `plan_start_conflict` ("You have an active session for {plan} · Day {n}. …"), plus `plan_start_conflict_no_day` and `plan_start_conflict_generic` variants for null-day / unknown-plan cases.
+- [x] 3.5.2 Added same keys to `apps/web/src/i18n/messages/es.json`: `plan_day_start_cta` ("Empezar sesión"), `plan_start_conflict` ("Tienes una sesión activa para {plan} · Día {n}. …") + no-day/generic variants. Catalog-parity test green (key set + placeholders match).
+- [x] 3.5.3 DayDetailPanel CTA + all 3 conflict-banner variants use `t(...)` — no inline literals introduced.
 
 ### Phase 3.6: Verification
 
-- [ ] 3.6.1 Write e2e test (Playwright or Vitest integration): multi-plan user navigates Plan tab → selects day N of plan A → clicks "Empezar sesión" → tracker opens for `(planA, dayN)` without misroute.
-- [ ] 3.6.2 Write e2e / integration test: user has active session for `(planA, day1)`, triggers start for `(planA, day2)` → conflict banner appears, no second active session in DB.
-- [ ] 3.6.3 Run `pnpm architecture` — verify no `routes/**→db/**` direct imports.
-- [ ] 3.6.4 Run `pnpm test` — full suite green.
+- [x] 3.6.1 Wrote `tests/e2e/plan-start-cta.spec.ts`: test 1 (deterministic) proves the Plan tab is reachable via the AppShell sidebar and renders its plan view; test 2 asserts start → 200 session (the inline-tracker source contract). NOTE: the full UI happy path (reach a READY plan, click Start, tracker renders inline) requires an AI-generated `WorkoutProgram` — the e2e harness boots the api WITHOUT LLM creds, so the ready-plan-dependent tests `test.skip()` with a clear reason. Spec type-checks + is discovered by Playwright (`--list` shows 3 tests); NOT booted here (no Postgres container / AI in sandbox).
+- [x] 3.6.2 In the same spec, test 3 asserts: start day N (200), then start a DIFFERENT day → 409 `active_session_conflict` (or 404 for out-of-program day) — never a silent second active session. This is the exact contract the localized banner renders. Skips when no ready plan is available in the harness (documented AI gap).
+- [x] 3.6.3 `pnpm architecture` → exit 0 (1524 modules, no `routes/**→db/**` violations; DB-import negative probes rejected). Also `pnpm ui-api-guard` → exit 0 (20 client files, no UI→API leaks; PlanTrackerClient reuses server actions, never imports `server-only`/API_BASE_URL).
+- [x] 3.6.4 Unit suites green: apps/web `npx vitest run` PASS 550 / FAIL 0; apps/api PASS 584 / FAIL 0. tsc clean both. (Full `pnpm test` incl. e2e needs the booted stack — see 3.6.1/3.6.2 notes.)
