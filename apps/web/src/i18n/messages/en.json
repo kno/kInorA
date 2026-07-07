@@ -170,6 +170,9 @@
   "plan_nav_empty_cta": "Create your plan",
   "plan_selector_label": "Select a plan",
   "plan_selector_option": "{date} ({status})",
+  "plan_name_field_label": "Plan name (optional)",
+  "plan_name_placeholder": "e.g. Summer strength block",
+  "plan_view_details_or_regenerate": "View details or regenerate",
 
   "plan_day_label": "Day {n}",
   "plan_exercises_count": "exercises",

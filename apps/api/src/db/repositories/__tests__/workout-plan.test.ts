@@ -117,6 +117,53 @@ describe("WorkoutPlanRepository", () => {
       expect(insertedValues.userId).toBe(USER_B);
       expect(insertedValues.planSpecId).toBe(SPEC_A);
     });
+
+    it("persists a user-supplied name into the inserted values (#93)", async () => {
+      const row = {
+        id: PLAN_ID,
+        tenantId: TENANT_A,
+        userId: USER_A,
+        planSpecId: SPEC_A,
+        status: "generating" as const,
+        name: "Summer Cut",
+        programJson: null,
+        errorMessage: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const { insert, values } = insertChain([row]);
+      const repo = new WorkoutPlanRepository({ insert } as never);
+
+      await repo.createGenerating(TENANT_A, USER_A, SPEC_A, "Summer Cut");
+
+      const insertedValues = (values as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as Record<string, unknown>;
+      expect(insertedValues.name).toBe("Summer Cut");
+    });
+
+    it("stores name as null when no name is supplied (#93 — never defaults at write time)", async () => {
+      const row = {
+        id: PLAN_ID,
+        tenantId: TENANT_A,
+        userId: USER_A,
+        planSpecId: SPEC_A,
+        status: "generating" as const,
+        name: null,
+        programJson: null,
+        errorMessage: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const { insert, values } = insertChain([row]);
+      const repo = new WorkoutPlanRepository({ insert } as never);
+
+      await repo.createGenerating(TENANT_A, USER_A, SPEC_A);
+
+      const insertedValues = (values as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as Record<string, unknown>;
+      // A blank/absent name is stored as null so defaultPlanName resolves on read.
+      expect(insertedValues.name ?? null).toBeNull();
+    });
   });
 
   describe("markReady", () => {
@@ -409,6 +456,55 @@ describe("WorkoutPlanRepository", () => {
       expect(result[0].id).toBe(PLAN_ID);
       expect(result[0].status).toBe("ready");
       expect(result[0].createdAt).toEqual(createdAt);
+    });
+
+    it("projects the plan name into the summary (#93) — non-null name passes through", async () => {
+      const createdAt = new Date("2026-06-29T10:00:00Z");
+      const row = {
+        id: PLAN_ID,
+        status: "ready" as const,
+        createdAt,
+        name: "Summer Cut",
+      };
+      const { select } = selectChainOrderOnly([row]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.findAllByUser(TENANT_A, USER_A);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe("Summer Cut");
+    });
+
+    it("projects a null plan name as null (#93) — adapter resolves the default on read", async () => {
+      const createdAt = new Date("2026-06-29T10:00:00Z");
+      const row = {
+        id: PLAN_ID,
+        status: "ready" as const,
+        createdAt,
+        name: null,
+      };
+      const { select } = selectChainOrderOnly([row]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.findAllByUser(TENANT_A, USER_A);
+
+      expect(result).toHaveLength(1);
+      // The repo does NOT resolve the default — it faithfully returns the raw
+      // column value (null). defaultPlanName is applied by the app.ts adapter.
+      expect(result[0].name).toBeNull();
+    });
+
+    it("includes name in the select projection (#93)", async () => {
+      const createdAt = new Date("2026-06-29T10:00:00Z");
+      const row = { id: PLAN_ID, status: "ready" as const, createdAt, name: null };
+      const { select } = selectChainOrderOnly([row]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      await repo.findAllByUser(TENANT_A, USER_A);
+
+      const selectArg = (select as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as Record<string, unknown>;
+      expect(selectArg).toHaveProperty("name");
     });
   });
 

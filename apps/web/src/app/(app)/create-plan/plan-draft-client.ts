@@ -237,6 +237,12 @@ export interface PlanStatusResponse {
   status: string;
   program?: unknown;
   specId?: string;
+  /**
+   * Resolved plan label (#93). Always a non-empty string when present — the API
+   * resolves the blank→default rule server-side via `defaultPlanName`, so the
+   * web reads `plan.name` directly with no client-side fallback branching.
+   */
+  name?: string;
 }
 
 export type FetchPlanResult =
@@ -286,6 +292,8 @@ export interface PlanSummary {
   id: string;
   status: string;
   createdAt: string;
+  /** Resolved plan label (#93) — see PlanStatusResponse.name. */
+  name?: string;
 }
 
 export type FetchUserPlansResult =

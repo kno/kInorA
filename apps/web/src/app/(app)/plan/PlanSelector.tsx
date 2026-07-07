@@ -12,6 +12,13 @@ export interface PlanSummaryItem {
   id: string;
   status: string;
   createdAt: string;
+  /**
+   * Resolved plan label (#93). The server normally resolves the blank→default
+   * rule via `defaultPlanName`, so this is usually a non-empty string. It stays
+   * OPTIONAL, though, so the selector keeps a client-side date/status fallback
+   * to stay safe for legacy clients or any summary served without a name.
+   */
+  name?: string;
 }
 
 export interface PlanSelectorProps {
@@ -57,11 +64,16 @@ export function PlanSelector({ summaries, selectedId, messages }: PlanSelectorPr
         className="kin-select"
       >
         {summaries.map((plan) => {
+          // #93: prefer the server-resolved plan name as the primary option
+          // label. The server normally resolves it via defaultPlanName, but the
+          // field is optional, so fall back to the date/status template for any
+          // legacy/undefined summary served without a name (no crash).
           const date = new Date(plan.createdAt).toLocaleDateString();
-          // plan_selector_option template: "{date} ({status})"
-          const optionLabel = t("plan_selector_option", "{date} ({status})")
-            .replace("{date}", date)
-            .replace("{status}", plan.status);
+          const optionLabel = plan.name
+            ? plan.name
+            : t("plan_selector_option", "{date} ({status})")
+                .replace("{date}", date)
+                .replace("{status}", plan.status);
           return (
             <option key={plan.id} value={plan.id}>
               {optionLabel}
