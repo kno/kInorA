@@ -1,6 +1,10 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import { requireAuth } from "../auth/plugin.js";
-import { assertPlanSpecInput, assertPlanSpecShape } from "../plan/boundary.js";
+import {
+  assertPlanSpecInput,
+  assertPlanSpecShape,
+  PLAN_NAME_MAX_LENGTH,
+} from "../plan/boundary.js";
 import { derivePreferenceScores } from "@kinora/domain";
 import type { PlanSpec } from "@kinora/contracts";
 import type { PlanGenerationService } from "../ai/generation-service.js";
@@ -15,6 +19,13 @@ interface PlanRecord {
   status: string;
   programJson?: unknown;
   planSpecId: string;
+  /**
+   * Resolved plan label (#93). The app.ts adapter applies
+   * `defaultPlanName(row.name, row.createdAt)` before it reaches the route, so
+   * this is always a non-empty string once present. Optional here only to keep
+   * legacy callers/tests compiling.
+   */
+  name?: string;
 }
 
 /** Lightweight plan summary for the list endpoint. */
@@ -22,6 +33,8 @@ interface PlanSummary {
   id: string;
   status: string;
   createdAt: Date;
+  /** Resolved plan label (#93) — see PlanRecord.name. */
+  name?: string;
 }
 
 /**
@@ -193,9 +206,33 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       const inputSpec = rawSpec as Pick<
         PlanSpec,
         "goal" | "daysPerWeek" | "sessionDurationMinutes" | "location" | "equipment" | "limitations"
-      >;
+      > & { name?: unknown };
       const preferenceScores = derivePreferenceScores(inputSpec);
-      const confirmedSpec: PlanSpec = { ...inputSpec, preferenceScores, confirmed: true };
+      // #93: preserve the wizard-captured plan name onto the confirmed spec so it
+      // survives to the later generation request (the draft is deleted on promote,
+      // so spec_json is the only durable carrier). Normalize a blank/whitespace or
+      // non-string value to null — the date-based default is resolved once on READ
+      // via defaultPlanName; we never default at write time.
+      // Trim FIRST, then bound the trimmed length to the DB column
+      // (workout_plans.name is VARCHAR(120)). An over-long name is rejected here
+      // as a clean 422 — NOT allowed to reach the INSERT and blow up as a 500.
+      const trimmedName =
+        typeof inputSpec.name === "string" ? inputSpec.name.trim() : "";
+      if (trimmedName.length > PLAN_NAME_MAX_LENGTH) {
+        return reply.code(422).send({ error: "plan_name_too_long" });
+      }
+      const name = trimmedName !== "" ? trimmedName : null;
+      const confirmedSpec: PlanSpec = {
+        goal: inputSpec.goal,
+        daysPerWeek: inputSpec.daysPerWeek,
+        sessionDurationMinutes: inputSpec.sessionDurationMinutes,
+        location: inputSpec.location,
+        equipment: inputSpec.equipment,
+        limitations: inputSpec.limitations,
+        preferenceScores,
+        confirmed: true,
+        name,
+      };
 
       // Final integrity guard — confirmedSpec must now satisfy the full PlanSpec shape.
       // This should always pass given correct derivation; if it throws, it is a server bug.
@@ -271,6 +308,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
           id: s.id,
           status: s.status,
           createdAt: s.createdAt,
+          name: s.name,
         }))
       );
     }
@@ -302,6 +340,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         status: plan.status,
         program: plan.programJson ?? undefined,
         specId: plan.planSpecId,
+        name: plan.name,
       });
     }
   );
@@ -332,6 +371,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         status: plan.status,
         program: plan.programJson ?? undefined,
         specId: plan.planSpecId,
+        name: plan.name,
       });
     }
   );

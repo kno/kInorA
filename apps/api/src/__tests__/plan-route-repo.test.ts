@@ -156,3 +156,94 @@ describe("createPlanRouteRepo.promoteDraftToSpec — atomicity", () => {
     expect(draftRepo.delete).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("createPlanRouteRepo — plan name single-default layer (#93)", () => {
+  const CREATED_AT = new Date("2026-06-29T10:00:00Z");
+
+  function buildRepo(planRepoOverrides: Record<string, unknown>) {
+    const { database } = buildTxDatabase();
+    return createPlanRouteRepo({
+      database,
+      planSpecRepo: buildSpecRepo(),
+      planDraftRepo: buildDraftRepo(),
+      workoutPlanRepo: {
+        findById: vi.fn(),
+        findLatestByPlanSpec: vi.fn(),
+        findAllByUser: vi.fn(),
+        ...planRepoOverrides,
+      } as unknown as Pick<
+        WorkoutPlanRepository,
+        "findById" | "findLatestByPlanSpec" | "findAllByUser"
+      >,
+    });
+  }
+
+  it("findPlanById passes a non-blank name through unchanged", async () => {
+    const repo = buildRepo({
+      findById: vi.fn().mockResolvedValue({
+        id: "p1",
+        status: "ready",
+        planSpecId: "s1",
+        name: "Summer Cut",
+        programJson: null,
+        createdAt: CREATED_AT,
+      }),
+    });
+
+    const result = await repo.findPlanById(TENANT_A, USER_A, "p1");
+    expect(result?.name).toBe("Summer Cut");
+  });
+
+  it("findPlanById resolves a null name to a non-empty default", async () => {
+    const repo = buildRepo({
+      findById: vi.fn().mockResolvedValue({
+        id: "p1",
+        status: "ready",
+        planSpecId: "s1",
+        name: null,
+        programJson: null,
+        createdAt: CREATED_AT,
+      }),
+    });
+
+    const result = await repo.findPlanById(TENANT_A, USER_A, "p1");
+    expect(result?.name).toBeTruthy();
+    expect(result?.name).not.toBe("");
+  });
+
+  it("findPlanById returns undefined unchanged (no name resolution)", async () => {
+    const repo = buildRepo({ findById: vi.fn().mockResolvedValue(undefined) });
+    const result = await repo.findPlanById(TENANT_A, USER_A, "p1");
+    expect(result).toBeUndefined();
+  });
+
+  it("findLatestPlanBySpec resolves a null name to a non-empty default", async () => {
+    const repo = buildRepo({
+      findLatestByPlanSpec: vi.fn().mockResolvedValue({
+        id: "p1",
+        status: "ready",
+        planSpecId: "s1",
+        name: null,
+        programJson: null,
+        createdAt: CREATED_AT,
+      }),
+    });
+
+    const result = await repo.findLatestPlanBySpec(TENANT_A, USER_A, "s1");
+    expect(result?.name).toBeTruthy();
+  });
+
+  it("findAllPlansByUser resolves each row's name (null → default, non-blank → passthrough)", async () => {
+    const repo = buildRepo({
+      findAllByUser: vi.fn().mockResolvedValue([
+        { id: "p1", status: "ready", createdAt: CREATED_AT, name: "Summer Cut" },
+        { id: "p2", status: "generating", createdAt: CREATED_AT, name: null },
+      ]),
+    });
+
+    const result = await repo.findAllPlansByUser(TENANT_A, USER_A);
+    expect(result[0].name).toBe("Summer Cut");
+    expect(result[1].name).toBeTruthy();
+    expect(result[1].name).not.toBe("");
+  });
+});

@@ -36,6 +36,15 @@
   margin-bottom: var(--sp-5);
 }
 
+/* Optional plan-name field on the final step (#93). */
+.nameField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-width: 420px;
+  margin: var(--sp-4) auto 0;
+}
+
 .actions {
   display: flex;
   flex-direction: column-reverse;

@@ -147,6 +147,17 @@ export interface PlanSpec {
   limitations: PlanLimitation[];
   preferenceScores: PlanPreferenceScores;
   confirmed: boolean;
+  /**
+   * Optional user-supplied plan name (#93). Rides on the confirmed spec so it
+   * survives the two-request promote → confirm flow: at generation time the
+   * draft is already deleted, so `plan_specs.spec_json` is the only durable
+   * carrier of the wizard-captured name. On generation it is copied to
+   * `workout_plans.name`; the effective label is resolved on READ via
+   * `defaultPlanName(name, createdAt)`. Nullable/optional: a blank submission
+   * is stored as `null` so the date-based default stays dynamic. Never defaulted
+   * at write time.
+   */
+  name?: string | null;
 }
 
 // ---------------------------------------------------------------------------

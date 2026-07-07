@@ -22,6 +22,93 @@ function noopConfirm(): Promise<{ planId: string; status: string }> {
   return Promise.resolve({ planId: "plan-noop", status: "generating" });
 }
 
+describe("StepperShell — optional plan name (#93)", () => {
+  const completeStep6Draft = {
+    step: 6,
+    spec: {
+      goal: "strength" as const,
+      location: "gym" as const,
+      daysPerWeek: 3,
+      sessionDurationMinutes: 60,
+      equipment: ["barbell"],
+      limitations: [],
+    },
+  };
+
+  it("renders an optional plan-name input on the final step", () => {
+    render(
+      <StepperShell
+        saveDraftAction={noopSave}
+        confirmPlanSpecAction={noopConfirm}
+        initialDraft={completeStep6Draft}
+      />,
+    );
+    expect(screen.getByRole("textbox", { name: /plan name/i })).toBeTruthy();
+  });
+
+  it("allows Finish with a blank plan name (name is optional)", async () => {
+    const saveDraftAction = vi.fn().mockResolvedValue(undefined);
+    const confirmPlanSpecAction = vi
+      .fn()
+      .mockResolvedValue({ planId: "plan-1", status: "generating" });
+    render(
+      <StepperShell
+        saveDraftAction={saveDraftAction}
+        confirmPlanSpecAction={confirmPlanSpecAction}
+        initialDraft={completeStep6Draft}
+      />,
+    );
+    const finish = screen.getByRole("button", { name: /Finish/i }) as HTMLButtonElement;
+    // Blank name must NOT block finishing.
+    expect(finish.disabled).toBe(false);
+    fireEvent.click(finish);
+    await waitFor(() => expect(confirmPlanSpecAction).toHaveBeenCalledTimes(1));
+    // Blank name is submitted as null so the server resolves the default.
+    const [, submittedSpec] = saveDraftAction.mock.calls[0]! as [
+      number,
+      Record<string, unknown>,
+    ];
+    expect(submittedSpec.name).toBeNull();
+  });
+
+  it("includes a non-blank plan name (trimmed) in the submitted draft", async () => {
+    const saveDraftAction = vi.fn().mockResolvedValue(undefined);
+    render(
+      <StepperShell
+        saveDraftAction={saveDraftAction}
+        confirmPlanSpecAction={noopConfirm}
+        initialDraft={completeStep6Draft}
+      />,
+    );
+    const nameInput = screen.getByRole("textbox", { name: /plan name/i });
+    fireEvent.change(nameInput, { target: { value: "  Summer Cut  " } });
+    fireEvent.click(screen.getByRole("button", { name: /Finish/i }));
+    await waitFor(() => expect(saveDraftAction).toHaveBeenCalledTimes(1));
+    const [, submittedSpec] = saveDraftAction.mock.calls[0]! as [
+      number,
+      Record<string, unknown>,
+    ];
+    expect(submittedSpec.name).toBe("Summer Cut");
+  });
+
+  it("pre-populates the name input from a resumed draft's spec.name (#93)", () => {
+    render(
+      <StepperShell
+        saveDraftAction={noopSave}
+        confirmPlanSpecAction={noopConfirm}
+        initialDraft={{
+          ...completeStep6Draft,
+          spec: { ...completeStep6Draft.spec, name: "Resumed Block" },
+        }}
+      />,
+    );
+    const nameInput = screen.getByRole("textbox", {
+      name: /plan name/i,
+    }) as HTMLInputElement;
+    expect(nameInput.value).toBe("Resumed Block");
+  });
+});
+
 describe("StepperShell", () => {
   it("renders the first step (goal) when there is no initial draft", () => {
     render(

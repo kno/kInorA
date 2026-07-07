@@ -128,6 +128,34 @@ const fiveSessionProgram: WorkoutProgram = {
 
 // --- Tests ---
 
+describe("PlanWeekView — plan name header (#93)", () => {
+  it("renders the plan name in a heading when planName is provided", () => {
+    const view = PlanWeekView({
+      program: twoSessionProgram,
+      messages,
+      planName: "Summer Cut",
+    });
+    const heading = findFirst(view, (el) => el.type === "h1" || el.type === "h2");
+    expect(heading).toBeDefined();
+    expect(textOf(heading)).toContain("Summer Cut");
+  });
+
+  it("renders a different plan name (triangulate)", () => {
+    const view = PlanWeekView({
+      program: twoSessionProgram,
+      messages,
+      planName: "Winter Bulk",
+    });
+    expect(textOf(view)).toContain("Winter Bulk");
+  });
+
+  it("omits the name heading when planName is absent", () => {
+    const view = PlanWeekView({ program: twoSessionProgram, messages });
+    const heading = findFirst(view, (el) => el.type === "h1" || el.type === "h2");
+    expect(heading).toBeUndefined();
+  });
+});
+
 describe("PlanWeekView — summary strip", () => {
   it("SC-01: session count tile shows the number of weeklySessions (2 sessions)", () => {
     const view = PlanWeekView({ program: twoSessionProgram, messages });

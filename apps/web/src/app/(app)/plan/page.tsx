@@ -116,7 +116,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
         />
         <div className="kin-card kin-card--center">
           <a href={`/plan/${resolvedId}`} className="kin-link">
-            View details or regenerate
+            {t("plan_view_details_or_regenerate", "View details or regenerate")}
           </a>
         </div>
       </main>
@@ -129,7 +129,11 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
       {showSelector && (
         <PlanSelector summaries={summaries} selectedId={resolvedId} messages={messages} />
       )}
-      <PlanWeekView program={plan.program as WorkoutProgram} messages={messages} />
+      <PlanWeekView
+        program={plan.program as WorkoutProgram}
+        messages={messages}
+        planName={plan.name}
+      />
     </main>
   );
 }

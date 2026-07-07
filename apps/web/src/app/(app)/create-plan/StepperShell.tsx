@@ -19,16 +19,28 @@ import styles from "./stepper-shell.module.css";
 
 const TOTAL_STEPS = 6;
 
+/**
+ * Wizard draft shape (#93). The plan `name` is NOT a `PlanSpec` field — it is
+ * persisted on `workout_plans`, resolved server-side via `defaultPlanName` on
+ * read. It rides along in the untyped draft JSON as an optional key so the
+ * wizard can capture it without changing the shared `PlanSpec` contract.
+ */
+export type DraftSpec = Partial<PlanSpec> & { name?: string | null };
+
 export interface InitialDraft {
   step: number;
-  spec: Partial<PlanSpec>;
+  spec: DraftSpec;
 }
 
 export interface StepperShellProps {
   /** Hydrated server draft (resume). Absent → fresh wizard at step 1. */
   initialDraft?: InitialDraft;
-  /** Persists the current step + spec to the server (POST /plan-specs/drafts). */
-  saveDraftAction: (step: number, spec: Partial<PlanSpec>) => Promise<void>;
+  /**
+   * Persists the current step + spec to the server (POST /plan-specs/drafts).
+   * Accepts a DraftSpec so the optional plan `name` (#93) rides along in the
+   * draft JSON without changing the shared PlanSpec contract.
+   */
+  saveDraftAction: (step: number, spec: DraftSpec) => Promise<void>;
   /**
    * Promotes the draft to a confirmed PlanSpec and triggers AI generation.
    * Returns { planId, status } so the shell can navigate to /plan/[planId].
@@ -69,12 +81,26 @@ export function StepperShell({
   const t = (key: string, fallback: string): string => messages[key] ?? fallback;
   const router = useRouter();
   const [step, setStep] = useState(initialDraft?.step ?? 1);
-  const [spec, setSpec] = useState<Partial<PlanSpec>>(initialDraft?.spec ?? {});
+  const [spec, setSpec] = useState<DraftSpec>(initialDraft?.spec ?? {});
+  // #93: the plan name is held in its OWN state (not in `spec`) because it is not
+  // a PlanSpec field and only merges into the submitted draft on finish — never
+  // on step-advance, so typing it never triggers the auto-advance/save path.
+  const [name, setName] = useState<string>(initialDraft?.spec.name ?? "");
   const [resumed, setResumed] = useState(Boolean(initialDraft));
   const [busy, setBusy] = useState(false);
 
   const update = (patch: Partial<PlanSpec>) => {
     setSpec((prev) => ({ ...prev, ...patch }));
+  };
+
+  /**
+   * Resolve the captured plan name for submission (#93). A blank/whitespace-only
+   * value becomes `null` so the API applies the date-based default; a non-blank
+   * value is trimmed and passed through.
+   */
+  const normalizeNameForSubmit = (): string | null => {
+    const trimmed = name.trim();
+    return trimmed === "" ? null : trimmed;
   };
 
   const isCurrentStepComplete = (): boolean => {
@@ -152,7 +178,8 @@ export function StepperShell({
       // derives preferenceScores on promote (source of truth); the client
       // never computes them. confirmPlanSpecAction triggers AI generation
       // and returns the planId for the new generating plan.
-      await saveDraftAction(TOTAL_STEPS, spec);
+      // #93: attach the optional plan name (blank → null) to the final draft.
+      await saveDraftAction(TOTAL_STEPS, { ...spec, name: normalizeNameForSubmit() });
       const { planId } = await confirmPlanSpecAction();
       router.push(`/plan/${planId}`);
     } finally {
@@ -162,6 +189,7 @@ export function StepperShell({
 
   const handleStartOver = () => {
     setSpec({});
+    setName("");
     setStep(1);
     setResumed(false);
   };
@@ -218,11 +246,29 @@ export function StepperShell({
         );
       case 6:
         return (
-          <LimitationsStep
-            value={spec.limitations ?? []}
-            onSelect={(limitations: PlanLimitation[]) => update({ limitations })}
-            messages={messages}
-          />
+          <>
+            <LimitationsStep
+              value={spec.limitations ?? []}
+              onSelect={(limitations: PlanLimitation[]) => update({ limitations })}
+              messages={messages}
+            />
+            {/* Optional plan name (#93). Blank is allowed — the server resolves a
+                date-based default via defaultPlanName on read. */}
+            <div className={styles.nameField}>
+              <label htmlFor="plan-name" className="kin-label">
+                {t("plan_name_field_label", "Plan name (optional)")}
+              </label>
+              <input
+                id="plan-name"
+                type="text"
+                className="kin-input"
+                maxLength={120}
+                value={name}
+                placeholder={t("plan_name_placeholder", "e.g. Summer strength block")}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+          </>
         );
       default:
         return null;

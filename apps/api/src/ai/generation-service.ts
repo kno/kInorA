@@ -101,8 +101,17 @@ export class PlanGenerationService {
     }
     const spec = specRow.specJson;
 
-    // Step 3: Create the "generating" row and return planId immediately
-    const { id: planId } = await this.planRepo.createGenerating(tenantId, userId, planSpecId);
+    // Step 3: Create the "generating" row and return planId immediately.
+    // #93: thread the user-supplied plan name carried on the confirmed spec into
+    // the row. A blank submission is already normalized to null on promote, so we
+    // pass `spec.name ?? null` verbatim — the blank→default rule is applied only
+    // on read via defaultPlanName, never here.
+    const { id: planId } = await this.planRepo.createGenerating(
+      tenantId,
+      userId,
+      planSpecId,
+      spec.name ?? null
+    );
 
     // Step 4: Fire-and-forget background task.
     // Promise rejection is caught inside the task — no unhandledRejection.

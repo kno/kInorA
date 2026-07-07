@@ -170,6 +170,9 @@
   "plan_nav_empty_cta": "Crear tu plan",
   "plan_selector_label": "Seleccionar un plan",
   "plan_selector_option": "{date} ({status})",
+  "plan_name_field_label": "Nombre del plan (opcional)",
+  "plan_name_placeholder": "p. ej. Bloque de fuerza de verano",
+  "plan_view_details_or_regenerate": "Ver detalles o regenerar",
 
   "plan_day_label": "Día {n}",
   "plan_exercises_count": "ejercicios",
