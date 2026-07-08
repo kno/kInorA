@@ -15,8 +15,15 @@
  * Copy is centralized in `copy/tracker.ts` (the app has no i18n layer yet).
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
+  AppState,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -46,11 +53,13 @@ import {
   startWorkoutSession,
 } from "../api/workout-session";
 import {
+  computeElapsedSeconds,
+  computeRestRemaining,
   deriveTrackerView,
-  elapsedSecondsSince,
   formatCountdown,
   formatElapsed,
   formatWeight,
+  objectiveWeightFor,
   orderedSets,
   seedFromSet,
   segmentStates,
@@ -58,6 +67,7 @@ import {
   stepWeight,
 } from "./tracker/tracker-logic";
 import { RestRing } from "./tracker/RestRing";
+import { deleteSessionToken } from "../auth/session-storage";
 
 export type TrackerRouteParams = {
   sessionId?: string;
@@ -197,6 +207,17 @@ export default function WorkoutTrackerScreen({
 
   const [submitting, setSubmitting] = useState(false);
 
+  // Tracks mount status so async paths never setState after the screen is
+  // unmounted (navigating back mid-request). Guarded before EVERY setState in
+  // an async continuation below.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const loadSession = useCallback(async () => {
     setLoading(true);
     setErrorKey(undefined);
@@ -208,11 +229,22 @@ export default function WorkoutTrackerScreen({
     } else if (planId && typeof day === "number") {
       result = await startWorkoutSession(planId, day);
     } else {
+      if (!mountedRef.current) return;
       setErrorKey("errorLoad");
       setLoading(false);
       return;
     }
 
+    // A missing/expired token is unrecoverable by retrying the same tokenless
+    // request — route to the auth flow instead of dead-ending in a retry loop.
+    if (result.kind === "error" && result.message === "no_session") {
+      await deleteSessionToken();
+      if (!mountedRef.current) return;
+      navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+      return;
+    }
+
+    if (!mountedRef.current) return;
     if (result.kind === "ok") {
       setSession(result.session);
     } else if (result.message === "active_session_conflict") {
@@ -224,17 +256,10 @@ export default function WorkoutTrackerScreen({
       setErrorKey(sessionId ? "errorLoad" : "errorStart");
     }
     setLoading(false);
-  }, [sessionId, planId, day]);
+  }, [sessionId, planId, day, navigation]);
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      await loadSession();
-      if (cancelled) return;
-    })();
-    return () => {
-      cancelled = true;
-    };
+    void loadSession();
   }, [loadSession]);
 
   const view = useMemo(
@@ -258,28 +283,99 @@ export default function WorkoutTrackerScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSetId]);
 
-  // Seed elapsed once per session start; then tick while not paused.
+  // ── Wall-clock-anchored timers ──
+  // Both the elapsed timer and the rest countdown reconcile against
+  // `Date.now()` rather than counting `setInterval` ticks, so they stay
+  // accurate across backgrounded/locked spans where RN throttles or suspends
+  // JS timers. Pause bookkeeping lives in refs (no re-render churn); the pure
+  // math lives in tracker-logic. Mirrors web's `use-session-timer`.
   const startedAt = session?.startedAt;
-  useEffect(() => {
-    if (startedAt) setElapsed(elapsedSecondsSince(startedAt, Date.now()));
-  }, [startedAt]);
-  useEffect(() => {
-    if (!startedAt || paused) return;
-    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
-    return () => clearInterval(id);
-  }, [startedAt, paused]);
+  const startMsRef = useRef<number>(Number.NaN);
+  const elapsedPauseStartRef = useRef<number | null>(null);
+  const elapsedPausedAccumRef = useRef(0);
 
-  // Rest countdown ticker: runs while resting, clears at zero.
-  const isResting = restRemaining !== null;
+  // Rest end target (wall-clock ms), plus its own pause accounting.
+  const restEndsAtRef = useRef<number | null>(null);
+  const restPauseStartRef = useRef<number | null>(null);
+  const restPausedAccumRef = useRef(0);
+
+  const reconcileElapsed = useCallback(() => {
+    setElapsed(
+      computeElapsedSeconds(startMsRef.current, Date.now(), {
+        pausedAccumMs: elapsedPausedAccumRef.current,
+        pauseStartMs: elapsedPauseStartRef.current,
+      }),
+    );
+  }, []);
+
+  const reconcileRest = useCallback(() => {
+    if (restEndsAtRef.current == null) return;
+    const remaining = computeRestRemaining(restEndsAtRef.current, Date.now(), {
+      pausedAccumMs: restPausedAccumRef.current,
+      pauseStartMs: restPauseStartRef.current,
+    });
+    if (remaining == null) {
+      restEndsAtRef.current = null;
+      restPauseStartRef.current = null;
+      restPausedAccumRef.current = 0;
+      setRestRemaining(null);
+    } else {
+      setRestRemaining(remaining);
+    }
+  }, []);
+
+  // Re-seed and reconcile whenever the session's start arrives/changes.
   useEffect(() => {
-    if (!isResting) return;
+    startMsRef.current = startedAt ? Date.parse(startedAt) : Number.NaN;
+    reconcileElapsed();
+  }, [startedAt, reconcileElapsed]);
+
+  // Single ticker + AppState listener drives BOTH timers. The tick is only a
+  // display refresh — the values come from wall-clock, so a throttled or
+  // missed tick self-corrects on the next reconcile (including on resume).
+  useEffect(() => {
+    if (!startedAt) return;
+    reconcileElapsed();
+    reconcileRest();
     const id = setInterval(() => {
-      setRestRemaining((r) => (r === null || r <= 1 ? null : r - 1));
+      reconcileElapsed();
+      reconcileRest();
     }, 1000);
-    return () => clearInterval(id);
-  }, [isResting]);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        reconcileElapsed();
+        reconcileRest();
+      }
+    });
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
+  }, [startedAt, reconcileElapsed, reconcileRest]);
 
-  const handleTogglePause = useCallback(() => setPaused((p) => !p), []);
+  const isResting = restRemaining !== null;
+
+  const handleTogglePause = useCallback(() => {
+    const now = Date.now();
+    if (elapsedPauseStartRef.current != null) {
+      // Resuming: fold the just-finished pause into the accumulators.
+      elapsedPausedAccumRef.current += now - elapsedPauseStartRef.current;
+      elapsedPauseStartRef.current = null;
+      if (restPauseStartRef.current != null) {
+        restPausedAccumRef.current += now - restPauseStartRef.current;
+        restPauseStartRef.current = null;
+      }
+      setPaused(false);
+    } else {
+      // Pausing: freeze both displays; the rest target shifts on resume so it
+      // does not "catch up" for the paused span.
+      elapsedPauseStartRef.current = now;
+      if (restEndsAtRef.current != null) restPauseStartRef.current = now;
+      setPaused(true);
+    }
+    reconcileElapsed();
+    reconcileRest();
+  }, [reconcileElapsed, reconcileRest]);
 
   const handleCompleteSet = useCallback(async () => {
     if (!session || !view?.currentSet || submitting) return;
@@ -292,29 +388,52 @@ export default function WorkoutTrackerScreen({
       weightKg: weight,
       actualReps: reps,
     });
+    if (!mountedRef.current) return;
     setSubmitting(false);
 
     if (result.kind === "ok") {
       setErrorKey(undefined);
       setSession(result.session);
-      // Start the rest timer seeded from the just-completed exercise.
+      // Start the rest timer, anchored to a wall-clock END target so it
+      // survives backgrounding. If paused when the set is logged, freeze it.
+      const now = Date.now();
+      restEndsAtRef.current = now + restSeconds * 1000;
+      restPausedAccumRef.current = 0;
+      restPauseStartRef.current = paused ? now : null;
       setRestDuration(restSeconds);
       setRestRemaining(restSeconds);
     } else {
       setErrorKey("errorRecord");
     }
-  }, [session, view, submitting, weight, reps]);
+  }, [session, view, submitting, weight, reps, paused]);
 
   const handleAddRestTime = useCallback(() => {
-    setRestRemaining((r) => (r === null ? r : Math.min(r + 15, 599)));
+    if (restEndsAtRef.current == null) return;
+    const now = Date.now();
+    const pausedMs =
+      restPausedAccumRef.current +
+      (restPauseStartRef.current != null ? now - restPauseStartRef.current : 0);
+    const currentRemainingMs = restEndsAtRef.current + pausedMs - now;
+    const newRemainingMs = Math.min(currentRemainingMs + 15_000, 599_000);
+    restEndsAtRef.current = now - pausedMs + newRemainingMs;
+    const newRemainingSec = Math.ceil(newRemainingMs / 1000);
+    // Grow the ring's denominator so the arc stays proportional (never > full).
+    setRestDuration((d) => Math.max(d, newRemainingSec));
+    setRestRemaining(newRemainingSec);
   }, []);
 
-  const handleSkipRest = useCallback(() => setRestRemaining(null), []);
+  const handleSkipRest = useCallback(() => {
+    restEndsAtRef.current = null;
+    restPauseStartRef.current = null;
+    restPausedAccumRef.current = 0;
+    setRestRemaining(null);
+  }, []);
 
   const handleFinish = useCallback(async () => {
     if (!session || submitting) return;
     setSubmitting(true);
     const result = await completeWorkoutSession(session.id);
+    if (!mountedRef.current) return;
     setSubmitting(false);
     if (result.kind === "ok") {
       setErrorKey(undefined);
@@ -393,9 +512,17 @@ export default function WorkoutTrackerScreen({
   /* ── Active session render ── */
 
   const current = view.currentExercise;
-  const objective = current
-    ? t.objectiveLabel(weight, view.currentSet?.targetReps ?? String(reps))
-    : "";
+  // The objective is the plan's FIXED target for this set — never the live
+  // stepper `weight` (which the user mutates while logging). Source the weight
+  // from the set's prescribed `weightKg`; fall back to a reps-only objective
+  // when the plan prescribes no weight.
+  const objectiveWeight = objectiveWeightFor(view.currentSet);
+  const objectiveReps = view.currentSet?.targetReps ?? String(reps);
+  const objective = !current
+    ? ""
+    : objectiveWeight !== undefined
+      ? t.objectiveLabel(objectiveWeight, objectiveReps)
+      : t.objectiveLabelNoWeight(objectiveReps);
   const restColor =
     restRemaining !== null && restRemaining <= REST_LOW_THRESHOLD
       ? colors.accent
@@ -464,7 +591,13 @@ export default function WorkoutTrackerScreen({
           <View
             style={styles.segBar}
             accessibilityRole="progressbar"
-            accessibilityValue={{ min: 0, max: view.exerciseCount, now: view.completedSets }}
+            accessibilityValue={{
+              text: t.progressValueText(
+                view.currentExerciseNumber,
+                view.exerciseCount,
+                view.percent,
+              ),
+            }}
             accessibilityLabel={t.progressA11y(view.currentExerciseNumber, view.exerciseCount)}
           >
             {segments.map((state, i) => (

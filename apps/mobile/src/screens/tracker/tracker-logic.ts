@@ -47,6 +47,75 @@ export function elapsedSecondsSince(startedAtIso: string, nowMs: number): number
   return Math.max(0, Math.floor((nowMs - startMs) / 1000));
 }
 
+/**
+ * Accumulated pause state for a wall-clock-reconciled timer.
+ *
+ * `pausedAccumMs` is the wall-time already spent in COMPLETED pause intervals;
+ * `pauseStartMs` is the epoch-ms when the current pause began, or `null` while
+ * running. Both the elapsed timer and the rest countdown share this shape so
+ * pause math lives in one tested place.
+ */
+export interface PauseState {
+  pausedAccumMs: number;
+  pauseStartMs: number | null;
+}
+
+/** Total paused wall-time at `nowMs`, including any in-progress pause. */
+export function pausedMillis(state: PauseState, nowMs: number): number {
+  const live =
+    state.pauseStartMs != null ? Math.max(0, nowMs - state.pauseStartMs) : 0;
+  return Math.max(0, state.pausedAccumMs) + live;
+}
+
+/**
+ * Elapsed seconds for the session timer, reconciled to WALL-CLOCK time so it
+ * stays accurate across backgrounded/locked spans where JS timers are
+ * throttled or suspended. Paused wall-time is excluded — while paused the
+ * growing "current pause" term cancels the growing `now`, so the value freezes.
+ * NaN-safe: an invalid start yields 0.
+ */
+export function computeElapsedSeconds(
+  startMs: number,
+  nowMs: number,
+  pause: PauseState,
+): number {
+  if (!Number.isFinite(startMs)) return 0;
+  const paused = pausedMillis(pause, nowMs);
+  return Math.max(0, Math.floor((nowMs - startMs - paused) / 1000));
+}
+
+/**
+ * Remaining rest seconds for a countdown anchored to a wall-clock END target,
+ * so it survives backgrounding (recompute on resume rather than counting
+ * ticks). Returns `null` once the target has passed. Pausing pushes the target
+ * out by the paused span, so the countdown freezes and does not "catch up" on
+ * resume. Uses `Math.ceil` so a freshly started rest reads its full duration.
+ */
+export function computeRestRemaining(
+  endsAtMs: number,
+  nowMs: number,
+  pause: PauseState,
+): number | null {
+  const paused = pausedMillis(pause, nowMs);
+  const remainingMs = endsAtMs + paused - nowMs;
+  if (remainingMs <= 0) return null;
+  return Math.ceil(remainingMs / 1000);
+}
+
+/**
+ * Fixed objective weight for a set: the plan's prescribed/prior `weightKg`.
+ *
+ * The set contract (`SetRecordDTO`) carries no separate "target weight" — only
+ * the prescribed/last-used `weightKg` and a `targetReps` string. The objective
+ * must reflect that FIXED target, never the live stepper state (which the user
+ * mutates while logging the set). Returns `undefined` when the plan prescribes
+ * no weight (e.g. bodyweight moves), so the caller can render a reps-only
+ * objective.
+ */
+export function objectiveWeightFor(set: SetRecordDTO | undefined): number | undefined {
+  return set?.weightKg;
+}
+
 /** Step the weight by ±WEIGHT_STEP, clamped, normalized to at most 1 decimal. */
 export function stepWeight(current: number, direction: 1 | -1): number {
   const next = current + direction * WEIGHT_STEP;

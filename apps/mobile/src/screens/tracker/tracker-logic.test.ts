@@ -5,11 +5,14 @@ import type {
   WorkoutSessionRecord,
 } from "@kinora/contracts";
 import {
+  computeElapsedSeconds,
+  computeRestRemaining,
   deriveTrackerView,
   elapsedSecondsSince,
   formatCountdown,
   formatElapsed,
   formatWeight,
+  objectiveWeightFor,
   parseTargetReps,
   ringDashoffset,
   seedFromSet,
@@ -17,6 +20,7 @@ import {
   stepReps,
   stepWeight,
 } from "./tracker-logic";
+import { trackerCopy } from "../../copy/tracker";
 
 function set(overrides: Partial<SetRecordDTO> & { id: string }): SetRecordDTO {
   return {
@@ -99,6 +103,110 @@ describe("steppers", () => {
     expect(stepReps(8, 1)).toBe(9);
     expect(stepReps(1, -1)).toBe(1);
     expect(stepReps(99, 1)).toBe(99);
+  });
+  it("normalizes binary float artifacts via toFixed(1)", () => {
+    // Repeated ±2.5 stepping must never accumulate float noise like
+    // 12.500000000000002 — the Number(next.toFixed(1)) normalization keeps
+    // every value clean to one decimal.
+    let w = 0;
+    for (let i = 0; i < 40; i += 1) w = stepWeight(w, 1);
+    expect(w).toBe(100);
+    // Each intermediate value stays a clean 0.1-grid number.
+    let v = 5;
+    for (let i = 0; i < 20; i += 1) {
+      v = stepWeight(v, 1);
+      expect(v).toBe(Number(v.toFixed(1)));
+    }
+  });
+});
+
+describe("computeElapsedSeconds", () => {
+  const NO_PAUSE = { pausedAccumMs: 0, pauseStartMs: null };
+
+  it("tracks WALL-CLOCK across a backgrounded jump without per-second ticks", () => {
+    const start = 1_000_000;
+    // App backgrounds at t=5s, resumes 5 minutes later with a SINGLE reconcile.
+    // A tick-counting timer would report ~5s; wall-clock reports the full span.
+    expect(computeElapsedSeconds(start, start + 5_000, NO_PAUSE)).toBe(5);
+    const afterBackground = start + 5_000 + 300_000;
+    expect(computeElapsedSeconds(start, afterBackground, NO_PAUSE)).toBe(305);
+  });
+
+  it("freezes while paused and resumes without losing the running total", () => {
+    const start = 0;
+    // Running for 10s, then pause begins at t=10s.
+    const pausedState = { pausedAccumMs: 0, pauseStartMs: 10_000 };
+    // 30s of wall-time pass while paused: display stays frozen at 10s.
+    expect(computeElapsedSeconds(start, 40_000, pausedState)).toBe(10);
+    // Resume at t=40s: the 30s pause is folded into the accumulator.
+    const resumed = { pausedAccumMs: 30_000, pauseStartMs: null };
+    // 5s more running → 15s total (paused span excluded).
+    expect(computeElapsedSeconds(start, 45_000, resumed)).toBe(15);
+  });
+
+  it("is NaN-safe for an invalid start", () => {
+    expect(computeElapsedSeconds(Number.NaN, 10_000, NO_PAUSE)).toBe(0);
+  });
+});
+
+describe("computeRestRemaining", () => {
+  const NO_PAUSE = { pausedAccumMs: 0, pauseStartMs: null };
+
+  it("counts down against a wall-clock end target", () => {
+    const endsAt = 90_000; // 90s rest, now=0
+    expect(computeRestRemaining(endsAt, 0, NO_PAUSE)).toBe(90);
+    expect(computeRestRemaining(endsAt, 45_000, NO_PAUSE)).toBe(45);
+    // Backgrounded past the end → cleared.
+    expect(computeRestRemaining(endsAt, 91_000, NO_PAUSE)).toBeNull();
+    expect(computeRestRemaining(endsAt, 90_000, NO_PAUSE)).toBeNull();
+  });
+
+  it("freezes while paused and does not catch up on resume", () => {
+    const endsAt = 90_000; // now=0
+    // Pause begins at t=30s (60s remaining).
+    const paused = { pausedAccumMs: 0, pauseStartMs: 30_000 };
+    // 20s pass while paused: still 60s remaining (frozen, not catching up).
+    expect(computeRestRemaining(endsAt, 50_000, paused)).toBe(60);
+    // Resume at t=50s: pause span folded in; target effectively shifted +20s.
+    const resumed = { pausedAccumMs: 20_000, pauseStartMs: null };
+    expect(computeRestRemaining(endsAt, 50_000, resumed)).toBe(60);
+    // 10s more running → 50s remaining.
+    expect(computeRestRemaining(endsAt, 60_000, resumed)).toBe(50);
+  });
+});
+
+describe("ringDashoffset overshoot", () => {
+  it("clamps to a valid offset when remaining exceeds duration (+15s)", () => {
+    const c = 345.4;
+    // +15s can push remaining above the original duration; the arc must stay
+    // full (offset 0), never negative or NaN.
+    const offset = ringDashoffset(105, 90, c);
+    expect(offset).toBe(0);
+    expect(Number.isFinite(offset)).toBe(true);
+    expect(offset).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("objectiveWeightFor", () => {
+  it("returns the set's prescribed weight, ignoring live stepper state", () => {
+    expect(objectiveWeightFor(set({ id: "a", weightKg: 60 }))).toBe(60);
+  });
+  it("returns undefined when the plan prescribes no weight", () => {
+    expect(objectiveWeightFor(set({ id: "b" }))).toBeUndefined();
+    expect(objectiveWeightFor(undefined)).toBeUndefined();
+  });
+});
+
+describe("progress a11y value coherence (copy)", () => {
+  it("announces a single coherent unit (exercise position + percent)", () => {
+    // Regression: the old numeric range mixed units (max=exercises,
+    // now=sets) → "9 of 3". The value text keeps one unit throughout.
+    expect(trackerCopy.progressValueText(2, 6, 33)).toBe(
+      "Ejercicio 2 de 6, 33%",
+    );
+  });
+  it("objectiveLabelNoWeight omits the weight for bodyweight sets", () => {
+    expect(trackerCopy.objectiveLabelNoWeight("12")).toBe("12 reps");
   });
 });
 
