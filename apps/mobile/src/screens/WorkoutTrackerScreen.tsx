@@ -218,6 +218,15 @@ export default function WorkoutTrackerScreen({
     };
   }, []);
 
+  // A missing/expired token is unrecoverable by retrying the same tokenless
+  // request — route to the auth flow instead of dead-ending in a retry loop.
+  // Shared by every call site that can observe a `no_session` result.
+  const handleUnauthenticatedSession = useCallback(async () => {
+    await deleteSessionToken();
+    if (!mountedRef.current) return;
+    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+  }, [navigation]);
+
   const loadSession = useCallback(async () => {
     setLoading(true);
     setErrorKey(undefined);
@@ -235,12 +244,8 @@ export default function WorkoutTrackerScreen({
       return;
     }
 
-    // A missing/expired token is unrecoverable by retrying the same tokenless
-    // request — route to the auth flow instead of dead-ending in a retry loop.
     if (result.kind === "error" && result.message === "no_session") {
-      await deleteSessionToken();
-      if (!mountedRef.current) return;
-      navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+      await handleUnauthenticatedSession();
       return;
     }
 
@@ -256,7 +261,7 @@ export default function WorkoutTrackerScreen({
       setErrorKey(sessionId ? "errorLoad" : "errorStart");
     }
     setLoading(false);
-  }, [sessionId, planId, day, navigation]);
+  }, [sessionId, planId, day, handleUnauthenticatedSession]);
 
   useEffect(() => {
     void loadSession();
@@ -389,6 +394,13 @@ export default function WorkoutTrackerScreen({
       actualReps: reps,
     });
     if (!mountedRef.current) return;
+
+    if (result.kind === "error" && result.message === "no_session") {
+      setSubmitting(false);
+      await handleUnauthenticatedSession();
+      return;
+    }
+
     setSubmitting(false);
 
     if (result.kind === "ok") {
@@ -405,7 +417,7 @@ export default function WorkoutTrackerScreen({
     } else {
       setErrorKey("errorRecord");
     }
-  }, [session, view, submitting, weight, reps, paused]);
+  }, [session, view, submitting, weight, reps, paused, handleUnauthenticatedSession]);
 
   const handleAddRestTime = useCallback(() => {
     if (restEndsAtRef.current == null) return;
@@ -434,6 +446,13 @@ export default function WorkoutTrackerScreen({
     setSubmitting(true);
     const result = await completeWorkoutSession(session.id);
     if (!mountedRef.current) return;
+
+    if (result.kind === "error" && result.message === "no_session") {
+      setSubmitting(false);
+      await handleUnauthenticatedSession();
+      return;
+    }
+
     setSubmitting(false);
     if (result.kind === "ok") {
       setErrorKey(undefined);
@@ -441,7 +460,7 @@ export default function WorkoutTrackerScreen({
     } else {
       setErrorKey("errorComplete");
     }
-  }, [session, submitting]);
+  }, [session, submitting, handleUnauthenticatedSession]);
 
   const goHome = useCallback(() => navigation.goBack(), [navigation]);
 
