@@ -19,14 +19,29 @@ export function RestRing({ t, duration, remaining, onSkip, onAddTime }: RestRing
   // Guard against a non-positive rest duration (e.g. an exercise configured
   // with restSeconds: 0) so the ring offset never divides by zero → Infinity.
   const safeDuration = duration > 0 ? duration : 1;
-  const offset = active ? RING_CIRCUMFERENCE * (1 - remaining / safeDuration) : 0;
+  // Clamp so a "+15 s" that pushes `remaining` past `duration` (offset < 0)
+  // never wraps the ring by rendering a negative dash offset.
+  const offset = active
+    ? Math.max(0, RING_CIRCUMFERENCE * (1 - remaining / safeDuration))
+    : 0;
+
+  // Announced to assistive tech: the visible countdown lives inside an
+  // `aria-hidden` node, so this sr-only live region carries the state + time.
+  const srStatus = active
+    ? t("tracker_rest_sr_active", "Rest active, {time} remaining").replace(
+        "{time}",
+        formatRest(remaining),
+      )
+    : t("tracker_rest_ready", "Ready for the set");
 
   return (
     <section
       className={`${styles.card} ${styles.restCard}`}
       aria-label={t("tracker_rest_aria", "Rest timer")}
-      aria-live="polite"
     >
+      <span className={styles.srOnly} aria-live="polite">
+        {srStatus}
+      </span>
       <div className={styles.restState}>
         <span className={styles.restHeading}>
           <span
