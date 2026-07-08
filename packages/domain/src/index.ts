@@ -18,6 +18,7 @@ export type { RpeValidation } from "./plan/rpe.js";
 export { applyEquipmentSubstitutions } from "./plan/equipment-substitution.js";
 export { injectLimitationWarnings } from "./plan/limitation-warnings.js";
 export { assertNoDiagnosticLanguage } from "./plan/diagnostic-guard.js";
+export { normalizeReps, normalizeProgramReps, DEFAULT_REPS } from "./plan/reps-normalizer.js";
 
 export {
   MIN_PASSWORD_LENGTH,

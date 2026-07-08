@@ -7,6 +7,7 @@ import {
   applyEquipmentSubstitutions,
   injectLimitationWarnings,
   assertNoDiagnosticLanguage,
+  normalizeProgramReps,
 } from "@kinora/domain";
 
 /**
@@ -45,7 +46,7 @@ export class PlanSpecShapeError extends Error {
  * 3. Create a "generating" row in WorkoutPlanRepository and return { planId, status }
  *    IMMEDIATELY to the caller — the LLM call is fire-and-forget.
  * 4. Background task (unhandled rejection is caught → markFailed):
- *    generator.generate → applyEquipmentSubstitutions
+ *    generator.generate → normalizeProgramReps → applyEquipmentSubstitutions
  *    → injectLimitationWarnings → assertNoDiagnosticLanguage → markReady.
  *    On ANY error → markFailed.
  *
@@ -144,7 +145,8 @@ export class PlanGenerationService {
     try {
       // generate → post-process → guard → persist
       const rawProgram = await this.generator.generate(spec);
-      const substituted = applyEquipmentSubstitutions(rawProgram, spec.equipment);
+      const normalized = normalizeProgramReps(rawProgram);
+      const substituted = applyEquipmentSubstitutions(normalized, spec.equipment);
       const withWarnings = injectLimitationWarnings(substituted, spec.limitations);
       assertNoDiagnosticLanguage(withWarnings);
 
