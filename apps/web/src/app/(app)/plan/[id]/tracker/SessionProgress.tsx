@@ -25,6 +25,13 @@ export function SessionProgress({
     .replace("{n}", String(currentExerciseNumber))
     .replace("{m}", String(totalExercises));
 
+  // The numeric range on the progressbar is sets-based (completed/total sets),
+  // so give AT a coherent spoken value that matches the exercise-based label.
+  const valueText = t("tracker_progress_valuetext", "Exercise {n} of {m}, {percent}%")
+    .replace("{n}", String(currentExerciseNumber))
+    .replace("{m}", String(totalExercises))
+    .replace("{percent}", String(percent));
+
   return (
     <section className={styles.progressCard} aria-label={t("tracker_progress_aria", "Session progress")}>
       <div className={styles.progressHead}>
@@ -37,6 +44,7 @@ export function SessionProgress({
         aria-valuenow={completedSets}
         aria-valuemin={0}
         aria-valuemax={totalSets}
+        aria-valuetext={valueText}
         aria-label={label}
       >
         {segments.map((seg) => {

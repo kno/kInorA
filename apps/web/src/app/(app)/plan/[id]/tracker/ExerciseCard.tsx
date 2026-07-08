@@ -74,7 +74,10 @@ export function ExerciseCard({
       completed: true,
       weightKg: weight,
       actualReps: reps,
-      rpe: parsedRpe != null && Number.isFinite(parsedRpe) ? parsedRpe : undefined,
+      rpe:
+        parsedRpe != null && Number.isFinite(parsedRpe)
+          ? clamp(parsedRpe, 0, 10)
+          : undefined,
       notes: trimmedNote === "" ? undefined : trimmedNote,
     });
     onSetCompleted();
