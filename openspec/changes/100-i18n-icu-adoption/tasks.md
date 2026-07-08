@@ -81,31 +81,31 @@ Parity, Generated Message-Key Types, Catalog-Driven Locale Extensibility —
 proven against a sample catalog before full data migration)
 
 ### Phase 1.1: Package Scaffold
-- [ ] 1.1.1 Create `packages/i18n/package.json` — name `@kinora/i18n`, exports `"."` + `"./messages/en"` + `"./messages/es"`, mirror `packages/domain` devDeps.
-- [ ] 1.1.2 Create `packages/i18n/tsconfig.json` + `tsconfig.build.json` mirroring `packages/domain`.
-- [ ] 1.1.3 Register `@kinora/i18n` path alias in root tsconfig; confirm pnpm-workspace glob already covers it.
+- [x] 1.1.1 Create `packages/i18n/package.json` — name `@kinora/i18n`, exports `"."` + `"./messages/en"` + `"./messages/es"`, mirror `packages/domain` devDeps.
+- [x] 1.1.2 Create `packages/i18n/tsconfig.json` + `tsconfig.build.json` mirroring `packages/domain`.
+- [x] 1.1.3 Register `@kinora/i18n` path alias in root tsconfig; confirm pnpm-workspace glob already covers it.
 
 ### Phase 1.2: flattenMessages
-- [ ] 1.2.1 [RED] `packages/i18n/src/__tests__/flatten.test.ts` — nested object → flat dot-joined `Record<string,string>`.
-- [ ] 1.2.2 [GREEN] Implement `packages/i18n/src/flatten.ts` — `flattenMessages(nested)`.
+- [x] 1.2.1 [RED] `packages/i18n/src/__tests__/flatten.test.ts` — nested object → flat dot-joined `Record<string,string>`.
+- [x] 1.2.2 [GREEN] Implement `packages/i18n/src/flatten.ts` — `flattenMessages(nested)`.
 
 ### Phase 1.3: mergeWithBase (EN fallback util, Gap 2)
-- [ ] 1.3.1 [RED] `packages/i18n/src/__tests__/merge.test.ts` — `mergeWithBase(en, locale)` deep-merges nested catalogs; missing namespace/key in `locale` falls back to `en`'s value; present keys in `locale` win.
-- [ ] 1.3.2 [GREEN] Implement `packages/i18n/src/merge.ts` — `mergeWithBase()` deep merge (not shallow spread — must preserve whole namespaces missing from `locale`).
+- [x] 1.3.1 [RED] `packages/i18n/src/__tests__/merge.test.ts` — `mergeWithBase(en, locale)` deep-merges nested catalogs; missing namespace/key in `locale` falls back to `en`'s value; present keys in `locale` win.
+- [x] 1.3.2 [GREEN] Implement `packages/i18n/src/merge.ts` — `mergeWithBase()` deep merge (not shallow spread — must preserve whole namespaces missing from `locale`).
 
 ### Phase 1.4: Parity + ICU-Arg Guard
-- [ ] 1.4.1 [RED] `packages/i18n/src/__tests__/catalog-parity.test.ts` against a sample EN/ES fixture: (a) missing key fails with key+locale, (b) identical key sets pass, (c) empty/whitespace value fails, (d) mismatched ICU arg names fail, (e) matching ICU args (incl. one `select` case) pass.
-- [ ] 1.4.2 [GREEN] Implement the guard over recursively-flattened catalogs, parsing `{arg}`/`{arg, plural, ...}`/`{arg, select, ...}` argument names per key.
-- [ ] 1.4.3 Adapt intent from existing `apps/web/src/i18n/__tests__/catalog-parity.test.ts` into this guard (confirm coverage parity before the old one is retired in slice 8).
+- [x] 1.4.1 [RED] `packages/i18n/src/__tests__/catalog-parity.test.ts` against a sample EN/ES fixture: (a) missing key fails with key+locale, (b) identical key sets pass, (c) empty/whitespace value fails, (d) mismatched ICU arg names fail, (e) matching ICU args (incl. one `select` case) pass.
+- [x] 1.4.2 [GREEN] Implement the guard over recursively-flattened catalogs, parsing `{arg}`/`{arg, plural, ...}`/`{arg, select, ...}` argument names per key.
+- [x] 1.4.3 Adapt intent from existing `apps/web/src/i18n/__tests__/catalog-parity.test.ts` into this guard (confirm coverage parity before the old one is retired in slice 8).
 
 ### Phase 1.5: Type Generation
-- [ ] 1.5.1 [RED] `packages/i18n/src/__tests__/types.test.ts` — unknown key reference fails to type-check; valid key type-checks.
-- [ ] 1.5.2 [GREEN] Implement `packages/i18n/src/types.ts` — generated `Messages` type / flat-key union from the sample catalog shape.
+- [x] 1.5.1 [RED] `packages/i18n/src/__tests__/types.test.ts` — unknown key reference fails to type-check; valid key type-checks.
+- [x] 1.5.2 [GREEN] Implement `packages/i18n/src/types.ts` — generated `Messages` type / flat-key union from the sample catalog shape.
 
 ### Phase 1.6: Package Assembly
-- [ ] 1.6.1 Create `packages/i18n/src/index.ts` — export catalogs, `flattenMessages`, `mergeWithBase`, generated types.
-- [ ] 1.6.2 Create `packages/i18n/src/messages/en.json` + `es.json` as small SAMPLE catalogs (full data lands in slice 2) — enough to exercise nesting, plural, `select`, and interpolation.
-- [ ] 1.6.3 `pnpm test` + typecheck in `packages/i18n` — green.
+- [x] 1.6.1 Create `packages/i18n/src/index.ts` — export catalogs, `flattenMessages`, `mergeWithBase`, generated types.
+- [x] 1.6.2 Create `packages/i18n/src/messages/en.json` + `es.json` as small SAMPLE catalogs (full data lands in slice 2) — enough to exercise nesting, plural, `select`, and interpolation.
+- [x] 1.6.3 `pnpm test` + typecheck in `packages/i18n` — green.
 
 ---
 
