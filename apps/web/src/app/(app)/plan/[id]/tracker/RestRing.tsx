@@ -16,7 +16,10 @@ interface RestRingProps {
 export function RestRing({ t, duration, remaining, onSkip, onAddTime }: RestRingProps) {
   const active = remaining != null;
   const low = active && remaining <= 15;
-  const offset = active ? RING_CIRCUMFERENCE * (1 - remaining / duration) : 0;
+  // Guard against a non-positive rest duration (e.g. an exercise configured
+  // with restSeconds: 0) so the ring offset never divides by zero → Infinity.
+  const safeDuration = duration > 0 ? duration : 1;
+  const offset = active ? RING_CIRCUMFERENCE * (1 - remaining / safeDuration) : 0;
 
   return (
     <section
