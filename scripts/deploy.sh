@@ -96,4 +96,13 @@ $COMPOSE_CMD up -d api web
 # Verify health via internal compose network (API already passed Docker healthcheck)
 $COMPOSE_CMD exec api node -e "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
+# Reclaim disk from superseded images now that the new deploy is verified healthy.
+# Each deploy pulls a fresh GHCR_IMAGE tag but the previous tagged images were
+# never removed, so old layers accumulated until the VPS ran out of disk (the
+# postgres "No space left on device" boot failure). Prune unused images (-a keeps
+# only those referenced by the running containers). Runs AFTER the health check so
+# the just-deployed image is protected and a mid-deploy failure never prunes.
+# Non-fatal: a prune hiccup must not fail an otherwise-successful deploy.
+docker image prune -af >/dev/null 2>&1 || true
+
 echo "Deploy complete."
