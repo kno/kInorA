@@ -4,6 +4,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { WorkoutProgram, WorkoutSessionRecord } from "@kinora/contracts";
 import { PlanStatusClient } from "../PlanStatusClient";
 
+// The redesigned TrackerPanel imports a scoped CSS module; return the class
+// names verbatim so component queries stay by role/label/text, not by hash.
+vi.mock("../TrackerPanel.module.css", () => ({
+  default: new Proxy({}, { get: (_t, k) => String(k) }),
+}));
+
 const usePlanWs = vi.fn();
 const getPlanStatusAction = vi.fn();
 const regeneratePlanAction = vi.fn();
@@ -64,6 +70,7 @@ const activeSession: WorkoutSessionRecord = {
           sessionExerciseId: "exercise-1",
           setIndex: 0,
           targetReps: "8",
+          weightKg: 45,
           completed: false,
         },
       ],
@@ -101,25 +108,27 @@ describe("PlanStatusClient tracker flow", () => {
       expect(startWorkoutSessionAction).toHaveBeenCalledWith("plan-1", 1);
     });
 
-    expect(await screen.findByRole("heading", { name: /live workout/i })).toBeTruthy();
-    expect(screen.getAllByText(/barbell squat/i)).toHaveLength(2);
-    expect(screen.getByText(/next action/i)).toBeTruthy();
+    // The tracker region takes over; the current exercise is the topbar heading.
+    expect(await screen.findByRole("region", { name: /live workout/i })).toBeTruthy();
+    expect(screen.getAllByText(/barbell squat/i).length).toBeGreaterThanOrEqual(2);
+    // Real, computed progress replaces the old "next action" hint.
+    expect(screen.getByText(/exercise 1 of 1/i)).toBeTruthy();
     expect(screen.queryByText(/analytics/i)).toBeNull();
     expect(screen.queryByText(/offline/i)).toBeNull();
   });
 
-  it("records sets and completes the workout through server actions", async () => {
+  it("records a set through steppers and completes the workout via server actions", async () => {
     startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: activeSession });
     recordWorkoutSetAction.mockResolvedValue({
       ...activeSession,
       exercises: [
         {
-          ...activeSession.exercises[0],
+          ...activeSession.exercises[0]!,
           setRecords: [
             {
               ...activeSession.exercises[0]!.setRecords[0]!,
-              actualReps: 8,
-              weightKg: 80,
+              actualReps: 9,
+              weightKg: 47.5,
               rpe: 8,
               notes: "Strong set",
               completed: true,
@@ -137,23 +146,28 @@ describe("PlanStatusClient tracker flow", () => {
     renderClient();
 
     fireEvent.click(screen.getByRole("button", { name: /start workout/i }));
-    await screen.findByRole("heading", { name: /live workout/i });
+    await screen.findByRole("region", { name: /live workout/i });
 
-    fireEvent.change(screen.getByLabelText(/actual reps/i), { target: { value: "8" } });
-    fireEvent.change(screen.getByLabelText(/weight \(kg\)/i), { target: { value: "80" } });
+    // Steppers seed from the set (weight 45, reps from targetReps "8"). Nudge both.
+    fireEvent.click(screen.getByRole("button", { name: /increase load/i }));
+    fireEvent.click(screen.getByRole("button", { name: /increase reps/i }));
     fireEvent.change(screen.getByLabelText(/^rpe$/i), { target: { value: "8" } });
+    fireEvent.click(screen.getByRole("button", { name: /add note/i }));
     fireEvent.change(screen.getByLabelText(/notes/i), { target: { value: "Strong set" } });
-    fireEvent.click(screen.getByLabelText(/completed/i));
-    fireEvent.click(screen.getByRole("button", { name: /save set/i }));
+    fireEvent.click(screen.getByRole("button", { name: /complete set/i }));
 
     await waitFor(() => {
-      expect(recordWorkoutSetAction).toHaveBeenCalledWith("session-1", "set-1", {
-        actualReps: 8,
-        weightKg: 80,
-        rpe: 8,
-        completed: true,
-        notes: "Strong set",
-      });
+      expect(recordWorkoutSetAction).toHaveBeenCalledWith(
+        "session-1",
+        "set-1",
+        expect.objectContaining({
+          actualReps: 9,
+          weightKg: 47.5,
+          rpe: 8,
+          completed: true,
+          notes: "Strong set",
+        }),
+      );
     });
 
     fireEvent.click(screen.getByRole("button", { name: /complete workout/i }));
@@ -163,17 +177,14 @@ describe("PlanStatusClient tracker flow", () => {
     });
 
     // BLOCKER fix (#93): after a successful complete the tracker is dismissed
-    // and the plan view returns (no navigation dead-end). The completed session
-    // is persisted server-side; the live tracker must NOT linger.
+    // and the plan view returns (no navigation dead-end).
     await waitFor(() => {
-      expect(screen.queryByRole("heading", { name: /live workout/i })).toBeNull();
+      expect(screen.queryByRole("region", { name: /live workout/i })).toBeNull();
     });
-    // The ready plan view (its "Start workout" CTA) is shown again.
     expect(screen.getByRole("button", { name: /start workout/i })).toBeTruthy();
   });
 
   it("renders a conflict notice WITHOUT crashing when start returns a 409 conflict (F1/F3)", async () => {
-    // Regression guard: the old code threw on conflict, crashing the page.
     startWorkoutSessionAction.mockResolvedValue({
       kind: "conflict",
       activePlanName: "Summer Cut",
@@ -188,11 +199,10 @@ describe("PlanStatusClient tracker flow", () => {
       expect(startWorkoutSessionAction).toHaveBeenCalledWith("plan-1", 1);
     });
 
-    // The conflict message is shown; the tracker is NOT rendered; no throw.
     const alert = await screen.findByTestId("start-conflict");
     expect(alert.textContent).toContain("Summer Cut");
     expect(alert.textContent).toContain("Day 3");
-    expect(screen.queryByRole("heading", { name: /live workout/i })).toBeNull();
+    expect(screen.queryByRole("region", { name: /live workout/i })).toBeNull();
   });
 
   it("after a conflict, a subsequent successful start clears the banner and shows the tracker (retry)", async () => {
@@ -206,14 +216,12 @@ describe("PlanStatusClient tracker flow", () => {
 
     renderClient();
 
-    // First start → conflict banner.
     fireEvent.click(screen.getByRole("button", { name: /start workout/i }));
     await screen.findByTestId("start-conflict");
 
-    // Retry (the ready view is still shown) → success clears conflict, swaps view.
     fireEvent.click(screen.getByRole("button", { name: /start workout/i }));
 
-    expect(await screen.findByRole("heading", { name: /live workout/i })).toBeTruthy();
+    expect(await screen.findByRole("region", { name: /live workout/i })).toBeTruthy();
     expect(screen.queryByTestId("start-conflict")).toBeNull();
   });
 
@@ -223,7 +231,7 @@ describe("PlanStatusClient tracker flow", () => {
     renderClient();
 
     fireEvent.click(screen.getByRole("button", { name: /start workout/i }));
-    await screen.findByRole("heading", { name: /live workout/i });
+    await screen.findByRole("region", { name: /live workout/i });
 
     expect(screen.getByLabelText(/^rpe$/i).getAttribute("step")).toBe("1");
   });
