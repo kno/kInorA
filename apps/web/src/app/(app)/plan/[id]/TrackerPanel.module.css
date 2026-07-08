@@ -1,0 +1,771 @@
+/* ==========================================================================
+ * TrackerPanel.module.css
+ * Scoped styles for the live workout tracker (desktop-tracker Open Design).
+ * Reuses the global design tokens from globals.css (dark-only, oklch, Space
+ * Grotesk / DM Sans). The mockup's left sidebar is intentionally NOT recreated
+ * here — the app shell already supplies navigation. This module renders the
+ * main-panel + performance-rail only.
+ * ========================================================================== */
+
+/* ---- Root: main-panel (1fr) + performance rail (344px) ---- */
+
+.tracker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 344px;
+  gap: 20px;
+  align-items: start;
+}
+
+.mainPanel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+/* ---- Topbar ---- */
+
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.title {
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1.02;
+}
+
+.sessionControls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.timerBox {
+  min-width: 110px;
+  text-align: right;
+}
+
+.timerLabel {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.timerValue {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Buttons ---- */
+
+.iconBtn,
+.btn {
+  min-height: 44px;
+  border-radius: var(--r-btn);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  transition: transform 0.05s, background 0.15s, border-color 0.15s;
+}
+
+.iconBtn {
+  width: 44px;
+}
+
+.btn {
+  padding: 0 18px;
+  font-weight: 700;
+}
+
+.iconBtn:hover,
+.btn:hover {
+  background: var(--border);
+}
+
+.iconBtn:active,
+.btn:active {
+  transform: translateY(1px);
+}
+
+.iconBtn:focus-visible,
+.btn:focus-visible,
+.stepBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btnPrimary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+
+.btnPrimary:hover {
+  background: var(--accent);
+  filter: brightness(1.05);
+}
+
+.btnDanger {
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 42%, transparent);
+  background: transparent;
+}
+
+.btnDanger:hover {
+  background: color-mix(in oklab, var(--danger) 9%, transparent);
+}
+
+.btnWarn {
+  color: var(--warning);
+  background: color-mix(in oklab, var(--warning) 12%, transparent);
+  border-color: color-mix(in oklab, var(--warning) 28%, transparent);
+}
+
+.btn:disabled,
+.btnPrimary:disabled,
+.stepBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---- Segmented progress ---- */
+
+.progressCard {
+  padding: 18px;
+  border-radius: 18px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.progressHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.progressHead strong {
+  font-size: 14px;
+  font-family: var(--font-display);
+}
+
+.progressPct {
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.segBar {
+  display: flex;
+  gap: 5px;
+  height: 7px;
+}
+
+.seg {
+  flex: 1;
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.segDone {
+  background: var(--accent);
+}
+
+.segActive {
+  background: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+/* ---- Workbench (exercise card + side stack) ---- */
+
+.workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 18px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+}
+
+.exerciseCard {
+  position: relative;
+  overflow: hidden;
+  padding: 28px;
+}
+
+.exerciseCard::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+.exerciseTitleRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.exerciseName {
+  font-family: var(--font-display);
+  font-size: clamp(26px, 3vw, 40px);
+  line-height: 1;
+  margin-top: 8px;
+}
+
+.targetPill {
+  align-self: flex-start;
+  white-space: nowrap;
+  padding: 8px 13px;
+  border-radius: var(--r-pill);
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid color-mix(in oklab, var(--accent) 16%, transparent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.metric {
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.metric strong {
+  display: block;
+  margin-top: 8px;
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Steppers ---- */
+
+.stepperGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.stepperGroup {
+  padding: 18px;
+  border-radius: 18px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.stepperLabel {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.stepperControls {
+  display: grid;
+  grid-template-columns: 52px 1fr 52px;
+  align-items: center;
+  gap: 12px;
+}
+
+.stepBtn {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 24px;
+  cursor: pointer;
+  transition: transform 0.05s, background 0.15s;
+}
+
+.stepBtn:hover {
+  background: var(--border);
+}
+
+.stepBtn:active {
+  transform: scale(0.96);
+}
+
+.stepValueWrap {
+  text-align: center;
+}
+
+.stepValue {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 0.95;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepUnit {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---- Optional RPE + note controls ---- */
+
+.secondaryRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.rpeField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rpeLabel {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.rpeInput {
+  width: 96px;
+  min-height: 44px;
+  border-radius: var(--r-btn);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  padding: 0 12px;
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+}
+
+.rpeInput:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.noteInput {
+  flex: 1;
+  min-width: 200px;
+  min-height: 44px;
+  border-radius: var(--r-btn);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  padding: 10px 12px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  resize: vertical;
+}
+
+.noteInput:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.completeRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.completeRow .btnPrimary {
+  min-height: 56px;
+  font-size: 16px;
+}
+
+/* ---- Side stack (rest ring + next) ---- */
+
+.sideStack {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.restCard {
+  padding: 20px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  gap: 16px;
+}
+
+.restState {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.restHeading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.restDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning);
+  animation: trackerPulse 1.2s ease-in-out infinite;
+}
+
+.restDotIdle {
+  background: var(--muted);
+  animation: none;
+}
+
+@keyframes trackerPulse {
+  50% {
+    opacity: 0.45;
+    transform: scale(0.78);
+  }
+}
+
+.ringWrap {
+  position: relative;
+  width: 160px;
+  height: 160px;
+}
+
+.ringWrap svg {
+  transform: rotate(-90deg);
+}
+
+.ringCenter {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 2px;
+}
+
+.ringTime {
+  color: var(--warning);
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ringTimeLow {
+  color: var(--accent);
+}
+
+.ringLabelSm {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.restActions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.nextCard {
+  padding: 20px;
+}
+
+.nextCard h3,
+.timelineCard h3 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  margin-bottom: 14px;
+}
+
+.nextExercise {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.nextIcon {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  flex: none;
+}
+
+.nextName {
+  font-weight: 700;
+}
+
+.nextDetail {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.nextEmpty {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---- Timeline ---- */
+
+.timelineCard {
+  padding: 20px;
+}
+
+.timelineList {
+  display: grid;
+  gap: 10px;
+}
+
+.timelineItem {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+}
+
+.timelineIndex {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-family: var(--font-display);
+  font-size: 12px;
+}
+
+.timelineItemDone .timelineIndex {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+
+.timelineItemActive {
+  color: var(--fg);
+}
+
+.timelineItemActive .timelineIndex {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 45%, transparent);
+  background: var(--accent-dim);
+}
+
+.timelineName {
+  font-weight: 700;
+}
+
+.timelineMeta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.timelineTag {
+  padding: 5px 10px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+
+/* ---- Performance rail ---- */
+
+.rail {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 20px;
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.railTitle {
+  font-family: var(--font-display);
+  font-size: 26px;
+  margin-top: 4px;
+}
+
+.railStatGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.railStat {
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.railStat span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.railStat strong {
+  display: block;
+  margin-top: 7px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.railStatStub strong {
+  color: var(--muted);
+}
+
+.stubTag {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--muted);
+  font-family: var(--font-body);
+}
+
+.accentValue {
+  color: var(--accent);
+}
+
+.aiNote {
+  padding: 18px;
+  border-radius: 18px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--accent) 10%, transparent),
+    var(--surface-2)
+  );
+  border: 1px solid color-mix(in oklab, var(--accent) 20%, transparent);
+}
+
+.aiNote h3 {
+  font-family: var(--font-display);
+  font-size: 17px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aiNote p {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* ---- Responsive: rail stacks under the main panel, then single column ---- */
+
+@media (max-width: 1180px) {
+  .tracker {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 860px) {
+  .workbench,
+  .stepperGrid,
+  .metricsGrid,
+  .completeRow {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar,
+  .exerciseTitleRow {
+    flex-direction: column;
+  }
+
+  .timerBox {
+    text-align: left;
+  }
+
+  .mainPanel,
+  .exerciseCard {
+    padding: 18px;
+  }
+}

@@ -1,5 +1,38 @@
+"use client";
+
+/**
+ * TrackerPanel — live workout tracker container (desktop-tracker Open Design).
+ *
+ * Renders the mockup's main-panel + performance-rail INSIDE the existing app
+ * shell (the shell already supplies the sidebar/navigation, so the mockup's
+ * left sidebar is intentionally not recreated here).
+ *
+ * This is the CONTAINER: it derives a pure view model from the session
+ * (`deriveTrackerModel`), owns the client-only timers (session elapsed + rest
+ * ring) via hooks, and composes the presentational pieces. All the display
+ * logic lives in the small components under `./tracker/`, which keeps this file
+ * about wiring, not markup.
+ *
+ * Real, data-backed pieces: session timer, segmented progress, current-exercise
+ * metrics (volume, set n/total, rpe), load/reps steppers, rest ring, next
+ * exercise, timeline, and the rail's Volume + Series stats. Explicit STUBS
+ * (never faked): streak, avg rest, and the AI microadjust note.
+ */
+
+import { useCallback } from "react";
 import type { WorkoutSessionRecord } from "@kinora/contracts";
 import type { WorkoutSetUpdateInput } from "./tracker-types";
+import { deriveTrackerModel } from "./tracker/tracker-model";
+import { useSessionTimer } from "./tracker/use-session-timer";
+import { useRestTimer } from "./tracker/use-rest-timer";
+import { TrackerTopbar } from "./tracker/TrackerTopbar";
+import { SessionProgress } from "./tracker/SessionProgress";
+import { ExerciseCard } from "./tracker/ExerciseCard";
+import { RestRing } from "./tracker/RestRing";
+import { NextExercisePreview } from "./tracker/NextExercisePreview";
+import { Timeline } from "./tracker/Timeline";
+import { PerformanceRail } from "./tracker/PerformanceRail";
+import styles from "./TrackerPanel.module.css";
 
 interface TrackerPanelProps {
   session: WorkoutSessionRecord;
@@ -8,191 +41,85 @@ interface TrackerPanelProps {
   onCompleteSession: (sessionId: string) => Promise<void>;
 }
 
-function parseOptionalNumber(value: FormDataEntryValue | null): number | undefined {
-  if (typeof value !== "string") return undefined;
-  if (value.trim() === "") return undefined;
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function parseOptionalText(value: FormDataEntryValue | null): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function getActiveExercise(session: WorkoutSessionRecord) {
-  return (
-    session.exercises.find((exercise) =>
-      exercise.setRecords.some((setRecord) => !setRecord.completed),
-    ) ?? session.exercises[0]
-  );
-}
-
-function getNextAction(session: WorkoutSessionRecord, messages?: Record<string, string>) {
-  const t = (key: string, fallback: string) => messages?.[key] ?? fallback;
-
-  if (session.status === "completed") {
-    return t("tracker_next_action_done", "Workout completed");
-  }
-
-  const pendingSet = session.exercises
-    .flatMap((exercise) => exercise.setRecords)
-    .find((setRecord) => !setRecord.completed);
-
-  if (!pendingSet) {
-    return t("tracker_next_action_finish", "Complete your workout when you're ready.");
-  }
-
-  return t("tracker_next_action_log", "Log the next set to keep the workout moving.");
-}
-
 export function TrackerPanel({
   session,
   messages,
   onRecordSet,
   onCompleteSession,
 }: TrackerPanelProps) {
-  const t = (key: string, fallback: string) => messages?.[key] ?? fallback;
-  const activeExercise = getActiveExercise(session);
-  const nextAction = getNextAction(session, messages);
+  const t = useCallback(
+    (key: string, fallback: string): string => messages?.[key] ?? fallback,
+    [messages],
+  );
+
+  const model = deriveTrackerModel(session);
+  const restDuration = model.activeExercise?.restSeconds ?? 60;
+
+  const timer = useSessionTimer(session.startedAt, model.isCompleted);
+  const rest = useRestTimer(restDuration);
+
+  const handleComplete = useCallback(
+    () => onCompleteSession(session.id),
+    [onCompleteSession, session.id],
+  );
 
   return (
-    <main className="kin-page">
-      <header className="kin-card kin-card--header">
-        <div>
-          <p className="kin-muted">{t("tracker_live_eyebrow", "Live tracker")}</p>
-          <h1 className="kin-title">{t("tracker_live_title", "Live workout")}</h1>
+    <section className={styles.tracker} aria-label={t("tracker_live_title", "Live workout")}>
+      <div className={styles.mainPanel}>
+        <TrackerTopbar
+          t={t}
+          title={model.activeExercise?.title ?? t("tracker_live_title", "Live workout")}
+          elapsed={timer.elapsed}
+          paused={timer.paused}
+          isCompleted={model.isCompleted}
+          onTogglePause={timer.togglePause}
+          onComplete={handleComplete}
+        />
+
+        <SessionProgress
+          t={t}
+          segments={model.segments}
+          percent={model.percent}
+          completedSets={model.completedSets}
+          totalSets={model.totalSets}
+          currentExerciseNumber={model.currentExerciseNumber}
+          totalExercises={model.totalExercises}
+        />
+
+        <div className={styles.workbench}>
+          <ExerciseCard
+            t={t}
+            activeExercise={model.activeExercise}
+            activeSet={model.activeSet}
+            currentSetNumber={model.currentSetNumber}
+            totalSetsInExercise={model.totalSetsInExercise}
+            exerciseVolume={model.activeExerciseVolume}
+            canRecord={model.canRecord}
+            onRecordSet={onRecordSet}
+            onSetCompleted={rest.start}
+          />
+
+          <div className={styles.sideStack}>
+            <RestRing
+              t={t}
+              duration={restDuration}
+              remaining={rest.remaining}
+              onSkip={rest.skip}
+              onAddTime={rest.addTime}
+            />
+            <NextExercisePreview t={t} nextExercise={model.nextExercise} />
+          </div>
         </div>
-        <span className="kin-badge">
-          {session.status === "completed"
-            ? t("tracker_status_completed", "Completed")
-            : t("tracker_status_active", "Active")}
-        </span>
-      </header>
 
-      {activeExercise && (
-        <section className="kin-card">
-          <p className="kin-muted">{t("tracker_current_exercise", "Current exercise")}</p>
-          <h2 className="kin-subtitle">{activeExercise.title}</h2>
-          <p className="kin-text kin-muted">
-            {t("tracker_rest_context", "Rest")}: {activeExercise.restSeconds}s
-          </p>
-          {activeExercise.notes && <p className="kin-text">{activeExercise.notes}</p>}
-          <p className="kin-text">
-            <strong>{t("tracker_next_action", "Next action")}: </strong>
-            {nextAction}
-          </p>
-        </section>
-      )}
+        <Timeline t={t} items={model.timeline} />
+      </div>
 
-      {session.exercises.map((exercise) => (
-        <section key={exercise.id} className="kin-card">
-          <h3 className="kin-subtitle">{exercise.title}</h3>
-          {exercise.notes && <p className="kin-text kin-muted">{exercise.notes}</p>}
-
-          {exercise.setRecords.map((setRecord) => (
-            <form
-              key={setRecord.id}
-              className="kin-card"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                const formData = new FormData(event.currentTarget);
-                await onRecordSet(setRecord.id, {
-                  actualReps: parseOptionalNumber(formData.get("actualReps")),
-                  weightKg: parseOptionalNumber(formData.get("weightKg")),
-                  rpe: parseOptionalNumber(formData.get("rpe")),
-                  completed: formData.get("completed") === "on",
-                  notes: parseOptionalText(formData.get("notes")),
-                });
-              }}
-            >
-              <h4 className="kin-subtitle">
-                {t("tracker_set_heading", "Set")} {setRecord.setIndex + 1}
-              </h4>
-              <p className="kin-text kin-muted">
-                {t("tracker_target_reps", "Target reps")}: {setRecord.targetReps}
-              </p>
-
-              <label>
-                {t("tracker_actual_reps", "Actual reps")}
-                <input
-                  name="actualReps"
-                  type="number"
-                  min={0}
-                  defaultValue={setRecord.actualReps ?? ""}
-                  disabled={session.status === "completed"}
-                />
-              </label>
-
-              <label>
-                {t("tracker_weight", "Weight (kg)")}
-                <input
-                  name="weightKg"
-                  type="number"
-                  min={0}
-                  step="0.5"
-                  defaultValue={setRecord.weightKg ?? ""}
-                  disabled={session.status === "completed"}
-                />
-              </label>
-
-              <label>
-                {t("tracker_rpe", "RPE")}
-                <input
-                  name="rpe"
-                  type="number"
-                  min={0}
-                  max={10}
-                  step="1"
-                  defaultValue={setRecord.rpe ?? ""}
-                  disabled={session.status === "completed"}
-                />
-              </label>
-
-              <label>
-                {t("tracker_notes", "Notes")}
-                <input
-                  name="notes"
-                  type="text"
-                  defaultValue={setRecord.notes ?? ""}
-                  disabled={session.status === "completed"}
-                />
-              </label>
-
-              <label>
-                <input
-                  name="completed"
-                  type="checkbox"
-                  defaultChecked={setRecord.completed}
-                  disabled={session.status === "completed"}
-                />
-                {t("tracker_completed_toggle", "Completed")}
-              </label>
-
-              <button
-                type="submit"
-                className="kin-btn kin-btn--primary"
-                disabled={session.status === "completed"}
-              >
-                {t("tracker_save_set_cta", "Save set")}
-              </button>
-            </form>
-          ))}
-        </section>
-      ))}
-
-      <section className="kin-card kin-card--header">
-        <button
-          type="button"
-          className="kin-btn kin-btn--primary"
-          disabled={session.status === "completed"}
-          onClick={() => onCompleteSession(session.id)}
-        >
-          {t("tracker_complete_cta", "Complete workout")}
-        </button>
-      </section>
-    </main>
+      <PerformanceRail
+        t={t}
+        sessionVolume={model.sessionVolume}
+        completedSets={model.completedSets}
+        totalSets={model.totalSets}
+      />
+    </section>
   );
 }
