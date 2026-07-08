@@ -24,6 +24,14 @@ export const trackerCopy = {
     `Ejercicio ${current} de ${total}`,
   progressA11y: (current: number, total: number) =>
     `${current} de ${total} ejercicios`,
+  /**
+   * Coherent spoken value for the progress bar. The segmented bar mixes units
+   * (one segment per exercise) so a numeric min/max/now range reads as
+   * nonsense to a screen reader ("9 de 3"); this single localized string keeps
+   * the announced value in one unit — exercise position plus percent complete.
+   */
+  progressValueText: (current: number, total: number, percent: number) =>
+    `Ejercicio ${current} de ${total}, ${percent}%`,
 
   /** Exercise card. */
   currentExerciseEyebrow: "Ejercicio actual",
@@ -31,6 +39,7 @@ export const trackerCopy = {
     `Serie ${setNumber} de ${setTotal} · Objetivo: ${targetLabel}`,
   objectiveLabel: (weightKg: number, reps: string) =>
     `${weightKg} kg × ${reps} reps`,
+  objectiveLabelNoWeight: (reps: string) => `${reps} reps`,
   loadLabel: "Carga",
   loadUnit: "kg",
   repsLabel: "Reps",
