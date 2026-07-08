@@ -24,10 +24,24 @@ import {
 } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Linking } from "react-native";
+import { useFonts } from "expo-font";
+import {
+  SpaceGrotesk_600SemiBold,
+  SpaceGrotesk_700Bold,
+} from "@expo-google-fonts/space-grotesk";
+import {
+  DMSans_400Regular,
+  DMSans_500Medium,
+  DMSans_600SemiBold,
+  DMSans_700Bold,
+} from "@expo-google-fonts/dm-sans";
 
 import LoginScreen from "./src/screens/LoginScreen";
 import SignUpScreen from "./src/screens/SignUpScreen";
 import HomeScreen from "./src/screens/HomeScreen";
+import WorkoutTrackerScreen, {
+  type TrackerRouteParams,
+} from "./src/screens/WorkoutTrackerScreen";
 
 import {
   getSessionToken,
@@ -45,10 +59,11 @@ type RootStackParamList = {
   Login: undefined;
   SignUp: undefined;
   Home: undefined;
+  Tracker: TrackerRouteParams;
 };
 
 /** Routes that require an authenticated session; auth routes are never guarded. */
-const PROTECTED_ROUTES: (keyof RootStackParamList)[] = ["Home"];
+const PROTECTED_ROUTES: (keyof RootStackParamList)[] = ["Home", "Tracker"];
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
@@ -58,6 +73,17 @@ export default function App() {
     useState<keyof RootStackParamList>("Login");
   const [hasSession, setHasSession] = useState(false);
   const [isReady, setIsReady] = useState(false);
+
+  // Load the design-system fonts (Space Grotesk display / DM Sans body). The
+  // registered keys MUST match the `fonts` tokens in src/theme/tokens.ts.
+  const [fontsLoaded] = useFonts({
+    "SpaceGrotesk-SemiBold": SpaceGrotesk_600SemiBold,
+    "SpaceGrotesk-Bold": SpaceGrotesk_700Bold,
+    "DMSans-Regular": DMSans_400Regular,
+    "DMSans-Medium": DMSans_500Medium,
+    "DMSans-SemiBold": DMSans_600SemiBold,
+    "DMSans-Bold": DMSans_700Bold,
+  });
 
   // Startup: read the stored session token and resolve the initial route.
   // Mirrors the web middleware's presence check (no 401/403 — 05b owns that).
@@ -119,7 +145,7 @@ export default function App() {
     }
   }
 
-  if (!isReady) return null;
+  if (!isReady || !fontsLoaded) return null;
 
   return (
     <NavigationContainer
@@ -138,6 +164,11 @@ export default function App() {
           options={{ headerShown: false }}
         />
         <Stack.Screen name="Home" component={HomeScreen} options={{ title: "kInorA" }} />
+        <Stack.Screen
+          name="Tracker"
+          component={WorkoutTrackerScreen}
+          options={{ headerShown: false }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
