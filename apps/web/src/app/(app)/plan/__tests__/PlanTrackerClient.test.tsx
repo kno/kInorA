@@ -3,8 +3,11 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { WorkoutProgram, WorkoutSessionRecord } from "@kinora/contracts";
 
-// Mock the CSS module to avoid transform errors.
+// Mock the CSS modules to avoid transform errors.
 vi.mock("../plan-week-view.module.css", () => ({
+  default: new Proxy({}, { get: (_t, k) => String(k) }),
+}));
+vi.mock("../[id]/TrackerPanel.module.css", () => ({
   default: new Proxy({}, { get: (_t, k) => String(k) }),
 }));
 
@@ -106,7 +109,7 @@ describe("PlanTrackerClient — inline state swap (#93 Slice 3)", () => {
       <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
     );
     expect(screen.getByText("Push Day")).toBeDefined();
-    expect(screen.queryByText("Live workout")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Live workout" })).toBeNull();
   });
 
   it("on a started result, swaps to TrackerPanel without navigating", async () => {
@@ -121,7 +124,7 @@ describe("PlanTrackerClient — inline state swap (#93 Slice 3)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start session" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Live workout")).toBeDefined();
+      expect(screen.getByRole("region", { name: "Live workout" })).toBeDefined();
     });
     expect(startWorkoutSessionAction).toHaveBeenCalledWith("plan-a", 1);
   });
@@ -161,7 +164,7 @@ describe("PlanTrackerClient — inline state swap (#93 Slice 3)", () => {
       expect(banner.textContent).toContain("5");
     });
     // Did NOT swap to the tracker.
-    expect(screen.queryByText("Live workout")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Live workout" })).toBeNull();
     // Day cards still visible (card + open detail header both show the title).
     expect(screen.getAllByText("Push Day").length).toBeGreaterThanOrEqual(1);
   });
@@ -185,7 +188,7 @@ describe("PlanTrackerClient — completion returns to the plan view (BLOCKER #93
     fireEvent.click(screen.getByText("Push Day"));
     fireEvent.click(screen.getByRole("button", { name: "Start session" }));
     await waitFor(() => {
-      expect(screen.getByText("Live workout")).toBeDefined();
+      expect(screen.getByRole("region", { name: "Live workout" })).toBeDefined();
     });
 
     // Complete the workout.
@@ -193,7 +196,7 @@ describe("PlanTrackerClient — completion returns to the plan view (BLOCKER #93
 
     // Tracker is dismissed; the plan view (children + day grid) is back.
     await waitFor(() => {
-      expect(screen.queryByText("Live workout")).toBeNull();
+      expect(screen.queryByRole("region", { name: "Live workout" })).toBeNull();
     });
     expect(screen.getByText("Summary strip")).toBeDefined();
     expect(screen.getAllByText("Push Day").length).toBeGreaterThanOrEqual(1);
@@ -217,7 +220,7 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
       "We couldn't start the session. Please try again.",
     );
     // Did NOT swap to the tracker (no crash, plan view intact).
-    expect(screen.queryByText("Live workout")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Live workout" })).toBeNull();
     expect(screen.getAllByText("Push Day").length).toBeGreaterThanOrEqual(1);
   });
 
@@ -231,17 +234,17 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
 
     fireEvent.click(screen.getByText("Push Day"));
     fireEvent.click(screen.getByRole("button", { name: "Start session" }));
-    await waitFor(() => expect(screen.getByText("Live workout")).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("region", { name: "Live workout" })).toBeDefined());
 
     // Submit the set form → record throws.
-    fireEvent.click(screen.getByRole("button", { name: "Save set" }));
+    fireEvent.click(screen.getByRole("button", { name: "Complete set" }));
 
     const alert = await screen.findByTestId("tracker-error");
     expect(alert.textContent).toBe(
       "We couldn't save the set. Please try again.",
     );
     // Still on the tracker — no crash.
-    expect(screen.getByText("Live workout")).toBeDefined();
+    expect(screen.getByRole("region", { name: "Live workout" })).toBeDefined();
   });
 
   it("a thrown error from COMPLETE sets an inline error and does NOT crash", async () => {
@@ -254,7 +257,7 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
 
     fireEvent.click(screen.getByText("Push Day"));
     fireEvent.click(screen.getByRole("button", { name: "Start session" }));
-    await waitFor(() => expect(screen.getByText("Live workout")).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("region", { name: "Live workout" })).toBeDefined());
 
     fireEvent.click(screen.getByRole("button", { name: "Complete workout" }));
 
@@ -263,7 +266,7 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
       "We couldn't complete the workout. Please try again.",
     );
     // Complete failed → still on the tracker (not dismissed).
-    expect(screen.getByText("Live workout")).toBeDefined();
+    expect(screen.getByRole("region", { name: "Live workout" })).toBeDefined();
   });
 });
 
@@ -283,7 +286,7 @@ describe("PlanTrackerClient — plan/day identity in the active tracker (CRITICA
     fireEvent.click(screen.getByText("Push Day")); // day 1
     fireEvent.click(screen.getByRole("button", { name: "Start session" }));
 
-    await waitFor(() => expect(screen.getByText("Live workout")).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("region", { name: "Live workout" })).toBeDefined());
 
     const identity = screen.getByTestId("tracker-identity");
     expect(identity.textContent).toContain("Summer Cut");
@@ -314,7 +317,7 @@ describe("PlanTrackerClient — conflict then retry (#93)", () => {
     fireEvent.click(screen.getByText("Pull Day"));
     fireEvent.click(screen.getByRole("button", { name: "Start session" }));
 
-    await waitFor(() => expect(screen.getByText("Live workout")).toBeDefined());
+    await waitFor(() => expect(screen.getByRole("region", { name: "Live workout" })).toBeDefined());
     expect(startWorkoutSessionAction).toHaveBeenNthCalledWith(2, "plan-a", 2);
     // Conflict banner cleared (swapped to tracker view).
     expect(screen.queryByRole("alert")).toBeNull();
