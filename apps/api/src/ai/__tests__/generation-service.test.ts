@@ -220,6 +220,43 @@ describe("PlanGenerationService", () => {
 
       vi.useRealTimers();
     });
+
+    it("normalizes corrupted reps before markReady (#92)", async () => {
+      vi.useFakeTimers();
+
+      const specRow = { specJson: confirmedSpec };
+      const specRepo = buildMockSpecRepo(specRow);
+      const planRepo = buildMockPlanRepo();
+
+      const corruptedProgram: WorkoutProgram = {
+        weeklySessions: [
+          {
+            day: 1,
+            title: "Upper Body",
+            exercises: [
+              { name: "Squat", sets: 4, reps: "6- vain? 8", restSeconds: 90 },
+            ],
+          },
+        ],
+        limitationWarnings: [],
+      };
+      vi.spyOn(generator, "generate").mockResolvedValue(corruptedProgram);
+
+      const service = new PlanGenerationService(generator, specRepo as never, planRepo as never);
+      await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
+
+      await vi.runAllTimersAsync();
+
+      expect(planRepo.markReady).toHaveBeenCalledTimes(1);
+      const [, , calledProgram] = planRepo.markReady.mock.calls[0] as [
+        string,
+        string,
+        WorkoutProgram,
+      ];
+      expect(calledProgram.weeklySessions[0]?.exercises[0]?.reps).toBe("6-8");
+
+      vi.useRealTimers();
+    });
   });
 
   describe("background task — failure path", () => {
