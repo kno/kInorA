@@ -316,14 +316,14 @@ No Residual Legacy Catalog Access — final confirmation). KEEPS `resolveLocale`
 dead catalogs/helpers ONLY. Depends on slices 3, 4, 5, 6, AND 7 (cluster C)
 having landed first.
 
-- [ ] 8.1 Run the EXTENDED full-codebase grep over `apps/web/src`, EXCLUDING test files (`-g '!**/__tests__/**' -g '!**/*.test.*'`) and comment lines: assert ZERO remaining real catalog access `messages\??\.[a-zA-Z_]` or `messages\[`, `resolvePageI18n`, `loadMessages`, `.replace()` i18n sites, and local `t(key,fallback)` closures. NOTE: a bare `messages\.` pattern false-positives on surviving code comments (`hooks/use-plan-ws.ts:23`, `PlanStatusClient.tsx:73`) — scope the pattern to expression-position access as above, and manually discard any comment-only match. Do NOT proceed if real (non-comment, non-test) access remains.
-- [ ] 8.2 Delete old `apps/web/src/i18n/messages/{en,es}.json`.
-- [ ] 8.3 Retire `loadMessages` (defined in `apps/web/src/i18n/locale.ts`, imported by `request.ts`) — delete the function and its import once 8.1 confirms zero call-sites.
-- [ ] 8.4 Retire `resolvePageI18n` — confirm zero remaining call-sites per 8.1 before deleting the function.
-- [ ] 8.5 Do NOT remove `resolveLocale` (middleware/`request.ts` still call it) and do NOT remove the EN-fallback merge (`mergeWithBase`, now living in `getRequestConfig`, added in slice 3) — confirm both remain present after deletion.
-- [ ] 8.6 Delete the old `apps/web/src/i18n/__tests__/catalog-parity.test.ts` (intent already adapted into `packages/i18n`'s guard in slice 1).
-- [ ] 8.7 `pnpm test` — full web suite green; `pnpm build` (web) green.
-- [ ] 8.8 Re-run the 8.1 grep (same scoped pattern, excluding tests/comments) post-deletion as a final confirmation gate — zero references anywhere in `apps/web` to the deleted old JSON paths, `loadMessages`, or `resolvePageI18n`; confirm `resolveLocale` and the `mergeWithBase` fallback call are still present.
+- [x] 8.1 Run the EXTENDED full-codebase grep over `apps/web/src`, EXCLUDING test files (`-g '!**/__tests__/**' -g '!**/*.test.*'`) and comment lines: assert ZERO remaining real catalog access `messages\??\.[a-zA-Z_]` or `messages\[`, `resolvePageI18n`, `loadMessages`, `.replace()` i18n sites, and local `t(key,fallback)` closures. NOTE: a bare `messages\.` pattern false-positives on surviving code comments (`hooks/use-plan-ws.ts:23`, `PlanStatusClient.tsx:73`) — scope the pattern to expression-position access as above, and manually discard any comment-only match. Do NOT proceed if real (non-comment, non-test) access remains.
+- [x] 8.2 Delete old `apps/web/src/i18n/messages/{en,es}.json`.
+- [x] 8.3 Retire `loadMessages` (defined in `apps/web/src/i18n/locale.ts`, imported by `request.ts`) — delete the function and its import once 8.1 confirms zero call-sites.
+- [x] 8.4 Retire `resolvePageI18n` — confirm zero remaining call-sites per 8.1 before deleting the function.
+- [x] 8.5 Do NOT remove `resolveLocale` (middleware/`request.ts` still call it) and do NOT remove the EN-fallback merge (`mergeWithBase`, now living in `getRequestConfig`, added in slice 3) — confirm both remain present after deletion.
+- [x] 8.6 Delete the old `apps/web/src/i18n/__tests__/catalog-parity.test.ts` (intent already adapted into `packages/i18n`'s guard in slice 1).
+- [x] 8.7 `pnpm test` — full web suite green; `pnpm build` (web) green.
+- [x] 8.8 Re-run the 8.1 grep (same scoped pattern, excluding tests/comments) post-deletion as a final confirmation gate — zero references anywhere in `apps/web` to the deleted old JSON paths, `loadMessages`, or `resolvePageI18n`; confirm `resolveLocale` and the `mergeWithBase` fallback call are still present.
 
 ---
 
