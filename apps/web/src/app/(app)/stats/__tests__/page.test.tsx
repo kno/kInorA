@@ -1,45 +1,47 @@
 import type { ReactElement, ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { headers } from "next/headers";
+import { describe, expect, it, vi } from "vitest";
 import StatsPage from "../page";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
 
-vi.mock("next/headers", () => ({
-  headers: vi.fn(),
+// StatsPage is a server component (`getTranslations`) — see
+// `server-translator.ts` for why this is mocked rather than run for real
+// (the real next-intl/server RSC build isn't available under Vitest).
+// `getTranslations` is a `vi.fn` (not a plain async arrow) so the ES-locale
+// test below can override it for a single call via `mockResolvedValueOnce`.
+vi.mock("next-intl/server", () => ({
+  getTranslations: vi.fn(async () => createServerTranslator()),
 }));
 
-const mockedHeaders = vi.mocked(headers);
+import { getTranslations } from "next-intl/server";
+import { createServerTranslator } from "@/test-utils/server-translator";
 
 describe("StatsPage", () => {
-  beforeEach(() => {
-    mockedHeaders.mockResolvedValue(new Headers({ "accept-language": "en-US,en;q=0.9" }));
-  });
-
-  it("renders the statistics heading", async () => {
-    const page = await StatsPage({ searchParams: Promise.resolve({ lang: "en" }) });
+  it("renders the statistics heading via getTranslations, no messages.* access", async () => {
+    const page = await StatsPage();
     expect(textOf(page)).toContain("Statistics");
   });
 
   it("renders placeholder description text", async () => {
-    const page = await StatsPage({ searchParams: Promise.resolve({ lang: "en" }) });
+    const page = await StatsPage();
     expect(textOf(page)).toContain("progress");
   });
 
   it("renders inside a kin-page wrapper", async () => {
-    const page = await StatsPage({ searchParams: Promise.resolve({ lang: "en" }) });
+    const page = await StatsPage();
     const main = findFirst(page, (el) => el.type === "main");
     expect(main).toBeDefined();
     expect(main?.props?.className).toContain("kin-page");
   });
 
-  it("renders Spanish copy from the i18n catalog when lang=es", async () => {
-    const page = await StatsPage({ searchParams: Promise.resolve({ lang: "es" }) });
+  it("renders real Spanish copy from the ES catalog (not EN leakage)", async () => {
+    vi.mocked(getTranslations).mockResolvedValueOnce(createServerTranslator("es"));
+    const page = await StatsPage();
     const text = textOf(page);
 
     expect(text).toContain("Estadísticas");
-    expect(text).toContain("progreso");
+    expect(text).toContain("Sigue tu progreso y revisa tu historial de entrenamiento.");
   });
 });
 
