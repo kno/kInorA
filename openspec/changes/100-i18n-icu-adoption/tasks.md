@@ -334,25 +334,26 @@ Locale Switching, EN Support Added). Includes AUTHORING (not just
 migrating) ~30 mobile-unique ES-only tracker strings as new EN+ES keys.
 
 ### Phase 9.1: Install + Provider
-- [ ] 9.1.1 Add `react-intl@^10.1.14` + `@kinora/i18n` workspace dependency to `apps/mobile`.
-- [ ] 9.1.2 [RED] Write test asserting `App.tsx` mounts `IntlProvider` above `NavigationContainer` with `messages={flattenMessages(mergeWithBase(en, catalog[locale]))}`, `locale`, `defaultLocale="en"`.
-- [ ] 9.1.3 [GREEN] Implement `IntlProvider` wiring in `App.tsx` per 9.1.2, using the shared `flattenMessages`/`mergeWithBase` from `@kinora/i18n` at the boundary.
+- [x] 9.1.1 Add `react-intl@^10.1.14` + `@kinora/i18n` workspace dependency to `apps/mobile`.
+- [x] 9.1.2 [RED] Write test asserting `App.tsx` mounts `IntlProvider` above `NavigationContainer` with `messages={flattenMessages(mergeWithBase(en, catalog[locale]))}`, `locale`, `defaultLocale="en"`.
+- [x] 9.1.3 [GREEN] Implement `IntlProvider` wiring in `App.tsx` per 9.1.2, using the shared `flattenMessages`/`mergeWithBase` from `@kinora/i18n` at the boundary. DEVIATION (test target): `@react-navigation/native`/`react-native` use Flow's `import typeof` syntax Vite/Rollup cannot parse under Vitest (no Metro/jest-expo Babel transform here) — the structural test mocks `NavigationContainer` with a passthrough component rather than mounting App.tsx's full tree (fonts, SecureStore, deep-link listeners), consistent with this app's existing "pure logic tested, framework glue thin" convention (see App.tsx's own doc comment). The actual wiring landed in App.tsx itself, verified by inspection + the mocked-structure test.
+- [x] 9.1.3b Extracted the pure pieces into `apps/mobile/src/i18n/locale.ts` (`resolveMessages`, `DEFAULT_LOCALE`, `isSupportedLocale`) and `locale-store.ts` (`createLocaleStore` — subscribe/getLocale/setLocale) so the boundary logic is directly unit-tested; `LocaleProvider.tsx` is the thin glue wiring them into React (`useSyncExternalStore` + react-intl's `IntlProvider`).
 
 ### Phase 9.2: Locale State + Switching
-- [ ] 9.2.1 [RED] Write test asserting locale state switches at runtime and consumers re-render with new locale's copy without app restart.
-- [ ] 9.2.2 [GREEN] Implement locale state + context provider for the switch from 9.2.1.
+- [x] 9.2.1 [RED] Write test asserting locale state switches at runtime and consumers re-render with new locale's copy without app restart.
+- [x] 9.2.2 [GREEN] Implement locale state + context provider for the switch from 9.2.1 (`LocaleProvider`/`useLocale()` in `apps/mobile/src/i18n/LocaleProvider.tsx`).
 
 ### Phase 9.3: Author ~30 Mobile-Unique Tracker Strings
-- [ ] 9.3.1 Enumerate the ~30 mobile-unique ES-only strings in `apps/mobile/src/copy/tracker.ts` that have no EN/web equivalent.
-- [ ] 9.3.2 [RED] Extend the `packages/i18n` parity guard test fixture to include the new mobile-only namespace keys; assert the guard requires EN+ES parity for them too (guard must fail if only ES is added).
-- [ ] 9.3.3 [GREEN] Author NEW EN+ES entries for all ~30 strings in `packages/i18n/src/messages/{en,es}.json` under a mobile-tracker namespace; run the guard — must pass with real (non-placeholder) EN translations.
+- [x] 9.3.1 Enumerate the ~30 mobile-unique ES-only strings in `apps/mobile/src/copy/tracker.ts` that have no EN/web equivalent. RESULT (deviates from the "~30" estimate — see apply-progress for the full literal-vs-semantic-match analysis and reasoning): 22 of `trackerCopy`'s 45 entries turned out to be BYTE-IDENTICAL to an existing `tracker.*` web key (same literal ES text) and will directly reuse that namespace in slice 10; 23 entries have no exact reusable equivalent — either genuinely novel content, or a semantic sibling exists elsewhere in the catalog but with different register (mobile's copy uses "vos" Argentine Spanish; the web catalog uses "tú" form) or different wording, so reusing the web key would silently change mobile's existing rendered text. Those 23 were authored fresh under a new `mobileTracker` namespace, preserving mobile's exact existing ES copy verbatim and translating it faithfully to EN (not inventing new content).
+- [x] 9.3.2 [RED] Extend the `packages/i18n` parity guard test fixture to include the new mobile-only namespace keys; assert the guard requires EN+ES parity for them too (guard must fail if only ES is added). Added to `packages/i18n/src/__tests__/catalog-parity.test.ts`.
+- [x] 9.3.3 [GREEN] Author NEW EN+ES entries for all ~30 [23, see 9.3.1] strings in `packages/i18n/src/messages/{en,es}.json` under a mobile-tracker [`mobileTracker`] namespace; run the guard — must pass with real (non-placeholder) EN translations. Full catalog now carries 352 leaf keys (329 + 23); `packages/i18n` full-catalog parity test in `index.test.ts` updated accordingly and green.
 
 ### Phase 9.4: Proof Screen + Cross-Runtime Parity
-- [ ] 9.4.1 [RED] Write test asserting one representative screen accesses `useIntl().formatMessage({id})` directly (no prop-drilled messages), including at least one EN-rendered string (first mobile EN proof).
-- [ ] 9.4.2 [GREEN] Migrate that one screen per 9.4.1.
-- [ ] 9.4.3 [RED] Write cross-package test asserting mobile (`react-intl`) and web (`next-intl`) render identical text for a shared catalog key with the same args and locale.
-- [ ] 9.4.4 [GREEN] Confirm parity from 9.4.3 holds; fix any catalog/formatter discrepancy.
-- [ ] 9.4.5 `pnpm test` in `apps/mobile` — suite green.
+- [x] 9.4.1 [RED] Write test asserting one representative screen accesses `useIntl().formatMessage({id})` directly (no prop-drilled messages), including at least one EN-rendered string (first mobile EN proof). Picked `HomeScreen` (not part of `copy/tracker.ts`/slice 10's scope) as the proof screen — `apps/mobile/src/screens/__tests__/HomeScreen.test.tsx`.
+- [x] 9.4.2 [GREEN] Migrate that one screen per 9.4.1 — `HomeScreen`'s logout button text + accessibility label now both come from `dashboard.logout` via `useIntl()`. Fixed a pre-existing latent bug as a side effect: the accessibility label was hardcoded to the ES string "Cerrar sesión" regardless of the button's own (EN) visible text; both are now locale-consistent.
+- [x] 9.4.3 [RED] Write cross-package test asserting mobile (`react-intl`) and web (`next-intl`) render identical text for a shared catalog key with the same args and locale. `apps/mobile/src/i18n/__tests__/cross-runtime-parity.test.ts`, using `use-intl/core`'s `createTranslator` (the exact engine next-intl's `getTranslations`/`useTranslations` call under the hood — same approach as `apps/web/src/test-utils/server-translator.ts`) as web's stand-in, since next-intl's own React entry points require the "react-server" resolve condition unavailable under Vitest.
+- [x] 9.4.4 [GREEN] Confirm parity from 9.4.3 holds; fix any catalog/formatter discrepancy. Parity held on first run — no catalog/formatter discrepancy found (plain interpolation, plural, and a new `mobileTracker.*` key all matched byte-for-byte across both engines).
+- [x] 9.4.5 `pnpm test` in `apps/mobile` — suite green. 87/87 tests, 12/12 files.
 
 ---
 

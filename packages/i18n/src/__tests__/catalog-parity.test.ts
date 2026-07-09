@@ -84,6 +84,18 @@ describe("validateCatalogParity", () => {
     expect(result.errors).toEqual([]);
   });
 
+  it("fails when a mobile-only namespace key is added to es without an en counterpart (9.3.2)", () => {
+    const en = { mobileTracker: { retry: "Retry" } };
+    const es = { mobileTracker: { retry: "Reintentar", loading: "Cargando sesión…" } };
+
+    const result = validateCatalogParity(en, es);
+
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((error) => error.includes("mobileTracker.loading") && error.includes("en"))
+    ).toBe(true);
+  });
+
   it("uses custom locale labels in error messages when provided", () => {
     const en = { nav: { home: "Home", about: "About" } };
     const fr = { nav: { home: "Accueil" } };

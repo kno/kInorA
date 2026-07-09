@@ -12,6 +12,11 @@
  * the web app's pattern where `middleware.ts` wraps the tested
  * `evaluateAuthGate` and `actions.ts` wraps the tested `submitLogin`.
  *
+ * `LocaleProvider` (src/i18n/LocaleProvider.tsx) mounts react-intl's
+ * `IntlProvider` above `NavigationContainer`, seeded from the SAME shared
+ * `@kinora/i18n` catalogs web consumes — the first mobile consumer of that
+ * package (change 100, slice 9).
+ *
  * PR4 task 3.1: Expo project entry (`expo/AppEntry.js` loads this default
  * export). React Navigation native stack wires Login/SignUp/Home and
  * integrates the session guard (3.4) + deep-link callback handler (3.3).
@@ -54,6 +59,7 @@ import {
 } from "./src/auth/session-guard";
 import { resolveDeepLinkAction } from "./src/auth/deep-link";
 import { proxyMobileSocialCallback } from "./src/auth/callback-proxy";
+import { LocaleProvider } from "./src/i18n/LocaleProvider";
 
 type RootStackParamList = {
   Login: undefined;
@@ -148,28 +154,30 @@ export default function App() {
   if (!isReady || !fontsLoaded) return null;
 
   return (
-    <NavigationContainer
-      ref={navigationRef}
-      onStateChange={handleNavigationStateChange}
-    >
-      <Stack.Navigator initialRouteName={initialRoute}>
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="SignUp"
-          component={SignUpScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen name="Home" component={HomeScreen} options={{ title: "kInorA" }} />
-        <Stack.Screen
-          name="Tracker"
-          component={WorkoutTrackerScreen}
-          options={{ headerShown: false }}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <LocaleProvider>
+      <NavigationContainer
+        ref={navigationRef}
+        onStateChange={handleNavigationStateChange}
+      >
+        <Stack.Navigator initialRouteName={initialRoute}>
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="SignUp"
+            component={SignUpScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen name="Home" component={HomeScreen} options={{ title: "kInorA" }} />
+          <Stack.Screen
+            name="Tracker"
+            component={WorkoutTrackerScreen}
+            options={{ headerShown: false }}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </LocaleProvider>
   );
 }
