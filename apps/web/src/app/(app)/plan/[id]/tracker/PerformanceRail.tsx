@@ -1,9 +1,8 @@
+import { useTranslations } from "next-intl";
 import { displayNum } from "./tracker-model";
-import type { Translate } from "./tracker-model";
 import styles from "../TrackerPanel.module.css";
 
 interface PerformanceRailProps {
-  t: Translate;
   sessionVolume: number;
   completedSets: number;
   totalSets: number;
@@ -16,47 +15,47 @@ interface PerformanceRailProps {
  * faked data.
  */
 export function PerformanceRail({
-  t,
   sessionVolume,
   completedSets,
   totalSets,
 }: PerformanceRailProps) {
+  const t = useTranslations("tracker");
   return (
-    <aside className={styles.rail} aria-label={t("tracker_rail_aria", "Performance panel")}>
+    <aside className={styles.rail} aria-label={t("rail.aria")}>
       <div>
-        <p className={styles.eyebrow}>{t("tracker_rail_eyebrow", "Performance")}</p>
-        <h2 className={styles.railTitle}>{t("tracker_rail_title", "Session summary")}</h2>
+        <p className={styles.eyebrow}>{t("rail.eyebrow")}</p>
+        <h2 className={styles.railTitle}>{t("rail.title")}</h2>
       </div>
       <div className={styles.railStatGrid}>
         <div className={styles.railStat}>
-          <span>{t("tracker_metric_volume", "Volume")}</span>
+          <span>{t("metric.volume")}</span>
           <strong>
-            {displayNum(Math.round(sessionVolume))} {t("tracker_unit_kg", "kg")}
+            {displayNum(Math.round(sessionVolume))} {t("unit.kg")}
           </strong>
         </div>
         <div className={styles.railStat}>
-          <span>{t("tracker_rail_series", "Sets")}</span>
+          <span>{t("rail.series")}</span>
           <strong>
             {completedSets}/{totalSets}
           </strong>
         </div>
         {/* STUB: avg rest is not backed by the data contract. */}
         <div className={`${styles.railStat} ${styles.railStatStub}`}>
-          <span>{t("tracker_rail_avg_rest", "Avg rest")}</span>
+          <span>{t("rail.avgRest")}</span>
           <strong>—</strong>
-          <span className={styles.stubTag}>{t("tracker_stub_soon", "coming soon")}</span>
+          <span className={styles.stubTag}>{t("stubSoon")}</span>
         </div>
         {/* STUB: streak is not backed by the data contract. */}
         <div className={`${styles.railStat} ${styles.railStatStub}`}>
-          <span>{t("tracker_rail_streak", "Streak")}</span>
+          <span>{t("rail.streak")}</span>
           <strong>—</strong>
-          <span className={styles.stubTag}>{t("tracker_stub_soon", "coming soon")}</span>
+          <span className={styles.stubTag}>{t("stubSoon")}</span>
         </div>
       </div>
       {/* STUB: AI microadjust copy is not backed by the data contract. */}
-      <section className={styles.aiNote} aria-label={t("tracker_ai_note_heading", "Suggested microadjust")}>
-        <h3>{t("tracker_ai_note_heading", "Suggested microadjust")}</h3>
-        <p>{t("tracker_ai_note_stub", "AI coaching insights will appear here once available.")}</p>
+      <section className={styles.aiNote} aria-label={t("aiNote.heading")}>
+        <h3>{t("aiNote.heading")}</h3>
+        <p>{t("aiNote.stub")}</p>
       </section>
     </aside>
   );

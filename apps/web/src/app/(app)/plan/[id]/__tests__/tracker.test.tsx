@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import type { WorkoutProgram, WorkoutSessionRecord } from "@kinora/contracts";
+import { renderWithIntl } from "@/test-utils/render-with-intl";
 import { PlanStatusClient } from "../PlanStatusClient";
 
 // The redesigned TrackerPanel imports a scoped CSS module; return the class
@@ -86,7 +87,7 @@ function renderClient() {
   usePlanWs.mockReturnValue({ status: "ready" });
   regeneratePlanAction.mockResolvedValue({ planId: "plan-1", status: "generating" });
 
-  return render(
+  return renderWithIntl(
     <PlanStatusClient
       planId="plan-1"
       specId="spec-1"

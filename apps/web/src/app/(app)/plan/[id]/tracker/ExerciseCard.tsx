@@ -10,15 +10,14 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { SessionExerciseRecord, SetRecordDTO } from "@kinora/contracts";
 import type { WorkoutSetUpdateInput } from "../tracker-types";
 import { WEIGHT_STEP, clamp, displayNum, parseLeadingInt } from "./tracker-model";
-import type { Translate } from "./tracker-model";
 import { Stepper } from "./Stepper";
 import styles from "../TrackerPanel.module.css";
 
 interface ExerciseCardProps {
-  t: Translate;
   activeExercise?: SessionExerciseRecord;
   activeSet?: SetRecordDTO;
   currentSetNumber: number;
@@ -39,7 +38,6 @@ function seedFromSet(set: SetRecordDTO | undefined) {
 }
 
 export function ExerciseCard({
-  t,
   activeExercise,
   activeSet,
   currentSetNumber,
@@ -49,6 +47,7 @@ export function ExerciseCard({
   onRecordSet,
   onSetCompleted,
 }: ExerciseCardProps) {
+  const t = useTranslations("tracker");
   const [weight, setWeight] = useState(() => seedFromSet(activeSet).weight);
   const [reps, setReps] = useState(() => seedFromSet(activeSet).reps);
   const [rpeInput, setRpeInput] = useState(() => seedFromSet(activeSet).rpe);
@@ -83,62 +82,59 @@ export function ExerciseCard({
     onSetCompleted();
   }, [activeSet, rpeInput, note, weight, reps, onRecordSet, onSetCompleted]);
 
-  const targetPill = t("tracker_target_pill", "Target · {reps} reps").replace(
-    "{reps}",
-    String(parseLeadingInt(activeSet?.targetReps, 0)),
-  );
+  const targetPill = t("target.pill", { reps: parseLeadingInt(activeSet?.targetReps, 0) });
 
   return (
     <section
       className={`${styles.card} ${styles.exerciseCard}`}
-      aria-label={t("tracker_current_exercise", "Current exercise")}
+      aria-label={t("currentExercise")}
     >
       <div className={styles.exerciseTitleRow}>
         <div>
-          <p className={styles.eyebrow}>{t("tracker_current_exercise", "Current exercise")}</p>
+          <p className={styles.eyebrow}>{t("currentExercise")}</p>
           <h2 className={styles.exerciseName}>{activeExercise?.title ?? "—"}</h2>
         </div>
         <span className={styles.targetPill}>{targetPill}</span>
       </div>
 
-      <div className={styles.metricsGrid} aria-label={t("tracker_metrics_aria", "Exercise summary")}>
+      <div className={styles.metricsGrid} aria-label={t("metrics.aria")}>
         <div className={styles.metric}>
-          <span>{t("tracker_set_heading", "Set")}</span>
+          <span>{t("set.heading")}</span>
           <strong>
             {currentSetNumber}/{totalSetsInExercise}
           </strong>
         </div>
         <div className={styles.metric}>
-          <span>{t("tracker_metric_volume", "Volume")}</span>
+          <span>{t("metric.volume")}</span>
           <strong>
-            {displayNum(Math.round(exerciseVolume))} {t("tracker_unit_kg", "kg")}
+            {displayNum(Math.round(exerciseVolume))} {t("unit.kg")}
           </strong>
         </div>
         <div className={styles.metric}>
-          <span>{t("tracker_rpe", "RPE")}</span>
+          <span>{t("rpe")}</span>
           <strong>{activeSet?.rpe != null ? activeSet.rpe : "—"}</strong>
         </div>
       </div>
 
-      <div className={styles.stepperGrid} role="group" aria-label={t("tracker_steppers_aria", "Adjust load and reps")}>
+      <div className={styles.stepperGrid} role="group" aria-label={t("steppers.aria")}>
         <Stepper
-          label={t("tracker_load_label", "Load")}
+          label={t("load.label")}
           labelId="tracker-load-label"
           value={displayNum(weight)}
-          unit={t("tracker_unit_kg", "kg")}
-          decrementLabel={t("tracker_weight_down_label", "Decrease load 2.5 kg")}
-          incrementLabel={t("tracker_weight_up_label", "Increase load 2.5 kg")}
+          unit={t("unit.kg")}
+          decrementLabel={t("weight.downLabel")}
+          incrementLabel={t("weight.upLabel")}
           onDecrement={() => setWeight((w) => clamp(+(w - WEIGHT_STEP).toFixed(1), 0, 300))}
           onIncrement={() => setWeight((w) => clamp(+(w + WEIGHT_STEP).toFixed(1), 0, 300))}
           disabled={!canRecord}
         />
         <Stepper
-          label={t("tracker_reps_label", "Reps")}
+          label={t("reps.label")}
           labelId="tracker-reps-label"
           value={reps}
-          unit={t("tracker_unit_reps", "reps")}
-          decrementLabel={t("tracker_reps_down_label", "Decrease reps")}
-          incrementLabel={t("tracker_reps_up_label", "Increase reps")}
+          unit={t("unit.reps")}
+          decrementLabel={t("reps.downLabel")}
+          incrementLabel={t("reps.upLabel")}
           onDecrement={() => setReps((r) => clamp(r - 1, 0, 99))}
           onIncrement={() => setReps((r) => clamp(r + 1, 0, 99))}
           disabled={!canRecord}
@@ -148,7 +144,7 @@ export function ExerciseCard({
       <div className={styles.secondaryRow}>
         <div className={styles.rpeField}>
           <label className={styles.rpeLabel} htmlFor="tracker-rpe">
-            {t("tracker_rpe", "RPE")}
+            {t("rpe")}
           </label>
           <input
             id="tracker-rpe"
@@ -169,8 +165,8 @@ export function ExerciseCard({
             rows={1}
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder={t("tracker_note_placeholder", "Quick note")}
-            aria-label={t("tracker_notes", "Notes")}
+            placeholder={t("note.placeholder")}
+            aria-label={t("notes")}
             disabled={!canRecord}
           />
         ) : (
@@ -180,7 +176,7 @@ export function ExerciseCard({
             onClick={() => setShowNote(true)}
             disabled={!canRecord}
           >
-            {t("tracker_add_note_cta", "Add note")}
+            {t("addNote.cta")}
           </button>
         )}
       </div>
@@ -192,7 +188,7 @@ export function ExerciseCard({
           onClick={handleCompleteSet}
           disabled={!canRecord}
         >
-          {t("tracker_complete_set_cta", "Complete set")}
+          {t("completeSet.cta")}
         </button>
       </div>
     </section>

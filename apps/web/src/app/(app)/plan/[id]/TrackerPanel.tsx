@@ -20,6 +20,7 @@
  */
 
 import { useCallback } from "react";
+import { useTranslations } from "next-intl";
 import type { WorkoutSessionRecord } from "@kinora/contracts";
 import type { WorkoutSetUpdateInput } from "./tracker-types";
 import { deriveTrackerModel } from "./tracker/tracker-model";
@@ -36,21 +37,16 @@ import styles from "./TrackerPanel.module.css";
 
 interface TrackerPanelProps {
   session: WorkoutSessionRecord;
-  messages?: Record<string, string>;
   onRecordSet: (setId: string, input: WorkoutSetUpdateInput) => Promise<void>;
   onCompleteSession: (sessionId: string) => Promise<void>;
 }
 
 export function TrackerPanel({
   session,
-  messages,
   onRecordSet,
   onCompleteSession,
 }: TrackerPanelProps) {
-  const t = useCallback(
-    (key: string, fallback: string): string => messages?.[key] ?? fallback,
-    [messages],
-  );
+  const t = useTranslations("tracker");
 
   const model = deriveTrackerModel(session);
   const restDuration = model.activeExercise?.restSeconds ?? 60;
@@ -64,11 +60,10 @@ export function TrackerPanel({
   );
 
   return (
-    <section className={styles.tracker} aria-label={t("tracker_live_title", "Live workout")}>
+    <section className={styles.tracker} aria-label={t("live.title")}>
       <div className={styles.mainPanel}>
         <TrackerTopbar
-          t={t}
-          title={model.activeExercise?.title ?? t("tracker_live_title", "Live workout")}
+          title={model.activeExercise?.title ?? t("live.title")}
           elapsed={timer.elapsed}
           paused={timer.paused}
           isCompleted={model.isCompleted}
@@ -77,7 +72,6 @@ export function TrackerPanel({
         />
 
         <SessionProgress
-          t={t}
           segments={model.segments}
           percent={model.percent}
           completedSets={model.completedSets}
@@ -88,7 +82,6 @@ export function TrackerPanel({
 
         <div className={styles.workbench}>
           <ExerciseCard
-            t={t}
             activeExercise={model.activeExercise}
             activeSet={model.activeSet}
             currentSetNumber={model.currentSetNumber}
@@ -101,21 +94,19 @@ export function TrackerPanel({
 
           <div className={styles.sideStack}>
             <RestRing
-              t={t}
               duration={restDuration}
               remaining={rest.remaining}
               onSkip={rest.skip}
               onAddTime={rest.addTime}
             />
-            <NextExercisePreview t={t} nextExercise={model.nextExercise} />
+            <NextExercisePreview nextExercise={model.nextExercise} />
           </div>
         </div>
 
-        <Timeline t={t} items={model.timeline} />
+        <Timeline items={model.timeline} />
       </div>
 
       <PerformanceRail
-        t={t}
         sessionVolume={model.sessionVolume}
         completedSets={model.completedSets}
         totalSets={model.totalSets}
