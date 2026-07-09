@@ -4,8 +4,9 @@
  * Server component that:
  *  1. Fetches the initial plan status from GET /workout-plans/:id, using the
  *     session token read server-side from the httpOnly kinora_session cookie.
- *  2. Loads i18n messages for the locale
- *  3. Renders PlanStatusClient (client component) with initial state
+ *  2. Renders PlanStatusClient (client component) with initial state. i18n is
+ *     resolved by next-intl's request config — no message threading needed
+ *     since this page renders no localized text of its own.
  *
  * Issue #42: the session token is used ONLY for the server-side fetch here. It
  * is NOT passed to PlanStatusClient — the browser authenticates the WS upgrade
@@ -14,10 +15,9 @@
  * The client component subscribes to the WS for live updates and handles
  * the "Regenerate" CTA.
  */
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
-import { resolveLocale, loadMessages } from "@/i18n/locale";
 import { fetchPlanStatus } from "@/app/(app)/create-plan/plan-draft-client";
 import { PlanStatusClient } from "./PlanStatusClient";
 import type { WorkoutProgram } from "@kinora/contracts";
@@ -31,11 +31,6 @@ export default async function PlanStatusPage({ params }: PlanPageProps) {
 
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
-
-  const requestHeaders = await headers();
-  const acceptLanguage = requestHeaders.get("accept-language");
-  const locale = resolveLocale(acceptLanguage, undefined);
-  const messages = loadMessages(locale);
 
   // Fetch the initial plan status server-side for fast first render.
   // On 404 or cross-tenant, Next.js returns a 404 page.
@@ -59,7 +54,6 @@ export default async function PlanStatusPage({ params }: PlanPageProps) {
       initialProgram={
         plan.status === "ready" ? (plan.program as WorkoutProgram) : undefined
       }
-      messages={messages}
     />
   );
 }

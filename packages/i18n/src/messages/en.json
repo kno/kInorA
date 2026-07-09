@@ -286,6 +286,11 @@
       "conflict": "You have an active session for {plan} · Day {n}. Resume or finish it before starting another.",
       "conflict_no_day": "You have an active session for {plan}. Resume or finish it before starting another.",
       "conflict_generic": "You already have an active workout session. Resume or finish it before starting another."
+    },
+    "error": {
+      "title": "Connection problem",
+      "desc": "We lost the live connection and could not fetch your plan status. Check your connection or sign in again, then retry.",
+      "retryCta": "Retry"
     }
   },
   "tracker": {
@@ -306,7 +311,8 @@
     "error": {
       "start": "We couldn't start the session. Please try again.",
       "record": "We couldn't save the set. Please try again.",
-      "complete": "We couldn't complete the workout. Please try again."
+      "complete": "We couldn't complete the workout. Please try again.",
+      "generic": "Something went wrong. Please try again."
     },
     "currentExercise": "Current exercise",
     "rpe": "RPE",

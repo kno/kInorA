@@ -198,28 +198,28 @@ slice in a way that separates `PlanStatusView` from either parent, or a
 dangling `messages` prop will break type-check (same trap as `TrackerPanel`).
 
 ### Phase 5.1: Server Pages + PlanWeekView
-- [ ] 5.1.1 [RED] Write/extend render tests for `plan/page.tsx` and `plan/[id]/page.tsx` asserting `getTranslations()` server-side usage, no `loadMessages` threading.
-- [ ] 5.1.2 [GREEN] Migrate `plan/page.tsx` → `getTranslations()`, drop `loadMessages` threading to children.
-- [ ] 5.1.3 [GREEN] Migrate `plan/[id]/page.tsx` → `getTranslations()`, drop `loadMessages` threading.
-- [ ] 5.1.4 [RED] Write render test for `PlanWeekView` asserting `getTranslations()` usage (component was missed in the earlier slice cut).
-- [ ] 5.1.5 [GREEN] Migrate `PlanWeekView` → `getTranslations()`.
+- [x] 5.1.1 [RED] Write/extend render tests for `plan/page.tsx` and `plan/[id]/page.tsx` asserting `getTranslations()` server-side usage, no `loadMessages` threading.
+- [x] 5.1.2 [GREEN] Migrate `plan/page.tsx` → `getTranslations()`, drop `loadMessages` threading to children.
+- [x] 5.1.3 [GREEN] Migrate `plan/[id]/page.tsx` → `getTranslations()`, drop `loadMessages` threading.
+- [x] 5.1.4 [RED] Write render test for `PlanWeekView` asserting `getTranslations()` usage (component was missed in the earlier slice cut).
+- [x] 5.1.5 [GREEN] Migrate `PlanWeekView` → `getTranslations()`.
 
 ### Phase 5.2: Client Wrappers Drop `messages` Prop
-- [ ] 5.2.1 [RED] Write/extend tests asserting `PlanTrackerClient` and `PlanStatusClient` no longer accept a `messages` prop and instead call `useTranslations` directly, and no longer drill `messages` to `DayDetailPanel`/`PlanStatusView`.
-- [ ] 5.2.2 [GREEN] Migrate `PlanTrackerClient` — drop `messages` prop entirely; own `t`→`useTranslations`; stop drilling to `DayDetailPanel`.
-- [ ] 5.2.3 [GREEN] Migrate `PlanStatusClient` — drop `messages` prop entirely; own `t`→`useTranslations`; stop drilling to `PlanStatusView`.
-- [ ] 5.2.4 [GREEN] Migrate `DayDetailPanel` → `useTranslations`.
-- [ ] 5.2.5 [RED] Write test asserting `PlanStatusView` is a client component (`use client`) using `useTranslations`.
-- [ ] 5.2.6 [GREEN] Add `"use client"` to `PlanStatusView` + migrate to `useTranslations`.
+- [x] 5.2.1 [RED] Write/extend tests asserting `PlanTrackerClient` and `PlanStatusClient` no longer accept a `messages` prop and instead call `useTranslations` directly, and no longer drill `messages` to `DayDetailPanel`/`PlanStatusView`.
+- [x] 5.2.2 [GREEN] Migrate `PlanTrackerClient` — drop `messages` prop entirely; own `t`→`useTranslations`; stop drilling to `DayDetailPanel`.
+- [x] 5.2.3 [GREEN] Migrate `PlanStatusClient` — drop `messages` prop entirely; own `t`→`useTranslations`; stop drilling to `PlanStatusView`.
+- [x] 5.2.4 [GREEN] Migrate `DayDetailPanel` → `useTranslations`.
+- [x] 5.2.5 [RED] Write test asserting `PlanStatusView` is a client component (`use client`) using `useTranslations`.
+- [x] 5.2.6 [GREEN] Add `"use client"` to `PlanStatusView` + migrate to `useTranslations`.
 
 ### Phase 5.3: PlanSelector — `select` + `useFormatter` Date (Gap 1)
-- [ ] 5.3.1 [RED] Write test asserting `PlanSelector` renders `plan.selector.option` via the ICU `select` branch (`ready`/`generating`/`failed`/`other`) instead of `.replace()`-built `{date} ({status})` string.
-- [ ] 5.3.2 [RED] Write test asserting `PlanSelector` formats the date via `useFormatter().dateTime` under the active locale (not a raw `Date#toLocaleDateString` or manual format string).
-- [ ] 5.3.3 [GREEN] Migrate `PlanSelector` — `useFormatter().dateTime` for the date + ICU `select` for status, satisfying 5.3.1/5.3.2.
+- [x] 5.3.1 [RED] Write test asserting `PlanSelector` renders `plan.selector.option` via the ICU `select` branch (`ready`/`generating`/`failed`/`other`) instead of `.replace()`-built `{date} ({status})` string.
+- [x] 5.3.2 [RED] Write test asserting `PlanSelector` formats the date via `useFormatter().dateTime` under the active locale (not a raw `Date#toLocaleDateString` or manual format string).
+- [x] 5.3.3 [GREEN] Migrate `PlanSelector` — `useFormatter().dateTime` for the date + ICU `select` for status, satisfying 5.3.1/5.3.2.
 
 ### Phase 5.4: Cluster Verification
-- [ ] 5.4.1 Grep-verify zero remaining `.replace()`/local `t(key,fallback)` closures across the 8 plan-shell files.
-- [ ] 5.4.2 `pnpm test` — full suite green.
+- [x] 5.4.1 Grep-verify zero remaining `.replace()`/local `t(key,fallback)` closures across the 8 plan-shell files.
+- [x] 5.4.2 `pnpm test` — full suite green.
 
 ---
 

@@ -286,6 +286,11 @@
       "conflict": "Tienes una sesión activa para {plan} · Día {n}. Retómala o termínala antes de empezar otra.",
       "conflict_no_day": "Tienes una sesión activa para {plan}. Retómala o termínala antes de empezar otra.",
       "conflict_generic": "Ya tienes una sesión de entrenamiento activa. Retómala o termínala antes de empezar otra."
+    },
+    "error": {
+      "title": "Problema de conexión",
+      "desc": "Perdimos la conexión en vivo y no pudimos obtener el estado de tu plan. Revisa tu conexión o vuelve a iniciar sesión, luego reintenta.",
+      "retryCta": "Reintentar"
     }
   },
   "tracker": {
@@ -306,7 +311,8 @@
     "error": {
       "start": "No pudimos iniciar la sesión. Inténtalo de nuevo.",
       "record": "No pudimos guardar la serie. Inténtalo de nuevo.",
-      "complete": "No pudimos completar el entrenamiento. Inténtalo de nuevo."
+      "complete": "No pudimos completar el entrenamiento. Inténtalo de nuevo.",
+      "generic": "Algo salió mal. Inténtalo de nuevo."
     },
     "currentExercise": "Ejercicio actual",
     "rpe": "RPE",

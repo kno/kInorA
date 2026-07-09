@@ -1,41 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import type { ReactElement, ReactNode } from "react";
+import { screen, fireEvent } from "@testing-library/react";
+import { renderWithIntl } from "@/test-utils/render-with-intl";
 import type { PlanSummaryItem } from "../PlanSelector";
-
-// --- React tree inspection helpers ---
-
-type AnyProps = Record<string, unknown> & { children?: ReactNode };
-type AnyElement = ReactElement<AnyProps>;
-
-function findFirst(
-  node: ReactNode,
-  match: (el: AnyElement) => boolean,
-): AnyElement | undefined {
-  if (typeof node === "object" && node !== null && "props" in node) {
-    const el = node as AnyElement;
-    if (match(el)) return el;
-    const found = findFirst(el.props.children, match);
-    if (found) return found;
-  }
-  if (Array.isArray(node)) {
-    for (const child of node) {
-      const found = findFirst(child, match);
-      if (found) return found;
-    }
-  }
-  return undefined;
-}
-
-function textOf(node: ReactNode): string {
-  if (typeof node === "string") return node;
-  if (typeof node === "number") return String(node);
-  if (Array.isArray(node)) return node.map(textOf).join("");
-  if (typeof node === "object" && node !== null && "props" in node) {
-    return textOf((node as AnyElement).props.children);
-  }
-  return "";
-}
 
 // --- Module mocks ---
 
@@ -62,42 +29,49 @@ const summaries: PlanSummaryItem[] = [
 
 describe("PlanSelector", () => {
   it("renders a <select> element", () => {
-    const view = PlanSelector({ summaries, selectedId: "plan-newer" });
-    const select = findFirst(view, (el) => el.type === "select");
-    expect(select).toBeDefined();
+    renderWithIntl(<PlanSelector summaries={summaries} selectedId="plan-newer" />);
+    expect(screen.getByRole("combobox")).toBeDefined();
   });
 
-  it("renders options for each summary (newest-first order matches prop order)", () => {
-    const view = PlanSelector({ summaries, selectedId: "plan-newer" });
-    const text = textOf(view);
-    // Option labels now use "{date} ({status})" format (not the raw plan id).
-    // Check that the statuses appear in the rendered text.
-    expect(text).toContain("ready");
-    expect(text).toContain("generating");
+  it("renders the 'ready' ICU select branch for a ready plan (Gap 1)", () => {
+    renderWithIntl(<PlanSelector summaries={summaries} selectedId="plan-newer" />);
+    expect(screen.getByText(/Ready/)).toBeDefined();
+  });
+
+  it("renders the 'generating' ICU select branch for a generating plan (Gap 1)", () => {
+    renderWithIntl(<PlanSelector summaries={summaries} selectedId="plan-newer" />);
+    expect(screen.getByText(/Generating/)).toBeDefined();
+  });
+
+  it("renders the 'failed' ICU select branch for a failed plan (Gap 1)", () => {
+    const failedSummaries: PlanSummaryItem[] = [
+      { id: "plan-f", status: "failed", createdAt: "2026-06-29T10:00:00.000Z" },
+    ];
+    renderWithIntl(<PlanSelector summaries={failedSummaries} selectedId="plan-f" />);
+    expect(screen.getByText(/Failed/)).toBeDefined();
+  });
+
+  it("renders the 'other' ICU select branch for an unrecognized status (Gap 1)", () => {
+    const unknownSummaries: PlanSummaryItem[] = [
+      { id: "plan-u", status: "archived", createdAt: "2026-06-29T10:00:00.000Z" },
+    ];
+    renderWithIntl(<PlanSelector summaries={unknownSummaries} selectedId="plan-u" />);
+    expect(screen.getByText(/Unknown/)).toBeDefined();
   });
 
   it("marks the selectedId option as selected via value prop on <select>", () => {
-    const view = PlanSelector({ summaries, selectedId: "plan-older" });
-    const select = findFirst(view, (el) => el.type === "select");
-    expect(select).toBeDefined();
-    expect(select?.props?.value).toBe("plan-older");
+    renderWithIntl(<PlanSelector summaries={summaries} selectedId="plan-older" />);
+    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("plan-older");
   });
 
   it("marks the first plan as selected when selectedId matches first entry", () => {
-    const view = PlanSelector({ summaries, selectedId: "plan-newer" });
-    const select = findFirst(view, (el) => el.type === "select");
-    expect(select?.props?.value).toBe("plan-newer");
+    renderWithIntl(<PlanSelector summaries={summaries} selectedId="plan-newer" />);
+    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("plan-newer");
   });
 
   it("onChange pushes /plan?planId=<encoded-id> via router.push (Fix 5 — encodeURIComponent)", () => {
-    const view = PlanSelector({ summaries, selectedId: "plan-newer" });
-    const select = findFirst(view, (el) => el.type === "select");
-    expect(select).toBeDefined();
-
-    // Simulate the onChange handler
-    const onChange = select?.props?.onChange as (e: { target: { value: string } }) => void;
-    expect(typeof onChange).toBe("function");
-    onChange({ target: { value: "plan-older" } });
+    renderWithIntl(<PlanSelector summaries={summaries} selectedId="plan-newer" />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "plan-older" } });
     // "plan-older" has no special chars so encodeURIComponent keeps it the same
     expect(routerPush).toHaveBeenCalledWith("/plan?planId=plan-older");
   });
@@ -107,11 +81,15 @@ describe("PlanSelector", () => {
     const planWithSpecialId: PlanSummaryItem[] = [
       { id: "plan/with+special=chars&more", status: "ready", createdAt: "2026-06-29T10:00:00.000Z" },
     ];
-    const view = PlanSelector({ summaries: planWithSpecialId, selectedId: "plan/with+special=chars&more" });
-    const select = findFirst(view, (el) => el.type === "select");
-
-    const onChange = select?.props?.onChange as (e: { target: { value: string } }) => void;
-    onChange({ target: { value: "plan/with+special=chars&more" } });
+    renderWithIntl(
+      <PlanSelector
+        summaries={planWithSpecialId}
+        selectedId="plan/with+special=chars&more"
+      />,
+    );
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "plan/with+special=chars&more" },
+    });
     // The raw id has special chars — encodeURIComponent must encode them
     expect(routerPush).toHaveBeenCalledWith(
       "/plan?planId=plan%2Fwith%2Bspecial%3Dchars%26more"
@@ -119,11 +97,8 @@ describe("PlanSelector", () => {
   });
 
   it("onChange pushes the correct URL for a different selected plan", () => {
-    const view = PlanSelector({ summaries, selectedId: "plan-older" });
-    const select = findFirst(view, (el) => el.type === "select");
-
-    const onChange = select?.props?.onChange as (e: { target: { value: string } }) => void;
-    onChange({ target: { value: "plan-newer" } });
+    renderWithIntl(<PlanSelector summaries={summaries} selectedId="plan-older" />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "plan-newer" } });
     expect(routerPush).toHaveBeenCalledWith("/plan?planId=plan-newer");
   });
 
@@ -132,10 +107,9 @@ describe("PlanSelector", () => {
       { id: "p1", status: "ready", createdAt: "2026-06-29T10:00:00.000Z", name: "Summer Cut" },
       { id: "p2", status: "ready", createdAt: "2026-06-28T09:00:00.000Z", name: "Winter Bulk" },
     ];
-    const view = PlanSelector({ summaries: named, selectedId: "p1" });
-    const text = textOf(view);
-    expect(text).toContain("Summer Cut");
-    expect(text).toContain("Winter Bulk");
+    renderWithIntl(<PlanSelector summaries={named} selectedId="p1" />);
+    expect(screen.getByText("Summer Cut")).toBeDefined();
+    expect(screen.getByText("Winter Bulk")).toBeDefined();
   });
 
   it("two plans with distinct names render distinct labels (#93)", () => {
@@ -143,21 +117,11 @@ describe("PlanSelector", () => {
       { id: "p1", status: "ready", createdAt: "2026-06-29T10:00:00.000Z", name: "Alpha" },
       { id: "p2", status: "ready", createdAt: "2026-06-28T09:00:00.000Z", name: "Beta" },
     ];
-    const view = PlanSelector({ summaries: named, selectedId: "p1" });
-    const options: AnyElement[] = [];
-    function collect(node: ReactNode) {
-      if (typeof node === "object" && node !== null && "props" in node) {
-        const el = node as AnyElement;
-        if (el.type === "option") options.push(el);
-        collect(el.props.children);
-      }
-      if (Array.isArray(node)) node.forEach(collect);
-    }
-    collect(view);
-    const labels = options.map((o) => textOf(o.props.children));
+    renderWithIntl(<PlanSelector summaries={named} selectedId="p1" />);
+    const options = screen.getAllByRole("option") as HTMLOptionElement[];
+    const labels = options.map((o) => o.textContent);
     expect(labels).toContain("Alpha");
     expect(labels).toContain("Beta");
-    expect(labels[0]).not.toBe(labels[1]);
   });
 
   it("renders the server-resolved default label when name is a resolved fallback (#93)", () => {
@@ -166,42 +130,44 @@ describe("PlanSelector", () => {
     const resolved: PlanSummaryItem[] = [
       { id: "p1", status: "ready", createdAt: "2026-06-29T10:00:00.000Z", name: "Plan 2026-06-29" },
     ];
-    const view = PlanSelector({ summaries: resolved, selectedId: "p1" });
-    expect(textOf(view)).toContain("Plan 2026-06-29");
+    renderWithIntl(<PlanSelector summaries={resolved} selectedId="p1" />);
+    expect(screen.getByText("Plan 2026-06-29")).toBeDefined();
   });
 
-  it("renders the date/status fallback label when a summary has no name (#93 legacy safety)", () => {
+  it("renders the date + ICU-select fallback label when a summary has no name (#93 legacy safety)", () => {
     // The name field is optional; a legacy/undefined summary must NOT crash and
-    // must fall back to the "{date} ({status})" template.
+    // must fall back to the "{date} ({select-branch})" template.
     const noName: PlanSummaryItem[] = [
       { id: "p1", status: "ready", createdAt: "2026-06-29T10:00:00.000Z" },
     ];
-    let view: ReturnType<typeof PlanSelector> | undefined;
     expect(() => {
-      view = PlanSelector({ summaries: noName, selectedId: "p1" });
+      renderWithIntl(<PlanSelector summaries={noName} selectedId="p1" />);
     }).not.toThrow();
-    const text = textOf(view);
-    // Status appears via the fallback template; the option is not blank.
-    expect(text).toContain("ready");
-    const expectedDate = new Date("2026-06-29T10:00:00.000Z").toLocaleDateString();
-    expect(text).toContain(expectedDate);
+    // Status appears via the ICU select branch; the option is not blank.
+    expect(screen.getByText(/Ready/)).toBeDefined();
+  });
+
+  it("formats the date via useFormatter().dateTime, not Date#toLocaleDateString (Gap 1)", () => {
+    // A raw `.toLocaleDateString()` call would produce a different shape than
+    // next-intl's `dateTime` formatter for the same Date under the "en" locale
+    // used by renderWithIntl — assert the ACTUAL formatter output is present,
+    // not a manually-reconstructed string.
+    const noName: PlanSummaryItem[] = [
+      { id: "p1", status: "ready", createdAt: "2026-06-29T10:00:00.000Z" },
+    ];
+    renderWithIntl(<PlanSelector summaries={noName} selectedId="p1" />);
+    const option = screen.getByRole("option") as HTMLOptionElement;
+    // next-intl's default `dateTime()` (no format name/options) renders
+    // Intl.DateTimeFormat("en").format(date) — for 2026-06-29 that's "6/29/2026".
+    expect(option.textContent).toContain("6/29/2026");
+    expect(option.textContent).toContain("Ready");
   });
 
   it("renders option values matching plan ids", () => {
-    const view = PlanSelector({ summaries, selectedId: "plan-newer" });
-    // Find all <option> elements and check their values
-    const options: AnyElement[] = [];
-    function collect(node: ReactNode) {
-      if (typeof node === "object" && node !== null && "props" in node) {
-        const el = node as AnyElement;
-        if (el.type === "option") options.push(el);
-        collect(el.props.children);
-      }
-      if (Array.isArray(node)) node.forEach(collect);
-    }
-    collect(view);
+    renderWithIntl(<PlanSelector summaries={summaries} selectedId="plan-newer" />);
+    const options = screen.getAllByRole("option") as HTMLOptionElement[];
     expect(options.length).toBeGreaterThanOrEqual(2);
-    const optionValues = options.map((o) => o.props.value);
+    const optionValues = options.map((o) => o.value);
     expect(optionValues).toContain("plan-newer");
     expect(optionValues).toContain("plan-older");
   });

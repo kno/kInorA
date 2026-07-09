@@ -42,12 +42,11 @@ const redirect = vi.fn();
 const listPlansAction = vi.fn();
 const getPlanStatusAction = vi.fn();
 
-// Mock next/headers — page uses headers() to read Accept-Language for i18n locale resolution.
-// Return an empty Accept-Language so locale resolves to English (default).
-vi.mock("next/headers", () => ({
-  headers: vi.fn(async () => ({
-    get: (key: string) => (key === "accept-language" ? null : null),
-  })),
+// PlanPage is a server component (`getTranslations`) — see
+// `server-translator.ts` for why this is mocked rather than run for real
+// (the real next-intl/server RSC build isn't available under Vitest).
+vi.mock("next-intl/server", () => ({
+  getTranslations: async () => createServerTranslator(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -81,6 +80,7 @@ import PlanPage from "../page";
 import { PlanStatusView } from "../../plan/[id]/PlanStatusView";
 import { PlanSelector } from "../PlanSelector";
 import { PlanWeekView } from "../PlanWeekView";
+import { createServerTranslator } from "@/test-utils/server-translator";
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -232,15 +232,13 @@ describe("PlanPage — ready state (SC-18 / T4 wiring)", () => {
     expect(statusView).toBeUndefined();
   });
 
-  it("passes messages (i18n record) to PlanWeekView", async () => {
+  it("does NOT pass a messages prop to PlanWeekView (getTranslations, not loadMessages)", async () => {
     listPlansAction.mockResolvedValue({ kind: "ok", plans: summaries });
     getPlanStatusAction.mockResolvedValue({ kind: "ok", plan: readyPlan });
 
     const page = await PlanPage({ searchParams: Promise.resolve({}) });
     const weekView = findFirst(page, (el) => el.type === PlanWeekView);
-    // messages must be a non-null Record — the component needs it for i18n
-    expect(weekView?.props?.messages).toBeDefined();
-    expect(typeof weekView?.props?.messages).toBe("object");
+    expect(weekView?.props?.messages).toBeUndefined();
   });
 });
 
