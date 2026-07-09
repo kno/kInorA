@@ -19,6 +19,7 @@ import {
   StyleSheet,
   Alert,
 } from "react-native";
+import { useIntl } from "react-intl";
 import { deleteSessionToken } from "../auth/session-storage";
 import { colors, fonts, radius, spacing } from "../theme/tokens";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -28,6 +29,13 @@ type HomeScreenProps = {
 };
 
 export default function HomeScreen({ navigation }: HomeScreenProps) {
+  // First screen to consume `@kinora/i18n` directly via `useIntl()` (proof
+  // screen for change 100 slice 9, tasks 9.4.1/9.4.2) — no `messages` prop
+  // drilled in from a parent; `LocaleProvider` (mounted in App.tsx) supplies
+  // it via context.
+  const intl = useIntl();
+  const logoutLabel = intl.formatMessage({ id: "dashboard.logout" });
+
   const [planId, setPlanId] = useState(
     process.env.EXPO_PUBLIC_DEMO_PLAN_ID ?? "",
   );
@@ -90,9 +98,9 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         style={styles.logoutButton}
         onPress={handleLogout}
         accessibilityRole="button"
-        accessibilityLabel="Cerrar sesión"
+        accessibilityLabel={logoutLabel}
       >
-        <Text style={styles.logoutText}>Log out</Text>
+        <Text style={styles.logoutText}>{logoutLabel}</Text>
       </Pressable>
     </View>
   );

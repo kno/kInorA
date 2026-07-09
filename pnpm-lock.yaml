@@ -117,6 +117,9 @@ importers:
       '@kinora/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@kinora/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@react-navigation/native':
         specifier: ^7.1.14
         version: 7.3.3(react-native@0.79.5(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
@@ -138,6 +141,9 @@ importers:
       react:
         specifier: 19.0.0
         version: 19.0.0
+      react-intl:
+        specifier: ^10.1.14
+        version: 10.1.15(@types/react@19.0.14)(react@19.0.0)
       react-native:
         specifier: 0.79.5
         version: 0.79.5(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0)
@@ -154,9 +160,18 @@ importers:
       '@types/react':
         specifier: ~19.0.10
         version: 19.0.14
+      '@types/react-test-renderer':
+        specifier: 19.0.0
+        version: 19.0.0
+      react-test-renderer:
+        specifier: 19.0.0
+        version: 19.0.0(react@19.0.0)
       typescript:
         specifier: 5.8.3
         version: 5.8.3
+      use-intl:
+        specifier: ^4.13.1
+        version: 4.13.1(react@19.0.0)
       vitest:
         specifier: 3.2.4
         version: 3.2.4(@types/node@22.19.21)(jsdom@29.1.1)(lightningcss@1.27.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
@@ -1609,6 +1624,9 @@ packages:
   '@formatjs/intl-localematcher@0.8.11':
     resolution: {integrity: sha512-MzBbR9ifqgtzHwUl2PGEDtRVZGXF9nXPtrMyN6/iKbQaim1Ob7fnPJQMllVkHm3RK74o5VqnLrZIE9egWJhf5g==}
 
+  '@formatjs/intl@4.1.15':
+    resolution: {integrity: sha512-YN4CmJuqBC4CwiebhXz2EJDWXo8sdXA5WT+DbeaBaps7umJ5p5h5cVZeuhhTyVlNsPe9GkRNGKCQiBNzsbXotw==}
+
   '@google/generative-ai@0.24.1':
     resolution: {integrity: sha512-MqO+MLfM6kjxcKoy0p1wRzG3b4ZZXtPI+z2IE26UogS2Cm/XHO+7gGRBh6gcJsOiIVoH93UwKvW4HdgiOZCy9Q==}
     engines: {node: '>=18.0.0'}
@@ -2495,6 +2513,9 @@ packages:
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
     peerDependencies:
       '@types/react': ^19.2.0
+
+  '@types/react-test-renderer@19.0.0':
+    resolution: {integrity: sha512-qDVnNybqFm2eZKJ4jD34EvRd6VHD67KjgnWaEMM0Id9L22EpWe3nOSVKHWL1XWRCxUWe3lhXwlEeCKD1BlJCQA==}
 
   '@types/react@19.0.14':
     resolution: {integrity: sha512-ixLZ7zG7j1fM0DijL9hDArwhwcCb4vqmePgwtV0GfnkHRSCUEv4LvzarcTdhoqgyMznUx/EhoTUv31CKZzkQlw==}
@@ -4740,6 +4761,12 @@ packages:
     peerDependencies:
       react: '>=17.0.0'
 
+  react-intl@10.1.15:
+    resolution: {integrity: sha512-G6L7N0VM0XXmJyBSPvf9JQBd3xjkEQjYXx0UwXYn97QOhfDMhxJS7MmPh5IWJ1PnzJES3D4ewvGHP3kqiUsa2g==}
+    peerDependencies:
+      '@types/react': '>=18.0.0'
+      react: '>=18.0.0'
+
   react-is@17.0.2:
     resolution: {integrity: sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==}
 
@@ -4793,6 +4820,11 @@ packages:
   react-refresh@0.14.2:
     resolution: {integrity: sha512-jCvmsr+1IUSMUyzOkRcvnVbX3ZYC6g9TDrDbFuFmRDq7PD4yaGbLKNQL6k2jnArV8hjYxh7hVhAZB6s9HDGpZA==}
     engines: {node: '>=0.10.0'}
+
+  react-test-renderer@19.0.0:
+    resolution: {integrity: sha512-oX5u9rOQlHzqrE/64CNr0HB0uWxkCQmZNSfozlYvwE71TLVgeZxVf0IjouGEr1v7r1kcDifdAJBeOhdhxsG/DA==}
+    peerDependencies:
+      react: ^19.0.0
 
   react@19.0.0:
     resolution: {integrity: sha512-V8AVnmPIICiWpGfm6GLzCR/W5FXLchHop40W4nXBmdlEceh16rCN8O8LNWm5bh5XUX91fh7KpA+W0TgMKmgTpQ==}
@@ -7035,6 +7067,12 @@ snapshots:
     dependencies:
       '@formatjs/fast-memoize': 3.1.6
 
+  '@formatjs/intl@4.1.15':
+    dependencies:
+      '@formatjs/fast-memoize': 3.1.6
+      '@formatjs/icu-messageformat-parser': 3.5.13
+      intl-messageformat: 11.2.10
+
   '@google/generative-ai@0.24.1': {}
 
   '@img/colour@1.1.0':
@@ -7981,6 +8019,10 @@ snapshots:
   '@types/react-dom@19.2.3(@types/react@19.2.17)':
     dependencies:
       '@types/react': 19.2.17
+
+  '@types/react-test-renderer@19.0.0':
+    dependencies:
+      '@types/react': 19.0.14
 
   '@types/react@19.0.14':
     dependencies:
@@ -10325,6 +10367,14 @@ snapshots:
     dependencies:
       react: 19.0.0
 
+  react-intl@10.1.15(@types/react@19.0.14)(react@19.0.0):
+    dependencies:
+      '@formatjs/icu-messageformat-parser': 3.5.13
+      '@formatjs/intl': 4.1.15
+      '@types/react': 19.0.14
+      intl-messageformat: 11.2.10
+      react: 19.0.0
+
   react-is@17.0.2: {}
 
   react-is@18.3.1: {}
@@ -10411,6 +10461,12 @@ snapshots:
       - utf-8-validate
 
   react-refresh@0.14.2: {}
+
+  react-test-renderer@19.0.0(react@19.0.0):
+    dependencies:
+      react: 19.0.0
+      react-is: 19.2.7
+      scheduler: 0.25.0
 
   react@19.0.0: {}
 
@@ -11007,6 +11063,14 @@ snapshots:
       browserslist: 4.28.4
       escalade: 3.2.0
       picocolors: 1.1.1
+
+  use-intl@4.13.1(react@19.0.0):
+    dependencies:
+      '@formatjs/fast-memoize': 3.1.6
+      '@schummar/icu-type-parser': 1.21.5
+      icu-minify: 4.13.1
+      intl-messageformat: 11.2.10
+      react: 19.0.0
 
   use-intl@4.13.1(react@19.2.7):
     dependencies:
