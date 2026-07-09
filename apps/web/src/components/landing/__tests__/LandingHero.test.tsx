@@ -1,30 +1,27 @@
 import type { ReactElement, ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// LandingHero is a server component (`getTranslations`) — see
+// `server-translator.ts` for why this is mocked rather than run for real
+// (the real next-intl/server RSC build isn't available under Vitest).
+vi.mock("next-intl/server", () => ({
+  getTranslations: async () => createServerTranslator(),
+}));
+
+import { createServerTranslator } from "@/test-utils/server-translator";
 import { LandingHero } from "../LandingHero";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
 
 describe("LandingHero", () => {
-  const defaultMessages = {
-    hero_eyebrow: "AI Coach",
-    hero_title: "Your personal trainer, ",
-    hero_title_accent: "powered by AI",
-    hero_subtitle: "kInorA listens to you, builds your routine, and adjusts it every week.",
-    hero_cta_primary: "Start free",
-    hero_cta_secondary: "See how it works",
-    hero_meta_nocard: "No credit card required",
-    hero_meta_homegym: "Home or gym",
-    hero_meta_iosandroid: "iOS & Android",
-  };
-
-  it("renders the eyebrow label", () => {
-    const el = LandingHero({ messages: defaultMessages });
+  it("renders the eyebrow label via getTranslations, no messages.* access", async () => {
+    const el = await LandingHero();
     expect(textOf(el)).toContain("AI Coach");
   });
 
-  it("renders the heading with a real <em> accent segment (no raw HTML injection)", () => {
-    const el = LandingHero({ messages: defaultMessages });
+  it("renders the heading with a real <em> accent segment (no raw HTML injection)", async () => {
+    const el = await LandingHero();
     const heading = findFirst(el, (n) => n.type === "h1");
     expect(heading).toBeDefined();
     // No dangerouslySetInnerHTML — the accent is a real React <em> element.
@@ -36,26 +33,26 @@ describe("LandingHero", () => {
     expect(textOf(em)).toBe("powered by AI");
   });
 
-  it("renders the subtitle", () => {
-    const el = LandingHero({ messages: defaultMessages });
+  it("renders the subtitle", async () => {
+    const el = await LandingHero();
     expect(textOf(el)).toContain("kInorA listens to you");
   });
 
-  it("renders two CTA buttons", () => {
-    const el = LandingHero({ messages: defaultMessages });
+  it("renders two CTA buttons", async () => {
+    const el = await LandingHero();
     expect(textOf(el)).toContain("Start free");
     expect(textOf(el)).toContain("See how it works");
   });
 
-  it("renders meta info badges", () => {
-    const el = LandingHero({ messages: defaultMessages });
+  it("renders meta info badges", async () => {
+    const el = await LandingHero();
     expect(textOf(el)).toContain("No credit card required");
     expect(textOf(el)).toContain("Home or gym");
     expect(textOf(el)).toContain("iOS & Android");
   });
 
-  it("renders a phone mockup in the visual area", () => {
-    const el = LandingHero({ messages: defaultMessages });
+  it("renders a phone mockup in the visual area", async () => {
+    const el = await LandingHero();
     const phone = findFirst(el, (n) =>
       n.type === "div" &&
       n.props.className === "kin-landing-phone"

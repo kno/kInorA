@@ -1,45 +1,35 @@
 import type { ReactElement, ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+
+// LandingFooter is a server component (`getTranslations`) — see
+// `server-translator.ts` for why this is mocked rather than run for real
+// (the real next-intl/server RSC build isn't available under Vitest).
+vi.mock("next-intl/server", () => ({
+  getTranslations: async () => createServerTranslator(),
+}));
+
+import { createServerTranslator } from "@/test-utils/server-translator";
 import { LandingFooter } from "../LandingFooter";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
 
 describe("LandingFooter", () => {
-  const messages = {
-    footer_tagline: "The AI coach that builds your plan, adjusts it every week, and trains with you.",
-    footer_product: "Product",
-    footer_features: "Features",
-    footer_how_it_works: "How it works",
-    footer_pricing: "Pricing",
-    footer_download: "Download app",
-    footer_company: "Company",
-    footer_about: "About kInorA",
-    footer_blog: "Blog",
-    footer_careers: "Careers",
-    footer_contact: "Contact",
-    footer_legal: "Legal",
-    footer_privacy: "Privacy",
-    footer_terms: "Terms",
-    footer_cookies: "Cookies",
-    footer_copyright: "© 2026 kInorA. All rights reserved.",
-  };
-
-  it("renders the brand tagline", () => {
-    const el = LandingFooter({ messages });
+  it("renders the brand tagline via getTranslations, no messages.* access", async () => {
+    const el = await LandingFooter();
     expect(textOf(el)).toContain("The AI coach that builds your plan");
   });
 
-  it("renders the three footer column headings", () => {
-    const el = LandingFooter({ messages });
+  it("renders the three footer column headings", async () => {
+    const el = await LandingFooter();
     expect(textOf(el)).toContain("Product");
     expect(textOf(el)).toContain("Company");
     expect(textOf(el)).toContain("Legal");
   });
 
-  it("renders footer links", () => {
-    const el = LandingFooter({ messages });
+  it("renders footer links", async () => {
+    const el = await LandingFooter();
     expect(textOf(el)).toContain("Features");
     expect(textOf(el)).toContain("How it works");
     expect(textOf(el)).toContain("About kInorA");
@@ -47,22 +37,22 @@ describe("LandingFooter", () => {
     expect(textOf(el)).toContain("Terms");
   });
 
-  it("renders the copyright notice", () => {
-    const el = LandingFooter({ messages });
+  it("renders the copyright notice", async () => {
+    const el = await LandingFooter();
     expect(textOf(el)).toContain("© 2026 kInorA. All rights reserved.");
   });
 
-  it("uses shared decorative icon defaults for social links", () => {
-    const html = renderToStaticMarkup(LandingFooter({ messages }));
+  it("uses shared decorative icon defaults for social links", async () => {
+    const html = renderToStaticMarkup(await LandingFooter());
 
     const iconCount = (html.match(/focusable="false"/g) || []).length;
     expect(iconCount).toBe(4);
   });
 
-  it("brand logo uses kin-landing-nav__logo class (not kin-landing-nav__dot which breaks SVG)", () => {
+  it("brand logo uses kin-landing-nav__logo class (not kin-landing-nav__dot which breaks SVG)", async () => {
     // kin-landing-nav__dot applies background/border-radius/width/height which clobbers SVG rendering.
     // The OrbitLogoIcon should use kin-landing-nav__logo (clean SVG class) instead.
-    const html = renderToStaticMarkup(LandingFooter({ messages }));
+    const html = renderToStaticMarkup(await LandingFooter());
     expect(html).toContain("kin-landing-nav__logo");
     // The dot class must not be applied to the SVG brand mark
     expect(html).not.toContain("kin-landing-nav__dot");

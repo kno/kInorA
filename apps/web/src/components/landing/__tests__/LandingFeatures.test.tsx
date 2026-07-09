@@ -1,75 +1,56 @@
 import type { ReactElement, ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+
+// LandingFeatures is a server component (`getTranslations`) — see
+// `server-translator.ts` for why this is mocked rather than run for real
+// (the real next-intl/server RSC build isn't available under Vitest).
+vi.mock("next-intl/server", () => ({
+  getTranslations: async () => createServerTranslator(),
+}));
+
+import { createServerTranslator } from "@/test-utils/server-translator";
 import { LandingFeatures } from "../LandingFeatures";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
 
 describe("LandingFeatures", () => {
-  const messages = {
-    features_eyebrow: "Product",
-    features_title: "Everything you need, in one app",
-    features_subtitle: "The tools a personal trainer would give you.",
-    features_adaptive_title: "Adaptive plan",
-    features_adaptive_desc: "Routines that readjust each week.",
-    features_voice_title: "Voice assistant",
-    features_voice_desc: "Mark sets without touching the screen.",
-    features_tracking_title: "Live tracking",
-    features_tracking_desc: "Rest timer and set logging.",
-    features_stats_title: "Statistics",
-    features_stats_desc: "Visualize your volume and strength.",
-  };
-
-  it("renders the section heading", () => {
-    const html = renderToStaticMarkup(LandingFeatures({ messages }));
+  it("renders the section heading via getTranslations, no messages.* access", async () => {
+    const html = renderToStaticMarkup(await LandingFeatures());
     expect(html).toContain("Product");
     expect(html).toContain("Everything you need, in one app");
   });
 
-  it("renders all four feature cards", () => {
-    const el = LandingFeatures({ messages });
+  it("renders all four feature cards", async () => {
+    const el = await LandingFeatures();
     expect(textOf(el)).toContain("Adaptive plan");
     expect(textOf(el)).toContain("Voice assistant");
     expect(textOf(el)).toContain("Live tracking");
     expect(textOf(el)).toContain("Statistics");
   });
 
-  it("renders descriptions for each feature", () => {
-    const el = LandingFeatures({ messages });
-    expect(textOf(el)).toContain("Routines that readjust each week.");
-    expect(textOf(el)).toContain("Mark sets without touching the screen.");
+  it("renders descriptions for each feature", async () => {
+    const el = await LandingFeatures();
+    expect(textOf(el)).toContain("Routines that readjust each week");
+    expect(textOf(el)).toContain("Mark sets, request an exercise change");
   });
 
-  it("renders the reusable section heading as semantic header markup", () => {
-    const html = renderToStaticMarkup(LandingFeatures({ messages }));
+  it("renders the reusable section heading as semantic header markup", async () => {
+    const html = renderToStaticMarkup(await LandingFeatures());
 
     expect(html).toContain("<header");
   });
 
-  it("renders the strength-split section with eyebrow, heading, and description", () => {
-    const messages_with_strength = {
-      ...messages,
-      features_strength_eyebrow: "Real progression",
-      features_strength_title: "Every kilo lifted, recorded",
-      features_strength_desc: "kInorA tracks your loads and adjusts progression intelligently.",
-      strength_img_alt: "Chalked hands gripping a barbell before a lift",
-    };
-    const html = renderToStaticMarkup(LandingFeatures({ messages: messages_with_strength }));
+  it("renders the strength-split section with eyebrow, heading, and description", async () => {
+    const html = renderToStaticMarkup(await LandingFeatures());
     expect(html).toContain("Real progression");
     expect(html).toContain("Every kilo lifted, recorded");
-    expect(html).toContain("kInorA tracks your loads");
+    expect(html).toContain("kInorA keeps track of your loads");
   });
 
-  it("renders the strength image with alt text", () => {
-    const messages_with_strength = {
-      ...messages,
-      features_strength_eyebrow: "Real progression",
-      features_strength_title: "Every kilo lifted, recorded",
-      features_strength_desc: "Track loads intelligently.",
-      strength_img_alt: "Chalked hands gripping a barbell before a lift",
-    };
-    const html = renderToStaticMarkup(LandingFeatures({ messages: messages_with_strength }));
+  it("renders the strength image with alt text", async () => {
+    const html = renderToStaticMarkup(await LandingFeatures());
     expect(html).toContain('src="/landing/strength-1120.webp"');
     expect(html).toContain("Chalked hands gripping a barbell");
   });

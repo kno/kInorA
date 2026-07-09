@@ -1,22 +1,31 @@
 import type { ReactElement, ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { headers } from "next/headers";
+import { describe, expect, it, vi } from "vitest";
 import SignUpPage from "../page";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
 
-vi.mock("next/headers", () => ({
-  headers: vi.fn(),
+// SignUpPage is a server component (`getTranslations`) — see
+// `server-translator.ts` for why this is mocked rather than run for real
+// (the real next-intl/server RSC build isn't available under Vitest).
+// `getTranslations` is a `vi.fn` (not a plain async arrow) so the ES-locale
+// test below can override it for a single call via `mockResolvedValueOnce`.
+// `getRequestConfig` is a pass-through stub — SignUpPage still imports
+// `getFirstParam` from `@/i18n/request`, which calls `getRequestConfig` at
+// module scope for the (unrelated) default export next.config.ts consumes.
+vi.mock("next-intl/server", () => ({
+  getTranslations: vi.fn(async () => createServerTranslator()),
+  getRequestConfig: (callback: (params: unknown) => unknown) => callback,
 }));
 
-const mockedHeaders = vi.mocked(headers);
+vi.mock("../actions.js", () => ({
+  signupAction: vi.fn(),
+}));
+
+import { getTranslations } from "next-intl/server";
+import { createServerTranslator } from "@/test-utils/server-translator";
 
 describe("SignUpPage", () => {
-  beforeEach(() => {
-    mockedHeaders.mockResolvedValue(new Headers({ "accept-language": "en-US,en;q=0.9" }));
-  });
-
   it("renders an email/password form and a Google sign-up link", async () => {
     const page = await SignUpPage({ searchParams: Promise.resolve({}) });
 
@@ -62,8 +71,8 @@ describe("SignUpPage", () => {
     expect(loginLink).toBeDefined();
   });
 
-  it("renders English copy from the i18n catalog when lang=en", async () => {
-    const page = await SignUpPage({ searchParams: Promise.resolve({ lang: "en" }) });
+  it("renders English copy via getTranslations, no messages.* access", async () => {
+    const page = await SignUpPage({ searchParams: Promise.resolve({}) });
     const text = textOf(page);
 
     expect(text).toContain("Sign up");
@@ -72,8 +81,9 @@ describe("SignUpPage", () => {
     expect(text).toContain("Already have an account?");
   });
 
-  it("renders Spanish copy from the i18n catalog when lang=es", async () => {
-    const page = await SignUpPage({ searchParams: Promise.resolve({ lang: "es" }) });
+  it("renders real Spanish copy from the ES catalog (not EN leakage)", async () => {
+    vi.mocked(getTranslations).mockResolvedValueOnce(createServerTranslator("es"));
+    const page = await SignUpPage({ searchParams: Promise.resolve({}) });
     const text = textOf(page);
 
     expect(text).toContain("Crear cuenta");
