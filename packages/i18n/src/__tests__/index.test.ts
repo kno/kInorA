@@ -25,9 +25,26 @@ describe("@kinora/i18n package assembly", () => {
     expect(result.valid).toBe(true);
   });
 
-  it("the full catalog carries all 329 migrated leaf keys per locale", () => {
+  it("the full catalog carries all 352 migrated leaf keys per locale", () => {
+    // 329 web-migrated keys + 23 `mobileTracker.*` keys authored in slice 9
+    // for the mobile-unique tracker copy that has no EN/web equivalent (see
+    // 9.3.1 enumeration in tasks.md).
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(329);
+    expect(Object.keys(flat)).toHaveLength(352);
+  });
+
+  it("the mobileTracker namespace is present with EN+ES parity (9.3.3)", () => {
+    expect(catalogs.en.mobileTracker).toBeDefined();
+    expect(catalogs.es.mobileTracker).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+
+    const flat = flattenMessages(catalogs.en);
+    const mobileTrackerKeys = Object.keys(flat).filter((key) => key.startsWith("mobileTracker."));
+    expect(mobileTrackerKeys).toHaveLength(23);
+    expect(flat["mobileTracker.retry"]).toBe("Retry");
+    expect(flattenMessages(catalogs.es)["mobileTracker.retry"]).toBe("Reintentar");
   });
 
   it("flattenMessages + mergeWithBase compose over the full catalogs", () => {
