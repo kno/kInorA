@@ -68,3 +68,31 @@ describe("cross-runtime i18n parity: react-intl (mobile) vs next-intl's engine (
     expect(mobile).toBe("Reintentar");
   });
 });
+
+describe("10.3: plural parity with web (both ICU branches, second shared plural key)", () => {
+  it("selects the SAME branch as web for count=1 (one) and count=3 (other) — tracker.timeline.meta.done", () => {
+    for (const n of [1, 3]) {
+      const mobile = mobileRender("en", "tracker.timeline.meta.done", { n });
+      const web = webRender("en", "tracker.timeline.meta.done", { n });
+      expect(mobile).toBe(web);
+    }
+
+    expect(mobileRender("en", "tracker.timeline.meta.done", { n: 1 })).toBe("1 set · completed");
+    expect(mobileRender("en", "tracker.timeline.meta.done", { n: 3 })).toBe("3 sets · completed");
+  });
+
+  it("holds the same parity in es", () => {
+    for (const n of [1, 3]) {
+      const mobile = mobileRender("es", "tracker.timeline.meta.done", { n });
+      const web = webRender("es", "tracker.timeline.meta.done", { n });
+      expect(mobile).toBe(web);
+    }
+
+    expect(mobileRender("es", "tracker.timeline.meta.done", { n: 1 })).toBe(
+      "1 serie · completado",
+    );
+    expect(mobileRender("es", "tracker.timeline.meta.done", { n: 3 })).toBe(
+      "3 series · completado",
+    );
+  });
+});
