@@ -1,17 +1,17 @@
+import { useTranslations } from "next-intl";
 import type { SessionExerciseRecord } from "@kinora/contracts";
-import type { Translate } from "./tracker-model";
 import styles from "../TrackerPanel.module.css";
 
 interface NextExercisePreviewProps {
-  t: Translate;
   nextExercise?: SessionExerciseRecord;
 }
 
 /** "Up next" preview derived from the next exercise in the session. */
-export function NextExercisePreview({ t, nextExercise }: NextExercisePreviewProps) {
+export function NextExercisePreview({ nextExercise }: NextExercisePreviewProps) {
+  const t = useTranslations("tracker");
   return (
     <section className={`${styles.card} ${styles.nextCard}`}>
-      <h3>{t("tracker_next_heading", "Up next")}</h3>
+      <h3>{t("next.heading")}</h3>
       {nextExercise ? (
         <div className={styles.nextExercise}>
           <div className={styles.nextIcon} aria-hidden="true">
@@ -32,15 +32,12 @@ export function NextExercisePreview({ t, nextExercise }: NextExercisePreviewProp
           <div>
             <p className={styles.nextName}>{nextExercise.title}</p>
             <p className={styles.nextDetail}>
-              {t("tracker_next_sets", "{n} sets").replace(
-                "{n}",
-                String(nextExercise.setRecords.length),
-              )}
+              {t("next.sets", { n: nextExercise.setRecords.length })}
             </p>
           </div>
         </div>
       ) : (
-        <p className={styles.nextEmpty}>{t("tracker_next_empty", "Last exercise of the session.")}</p>
+        <p className={styles.nextEmpty}>{t("next.empty")}</p>
       )}
     </section>
   );

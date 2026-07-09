@@ -1,8 +1,8 @@
-import type { ExerciseState, Translate } from "./tracker-model";
+import { useTranslations } from "next-intl";
+import type { ExerciseState } from "./tracker-model";
 import styles from "../TrackerPanel.module.css";
 
 interface SessionProgressProps {
-  t: Translate;
   segments: Array<{ id: string; state: ExerciseState }>;
   percent: number;
   completedSets: number;
@@ -13,7 +13,6 @@ interface SessionProgressProps {
 
 /** Segmented progress bar: one segment per exercise (done/active/pending). */
 export function SessionProgress({
-  t,
   segments,
   percent,
   completedSets,
@@ -21,19 +20,19 @@ export function SessionProgress({
   currentExerciseNumber,
   totalExercises,
 }: SessionProgressProps) {
-  const label = t("tracker_progress_label", "Exercise {n} of {m}")
-    .replace("{n}", String(currentExerciseNumber))
-    .replace("{m}", String(totalExercises));
+  const t = useTranslations("tracker");
+  const label = t("progress.label", { n: currentExerciseNumber, m: totalExercises });
 
   // The numeric range on the progressbar is sets-based (completed/total sets),
   // so give AT a coherent spoken value that matches the exercise-based label.
-  const valueText = t("tracker_progress_valuetext", "Exercise {n} of {m}, {percent}%")
-    .replace("{n}", String(currentExerciseNumber))
-    .replace("{m}", String(totalExercises))
-    .replace("{percent}", String(percent));
+  const valueText = t("progress.valuetext", {
+    n: currentExerciseNumber,
+    m: totalExercises,
+    percent,
+  });
 
   return (
-    <section className={styles.progressCard} aria-label={t("tracker_progress_aria", "Session progress")}>
+    <section className={styles.progressCard} aria-label={t("progress.aria")}>
       <div className={styles.progressHead}>
         <strong>{label}</strong>
         <span className={styles.progressPct}>{percent}%</span>

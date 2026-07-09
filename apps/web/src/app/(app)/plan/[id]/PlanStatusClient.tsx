@@ -140,7 +140,6 @@ export function PlanStatusClient({
         )}
         <TrackerPanel
           session={activeSession}
-          messages={messages as Record<string, string> | undefined}
           onRecordSet={handleRecordSet}
           onCompleteSession={handleCompleteWorkout}
         />

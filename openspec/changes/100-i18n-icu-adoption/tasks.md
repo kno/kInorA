@@ -163,24 +163,24 @@ Closures, Server+Client Component Access) for the shared tracker surface.
 parent call-sites atomically or type-check breaks mid-slice.
 
 ### Phase 4.1: Test-First Per Component
-- [ ] 4.1.1 [RED] For `TrackerPanel`, `TrackerTopbar`, `SessionProgress`, `ExerciseCard`, `RestRing`, `NextExercisePreview`, `Timeline`, `PerformanceRail`: extend/write render tests asserting each uses `useTranslations`/`useFormatter` (not the old local `t(key,fallback)` closure or `.replace()`), covering plural (`tracker.next.sets`, `tracker.timeline.meta.done/pending`) and interpolation (`tracker.progress.label`, `tracker.rest.srActive`, `tracker.tracking.day`, `tracker.target.pill`).
-- [ ] 4.1.2 [GREEN] Migrate `TrackerPanel` — drop the `messages` prop it currently receives from both parents; consume `useTranslations` directly.
-- [ ] 4.1.3 [GREEN] Migrate `TrackerTopbar`.
-- [ ] 4.1.4 [GREEN] Migrate `SessionProgress`.
-- [ ] 4.1.5 [GREEN] Migrate `ExerciseCard`.
-- [ ] 4.1.6 [GREEN] Migrate `RestRing` (covers `tracker.rest.srActive {time}`).
-- [ ] 4.1.7 [GREEN] Migrate `NextExercisePreview`.
-- [ ] 4.1.8 [GREEN] Migrate `Timeline` (covers `tracker.timeline.meta.done/pending {n}` plural).
-- [ ] 4.1.9 [GREEN] Migrate `PerformanceRail`.
+- [x] 4.1.1 [RED] For `TrackerPanel`, `TrackerTopbar`, `SessionProgress`, `ExerciseCard`, `RestRing`, `NextExercisePreview`, `Timeline`, `PerformanceRail`: extend/write render tests asserting each uses `useTranslations`/`useFormatter` (not the old local `t(key,fallback)` closure or `.replace()`), covering plural (`tracker.next.sets`, `tracker.timeline.meta.done/pending`) and interpolation (`tracker.progress.label`, `tracker.rest.srActive`, `tracker.tracking.day`, `tracker.target.pill`).
+- [x] 4.1.2 [GREEN] Migrate `TrackerPanel` — drop the `messages` prop it currently receives from both parents; consume `useTranslations` directly.
+- [x] 4.1.3 [GREEN] Migrate `TrackerTopbar`.
+- [x] 4.1.4 [GREEN] Migrate `SessionProgress`.
+- [x] 4.1.5 [GREEN] Migrate `ExerciseCard`.
+- [x] 4.1.6 [GREEN] Migrate `RestRing` (covers `tracker.rest.srActive {time}`).
+- [x] 4.1.7 [GREEN] Migrate `NextExercisePreview`.
+- [x] 4.1.8 [GREEN] Migrate `Timeline` (covers `tracker.timeline.meta.done/pending {n}` plural).
+- [x] 4.1.9 [GREEN] Migrate `PerformanceRail`.
 
 ### Phase 4.2: Drop `Translate` Type + Fix Both Parents
-- [ ] 4.2.1 [GREEN] Remove the `Translate` type from `tracker-model.ts` — no longer needed once components self-consume `useTranslations`.
-- [ ] 4.2.2 [GREEN] Edit `PlanTrackerClient` to stop passing `messages` to `TrackerPanel` (it keeps its OWN `messages`/`t` for its own remaining local usages until slice 5 migrates it fully).
-- [ ] 4.2.3 [GREEN] Edit `PlanStatusClient` to stop passing `messages` to `TrackerPanel` (same pattern as 4.2.2).
+- [x] 4.2.1 [GREEN] Remove the `Translate` type from `tracker-model.ts` — no longer needed once components self-consume `useTranslations`.
+- [x] 4.2.2 [GREEN] Edit `PlanTrackerClient` to stop passing `messages` to `TrackerPanel` (it keeps its OWN `messages`/`t` for its own remaining local usages until slice 5 migrates it fully).
+- [x] 4.2.3 [GREEN] Edit `PlanStatusClient` to stop passing `messages` to `TrackerPanel` (same pattern as 4.2.2).
 
 ### Phase 4.3: Cluster Verification
-- [ ] 4.3.1 Grep-verify zero remaining `.replace()`/local `t(key,fallback)` closures across the 8 migrated tracker files + `tracker-model.ts`.
-- [ ] 4.3.2 `pnpm test` — full suite green; confirm both `PlanTrackerClient` and `PlanStatusClient` still type-check with the dropped `messages`-to-`TrackerPanel` prop.
+- [x] 4.3.1 Grep-verify zero remaining `.replace()`/local `t(key,fallback)` closures across the 8 migrated tracker files + `tracker-model.ts`.
+- [x] 4.3.2 `pnpm test` — full suite green; confirm both `PlanTrackerClient` and `PlanStatusClient` still type-check with the dropped `messages`-to-`TrackerPanel` prop.
 
 ---
 
