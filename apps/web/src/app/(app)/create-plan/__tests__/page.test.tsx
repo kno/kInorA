@@ -7,14 +7,18 @@ type AnyElement = ReactElement<AnyProps>;
 
 const cookieGet = vi.fn();
 const loadCurrentDraft = vi.fn();
+const getTranslations = vi.fn();
 
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({ get: cookieGet })),
-  headers: vi.fn(async () => ({ get: () => null })),
 }));
 
-/** Minimal searchParams stub — the page resolves i18n from `?lang=`. */
-const noSearchParams = Promise.resolve({});
+// CreatePlanPage is a server component (`getTranslations`) — see
+// `server-translator.ts` for why this is mocked rather than run for real
+// (the real next-intl/server RSC build isn't available under Vitest).
+vi.mock("next-intl/server", () => ({
+  getTranslations: (...args: unknown[]) => getTranslations(...args),
+}));
 
 vi.mock("../actions", () => ({
   saveDraftAction: vi.fn(),
@@ -41,28 +45,45 @@ afterEach(() => {
 });
 
 describe("CreatePlanPage", () => {
+  it("resolves copy server-side via next-intl's getTranslations (not resolvePageI18n)", async () => {
+    cookieGet.mockReturnValue({ value: "tok-1" });
+    loadCurrentDraft.mockResolvedValue(null);
+    getTranslations.mockResolvedValue(() => "");
+
+    await CreatePlanPage();
+
+    expect(getTranslations).toHaveBeenCalled();
+  });
+
+  it("does NOT thread a messages prop to StepperShell", async () => {
+    cookieGet.mockReturnValue({ value: "tok-1" });
+    loadCurrentDraft.mockResolvedValue(null);
+    getTranslations.mockResolvedValue(() => "");
+
+    const page = (await CreatePlanPage()) as AnyElement;
+
+    expect(page.props.messages).toBeUndefined();
+  });
+
   it("hydrates the stepper with the current server draft when one exists", async () => {
     cookieGet.mockReturnValue({ value: "tok-1" });
     loadCurrentDraft.mockResolvedValue({ step: 3, spec: { goal: "strength" } });
+    getTranslations.mockResolvedValue(() => "");
 
-    const page = (await CreatePlanPage({
-      searchParams: noSearchParams,
-    })) as AnyElement;
+    const page = (await CreatePlanPage()) as AnyElement;
 
     expect(loadCurrentDraft).toHaveBeenCalledWith("tok-1");
     expect(page.props.initialDraft).toEqual({ step: 3, spec: { goal: "strength" } });
     expect(page.props.saveDraftAction).toBeDefined();
     expect(page.props.confirmPlanSpecAction).toBeDefined();
-    expect(page.props.messages).toBeDefined();
   });
 
   it("starts the stepper with no draft when the API has none", async () => {
     cookieGet.mockReturnValue({ value: "tok-2" });
     loadCurrentDraft.mockResolvedValue(null);
+    getTranslations.mockResolvedValue(() => "");
 
-    const page = (await CreatePlanPage({
-      searchParams: noSearchParams,
-    })) as AnyElement;
+    const page = (await CreatePlanPage()) as AnyElement;
 
     expect(page.props.initialDraft).toBeUndefined();
   });
@@ -70,8 +91,9 @@ describe("CreatePlanPage", () => {
   it("passes an undefined token when no session cookie is present", async () => {
     cookieGet.mockReturnValue(undefined);
     loadCurrentDraft.mockResolvedValue(null);
+    getTranslations.mockResolvedValue(() => "");
 
-    await CreatePlanPage({ searchParams: noSearchParams });
+    await CreatePlanPage();
 
     expect(loadCurrentDraft).toHaveBeenCalledWith(undefined);
   });
