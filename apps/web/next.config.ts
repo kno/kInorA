@@ -34,9 +34,8 @@ const withSerwist = withSerwistInit({
   disable: process.env.NODE_ENV === "development",
 });
 
-// Points next-intl at the SAME `src/i18n/request.ts` that also still exports
-// `getFirstParam`/`resolvePageI18n` — those stay live until later slices
-// migrate their call-sites.
+// Points next-intl at `src/i18n/request.ts`, which hosts `getRequestConfig`
+// (the next-intl entry point) alongside the still-used `getFirstParam` helper.
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
