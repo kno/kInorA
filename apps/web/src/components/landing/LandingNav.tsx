@@ -1,20 +1,23 @@
+import { getTranslations } from "next-intl/server";
 import { LandingNavClient } from "./LandingNavClient";
 
-export function LandingNav({ messages }: { messages: Record<string, string> }) {
+export async function LandingNav() {
+  const t = await getTranslations();
+
   const links = [
-    { href: "#producto", label: messages.nav_products ?? "" },
-    { href: "#como", label: messages.nav_how_it_works ?? "" },
-    { href: "#precios", label: messages.nav_pricing ?? "" },
+    { href: "#producto", label: t("nav.products") },
+    { href: "#como", label: t("nav.howItWorks") },
+    { href: "#precios", label: t("nav.pricing") },
   ];
 
   return (
     <LandingNavClient
-      brandLabel={messages.title ?? "kInorA"}
+      brandLabel={t("marketing.title")}
       links={links}
-      loginLabel={messages.nav_login ?? ""}
-      signupLabel={messages.nav_signup ?? ""}
-      menuAriaLabel={messages.nav_menu_label ?? "Abrir menú"}
-      navAriaLabel={messages.nav_aria_label ?? "Principal"}
+      loginLabel={t("nav.login")}
+      signupLabel={t("nav.signup")}
+      menuAriaLabel={t("nav.menuLabel")}
+      navAriaLabel={t("nav.ariaLabel")}
     />
   );
 }

@@ -1,29 +1,32 @@
+import { getTranslations } from "next-intl/server";
 import type { KinIconName } from "@/components/icons";
 import { KinIcon } from "@/components/icons";
 import { OrbitCard, OrbitSectionHeader } from "@/components/orbit";
 import { Reveal } from "./Reveal";
 
-export function LandingFeatures({ messages }: { messages: Record<string, string> }) {
+export async function LandingFeatures() {
+  const t = await getTranslations();
+
   const features = [
     {
       icon: "clock" as KinIconName,
-      title: messages.features_adaptive_title,
-      desc: messages.features_adaptive_desc,
+      title: t("features.adaptive.title"),
+      desc: t("features.adaptive.desc"),
     },
     {
       icon: "mic" as KinIconName,
-      title: messages.features_voice_title,
-      desc: messages.features_voice_desc,
+      title: t("features.voice.title"),
+      desc: t("features.voice.desc"),
     },
     {
       icon: "target" as KinIconName,
-      title: messages.features_tracking_title,
-      desc: messages.features_tracking_desc,
+      title: t("features.tracking.title"),
+      desc: t("features.tracking.desc"),
     },
     {
       icon: "stats" as KinIconName,
-      title: messages.features_stats_title,
-      desc: messages.features_stats_desc,
+      title: t("features.stats.title"),
+      desc: t("features.stats.desc"),
     },
   ];
 
@@ -31,7 +34,7 @@ export function LandingFeatures({ messages }: { messages: Record<string, string>
     <section className="kin-landing-section kin-landing-section--no-top">
       <div className="kin-landing-wrap">
         <Reveal>
-          <OrbitSectionHeader className="kin-landing-head" eyebrow={messages.features_eyebrow ?? ""} title={messages.features_title ?? ""} description={messages.features_subtitle ?? ""} />
+          <OrbitSectionHeader className="kin-landing-head" eyebrow={t("features.eyebrow")} title={t("features.title")} description={t("features.subtitle")} />
         </Reveal>
         <div className="kin-landing-features">
           {features.map((f) => (
@@ -50,9 +53,9 @@ export function LandingFeatures({ messages }: { messages: Record<string, string>
           <div>
             <OrbitSectionHeader
               className="kin-landing-head"
-              eyebrow={messages.features_strength_eyebrow ?? ""}
-              title={messages.features_strength_title ?? ""}
-              description={messages.features_strength_desc ?? ""}
+              eyebrow={t("features.strength.eyebrow")}
+              title={t("features.strength.title")}
+              description={t("features.strength.desc")}
             />
           </div>
           <div className="kin-landing-strength-img">
@@ -61,7 +64,7 @@ export function LandingFeatures({ messages }: { messages: Record<string, string>
               <source media="(max-width: 760px)" srcSet="/landing/strength-640.webp" width={640} height={800} />
               <img
                 src="/landing/strength-1120.webp"
-                alt={messages.strength_img_alt ?? "Manos con magnesio sujetando una barra de pesas antes de un levantamiento, listos para ejecutar el movimiento"}
+                alt={t("marketing.strengthImgAlt")}
                 loading="lazy"
                 decoding="async"
                 width={1120}

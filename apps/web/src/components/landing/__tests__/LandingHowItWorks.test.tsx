@@ -1,40 +1,37 @@
 import type { ReactElement, ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+
+// LandingHowItWorks is a server component (`getTranslations`) — see
+// `server-translator.ts` for why this is mocked rather than run for real
+// (the real next-intl/server RSC build isn't available under Vitest).
+vi.mock("next-intl/server", () => ({
+  getTranslations: async () => createServerTranslator(),
+}));
+
+import { createServerTranslator } from "@/test-utils/server-translator";
 import { LandingHowItWorks } from "../LandingHowItWorks";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
 
 describe("LandingHowItWorks", () => {
-  const messages = {
-    hiw_eyebrow: "How it works",
-    hiw_title: "From your goal to your routine in three steps",
-    hiw_subtitle: "No generic templates.",
-    hiw_step1_title: "Tell it your goal",
-    hiw_step1_desc: "Speak or type: gain strength, lose fat, run farther.",
-    hiw_step2_title: "AI builds your plan",
-    hiw_step2_desc: "In seconds you get a weekly routine.",
-    hiw_step3_title: "Train and improve every week",
-    hiw_step3_desc: "Log your sessions and the AI adjusts loads.",
-  };
-
-  it("renders the section heading", () => {
-    const html = renderToStaticMarkup(LandingHowItWorks({ messages }));
+  it("renders the section heading via getTranslations, no messages.* access", async () => {
+    const html = renderToStaticMarkup(await LandingHowItWorks());
     expect(html).toContain("How it works");
     expect(html).toContain("From your goal to your routine in three steps");
   });
 
-  it("renders three steps with titles and descriptions", () => {
-    const el = LandingHowItWorks({ messages });
+  it("renders three steps with titles and descriptions", async () => {
+    const el = await LandingHowItWorks();
     expect(textOf(el)).toContain("Tell it your goal");
-    expect(textOf(el)).toContain("Speak or type: gain strength, lose fat, run farther.");
+    expect(textOf(el)).toContain("The AI learns your level, availability, and equipment.");
     expect(textOf(el)).toContain("AI builds your plan");
     expect(textOf(el)).toContain("Train and improve every week");
   });
 
-  it("renders the reusable section heading as semantic header markup", () => {
-    const html = renderToStaticMarkup(LandingHowItWorks({ messages }));
+  it("renders the reusable section heading as semantic header markup", async () => {
+    const html = renderToStaticMarkup(await LandingHowItWorks());
 
     expect(html).toContain("<header");
   });

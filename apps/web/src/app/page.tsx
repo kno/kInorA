@@ -1,6 +1,4 @@
-import { resolveLocale, loadMessages } from "@/i18n/locale";
-import { headers } from "next/headers";
-import type { SupportedLocale } from "@/i18n/locale";
+import { getTranslations } from "next-intl/server";
 import { LandingNav } from "@/components/landing/LandingNav";
 import { LandingHero } from "@/components/landing/LandingHero";
 import { LandingTrust } from "@/components/landing/LandingTrust";
@@ -12,43 +10,37 @@ import { LandingCTA } from "@/components/landing/LandingCTA";
 import { LandingFooter } from "@/components/landing/LandingFooter";
 import { LandingCinemaBand } from "@/components/landing/LandingCinemaBand";
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ lang?: string | string[] }>;
-}) {
-  const params = await searchParams;
-  const langParam =
-    typeof params.lang === "string"
-      ? params.lang
-      : Array.isArray(params.lang)
-        ? params.lang[0] ?? null
-        : null;
-
-  const requestHeaders = await headers();
-  const acceptLanguage = requestHeaders.get("accept-language");
-
-  const locale: SupportedLocale = resolveLocale(acceptLanguage, langParam);
-  const messages = loadMessages(locale);
+/**
+ * Landing page — user-facing copy comes from next-intl (see
+ * `@/i18n/request`), whose locale is resolved from the `?lang=` query
+ * parameter (via the `x-kinora-lang` header injected by `proxy.ts`) or the
+ * `Accept-Language` header. Each section component consumes its own
+ * translations directly (no `messages` prop threading) EXCEPT
+ * `LandingCinemaBand`/`LandingTrust`, which receive already-resolved
+ * strings/arrays as props and are not migrated (see `LandingNav.tsx` and
+ * friends for the per-component migration).
+ */
+export default async function HomePage() {
+  const t = await getTranslations();
 
   const trustItems: TrustItem[] = [
-    { icon: "clock", title: messages.trust_title ?? "", desc: messages.trust_desc_schedule ?? "" },
-    { icon: "chart", title: messages.trust_title_level ?? "", desc: messages.trust_desc_level ?? "" },
-    { icon: "checkbox", title: messages.trust_title_equipment ?? "", desc: messages.trust_desc_equipment ?? "" },
-    { icon: "mic", title: messages.trust_title_hands ?? "", desc: messages.trust_desc_hands ?? "" },
+    { icon: "clock", title: t("trust.schedule.title"), desc: t("trust.schedule.desc") },
+    { icon: "chart", title: t("trust.level.title"), desc: t("trust.level.desc") },
+    { icon: "checkbox", title: t("trust.equipment.title"), desc: t("trust.equipment.desc") },
+    { icon: "mic", title: t("trust.hands.title"), desc: t("trust.hands.desc") },
   ];
 
   return (
     <main>
-      <LandingNav messages={messages} />
-      <LandingHero messages={messages} />
-      <LandingCinemaBand alt={messages.cinema_alt ?? "Atleta tomando un descanso activo"} />
+      <LandingNav />
+      <LandingHero />
+      <LandingCinemaBand alt={t("marketing.cinemaAlt")} />
       <LandingTrust items={trustItems} />
-      <LandingHowItWorks messages={messages} />
-      <LandingFeatures messages={messages} />
-      <LandingPricing messages={messages} />
-      <LandingCTA messages={messages} />
-      <LandingFooter messages={messages} />
+      <LandingHowItWorks />
+      <LandingFeatures />
+      <LandingPricing />
+      <LandingCTA />
+      <LandingFooter />
     </main>
   );
 }

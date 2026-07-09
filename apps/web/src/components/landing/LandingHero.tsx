@@ -1,16 +1,19 @@
+import { getTranslations } from "next-intl/server";
 import { KinIcon } from "@/components/icons";
 import { OrbitProgress } from "@/components/orbit";
 import { Reveal } from "./Reveal";
 
-export function LandingHero({ messages }: { messages: Record<string, string> }) {
+export async function LandingHero() {
+  const t = await getTranslations();
+
   const days = [
-    { key: "mon", label: messages.phone_day_mon ?? "L", active: true },
-    { key: "tue", label: messages.phone_day_tue ?? "M", active: true },
-    { key: "wed", label: messages.phone_day_wed ?? "X", active: false },
-    { key: "thu", label: messages.phone_day_thu ?? "J", active: true },
-    { key: "fri", label: messages.phone_day_fri ?? "V", active: false, today: true },
-    { key: "sat", label: messages.phone_day_sat ?? "S", active: false },
-    { key: "sun", label: messages.phone_day_sun ?? "D", active: false },
+    { key: "mon", label: t("phone.day.mon"), active: true },
+    { key: "tue", label: t("phone.day.tue"), active: true },
+    { key: "wed", label: t("phone.day.wed"), active: false },
+    { key: "thu", label: t("phone.day.thu"), active: true },
+    { key: "fri", label: t("phone.day.fri"), active: false, today: true },
+    { key: "sat", label: t("phone.day.sat"), active: false },
+    { key: "sun", label: t("phone.day.sun"), active: false },
   ];
 
   return (
@@ -19,34 +22,34 @@ export function LandingHero({ messages }: { messages: Record<string, string> }) 
         <Reveal className="hero-copy">
           <span className="kin-landing-head__eyebrow">
             <KinIcon name="target" size={14} />
-            {messages.hero_eyebrow}
+            {t("hero.eyebrow")}
           </span>
           <h1>
-            {messages.hero_title}
-            <em>{messages.hero_title_accent}</em>
+            {t("hero.title")}
+            <em>{t("hero.titleAccent")}</em>
           </h1>
-          <p className="kin-landing-hero__sub">{messages.hero_subtitle}</p>
+          <p className="kin-landing-hero__sub">{t("hero.subtitle")}</p>
           <div className="kin-landing-hero__cta">
             <a className="kin-btn kin-btn--accent" href="/sign-up">
-              {messages.hero_cta_primary}
+              {t("hero.cta.primary")}
             </a>
             <a className="kin-btn kin-btn--ghost" href="#como">
               <KinIcon name="play" size={18} />
-              {messages.hero_cta_secondary}
+              {t("hero.cta.secondary")}
             </a>
           </div>
           <div className="kin-landing-hero__meta">
             <span>
               <KinIcon name="check" size={16} />
-              {messages.hero_meta_nocard}
+              {t("hero.meta.nocard")}
             </span>
             <span>
               <KinIcon name="check" size={16} />
-              {messages.hero_meta_homegym}
+              {t("hero.meta.homegym")}
             </span>
             <span>
               <KinIcon name="check" size={16} />
-              {messages.hero_meta_iosandroid}
+              {t("hero.meta.iosandroid")}
             </span>
           </div>
         </Reveal>
@@ -56,7 +59,7 @@ export function LandingHero({ messages }: { messages: Record<string, string> }) 
           <div
             className="kin-landing-phone"
             role="img"
-            aria-label={messages.phone_aria_label ?? "Vista previa de la app kInorA mostrando el entreno del día, la racha semanal y el progreso"}
+            aria-label={t("phone.ariaLabel")}
           >
             <div className="kin-landing-phone__screen">
               <div className="kin-landing-phone__top">
@@ -65,12 +68,12 @@ export function LandingHero({ messages }: { messages: Record<string, string> }) 
                     <KinIcon name="target" size={18} />
                   </span>
                   <div>
-                    <div className="kin-landing-phone__label">{messages.phone_coach_label ?? "Coach kInorA"}</div>
-                    <div className="kin-landing-phone__name">{messages.phone_day_label ?? "Día 4 · Fuerza"}</div>
+                    <div className="kin-landing-phone__label">{t("phone.coachLabel")}</div>
+                    <div className="kin-landing-phone__name">{t("phone.dayLabel")}</div>
                   </div>
                 </div>
                 <span className="kin-landing-pill kin-landing-pill--active">
-                  {messages.phone_pill_active ?? "En curso"}
+                  {t("phone.pillActive")}
                 </span>
               </div>
 
@@ -79,39 +82,39 @@ export function LandingHero({ messages }: { messages: Record<string, string> }) 
                   <OrbitProgress value={72} max={100} size={76} showPercent />
                 </div>
                 <div className="kin-landing-phone__ring-meta">
-                  <div className="kin-landing-phone__ring-h">{messages.phone_ring_goal_label ?? "Objetivo semanal"}</div>
-                  <div className="kin-landing-phone__ring-v">{messages.phone_ring_goal_value ?? "3 de 4 sesiones"}</div>
+                  <div className="kin-landing-phone__ring-h">{t("phone.ringGoalLabel")}</div>
+                  <div className="kin-landing-phone__ring-v">{t("phone.ringGoalValue")}</div>
                 </div>
               </div>
 
               <div className="kin-landing-phone__workout">
                 <div className="kin-landing-phone__work-head">
-                  <span className="kin-landing-phone__work-t">{messages.phone_workout_today ?? "Entreno de hoy"}</span>
-                  <span className="kin-landing-phone__work-dur">{messages.phone_workout_duration ?? "42 min"}</span>
+                  <span className="kin-landing-phone__work-t">{t("phone.workoutToday")}</span>
+                  <span className="kin-landing-phone__work-dur">{t("phone.workoutDuration")}</span>
                 </div>
                 <div className="kin-landing-phone__ex-row kin-landing-phone__ex-row--done">
                   <span className="kin-landing-phone__ex-check">
                     <KinIcon name="check" size={13} />
                   </span>
-                  <span className="kin-landing-phone__ex-name">{messages.phone_ex1_name ?? "Sentadilla con barra"}</span>
-                  <span className="kin-landing-phone__ex-set">{messages.phone_ex1_set ?? "4 × 8"}</span>
+                  <span className="kin-landing-phone__ex-name">{t("phone.ex1.name")}</span>
+                  <span className="kin-landing-phone__ex-set">{t("phone.ex1.set")}</span>
                 </div>
                 <div className="kin-landing-phone__ex-row kin-landing-phone__ex-row--done">
                   <span className="kin-landing-phone__ex-check">
                     <KinIcon name="check" size={13} />
                   </span>
-                  <span className="kin-landing-phone__ex-name">{messages.phone_ex2_name ?? "Press de banca"}</span>
-                  <span className="kin-landing-phone__ex-set">{messages.phone_ex2_set ?? "4 × 10"}</span>
+                  <span className="kin-landing-phone__ex-name">{t("phone.ex2.name")}</span>
+                  <span className="kin-landing-phone__ex-set">{t("phone.ex2.set")}</span>
                 </div>
                 <div className="kin-landing-phone__ex-row">
                   <span className="kin-landing-phone__ex-check"></span>
-                  <span className="kin-landing-phone__ex-name">{messages.phone_ex3_name ?? "Remo con mancuerna"}</span>
-                  <span className="kin-landing-phone__ex-set">{messages.phone_ex3_set ?? "3 × 12"}</span>
+                  <span className="kin-landing-phone__ex-name">{t("phone.ex3.name")}</span>
+                  <span className="kin-landing-phone__ex-set">{t("phone.ex3.set")}</span>
                 </div>
               </div>
 
               <div className="kin-landing-streak">
-                <span className="kin-landing-streak__label">{messages.phone_streak_label ?? "Racha"}</span>
+                <span className="kin-landing-streak__label">{t("phone.streakLabel")}</span>
                 {days.map((d) => (
                   <span
                     key={d.key}

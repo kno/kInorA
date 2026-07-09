@@ -1,6 +1,9 @@
+import { getTranslations } from "next-intl/server";
 import { Reveal } from "./Reveal";
 
-export function LandingCTA({ messages }: { messages: Record<string, string> }) {
+export async function LandingCTA() {
+  const t = await getTranslations();
+
   return (
     <section className="kin-landing-section">
       <div className="kin-landing-wrap">
@@ -13,14 +16,14 @@ export function LandingCTA({ messages }: { messages: Record<string, string> }) {
             </picture>
           </div>
           <div className="kin-landing-cta-overlay">
-            <h2>{messages.cta_title ?? ""}</h2>
-            <p>{messages.cta_subtitle ?? ""}</p>
+            <h2>{t("cta.title")}</h2>
+            <p>{t("cta.subtitle")}</p>
             <div className="kin-landing-hero__cta">
               <a className="kin-btn kin-btn--accent" href="/sign-up">
-                {messages.cta_primary}
+                {t("cta.primary")}
               </a>
               <a className="kin-btn kin-btn--ghost" href="#precios" style={{ borderColor: "var(--border)" }}>
-                {messages.cta_secondary}
+                {t("cta.secondary")}
               </a>
             </div>
           </div>
