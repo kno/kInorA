@@ -7,8 +7,8 @@
  * full production catalog (325 leaf keys, migrated from
  * `apps/web/src/i18n/messages/{en,es}.json`) without changing this surface.
  */
-import en from "./messages/en.json";
-import es from "./messages/es.json";
+import en from "./messages/en.json" with { type: "json" };
+import es from "./messages/es.json" with { type: "json" };
 
 export { flattenMessages } from "./flatten.js";
 export type { NestedMessages } from "./flatten.js";

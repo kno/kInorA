@@ -13,8 +13,10 @@
   "dependencies": {
     "@kinora/contracts": "workspace:*",
     "@kinora/domain": "workspace:*",
+    "@kinora/i18n": "workspace:*",
     "@serwist/next": "9.5.11",
     "next": "16.2.9",
+    "next-intl": "^4.13.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "server-only": "^0.0.1",
