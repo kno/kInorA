@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import withSerwistInit from "@serwist/next";
+import createNextIntlPlugin from "next-intl/plugin";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -33,6 +34,11 @@ const withSerwist = withSerwistInit({
   disable: process.env.NODE_ENV === "development",
 });
 
+// Points next-intl at the SAME `src/i18n/request.ts` that also still exports
+// `getFirstParam`/`resolvePageI18n` — those stay live until later slices
+// migrate their call-sites.
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
+
 const nextConfig: NextConfig = {
   // Next.js 16 defaults to Turbopack. @serwist/next injects a webpack config
   // (used only for the production SW build, since Serwist is disabled in dev),
@@ -49,4 +55,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSerwist(nextConfig);
+export default withNextIntl(withSerwist(nextConfig));
