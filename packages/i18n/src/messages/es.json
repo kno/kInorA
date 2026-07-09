@@ -1,0 +1,20 @@
+{
+  "nav": {
+    "home": "Inicio",
+    "about": "Acerca de"
+  },
+  "hero": {
+    "title": "Bienvenido a Kinora",
+    "greeting": "¡Hola, {name}!"
+  },
+  "wizard": {
+    "frequency": {
+      "days": "{n, plural, one {# día por semana} other {# días por semana}}"
+    }
+  },
+  "plan": {
+    "selector": {
+      "option": "{status, select, ready {Listo} generating {Generando} failed {Fallido} other {Desconocido}}"
+    }
+  }
+}
