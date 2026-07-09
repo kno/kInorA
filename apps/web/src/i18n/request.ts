@@ -5,9 +5,17 @@
  *  - `getFirstParam`   — normalises a string | string[] | undefined query param to string | null
  *  - `resolvePageI18n` — reads the incoming request headers, resolves the
  *                        locale, and loads the message catalogue in one step.
+ *
+ * This file is ALSO the target of `createNextIntlPlugin` (see
+ * `next.config.ts`) via its default export — `getRequestConfig` below wires
+ * next-intl's server/client runtime to the same locale-resolution logic,
+ * without touching `getFirstParam`/`resolvePageI18n`, which stay live until
+ * their call-sites migrate in later slices.
  */
 
 import { headers } from "next/headers";
+import { getRequestConfig } from "next-intl/server";
+import { catalogs, mergeWithBase } from "@kinora/i18n";
 import { resolveLocale, loadMessages } from "@/i18n/locale";
 import type { SupportedLocale, Messages } from "@/i18n/locale";
 
@@ -47,3 +55,41 @@ export async function resolvePageI18n(langParam: string | null): Promise<PageI18
   const messages = loadMessages(locale);
   return { locale, messages };
 }
+
+/**
+ * next-intl's request configuration, consumed via `createNextIntlPlugin` and
+ * the server/client runtime (`NextIntlClientProvider`, `useTranslations`,
+ * `getTranslations`, …).
+ *
+ * Resolution order (delegates to the EXISTING `resolveLocale`, unchanged):
+ *  1. `x-kinora-lang` header — set by `src/proxy.ts` from `?lang=`
+ *     (absent/deleted when `?lang=` is not present on the request, so this
+ *     falls through to Accept-Language exactly like a bare `langParam`)
+ *  2. `Accept-Language` request header
+ *  3. English fallback
+ *
+ * Messages are deep-merged over the English base (`mergeWithBase`) so a key
+ * missing from the active locale's catalogue still resolves — next-intl does
+ * NOT do this merge itself. `onError` swallows `MISSING_MESSAGE` so a single
+ * missing key never crashes the render.
+ */
+export default getRequestConfig(async () => {
+  const requestHeaders = await headers();
+  const acceptLanguage = requestHeaders.get("accept-language");
+  const xLangHeader = requestHeaders.get("x-kinora-lang");
+  const locale: SupportedLocale = resolveLocale(acceptLanguage, xLangHeader);
+  const messages = mergeWithBase(catalogs.en, catalogs[locale]);
+
+  return {
+    locale,
+    messages,
+    onError(error) {
+      if (error.code !== "MISSING_MESSAGE") {
+        console.error(error);
+      }
+    },
+    getMessageFallback({ key }) {
+      return key;
+    },
+  };
+});

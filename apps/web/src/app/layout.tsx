@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { headers } from "next/headers";
-import { resolveLocale } from "@/i18n/locale";
+import { getLocale, getMessages } from "next-intl/server";
+import { NextIntlClientProvider } from "next-intl";
 import { SerwistProvider } from "@serwist/next/react";
 
 import "./globals.css";
@@ -37,9 +37,12 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const requestHeaders = await headers();
-  const acceptLanguage = requestHeaders.get("accept-language");
-  const locale = resolveLocale(acceptLanguage, undefined);
+  // `getLocale`/`getMessages` read the SAME per-request config resolved by
+  // `getRequestConfig` (src/i18n/request.ts) — using them here instead of
+  // calling `resolveLocale` a second time keeps the `<html lang>` attribute
+  // and the provider's messages from ever drifting apart on one request.
+  const locale = await getLocale();
+  const messages = await getMessages();
 
   // Serwist only emits `sw.js` in production builds (it is disabled in
   // development via next.config). Registering the worker outside production
@@ -54,11 +57,13 @@ export default async function RootLayout({
         <style>{`.kin-landing-reveal{opacity:1;transform:none}`}</style>
       </noscript>
       <body>
-        {serviceWorkerEnabled ? (
-          <SerwistProvider swUrl="/sw.js">{children}</SerwistProvider>
-        ) : (
-          children
-        )}
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          {serviceWorkerEnabled ? (
+            <SerwistProvider swUrl="/sw.js">{children}</SerwistProvider>
+          ) : (
+            children
+          )}
+        </NextIntlClientProvider>
       </body>
     </html>
   );

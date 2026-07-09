@@ -129,17 +129,27 @@ function stackEnv() {
 }
 
 /**
- * Build the workspace libraries the api depends on. The api dev server (tsx)
- * imports `@kinora/contracts` and `@kinora/domain` through their published
- * `dist/` entry points, which only exist after a `tsc` build. CI runs the
- * "Build" step AFTER e2e (and a fresh clone has no dist at all), so the api
- * webServer would fail to start with "Cannot find module .../dist/index.js"
- * unless we build these first. Keeps `pnpm test:e2e` self-contained.
+ * Build the workspace libraries the api and web servers depend on. Both dev
+ * servers import `@kinora/contracts`, `@kinora/domain`, and `@kinora/i18n`
+ * (the web layout/i18n request config) through their published `dist/` entry
+ * points, which only exist after a `tsc` build — Next resolves these packages
+ * via their "default" export (no `transpilePackages`). CI runs the "Build"
+ * step AFTER e2e (and a fresh clone has no dist at all), so the webServer would
+ * fail to start with "Module not found: Can't resolve '@kinora/i18n'" unless we
+ * build these first. Keeps `pnpm test:e2e` self-contained.
  */
 async function buildWorkspaceLibs(env) {
   const code = await runInherit(
     "pnpm",
-    ["--filter", "@kinora/contracts", "--filter", "@kinora/domain", "build"],
+    [
+      "--filter",
+      "@kinora/contracts",
+      "--filter",
+      "@kinora/domain",
+      "--filter",
+      "@kinora/i18n",
+      "build",
+    ],
     env,
   );
   if (code !== 0) {
