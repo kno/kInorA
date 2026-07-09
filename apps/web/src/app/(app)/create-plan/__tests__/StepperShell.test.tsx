@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import type { PlanSpec } from "@kinora/contracts";
+import { renderWithIntl } from "@/test-utils/render-with-intl";
 import { StepperShell } from "../StepperShell";
 
 const push = vi.fn();
@@ -36,7 +37,7 @@ describe("StepperShell — optional plan name (#93)", () => {
   };
 
   it("renders an optional plan-name input on the final step", () => {
-    render(
+    renderWithIntl(
       <StepperShell
         saveDraftAction={noopSave}
         confirmPlanSpecAction={noopConfirm}
@@ -51,7 +52,7 @@ describe("StepperShell — optional plan name (#93)", () => {
     const confirmPlanSpecAction = vi
       .fn()
       .mockResolvedValue({ planId: "plan-1", status: "generating" });
-    render(
+    renderWithIntl(
       <StepperShell
         saveDraftAction={saveDraftAction}
         confirmPlanSpecAction={confirmPlanSpecAction}
@@ -73,7 +74,7 @@ describe("StepperShell — optional plan name (#93)", () => {
 
   it("includes a non-blank plan name (trimmed) in the submitted draft", async () => {
     const saveDraftAction = vi.fn().mockResolvedValue(undefined);
-    render(
+    renderWithIntl(
       <StepperShell
         saveDraftAction={saveDraftAction}
         confirmPlanSpecAction={noopConfirm}
@@ -92,7 +93,7 @@ describe("StepperShell — optional plan name (#93)", () => {
   });
 
   it("pre-populates the name input from a resumed draft's spec.name (#93)", () => {
-    render(
+    renderWithIntl(
       <StepperShell
         saveDraftAction={noopSave}
         confirmPlanSpecAction={noopConfirm}
@@ -111,14 +112,14 @@ describe("StepperShell — optional plan name (#93)", () => {
 
 describe("StepperShell", () => {
   it("renders the first step (goal) when there is no initial draft", () => {
-    render(
+    renderWithIntl(
       <StepperShell saveDraftAction={noopSave} confirmPlanSpecAction={noopConfirm} />,
     );
     expect(screen.getByRole("button", { name: /Strength/i })).toBeTruthy();
   });
 
   it("passes step progress to OrbitProgress (value=step-1, max=5)", () => {
-    render(
+    renderWithIntl(
       <StepperShell saveDraftAction={noopSave} confirmPlanSpecAction={noopConfirm} />,
     );
     const bar = screen.getByRole("progressbar");
@@ -127,11 +128,29 @@ describe("StepperShell", () => {
     expect(screen.getByText("1 / 6")).toBeTruthy();
   });
 
+  it("resolves wizard.step.progressAria's {step}/{total} interpolation through next-intl", () => {
+    renderWithIntl(
+      <StepperShell
+        saveDraftAction={noopSave}
+        confirmPlanSpecAction={noopConfirm}
+        initialDraft={{
+          step: 4,
+          spec: { goal: "strength", location: "gym", equipment: [] },
+        }}
+      />,
+    );
+    // The actual interpolated string, not just "renders" — a `.replace()`
+    // fallback or a dropped arg would leave literal "{step}"/"{total}".
+    expect(screen.getByRole("progressbar").getAttribute("aria-label")).toBe(
+      "Step 4 of 6",
+    );
+  });
+
   it("disables Continue until the current required step has a value", () => {
     // The equipment step (3) keeps the classic "select then Continue" flow
     // because it is multi-choice, so it never auto-advances. Here we resume at
     // step 3 with no equipment yet visited to observe Continue enabling.
-    render(
+    renderWithIntl(
       <StepperShell
         saveDraftAction={noopSave}
         confirmPlanSpecAction={noopConfirm}
@@ -152,7 +171,7 @@ describe("StepperShell", () => {
       vi.fn<(step: number, spec: Partial<PlanSpec>) => Promise<void>>().mockResolvedValue(
         undefined,
       );
-    render(
+    renderWithIntl(
       <StepperShell
         saveDraftAction={saveDraftAction}
         confirmPlanSpecAction={noopConfirm}
@@ -176,7 +195,7 @@ describe("StepperShell", () => {
 
   it("preserves prior values when navigating Back (local, no server call)", () => {
     const saveDraftAction = vi.fn().mockResolvedValue(undefined);
-    render(
+    renderWithIntl(
       <StepperShell
         saveDraftAction={saveDraftAction}
         confirmPlanSpecAction={noopConfirm}
@@ -195,7 +214,7 @@ describe("StepperShell", () => {
   });
 
   it("resumes at the draft step with pre-filled values", () => {
-    render(
+    renderWithIntl(
       <StepperShell
         saveDraftAction={noopSave}
         confirmPlanSpecAction={noopConfirm}
@@ -211,7 +230,7 @@ describe("StepperShell", () => {
   });
 
   it("keeps Finish disabled until all required inputs are present", () => {
-    render(
+    renderWithIntl(
       <StepperShell
         saveDraftAction={noopSave}
         confirmPlanSpecAction={noopConfirm}
@@ -238,7 +257,7 @@ describe("StepperShell", () => {
         undefined,
       );
     const confirmPlanSpecAction = vi.fn().mockResolvedValue({ planId: "plan-999", status: "generating" });
-    render(
+    renderWithIntl(
       <StepperShell
         saveDraftAction={saveDraftAction}
         confirmPlanSpecAction={confirmPlanSpecAction}
@@ -278,7 +297,7 @@ describe("StepperShell", () => {
       vi.fn<(step: number, spec: Partial<PlanSpec>) => Promise<void>>().mockResolvedValue(
         undefined,
       );
-    render(
+    renderWithIntl(
       <StepperShell
         saveDraftAction={saveDraftAction}
         confirmPlanSpecAction={noopConfirm}
@@ -300,7 +319,7 @@ describe("StepperShell", () => {
   });
 
   it("renders the limitations step (step 6) with a text input", () => {
-    render(
+    renderWithIntl(
       <StepperShell
         saveDraftAction={noopSave}
         confirmPlanSpecAction={noopConfirm}
@@ -321,7 +340,7 @@ describe("StepperShell", () => {
   });
 
   it("offers a continue-or-overwrite choice when resuming an existing draft", () => {
-    render(
+    renderWithIntl(
       <StepperShell
         saveDraftAction={noopSave}
         confirmPlanSpecAction={noopConfirm}
@@ -333,7 +352,7 @@ describe("StepperShell", () => {
   });
 
   it("resets to step 1 with empty values when Start over is chosen", () => {
-    render(
+    renderWithIntl(
       <StepperShell
         saveDraftAction={noopSave}
         confirmPlanSpecAction={noopConfirm}
@@ -350,7 +369,7 @@ describe("StepperShell", () => {
   describe("auto-advance on single-choice steps", () => {
     it("advances to the next step immediately after picking a goal (step 1)", async () => {
       const saveDraftAction = vi.fn().mockResolvedValue(undefined);
-      render(
+      renderWithIntl(
         <StepperShell
           saveDraftAction={saveDraftAction}
           confirmPlanSpecAction={noopConfirm}
@@ -367,7 +386,7 @@ describe("StepperShell", () => {
 
     it("advances after picking a location (step 2)", async () => {
       const saveDraftAction = vi.fn().mockResolvedValue(undefined);
-      render(
+      renderWithIntl(
         <StepperShell
           saveDraftAction={saveDraftAction}
           confirmPlanSpecAction={noopConfirm}
@@ -380,7 +399,7 @@ describe("StepperShell", () => {
 
     it("advances after picking a frequency (step 4)", async () => {
       const saveDraftAction = vi.fn().mockResolvedValue(undefined);
-      render(
+      renderWithIntl(
         <StepperShell
           saveDraftAction={saveDraftAction}
           confirmPlanSpecAction={noopConfirm}
@@ -396,7 +415,7 @@ describe("StepperShell", () => {
 
     it("auto-advances when a duration PRESET is picked (step 5)", async () => {
       const saveDraftAction = vi.fn().mockResolvedValue(undefined);
-      render(
+      renderWithIntl(
         <StepperShell
           saveDraftAction={saveDraftAction}
           confirmPlanSpecAction={noopConfirm}
@@ -421,7 +440,7 @@ describe("StepperShell", () => {
 
     it("auto-advances when a VALID custom duration is confirmed (step 5)", async () => {
       const saveDraftAction = vi.fn().mockResolvedValue(undefined);
-      render(
+      renderWithIntl(
         <StepperShell
           saveDraftAction={saveDraftAction}
           confirmPlanSpecAction={noopConfirm}
@@ -450,7 +469,7 @@ describe("StepperShell", () => {
 
     it("does NOT auto-advance on an INVALID custom duration (step 5)", async () => {
       const saveDraftAction = vi.fn().mockResolvedValue(undefined);
-      render(
+      renderWithIntl(
         <StepperShell
           saveDraftAction={saveDraftAction}
           confirmPlanSpecAction={noopConfirm}
@@ -476,7 +495,7 @@ describe("StepperShell", () => {
 
     it("does NOT auto-advance on the equipment step (step 3, multi-choice)", async () => {
       const saveDraftAction = vi.fn().mockResolvedValue(undefined);
-      render(
+      renderWithIntl(
         <StepperShell
           saveDraftAction={saveDraftAction}
           confirmPlanSpecAction={noopConfirm}
@@ -498,7 +517,7 @@ describe("StepperShell", () => {
 
     it("keeps a picked value selected after navigating Back to a single-choice step", async () => {
       const saveDraftAction = vi.fn().mockResolvedValue(undefined);
-      render(
+      renderWithIntl(
         <StepperShell
           saveDraftAction={saveDraftAction}
           confirmPlanSpecAction={noopConfirm}

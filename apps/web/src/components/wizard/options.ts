@@ -7,81 +7,64 @@ import type { PlanGoal, TrainingLocation } from "@kinora/contracts";
  * Equipment is keyed by training location because the selected location
  * constrains which equipment options are offered (spec requirement).
  *
- * i18n (issue #67): user-facing labels/descriptions/alt-text are carried as
- * stable catalog KEY references (`*Key`) plus an English fallback (`*Fallback`).
- * Step components resolve them with `t(key, fallback)` so nothing breaks if a
- * key is missing. The `value` strings are persisted into PlanSpec and MUST NOT
- * change.
+ * i18n (issue #67, migrated to next-intl in #100 slice 6): user-facing
+ * labels/descriptions/alt-text are carried as stable, nested catalog KEY
+ * references (`*Key`) resolved with `useTranslations()` — no in-code English
+ * fallback anymore; the catalog-parity guard (`@kinora/i18n`) is the single
+ * source of truth for the copy. The `value` strings are persisted into
+ * PlanSpec and MUST NOT change.
  */
 
 export interface GoalOption {
   value: PlanGoal;
   labelKey: string;
-  labelFallback: string;
   descriptionKey: string;
-  descriptionFallback: string;
 }
 
 export const GOAL_OPTIONS: readonly GoalOption[] = [
   {
     value: "strength",
-    labelKey: "wizard_goal_strength_label",
-    labelFallback: "Strength",
-    descriptionKey: "wizard_goal_strength_desc",
-    descriptionFallback: "Build raw, maximal power",
+    labelKey: "wizard.goal.strength.label",
+    descriptionKey: "wizard.goal.strength.desc",
   },
   {
     value: "hypertrophy",
-    labelKey: "wizard_goal_hypertrophy_label",
-    labelFallback: "Hypertrophy",
-    descriptionKey: "wizard_goal_hypertrophy_desc",
-    descriptionFallback: "Grow muscle size",
+    labelKey: "wizard.goal.hypertrophy.label",
+    descriptionKey: "wizard.goal.hypertrophy.desc",
   },
   {
     value: "fat_loss",
-    labelKey: "wizard_goal_fat_loss_label",
-    labelFallback: "Fat loss",
-    descriptionKey: "wizard_goal_fat_loss_desc",
-    descriptionFallback: "Progressive calorie deficit",
+    labelKey: "wizard.goal.fatLoss.label",
+    descriptionKey: "wizard.goal.fatLoss.desc",
   },
   {
     value: "general_fitness",
-    labelKey: "wizard_goal_general_fitness_label",
-    labelFallback: "General fitness",
-    descriptionKey: "wizard_goal_general_fitness_desc",
-    descriptionFallback: "Stay healthy and active",
+    labelKey: "wizard.goal.generalFitness.label",
+    descriptionKey: "wizard.goal.generalFitness.desc",
   },
 ];
 
 export interface LocationOption {
   value: TrainingLocation;
   labelKey: string;
-  labelFallback: string;
   descriptionKey: string;
-  descriptionFallback: string;
 }
 
 export const LOCATION_OPTIONS: readonly LocationOption[] = [
   {
     value: "home",
-    labelKey: "wizard_location_home_label",
-    labelFallback: "Home",
-    descriptionKey: "wizard_location_home_desc",
-    descriptionFallback: "Train in your own space",
+    labelKey: "wizard.location.home.label",
+    descriptionKey: "wizard.location.home.desc",
   },
   {
     value: "gym",
-    labelKey: "wizard_location_gym_label",
-    labelFallback: "Gym",
-    descriptionKey: "wizard_location_gym_desc",
-    descriptionFallback: "Full equipment access",
+    labelKey: "wizard.location.gym.label",
+    descriptionKey: "wizard.location.gym.desc",
   },
   {
     value: "outdoor",
-    labelKey: "wizard_location_outdoor_label",
-    labelFallback: "Outdoor",
-    descriptionKey: "wizard_location_outdoor_desc",
-    descriptionFallback: "Parks, trails, open air",
+    labelKey: "wizard.location.outdoor.label",
+    descriptionKey: "wizard.location.outdoor.desc",
   },
 ];
 
@@ -92,91 +75,30 @@ export const DURATION_OPTIONS: readonly number[] = [15, 30, 45, 60, 90];
 export interface EquipmentOption {
   value: string;
   labelKey: string;
-  labelFallback: string;
 }
 
 /** Equipment catalogue, scoped by training location. */
 export const EQUIPMENT_BY_LOCATION: Record<TrainingLocation, EquipmentOption[]> = {
   home: [
-    {
-      value: "dumbbells",
-      labelKey: "wizard_equipment_dumbbells_label",
-      labelFallback: "Dumbbells",
-    },
-    {
-      value: "resistance_bands",
-      labelKey: "wizard_equipment_resistance_bands_label",
-      labelFallback: "Resistance bands",
-    },
-    {
-      value: "pull_up_bar",
-      labelKey: "wizard_equipment_pull_up_bar_label",
-      labelFallback: "Pull-up bar",
-    },
-    {
-      value: "kettlebell",
-      labelKey: "wizard_equipment_kettlebell_label",
-      labelFallback: "Kettlebell",
-    },
-    {
-      value: "bench",
-      labelKey: "wizard_equipment_bench_label",
-      labelFallback: "Bench",
-    },
+    { value: "dumbbells", labelKey: "wizard.equipment.dumbbells.label" },
+    { value: "resistance_bands", labelKey: "wizard.equipment.resistanceBands.label" },
+    { value: "pull_up_bar", labelKey: "wizard.equipment.pullUpBar.label" },
+    { value: "kettlebell", labelKey: "wizard.equipment.kettlebell.label" },
+    { value: "bench", labelKey: "wizard.equipment.bench.label" },
   ],
   gym: [
-    {
-      value: "barbell",
-      labelKey: "wizard_equipment_barbell_label",
-      labelFallback: "Barbell",
-    },
-    {
-      value: "dumbbells",
-      labelKey: "wizard_equipment_dumbbells_label",
-      labelFallback: "Dumbbells",
-    },
-    {
-      value: "cable_machine",
-      labelKey: "wizard_equipment_cable_machine_label",
-      labelFallback: "Cable machine",
-    },
-    {
-      value: "smith_machine",
-      labelKey: "wizard_equipment_smith_machine_label",
-      labelFallback: "Smith machine",
-    },
-    {
-      value: "leg_press",
-      labelKey: "wizard_equipment_leg_press_label",
-      labelFallback: "Leg press",
-    },
-    {
-      value: "bench",
-      labelKey: "wizard_equipment_bench_label",
-      labelFallback: "Bench",
-    },
+    { value: "barbell", labelKey: "wizard.equipment.barbell.label" },
+    { value: "dumbbells", labelKey: "wizard.equipment.dumbbells.label" },
+    { value: "cable_machine", labelKey: "wizard.equipment.cableMachine.label" },
+    { value: "smith_machine", labelKey: "wizard.equipment.smithMachine.label" },
+    { value: "leg_press", labelKey: "wizard.equipment.legPress.label" },
+    { value: "bench", labelKey: "wizard.equipment.bench.label" },
   ],
   outdoor: [
-    {
-      value: "resistance_bands",
-      labelKey: "wizard_equipment_resistance_bands_label",
-      labelFallback: "Resistance bands",
-    },
-    {
-      value: "pull_up_bar",
-      labelKey: "wizard_equipment_pull_up_bar_label",
-      labelFallback: "Pull-up bar",
-    },
-    {
-      value: "bodyweight",
-      labelKey: "wizard_equipment_bodyweight_label",
-      labelFallback: "Bodyweight only",
-    },
-    {
-      value: "suspension_trainer",
-      labelKey: "wizard_equipment_suspension_trainer_label",
-      labelFallback: "Suspension trainer",
-    },
+    { value: "resistance_bands", labelKey: "wizard.equipment.resistanceBands.label" },
+    { value: "pull_up_bar", labelKey: "wizard.equipment.pullUpBar.label" },
+    { value: "bodyweight", labelKey: "wizard.equipment.bodyweight.label" },
+    { value: "suspension_trainer", labelKey: "wizard.equipment.suspensionTrainer.label" },
   ],
 };
 
@@ -192,8 +114,6 @@ export interface EquipmentPhoto {
   src: string;
   /** i18n catalog key for the alt-text. */
   altKey: string;
-  /** English alt-text fallback used when the key is missing. */
-  altFallback: string;
 }
 
 /**
@@ -206,58 +126,47 @@ export interface EquipmentPhoto {
 export const EQUIPMENT_PHOTO_BY_VALUE: Readonly<Record<string, EquipmentPhoto>> = {
   dumbbells: {
     src: "/equipment/equip-mancuernas.webp",
-    altKey: "wizard_equipment_dumbbells_alt",
-    altFallback: "A pair of adjustable dumbbells",
+    altKey: "wizard.equipment.dumbbells.alt",
   },
   barbell: {
     src: "/equipment/equip-barras.webp",
-    altKey: "wizard_equipment_barbell_alt",
-    altFallback: "An Olympic barbell loaded with plates",
+    altKey: "wizard.equipment.barbell.alt",
   },
   resistance_bands: {
     src: "/equipment/equip-bandas.webp",
-    altKey: "wizard_equipment_resistance_bands_alt",
-    altFallback: "A set of elastic resistance bands",
+    altKey: "wizard.equipment.resistanceBands.alt",
   },
   bodyweight: {
     src: "/equipment/equip-peso-corporal.webp",
-    altKey: "wizard_equipment_bodyweight_alt",
-    altFallback: "An athlete doing a one-arm push-up",
+    altKey: "wizard.equipment.bodyweight.alt",
   },
   cable_machine: {
     src: "/equipment/equip-maquinas.webp",
-    altKey: "wizard_equipment_cable_machine_alt",
-    altFallback: "A cable pulley station in a gym",
+    altKey: "wizard.equipment.cableMachine.alt",
   },
   pull_up_bar: {
     src: "/equipment/equip-dominadas.webp",
-    altKey: "wizard_equipment_pull_up_bar_alt",
-    altFallback: "Doorway pull-up bar",
+    altKey: "wizard.equipment.pullUpBar.alt",
   },
   kettlebell: {
     src: "/equipment/equip-kettlebell.webp",
-    altKey: "wizard_equipment_kettlebell_alt",
-    altFallback: "Kettlebell",
+    altKey: "wizard.equipment.kettlebell.alt",
   },
   bench: {
     src: "/equipment/equip-banco.webp",
-    altKey: "wizard_equipment_bench_alt",
-    altFallback: "Adjustable weight bench",
+    altKey: "wizard.equipment.bench.alt",
   },
   leg_press: {
     src: "/equipment/equip-prensa.webp",
-    altKey: "wizard_equipment_leg_press_alt",
-    altFallback: "Leg press machine",
+    altKey: "wizard.equipment.legPress.alt",
   },
   suspension_trainer: {
     src: "/equipment/equip-trx.webp",
-    altKey: "wizard_equipment_suspension_trainer_alt",
-    altFallback: "Suspension trainer straps",
+    altKey: "wizard.equipment.suspensionTrainer.alt",
   },
   smith_machine: {
     src: "/equipment/equip-gimnasio.webp",
-    altKey: "wizard_equipment_smith_machine_alt",
-    altFallback: "A Smith machine with guided barbell rails",
+    altKey: "wizard.equipment.smithMachine.alt",
   },
 };
 

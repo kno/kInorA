@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import type { PlanLimitation } from "@kinora/contracts";
 import styles from "./wizard.module.css";
 
 export interface LimitationsStepProps {
   value?: PlanLimitation[];
   onSelect: (limitations: PlanLimitation[]) => void;
-  messages?: Record<string, string>;
 }
 
 /**
@@ -15,12 +15,8 @@ export interface LimitationsStepProps {
  * `{ text, isWarning: true }`; no medical diagnosis is attempted. An empty
  * list is valid (the step is complete once visited).
  */
-export function LimitationsStep({
-  value = [],
-  onSelect,
-  messages = {},
-}: LimitationsStepProps) {
-  const t = (key: string, fallback: string): string => messages[key] ?? fallback;
+export function LimitationsStep({ value = [], onSelect }: LimitationsStepProps) {
+  const t = useTranslations();
   const [draft, setDraft] = useState("");
 
   const add = () => {
@@ -36,8 +32,8 @@ export function LimitationsStep({
         <input
           type="text"
           className={styles.input}
-          aria-label={t("wizard_limitations_add_aria", "Add a limitation")}
-          placeholder={t("wizard_limitations_add_placeholder", "e.g. knee pain")}
+          aria-label={t("wizard.limitations.addAria")}
+          placeholder={t("wizard.limitations.addPlaceholder")}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -48,7 +44,7 @@ export function LimitationsStep({
           }}
         />
         <button type="button" className={styles.addButton} onClick={add}>
-          {t("wizard_limitations_add_button", "Add")}
+          {t("wizard.limitations.addButton")}
         </button>
       </div>
 
@@ -60,10 +56,7 @@ export function LimitationsStep({
               <button
                 type="button"
                 className={styles.chipRemove}
-                aria-label={t("wizard_chip_remove_aria", "Remove {name}").replace(
-                  "{name}",
-                  limitation.text,
-                )}
+                aria-label={t("wizard.chip.removeAria", { name: limitation.text })}
                 onClick={() => onSelect(value.filter((_, i) => i !== index))}
               >
                 ×
