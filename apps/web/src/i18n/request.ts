@@ -83,6 +83,11 @@ export default getRequestConfig(async () => {
   return {
     locale,
     messages,
+    // Global default so `useFormatter`/`getFormatter` date formatting (Gap 1 —
+    // PlanSelector) doesn't fall back to the server's local runtime zone,
+    // which would risk a server/client hydration mismatch. All plan/session
+    // timestamps are stored and rendered as UTC ISO strings server-side.
+    timeZone: "UTC",
     onError(error) {
       if (error.code !== "MISSING_MESSAGE") {
         console.error(error);
