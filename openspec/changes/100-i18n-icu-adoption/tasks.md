@@ -114,15 +114,15 @@ proven against a sample catalog before full data migration)
 Satisfies: 100a (all requirements, now against full production data)
 
 ### Phase 2.1: Full Catalog Data
-- [ ] 2.1.1 Migrate all 325 flat underscore keys into nested namespaces (`nav`, `hero`, `trust`, `hiw`, `features`, `pricing`, `cta`, `auth`, `footer`, `phone`, `plan`, `tracker`, `wizard`, `dashboard`, `exercises`, `stats`, `profile`, `offline`, `marketing`).
-- [ ] 2.1.2 Convert ALL 18 ICU keys (verified count against the live catalog). Plain interpolation kept for `plan.selector.option` (base string; see 2.1.3 for `select` upgrade), `plan.start.conflict`, `plan.start.conflict_no_day`, `plan.day.label`, `tracker.tracking.day`, `tracker.progress.valuetext`, `tracker.target.pill`, `tracker.rest.srActive`, `wizard.step.progressAria`, `wizard.chip.removeAria`; count-bearing → `{n, plural, one{} other{}}` for `wizard.frequency.days`, `wizard.duration.min`, `plan.est_duration` ("est. {n} min" — count-bearing; use plural even though EN/ES "min" is plural-invariant, for consistency), `tracker.next.sets`, `tracker.timeline.meta.done`, `tracker.timeline.meta.active`, `tracker.timeline.meta.pending`; `tracker.progress.label` stays plain interpolation.
-- [ ] 2.1.3 Add `select` to `plan.selector.option`: `{status, select, ready{} generating{} failed{} other{}}` branch, replacing the `.replace()`-built `{date} ({status})` string at `PlanSelector.tsx:71-76` (date itself is formatted separately via `useFormatter` in slice 5, not baked into this key).
-- [ ] 2.1.4 Replace `packages/i18n/src/messages/en.json` + `es.json` sample data with the full migrated catalog.
+- [x] 2.1.1 Migrate all 325 flat underscore keys into nested namespaces (`nav`, `hero`, `trust`, `hiw`, `features`, `pricing`, `cta`, `auth`, `footer`, `phone`, `plan`, `tracker`, `wizard`, `dashboard`, `exercises`, `stats`, `profile`, `offline`, `marketing`).
+- [x] 2.1.2 Convert ALL 18 ICU keys (verified count against the live catalog). Plain interpolation kept for `plan.selector.option` (base string; see 2.1.3 for `select` upgrade), `plan.start.conflict`, `plan.start.conflict_no_day`, `plan.day.label`, `tracker.tracking.day`, `tracker.progress.valuetext`, `tracker.target.pill`, `tracker.rest.srActive`, `wizard.step.progressAria`, `wizard.chip.removeAria`; count-bearing → `{n, plural, one{} other{}}` for `wizard.frequency.days`, `wizard.duration.min`, `plan.est_duration` ("est. {n} min" — count-bearing; use plural even though EN/ES "min" is plural-invariant, for consistency), `tracker.next.sets`, `tracker.timeline.meta.done`, `tracker.timeline.meta.active`, `tracker.timeline.meta.pending`; `tracker.progress.label` stays plain interpolation.
+- [x] 2.1.3 Add `select` to `plan.selector.option`: `{status, select, ready{} generating{} failed{} other{}}` branch, replacing the `.replace()`-built `{date} ({status})` string at `PlanSelector.tsx:71-76` (date itself is formatted separately via `useFormatter` in slice 5, not baked into this key).
+- [x] 2.1.4 Replace `packages/i18n/src/messages/en.json` + `es.json` sample data with the full migrated catalog.
 
 ### Phase 2.2: Guard Validation Against Full Data
-- [ ] 2.2.1 Run the slice-1 guard (unmodified) against the full catalog — fix real mismatches, do not weaken the guard.
-- [ ] 2.2.2 Run/extend the slice-1 type-generation test against the full catalog shape.
-- [ ] 2.2.3 `pnpm test` in `packages/i18n` — green with full data.
+- [x] 2.2.1 Run the slice-1 guard (unmodified) against the full catalog — fix real mismatches, do not weaken the guard.
+- [x] 2.2.2 Run/extend the slice-1 type-generation test against the full catalog shape.
+- [x] 2.2.3 `pnpm test` in `packages/i18n` — green with full data.
 
 ---
 

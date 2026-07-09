@@ -2,9 +2,10 @@
  * `@kinora/i18n` — single source of truth for EN/ES ICU message catalogs,
  * shared by web (next-intl) and mobile (react-intl).
  *
- * Slice 1 ships this package's MACHINERY proven against a small sample
- * catalog (`messages/en.json` / `messages/es.json`). The full 325-key
- * production catalog data lands in slice 2 without changing this surface.
+ * Slice 1 shipped this package's MACHINERY proven against a small sample
+ * catalog. Slice 2 replaces `messages/en.json` / `messages/es.json` with the
+ * full production catalog (325 leaf keys, migrated from
+ * `apps/web/src/i18n/messages/{en,es}.json`) without changing this surface.
  */
 import en from "./messages/en.json";
 import es from "./messages/es.json";
@@ -22,4 +23,9 @@ export type { MessageKeys } from "./types.js";
 
 export const catalogs = { en, es } as const;
 
-export type SampleMessageKey = MessageKeys<typeof en>;
+/**
+ * The full union of dot-joined message-key paths, derived directly from the
+ * shipped EN catalog shape (no manual enumeration) — referencing an unknown
+ * key anywhere consuming code uses `MessageKey` is a compile-time error.
+ */
+export type MessageKey = MessageKeys<typeof en>;
