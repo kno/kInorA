@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import type { TrainingLocation } from "@kinora/contracts";
 import { OrbitSelectableCard } from "@/components/orbit";
 import { KinIcon } from "@/components/icons/KinIcon";
@@ -12,7 +13,6 @@ export interface EquipmentStepProps {
   /** The location selected in the previous step — constrains the options. */
   location?: TrainingLocation;
   onSelect: (equipment: string[]) => void;
-  messages?: Record<string, string>;
 }
 
 /**
@@ -30,9 +30,8 @@ export function EquipmentStep({
   value = [],
   location,
   onSelect,
-  messages = {},
 }: EquipmentStepProps) {
-  const t = (key: string, fallback: string): string => messages[key] ?? fallback;
+  const t = useTranslations();
   const options = equipmentForLocation(location);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -51,23 +50,18 @@ export function EquipmentStep({
     [
       ...value,
       ...options.map((o) => o.value),
-      ...options.map((o) => t(o.labelKey, o.labelFallback)),
+      ...options.map((o) => t(o.labelKey)),
     ].map((v) => v.toLowerCase()),
   );
 
   const addCustom = () => {
     const text = draft.trim();
     if (text === "") {
-      setError(t("wizard_equipment_error_empty", "Enter an equipment name."));
+      setError(t("wizard.equipment.errorEmpty"));
       return;
     }
     if (reserved.has(text.toLowerCase())) {
-      setError(
-        t(
-          "wizard_equipment_error_duplicate",
-          "That equipment is already in your list.",
-        ),
-      );
+      setError(t("wizard.equipment.errorDuplicate"));
       return;
     }
     setError(null);
@@ -91,13 +85,13 @@ export function EquipmentStep({
             return (
               <OrbitSelectableCard
                 key={option.value}
-                label={t(option.labelKey, option.labelFallback)}
+                label={t(option.labelKey)}
                 selected={value.includes(option.value)}
                 onSelect={() => toggle(option.value)}
                 mediaBackground={
                   <img
                     src={photo.src}
-                    alt={t(photo.altKey, photo.altFallback)}
+                    alt={t(photo.altKey)}
                     width={294}
                     height={294}
                     loading="lazy"
@@ -110,7 +104,7 @@ export function EquipmentStep({
           return (
             <OrbitSelectableCard
               key={option.value}
-              label={t(option.labelKey, option.labelFallback)}
+              label={t(option.labelKey)}
               selected={value.includes(option.value)}
               onSelect={() => toggle(option.value)}
               icon={<KinIcon name="dumbbell" size={22} />}
@@ -123,8 +117,8 @@ export function EquipmentStep({
         <input
           type="text"
           className={styles.input}
-          aria-label={t("wizard_equipment_add_aria", "Add equipment")}
-          placeholder={t("wizard_equipment_add_placeholder", "e.g. sled")}
+          aria-label={t("wizard.equipment.addAria")}
+          placeholder={t("wizard.equipment.addPlaceholder")}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -135,7 +129,7 @@ export function EquipmentStep({
           }}
         />
         <button type="button" className={styles.addButton} onClick={addCustom}>
-          {t("wizard_equipment_add_button", "Add")}
+          {t("wizard.equipment.addButton")}
         </button>
       </div>
 
@@ -153,10 +147,7 @@ export function EquipmentStep({
               <button
                 type="button"
                 className={styles.chipRemove}
-                aria-label={t("wizard_chip_remove_aria", "Remove {name}").replace(
-                  "{name}",
-                  entry,
-                )}
+                aria-label={t("wizard.chip.removeAria", { name: entry })}
                 onClick={() => onSelect(value.filter((v) => v !== entry))}
               >
                 ×

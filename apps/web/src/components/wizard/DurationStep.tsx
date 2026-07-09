@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { validateSessionDuration } from "@kinora/domain/plan";
 import { OrbitSelectableCard } from "@/components/orbit";
 import { DURATION_OPTIONS } from "./options";
@@ -17,7 +18,6 @@ export interface DurationStepProps {
    * never triggers this) while keeping a single commit path.
    */
   onSelect: (sessionDurationMinutes: number, source: DurationSource) => void;
-  messages?: Record<string, string>;
 }
 
 /**
@@ -30,8 +30,8 @@ export interface DurationStepProps {
  * reasons come from the domain layer and are surfaced as-is (not translated
  * here); only the wizard's own literals are internationalized.
  */
-export function DurationStep({ value, onSelect, messages = {} }: DurationStepProps) {
-  const t = (key: string, fallback: string): string => messages[key] ?? fallback;
+export function DurationStep({ value, onSelect }: DurationStepProps) {
+  const t = useTranslations();
 
   // Seed the custom field only when the current value is not a static option,
   // so resuming a draft with a typed duration shows it back to the user.
@@ -42,7 +42,7 @@ export function DurationStep({ value, onSelect, messages = {} }: DurationStepPro
   const submitCustom = () => {
     const trimmed = custom.trim();
     if (trimmed === "") {
-      setError(t("wizard_duration_error_empty", "Enter a duration in minutes."));
+      setError(t("wizard.duration.errorEmpty"));
       return;
     }
     const result = validateSessionDuration(Number(trimmed));
@@ -60,7 +60,7 @@ export function DurationStep({ value, onSelect, messages = {} }: DurationStepPro
         {DURATION_OPTIONS.map((minutes) => (
           <OrbitSelectableCard
             key={minutes}
-            label={t("wizard_duration_min", "{n} min").replace("{n}", String(minutes))}
+            label={t("wizard.duration.min", { n: minutes })}
             selected={value === minutes}
             onSelect={() => {
               setError(null);
@@ -68,8 +68,8 @@ export function DurationStep({ value, onSelect, messages = {} }: DurationStepPro
             }}
           >
             {minutes <= 30
-              ? t("wizard_duration_quick_session", "Quick session")
-              : t("wizard_duration_per_session", "Per session")}
+              ? t("wizard.duration.quickSession")
+              : t("wizard.duration.perSession")}
           </OrbitSelectableCard>
         ))}
       </div>
@@ -78,8 +78,8 @@ export function DurationStep({ value, onSelect, messages = {} }: DurationStepPro
         <input
           type="number"
           className={styles.input}
-          aria-label={t("wizard_duration_custom_aria", "Custom duration in minutes")}
-          placeholder={t("wizard_duration_custom_placeholder", "e.g. 75")}
+          aria-label={t("wizard.duration.customAria")}
+          placeholder={t("wizard.duration.customPlaceholder")}
           inputMode="numeric"
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
@@ -95,7 +95,7 @@ export function DurationStep({ value, onSelect, messages = {} }: DurationStepPro
           className={styles.addButton}
           onClick={submitCustom}
         >
-          {t("wizard_duration_set_button", "Set duration")}
+          {t("wizard.duration.setButton")}
         </button>
       </div>
 

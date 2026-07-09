@@ -231,22 +231,22 @@ threader (not a closure) that must migrate together with the stepper it
 threads `messages` into.
 
 ### Phase 6.1: `create-plan/page.tsx` Server Threader
-- [ ] 6.1.1 [RED] Write/extend render test for `create-plan/page.tsx` asserting `getTranslations()` server-side usage and NO `resolvePageI18n` call, and no `messages` prop threaded to `StepperShell`.
-- [ ] 6.1.2 [GREEN] Migrate `create-plan/page.tsx` — replace `resolvePageI18n` with `getTranslations()`; drop `messages` prop threading.
+- [x] 6.1.1 [RED] Write/extend render test for `create-plan/page.tsx` asserting `getTranslations()` server-side usage and NO `resolvePageI18n` call, and no `messages` prop threaded to `StepperShell`.
+- [x] 6.1.2 [GREEN] Migrate `create-plan/page.tsx` — replace `resolvePageI18n` with `getTranslations()`; drop `messages` prop threading.
 
 ### Phase 6.2: Test-First Per Stepper Component
-- [ ] 6.2.1 [RED] For `StepperShell` + the 6 wizard steps (Frequency, Duration, Equipment, Limitations, Goal, Location): extend/write render tests asserting migration to `next-intl` calls, including `wizard.step.progressAria {step}{total}`, `wizard.chip.removeAria {name}`, `wizard.frequency.days` plural, `wizard.duration.min` plural.
-- [ ] 6.2.2 [GREEN] Migrate `FrequencyStep` (covers `wizard.frequency.days` plural).
-- [ ] 6.2.3 [GREEN] Migrate `DurationStep` (covers `wizard.duration.min` plural).
-- [ ] 6.2.4 [GREEN] Migrate `EquipmentStep`.
-- [ ] 6.2.5 [GREEN] Migrate `LimitationsStep`.
-- [ ] 6.2.6 [GREEN] Migrate `GoalStep`.
-- [ ] 6.2.7 [GREEN] Migrate `LocationStep`.
-- [ ] 6.2.8 [GREEN] Migrate `StepperShell` (covers `wizard.step.progressAria {step}{total}`, `wizard.chip.removeAria {name}`); no longer receives `messages` prop from `create-plan/page.tsx`.
+- [x] 6.2.1 [RED] For `StepperShell` + the 6 wizard steps (Frequency, Duration, Equipment, Limitations, Goal, Location): extend/write render tests asserting migration to `next-intl` calls, including `wizard.step.progressAria {step}{total}`, `wizard.chip.removeAria {name}`, `wizard.frequency.days` plural, `wizard.duration.min` plural.
+- [x] 6.2.2 [GREEN] Migrate `FrequencyStep` (covers `wizard.frequency.days` plural).
+- [x] 6.2.3 [GREEN] Migrate `DurationStep` (covers `wizard.duration.min` plural).
+- [x] 6.2.4 [GREEN] Migrate `EquipmentStep`.
+- [x] 6.2.5 [GREEN] Migrate `LimitationsStep`.
+- [x] 6.2.6 [GREEN] Migrate `GoalStep`.
+- [x] 6.2.7 [GREEN] Migrate `LocationStep`.
+- [x] 6.2.8 [GREEN] Migrate `StepperShell` (covers `wizard.step.progressAria {step}{total}`, `wizard.chip.removeAria {name}`); no longer receives `messages` prop from `create-plan/page.tsx`.
 
 ### Phase 6.3: Cluster Verification
-- [ ] 6.3.1 Grep-verify zero remaining `.replace()`/local `t(key,fallback)` closures and zero `resolvePageI18n` calls across the 8 files migrated in this slice.
-- [ ] 6.3.2 `pnpm test` — full suite green.
+- [x] 6.3.1 Grep-verify zero remaining `.replace()`/local `t(key,fallback)` closures and zero `resolvePageI18n` calls across the 8 files migrated in this slice.
+- [x] 6.3.2 `pnpm test` — full suite green.
 
 ---
 
