@@ -1,4 +1,5 @@
-import { getFirstParam, resolvePageI18n } from "@/i18n/request";
+import { getTranslations } from "next-intl/server";
+import { getFirstParam } from "@/i18n/request";
 import { signupAction } from "./actions";
 
 /**
@@ -9,22 +10,24 @@ import { signupAction } from "./actions";
  * home. The Google link hits the social-login proxy. Mirrors the login page
  * layout and styling.
  *
- * User-facing copy comes from the i18n catalogs (see `@/i18n/locale`),
- * resolved from the `?lang=` query parameter or the `Accept-Language` header.
+ * User-facing copy comes from next-intl (see `@/i18n/request`), whose
+ * locale is resolved from the `?lang=` query parameter (via the
+ * `x-kinora-lang` header injected by `proxy.ts`) or the `Accept-Language`
+ * header.
  */
 export default async function SignUpPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string | string[]; lang?: string | string[] }>;
+  searchParams: Promise<{ error?: string | string[] }>;
 }) {
   const params = await searchParams;
   const error = getFirstParam(params.error);
-  const { messages } = await resolvePageI18n(getFirstParam(params.lang));
+  const t = await getTranslations();
 
   return (
     <main className="kin-page">
       <div className="kin-card">
-        <h1 className="kin-title kin-title--center">{messages.auth_signup_title}</h1>
+        <h1 className="kin-title kin-title--center">{t("auth.signup.title")}</h1>
 
         {error ? (
           <p role="alert" className="kin-error">
@@ -34,7 +37,7 @@ export default async function SignUpPage({
 
         <form action={signupAction} className="kin-form">
           <label className="kin-field">
-            <span className="kin-label">{messages.auth_email_label}</span>
+            <span className="kin-label">{t("auth.emailLabel")}</span>
             <input
               name="email"
               type="email"
@@ -45,7 +48,7 @@ export default async function SignUpPage({
           </label>
 
           <label className="kin-field">
-            <span className="kin-label">{messages.auth_password_label}</span>
+            <span className="kin-label">{t("auth.passwordLabel")}</span>
             <input
               name="password"
               type="password"
@@ -56,7 +59,7 @@ export default async function SignUpPage({
           </label>
 
           <button type="submit" className="kin-btn kin-btn--accent">
-            {messages.auth_signup_submit}
+            {t("auth.signup.submit")}
           </button>
         </form>
 
@@ -64,13 +67,13 @@ export default async function SignUpPage({
           href="/auth/social/login?provider=google"
           className="kin-btn kin-btn--ghost"
         >
-          {messages.auth_signup_google}
+          {t("auth.signup.google")}
         </a>
 
         <p className="kin-switch">
-          {messages.auth_signup_switch_prompt}{" "}
+          {t("auth.signup.switchPrompt")}{" "}
           <a href="/login" className="kin-switch-link">
-            {messages.auth_signup_switch_link}
+            {t("auth.signup.switchLink")}
           </a>
         </p>
       </div>

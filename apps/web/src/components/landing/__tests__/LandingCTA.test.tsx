@@ -1,43 +1,45 @@
 import type { ReactElement, ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+
+// LandingCTA is a server component (`getTranslations`) — see
+// `server-translator.ts` for why this is mocked rather than run for real
+// (the real next-intl/server RSC build isn't available under Vitest).
+vi.mock("next-intl/server", () => ({
+  getTranslations: async () => createServerTranslator(),
+}));
+
+import { createServerTranslator } from "@/test-utils/server-translator";
 import { LandingCTA } from "../LandingCTA";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
 
 describe("LandingCTA", () => {
-  const messages = {
-    cta_title: "Your next routine is waiting",
-    cta_subtitle: "Create your plan in under a minute. Free, no credit card.",
-    cta_primary: "Start free",
-    cta_secondary: "View plans",
-  };
-
-  it("renders the heading and subtitle", () => {
-    const html = renderToStaticMarkup(LandingCTA({ messages }));
+  it("renders the heading and subtitle via getTranslations, no messages.* access", async () => {
+    const html = renderToStaticMarkup(await LandingCTA());
     expect(html).toContain("Your next routine is waiting");
     expect(html).toContain("Create your plan in under a minute. Free, no credit card.");
   });
 
-  it("renders both CTA buttons", () => {
-    const html = renderToStaticMarkup(LandingCTA({ messages }));
+  it("renders both CTA buttons", async () => {
+    const html = renderToStaticMarkup(await LandingCTA());
     expect(html).toContain("Start free");
     expect(html).toContain("View plans");
   });
 
-  it("wraps the CTA content in a section", () => {
-    const html = renderToStaticMarkup(LandingCTA({ messages }));
+  it("wraps the CTA content in a section", async () => {
+    const html = renderToStaticMarkup(await LandingCTA());
     expect((html.match(/<section\b/g) || []).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders a photo background element", () => {
-    const html = renderToStaticMarkup(LandingCTA({ messages }));
+  it("renders a photo background element", async () => {
+    const html = renderToStaticMarkup(await LandingCTA());
     expect(html).toContain("kin-landing-ctaband-photo");
   });
 
-  it("CTA background image has empty alt (decorative — content conveyed by heading)", () => {
-    const html = renderToStaticMarkup(LandingCTA({ messages }));
+  it("CTA background image has empty alt (decorative — content conveyed by heading)", async () => {
+    const html = renderToStaticMarkup(await LandingCTA());
     // The cta-run image is decorative — it must have alt="" to be ignored by AT.
     expect(html).toContain('alt=""');
   });

@@ -1,34 +1,39 @@
 import type { ReactElement, ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { headers } from "next/headers";
+import { describe, expect, it, vi } from "vitest";
 import DashboardPage from "../page";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
 
-vi.mock("next/headers", () => ({
-  headers: vi.fn(),
+// DashboardPage is a server component (`getTranslations`) — see
+// `server-translator.ts` for why this is mocked rather than run for real
+// (the real next-intl/server RSC build isn't available under Vitest).
+// `getTranslations` is a `vi.fn` (not a plain async arrow) so the ES-locale
+// test below can override it for a single call via `mockResolvedValueOnce`.
+vi.mock("next-intl/server", () => ({
+  getTranslations: vi.fn(async () => createServerTranslator()),
 }));
 
-const mockedHeaders = vi.mocked(headers);
+vi.mock("../actions.js", () => ({
+  logoutAction: vi.fn(),
+}));
+
+import { getTranslations } from "next-intl/server";
+import { createServerTranslator } from "@/test-utils/server-translator";
 
 describe("DashboardPage", () => {
-  beforeEach(() => {
-    mockedHeaders.mockResolvedValue(new Headers({ "accept-language": "en-US,en;q=0.9" }));
-  });
-
-  it("renders the dashboard heading", async () => {
-    const page = await DashboardPage({ searchParams: Promise.resolve({ lang: "en" }) });
+  it("renders the dashboard heading via getTranslations, no messages.* access", async () => {
+    const page = await DashboardPage();
     expect(textOf(page)).toContain("Dashboard");
   });
 
   it("confirms the user is authenticated", async () => {
-    const page = await DashboardPage({ searchParams: Promise.resolve({ lang: "en" }) });
+    const page = await DashboardPage();
     expect(textOf(page)).toContain("You are authenticated");
   });
 
   it("renders a logout button inside a form", async () => {
-    const page = await DashboardPage({ searchParams: Promise.resolve({ lang: "en" }) });
+    const page = await DashboardPage();
 
     const submit = findFirst(page, (el) => el.props.type === "submit");
     expect(submit).toBeDefined();
@@ -39,12 +44,13 @@ describe("DashboardPage", () => {
     expect(form).toBeDefined();
   });
 
-  it("renders Spanish copy from the i18n catalog when lang=es", async () => {
-    const page = await DashboardPage({ searchParams: Promise.resolve({ lang: "es" }) });
+  it("renders real Spanish copy from the ES catalog (not EN leakage)", async () => {
+    vi.mocked(getTranslations).mockResolvedValueOnce(createServerTranslator("es"));
+    const page = await DashboardPage();
     const text = textOf(page);
 
     expect(text).toContain("Panel");
-    expect(text).toContain("Has iniciado sesión");
+    expect(text).toContain("Has iniciado sesión.");
     expect(text).toContain("Cerrar sesión");
   });
 });

@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import { KinIcon } from "@/components/icons";
 import { OrbitCard, OrbitSectionHeader } from "@/components/orbit";
 import { Reveal } from "./Reveal";
@@ -21,54 +22,56 @@ interface PricingTier {
   currency?: string;
 }
 
-export function LandingPricing({ messages }: { messages: Record<string, string> }) {
+export async function LandingPricing() {
+  const t = await getTranslations();
+
   const tiers: PricingTier[] = [
     {
-      tier: messages.pricing_free_tier ?? "",
-      desc: messages.pricing_free_desc ?? "",
-      amount: messages.pricing_free_amount ?? "",
-      per: messages.pricing_free_per ?? "",
+      tier: t("pricing.free.tier"),
+      desc: t("pricing.free.desc"),
+      amount: t("pricing.free.amount"),
+      per: t("pricing.free.per"),
       currency: "€",
       href: "/sign-up",
       features: [
-        { label: messages.pricing_free_feat1 ?? "" },
-        { label: messages.pricing_free_feat2 ?? "" },
-        { label: messages.pricing_free_feat3 ?? "" },
-        { label: messages.pricing_free_feat4 ?? "", muted: true },
+        { label: t("pricing.free.feat1") },
+        { label: t("pricing.free.feat2") },
+        { label: t("pricing.free.feat3") },
+        { label: t("pricing.free.feat4"), muted: true },
       ],
-      cta: messages.pricing_free_cta ?? "",
+      cta: t("pricing.free.cta"),
     },
     {
-      tier: messages.pricing_pro_tier ?? "",
-      desc: messages.pricing_pro_desc ?? "",
+      tier: t("pricing.pro.tier"),
+      desc: t("pricing.pro.desc"),
       amount: PRO_PRICE_EUR,
-      per: messages.pricing_pro_per ?? "",
+      per: t("pricing.pro.per"),
       currency: "€",
       pro: true,
       href: "/sign-up",
-      badge: messages.pricing_pro_badge ?? "",
+      badge: t("pricing.pro.badge"),
       features: [
-        { label: messages.pricing_pro_feat1 ?? "" },
-        { label: messages.pricing_pro_feat2 ?? "" },
-        { label: messages.pricing_pro_feat3 ?? "" },
-        { label: messages.pricing_pro_feat4 ?? "" },
+        { label: t("pricing.pro.feat1") },
+        { label: t("pricing.pro.feat2") },
+        { label: t("pricing.pro.feat3") },
+        { label: t("pricing.pro.feat4") },
       ],
-      cta: messages.pricing_pro_cta ?? "",
+      cta: t("pricing.pro.cta"),
     },
     {
-      tier: messages.pricing_team_tier ?? "",
-      desc: messages.pricing_team_desc ?? "",
+      tier: t("pricing.team.tier"),
+      desc: t("pricing.team.desc"),
       amount: TEAM_PRICE_EUR,
-      per: messages.pricing_team_per ?? "",
+      per: t("pricing.team.per"),
       currency: "€",
       href: "#",
       features: [
-        { label: messages.pricing_team_feat1 ?? "" },
-        { label: messages.pricing_team_feat2 ?? "" },
-        { label: messages.pricing_team_feat3 ?? "" },
-        { label: messages.pricing_team_feat4 ?? "" },
+        { label: t("pricing.team.feat1") },
+        { label: t("pricing.team.feat2") },
+        { label: t("pricing.team.feat3") },
+        { label: t("pricing.team.feat4") },
       ],
-      cta: messages.pricing_team_cta ?? "",
+      cta: t("pricing.team.cta"),
     },
   ];
 
@@ -76,7 +79,7 @@ export function LandingPricing({ messages }: { messages: Record<string, string> 
     <section className="kin-landing-section" id="precios">
       <div className="kin-landing-wrap">
         <Reveal>
-          <OrbitSectionHeader className="kin-landing-head" eyebrow={messages.pricing_eyebrow ?? ""} title={messages.pricing_title ?? ""} description={messages.pricing_subtitle ?? ""} />
+          <OrbitSectionHeader className="kin-landing-head" eyebrow={t("pricing.eyebrow")} title={t("pricing.title")} description={t("pricing.subtitle")} />
         </Reveal>
         <div className="kin-landing-prices">
           {tiers.map((tier, index) => (

@@ -1,6 +1,9 @@
+import { getTranslations } from "next-intl/server";
 import { KinIcon, OrbitLogoIcon } from "@/components/icons";
 
-export function LandingFooter({ messages }: { messages: Record<string, string> }) {
+export async function LandingFooter() {
+  const t = await getTranslations();
+
   return (
     <footer className="kin-landing-footer">
       <div className="kin-landing-wrap">
@@ -10,31 +13,31 @@ export function LandingFooter({ messages }: { messages: Record<string, string> }
               <OrbitLogoIcon size={16} decorative className="kin-landing-nav__logo" />
               kInorA
             </a>
-            <p>{messages.footer_tagline}</p>
+            <p>{t("footer.tagline")}</p>
           </div>
           <div className="kin-landing-footer__col">
-            <h4>{messages.footer_product}</h4>
-            <a href="#producto">{messages.footer_features}</a>
-            <a href="#como">{messages.footer_how_it_works}</a>
-            <a href="#precios">{messages.footer_pricing}</a>
-            <a href="#">{messages.footer_download}</a>
+            <h4>{t("footer.product")}</h4>
+            <a href="#producto">{t("footer.features")}</a>
+            <a href="#como">{t("footer.howItWorks")}</a>
+            <a href="#precios">{t("footer.pricing")}</a>
+            <a href="#">{t("footer.download")}</a>
           </div>
           <div className="kin-landing-footer__col">
-            <h4>{messages.footer_company}</h4>
-            <a href="#">{messages.footer_about}</a>
-            <a href="#">{messages.footer_blog}</a>
-            <a href="#">{messages.footer_careers}</a>
-            <a href="#">{messages.footer_contact}</a>
+            <h4>{t("footer.company")}</h4>
+            <a href="#">{t("footer.about")}</a>
+            <a href="#">{t("footer.blog")}</a>
+            <a href="#">{t("footer.careers")}</a>
+            <a href="#">{t("footer.contact")}</a>
           </div>
           <div className="kin-landing-footer__col">
-            <h4>{messages.footer_legal}</h4>
-            <a href="#">{messages.footer_privacy}</a>
-            <a href="#">{messages.footer_terms}</a>
-            <a href="#">{messages.footer_cookies}</a>
+            <h4>{t("footer.legal")}</h4>
+            <a href="#">{t("footer.privacy")}</a>
+            <a href="#">{t("footer.terms")}</a>
+            <a href="#">{t("footer.cookies")}</a>
           </div>
         </div>
         <div className="kin-landing-footer__bottom">
-          <span>{messages.footer_copyright}</span>
+          <span>{t("footer.copyright")}</span>
           <div className="kin-landing-footer__social">
             <a href="#" aria-label="Instagram">
               <KinIcon name="instagram" size={16} />

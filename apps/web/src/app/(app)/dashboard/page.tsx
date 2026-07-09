@@ -1,4 +1,4 @@
-import { getFirstParam, resolvePageI18n } from "@/i18n/request";
+import { getTranslations } from "next-intl/server";
 import { logoutAction } from "./actions";
 
 /**
@@ -11,26 +11,23 @@ import { logoutAction } from "./actions";
  *
  * This page renders inside the AppShell provided by `(app)/layout.tsx`.
  *
- * User-facing copy comes from the i18n catalogs (see `@/i18n/locale`),
- * resolved from the `?lang=` query parameter or the `Accept-Language` header.
+ * User-facing copy comes from next-intl (see `@/i18n/request`), whose
+ * locale is resolved from the `?lang=` query parameter (via the
+ * `x-kinora-lang` header injected by `proxy.ts`) or the `Accept-Language`
+ * header.
  */
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ lang?: string | string[] }>;
-}) {
-  const params = await searchParams;
-  const { messages } = await resolvePageI18n(getFirstParam(params.lang));
+export default async function DashboardPage() {
+  const t = await getTranslations();
 
   return (
     <main className="kin-page">
       <div className="kin-card kin-card--center">
-        <h1 className="kin-title">{messages.dashboard_title}</h1>
-        <p className="kin-text kin-muted">{messages.dashboard_authenticated}</p>
+        <h1 className="kin-title">{t("dashboard.title")}</h1>
+        <p className="kin-text kin-muted">{t("dashboard.authenticated")}</p>
 
         <form action={logoutAction}>
           <button type="submit" className="kin-btn kin-btn--danger">
-            {messages.dashboard_logout}
+            {t("dashboard.logout")}
           </button>
         </form>
       </div>

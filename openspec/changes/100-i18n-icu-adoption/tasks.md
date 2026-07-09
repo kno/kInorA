@@ -260,50 +260,50 @@ slices 4–6's route clusters, but MUST land before slice 8's cleanup gate
 call today).
 
 ### Phase 7.1: Verify Server/Client Status Per File
-- [ ] 7.1.1 For each of the 15 files in this slice, confirm current server/client status (`"use client"` directive present or absent) before assigning `getTranslations` (server) vs `useTranslations` (client) — do not assume; check each file individually.
+- [x] 7.1.1 For each of the 15 files in this slice, confirm current server/client status (`"use client"` directive present or absent) before assigning `getTranslations` (server) vs `useTranslations` (client) — do not assume; check each file individually. RESULT: all 15 files (8 pages + 7 landing children) had NO `"use client"` directive — all are server components, all migrated to `getTranslations` (async).
 
 ### Phase 7.2: 8 Orphan Server Pages
-- [ ] 7.2.1 [RED] Write render test for landing `page.tsx` asserting localized text is sourced via `getTranslations` (next-intl), not `messages.*` catalog access; assert `messages` prop is no longer threaded to landing children.
-- [ ] 7.2.2 [GREEN] Migrate landing `page.tsx` → `getTranslations()`; drop `messages` prop threading to children.
-- [ ] 7.2.3 [RED] Write render test for `(auth)/login/page.tsx` asserting `getTranslations` usage, no `messages.*` access.
-- [ ] 7.2.4 [GREEN] Migrate `(auth)/login/page.tsx` → `getTranslations()`.
-- [ ] 7.2.5 [RED] Write render test for `(auth)/sign-up/page.tsx` asserting `getTranslations` usage, no `messages.*` access.
-- [ ] 7.2.6 [GREEN] Migrate `(auth)/sign-up/page.tsx` → `getTranslations()`.
-- [ ] 7.2.7 [RED] Write render test for `dashboard/page.tsx` asserting `getTranslations` usage, no `messages.*` access.
-- [ ] 7.2.8 [GREEN] Migrate `dashboard/page.tsx` → `getTranslations()`.
-- [ ] 7.2.9 [RED] Write render test for `profile/page.tsx` asserting `getTranslations` usage, no `messages.*` access.
-- [ ] 7.2.10 [GREEN] Migrate `profile/page.tsx` → `getTranslations()`.
-- [ ] 7.2.11 [RED] Write render test for `exercises/page.tsx` asserting `getTranslations` usage, no `messages.*` access.
-- [ ] 7.2.12 [GREEN] Migrate `exercises/page.tsx` → `getTranslations()`.
-- [ ] 7.2.13 [RED] Write render test for `stats/page.tsx` asserting `getTranslations` usage, no `messages.*` access.
-- [ ] 7.2.14 [GREEN] Migrate `stats/page.tsx` → `getTranslations()`.
-- [ ] 7.2.15 [RED] Write render test for `offline/page.tsx` asserting `getTranslations` usage, no `messages.*` access.
-- [ ] 7.2.16 [GREEN] Migrate `offline/page.tsx` → `getTranslations()`; note Serwist precache risk (design Risks table) — no code change required this slice, just avoid regressing the precached snapshot's locale assumption.
+- [x] 7.2.1 [RED] Write render test for landing `page.tsx` asserting localized text is sourced via `getTranslations` (next-intl), not `messages.*` catalog access; assert `messages` prop is no longer threaded to landing children.
+- [x] 7.2.2 [GREEN] Migrate landing `page.tsx` → `getTranslations()`; drop `messages` prop threading to children.
+- [x] 7.2.3 [RED] Write render test for `(auth)/login/page.tsx` asserting `getTranslations` usage, no `messages.*` access.
+- [x] 7.2.4 [GREEN] Migrate `(auth)/login/page.tsx` → `getTranslations()`.
+- [x] 7.2.5 [RED] Write render test for `(auth)/sign-up/page.tsx` asserting `getTranslations` usage, no `messages.*` access.
+- [x] 7.2.6 [GREEN] Migrate `(auth)/sign-up/page.tsx` → `getTranslations()`.
+- [x] 7.2.7 [RED] Write render test for `dashboard/page.tsx` asserting `getTranslations` usage, no `messages.*` access.
+- [x] 7.2.8 [GREEN] Migrate `dashboard/page.tsx` → `getTranslations()`.
+- [x] 7.2.9 [RED] Write render test for `profile/page.tsx` asserting `getTranslations` usage, no `messages.*` access.
+- [x] 7.2.10 [GREEN] Migrate `profile/page.tsx` → `getTranslations()`.
+- [x] 7.2.11 [RED] Write render test for `exercises/page.tsx` asserting `getTranslations` usage, no `messages.*` access.
+- [x] 7.2.12 [GREEN] Migrate `exercises/page.tsx` → `getTranslations()`.
+- [x] 7.2.13 [RED] Write render test for `stats/page.tsx` asserting `getTranslations` usage, no `messages.*` access.
+- [x] 7.2.14 [GREEN] Migrate `stats/page.tsx` → `getTranslations()`.
+- [x] 7.2.15 [RED] Write render test for `offline/page.tsx` asserting `getTranslations` usage, no `messages.*` access.
+- [x] 7.2.16 [GREEN] Migrate `offline/page.tsx` → `getTranslations()`; note Serwist precache risk (design Risks table) — no code change required this slice, just avoid regressing the precached snapshot's locale assumption.
 
 ### Phase 7.3: 7 Landing Children
-- [ ] 7.3.1 [RED] Write render test for `LandingNav` asserting `getTranslations`/`useTranslations` per its verified server/client status (7.1.1), no `messages` prop; confirm its child `LandingNavClient` keeps plain-string props (NOT migrated — receives already-resolved strings).
-- [ ] 7.3.2 [GREEN] Migrate `LandingNav` per 7.3.1; drop `messages` prop.
-- [ ] 7.3.3 [RED] Write render test for `LandingHero` asserting migration off `messages` prop.
-- [ ] 7.3.4 [GREEN] Migrate `LandingHero`.
-- [ ] 7.3.5 [RED] Write render test for `LandingHowItWorks` asserting migration off `messages` prop.
-- [ ] 7.3.6 [GREEN] Migrate `LandingHowItWorks`.
-- [ ] 7.3.7 [RED] Write render test for `LandingFeatures` asserting migration off `messages` prop.
-- [ ] 7.3.8 [GREEN] Migrate `LandingFeatures`.
-- [ ] 7.3.9 [RED] Write render test for `LandingPricing` asserting migration off `messages` prop.
-- [ ] 7.3.10 [GREEN] Migrate `LandingPricing`.
-- [ ] 7.3.11 [RED] Write render test for `LandingCTA` asserting migration off `messages` prop.
-- [ ] 7.3.12 [GREEN] Migrate `LandingCTA`.
-- [ ] 7.3.13 [RED] Write render test for `LandingFooter` asserting migration off `messages` prop.
-- [ ] 7.3.14 [GREEN] Migrate `LandingFooter`.
-- [ ] 7.3.15 Confirm `LandingCinemaBand`, `LandingTrust`, `LandingNavClient` remain UNCHANGED — they receive already-resolved strings/arrays as props, not the `messages` catalog, and are NOT part of this migration.
+- [x] 7.3.1 [RED] Write render test for `LandingNav` asserting `getTranslations`/`useTranslations` per its verified server/client status (7.1.1), no `messages` prop; confirm its child `LandingNavClient` keeps plain-string props (NOT migrated — receives already-resolved strings).
+- [x] 7.3.2 [GREEN] Migrate `LandingNav` per 7.3.1; drop `messages` prop.
+- [x] 7.3.3 [RED] Write render test for `LandingHero` asserting migration off `messages` prop.
+- [x] 7.3.4 [GREEN] Migrate `LandingHero`.
+- [x] 7.3.5 [RED] Write render test for `LandingHowItWorks` asserting migration off `messages` prop.
+- [x] 7.3.6 [GREEN] Migrate `LandingHowItWorks`.
+- [x] 7.3.7 [RED] Write render test for `LandingFeatures` asserting migration off `messages` prop.
+- [x] 7.3.8 [GREEN] Migrate `LandingFeatures`.
+- [x] 7.3.9 [RED] Write render test for `LandingPricing` asserting migration off `messages` prop.
+- [x] 7.3.10 [GREEN] Migrate `LandingPricing`.
+- [x] 7.3.11 [RED] Write render test for `LandingCTA` asserting migration off `messages` prop.
+- [x] 7.3.12 [GREEN] Migrate `LandingCTA`.
+- [x] 7.3.13 [RED] Write render test for `LandingFooter` asserting migration off `messages` prop.
+- [x] 7.3.14 [GREEN] Migrate `LandingFooter`.
+- [x] 7.3.15 Confirm `LandingCinemaBand`, `LandingTrust`, `LandingNavClient` remain UNCHANGED — they receive already-resolved strings/arrays as props, not the `messages` catalog, and are NOT part of this migration. Verified unchanged; `HomePage` builds `trustItems`/`alt` via its own `getTranslations()` call and passes them as props, same as before.
 
 ### Phase 7.4: Number/Date + Fallback-Literal Cleanup
-- [ ] 7.4.1 Apply `useFormatter`/`getFormatter` wherever any of the 15 files render a number or date value.
-- [ ] 7.4.2 Remove the inline `?? "…"` fallback literals (some ES defaults) that these pages/children currently carry once their keys resolve correctly via next-intl's deep-merge EN fallback — confirm no observable text regression (these were NOT a hardcoded-English surface per the design's corrected risk note; all pages already resolved the catalog).
+- [x] 7.4.1 Apply `useFormatter`/`getFormatter` wherever any of the 15 files render a number or date value. N/A — grep-verified none of the 15 files render a number or date (pricing amounts are hardcoded module-level price constants, not locale-formatted values; no dates rendered).
+- [x] 7.4.2 Remove the inline `?? "…"` fallback literals (some ES defaults) that these pages/children currently carry once their keys resolve correctly via next-intl's deep-merge EN fallback — confirm no observable text regression (these were NOT a hardcoded-English surface per the design's corrected risk note; all pages already resolved the catalog). All literals removed; every removed key confirmed present in `packages/i18n/src/messages/en.json` with real rendered-text assertions in tests (no blank/regressed output).
 
 ### Phase 7.5: Cluster Verification
-- [ ] 7.5.1 Grep-verify zero remaining `messages.*` catalog access, `resolvePageI18n` calls, `.replace()` i18n sites, or local `t(key,fallback)` closures across all 15 files in this slice.
-- [ ] 7.5.2 `pnpm test` — full suite green.
+- [x] 7.5.1 Grep-verify zero remaining `messages.*` catalog access, `resolvePageI18n` calls, `.replace()` i18n sites, or local `t(key,fallback)` closures across all 15 files in this slice. Grep clean (zero matches).
+- [x] 7.5.2 `pnpm test` — full suite green. 73 files / 616 tests green; `pnpm type-check` clean; re-verified with `packages/{i18n,contracts,domain}/dist` renamed aside (no-dist CI-real check) — still green, then restored. FIX (reliability review): the first pass had dropped the per-page/component ES-locale render coverage that existed on `main` for the 8 pages + `LandingPricing`'s Teams-CTA-href guard (`createServerTranslator()` was hardcoded to `"en"`, and every test's mocked `getTranslations` only exercised EN). Parameterized `apps/web/src/test-utils/server-translator.ts` to `createServerTranslator(locale: "en" | "es" = "en")`; changed each affected test's `getTranslations` mock to a `vi.fn` so a per-test `mockResolvedValueOnce(createServerTranslator("es"))` can assert REAL ES catalog text (value-bearing, not "just renders"). Restored ES tests on: dashboard, exercises, profile, stats, offline, login, sign-up page tests, `LandingPricing`'s Teams CTA href guard, and added one on `HomePage` itself for `trustItems`/cinema-alt (the one case where a page — not a migrated child — owns the translation call). Test count went from 607 back to 616, matching `main`'s pre-migration count exactly.
 
 ---
 

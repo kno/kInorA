@@ -1,22 +1,21 @@
 import React from "react";
 import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// LandingNav is a server component (`getTranslations`) — see
+// `server-translator.ts` for why this is mocked rather than run for real
+// (the real next-intl/server RSC build isn't available under Vitest).
+vi.mock("next-intl/server", () => ({
+  getTranslations: async () => createServerTranslator(),
+}));
+
+import { createServerTranslator } from "@/test-utils/server-translator";
 import { LandingNav } from "../LandingNav";
 import { LandingNavClient, shouldFrost } from "../LandingNavClient";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
-
-const defaultMessages = {
-  title: "kInorA",
-  nav_products: "Product",
-  nav_how_it_works: "How it works",
-  nav_pricing: "Pricing",
-  nav_login: "Log in",
-  nav_signup: "Start free",
-  nav_menu_label: "Open menu",
-};
 
 const clientProps = {
   brandLabel: "kInorA",
@@ -137,31 +136,31 @@ describe("LandingNavClient", () => {
 });
 
 describe("LandingNav (server wrapper)", () => {
-  it("renders brand name from messages", () => {
-    const html = renderToStaticMarkup(LandingNav({ messages: defaultMessages }));
+  it("renders the brand name via getTranslations, no messages.* access", async () => {
+    const html = renderToStaticMarkup(await LandingNav());
     expect(html).toContain("kInorA");
   });
 
-  it("renders navigation labels from messages", () => {
-    const html = renderToStaticMarkup(LandingNav({ messages: defaultMessages }));
+  it("renders navigation labels from the real EN catalog", async () => {
+    const html = renderToStaticMarkup(await LandingNav());
     expect(html).toContain("Product");
     expect(html).toContain("How it works");
     expect(html).toContain("Pricing");
   });
 
-  it("renders login and sign-up labels from messages", () => {
-    const html = renderToStaticMarkup(LandingNav({ messages: defaultMessages }));
+  it("renders login and sign-up labels from the real EN catalog", async () => {
+    const html = renderToStaticMarkup(await LandingNav());
     expect(html).toContain("Log in");
     expect(html).toContain("Start free");
   });
 
-  it("passes menu aria label from messages to client component", () => {
-    const html = renderToStaticMarkup(LandingNav({ messages: defaultMessages }));
+  it("passes the menu aria label from the catalog to the client component", async () => {
+    const html = renderToStaticMarkup(await LandingNav());
     expect(html).toContain("Open menu");
   });
 
-  it("renders the hamburger button", () => {
-    const html = renderToStaticMarkup(LandingNav({ messages: defaultMessages }));
+  it("renders the hamburger button", async () => {
+    const html = renderToStaticMarkup(await LandingNav());
     expect(html).toContain("<button");
     expect(html).toContain("kin-landing-nav__toggle");
   });
