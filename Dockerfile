@@ -13,6 +13,7 @@ COPY apps/mobile/package.json apps/mobile/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/domain/package.json packages/domain/package.json
+COPY packages/i18n/package.json packages/i18n/package.json
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
