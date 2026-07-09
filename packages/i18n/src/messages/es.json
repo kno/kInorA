@@ -551,5 +551,50 @@
     "title": "Estás sin conexión",
     "description": "Parece que en este momento no tienes conexión a internet. Comprueba tu conexión e inténtalo de nuevo.",
     "syncNote": "Tus datos se sincronizarán cuando vuelvas a tener conexión."
+  },
+  "mobileTracker": {
+    "progress": {
+      "a11y": "{current} de {total} ejercicios"
+    },
+    "set": {
+      "info": "Serie {setNumber} de {setTotal} · Objetivo: {targetLabel}"
+    },
+    "objective": {
+      "withWeight": "{weightKg} kg × {reps} reps",
+      "noWeight": "{reps} reps"
+    },
+    "completeSet": {
+      "a11y": "Completar serie {setNumber}"
+    },
+    "next": {
+      "detail": "{sets} series · {weightKg} kg × {reps} reps",
+      "detailNoWeight": "{sets} series · {reps} reps"
+    },
+    "finish": {
+      "cta": "Finalizar sesión",
+      "a11y": "Finalizar sesión de entrenamiento"
+    },
+    "loading": "Cargando sesión…",
+    "complete": {
+      "title": "Sesión completada",
+      "body": "¡Buen trabajo! Registramos tu entrenamiento."
+    },
+    "backHome": "Volver al inicio",
+    "error": {
+      "load": "No pudimos cargar la sesión. Intentá de nuevo.",
+      "start": "No pudimos iniciar la sesión. Intentá de nuevo.",
+      "record": "No pudimos guardar la serie. Intentá de nuevo.",
+      "complete": "No pudimos finalizar la sesión. Intentá de nuevo."
+    },
+    "reps": {
+      "decrease": "Reducir repetición",
+      "increase": "Aumentar repetición"
+    },
+    "conflict": {
+      "withScope": "Ya tenés una sesión activa en «{planName}» (Día {day}). Terminala antes de empezar otra.",
+      "withPlan": "Ya tenés una sesión activa en «{planName}». Terminala antes de empezar otra.",
+      "generic": "Ya tenés una sesión activa. Terminala antes de empezar otra."
+    },
+    "retry": "Reintentar"
   }
 }

@@ -551,5 +551,50 @@
     "title": "You're Offline",
     "description": "It looks like you're currently disconnected from the internet. Please check your connection and try again.",
     "syncNote": "Your data will be synced once you're back online."
+  },
+  "mobileTracker": {
+    "progress": {
+      "a11y": "{current} of {total} exercises"
+    },
+    "set": {
+      "info": "Set {setNumber} of {setTotal} · Target: {targetLabel}"
+    },
+    "objective": {
+      "withWeight": "{weightKg} kg × {reps} reps",
+      "noWeight": "{reps} reps"
+    },
+    "completeSet": {
+      "a11y": "Complete set {setNumber}"
+    },
+    "next": {
+      "detail": "{sets} sets · {weightKg} kg × {reps} reps",
+      "detailNoWeight": "{sets} sets · {reps} reps"
+    },
+    "finish": {
+      "cta": "Finish session",
+      "a11y": "Finish workout session"
+    },
+    "loading": "Loading session…",
+    "complete": {
+      "title": "Session completed",
+      "body": "Great work! We've logged your workout."
+    },
+    "backHome": "Back to home",
+    "error": {
+      "load": "We couldn't load the session. Please try again.",
+      "start": "We couldn't start the session. Please try again.",
+      "record": "We couldn't save the set. Please try again.",
+      "complete": "We couldn't finish the session. Please try again."
+    },
+    "reps": {
+      "decrease": "Decrease rep",
+      "increase": "Increase rep"
+    },
+    "conflict": {
+      "withScope": "You already have an active session in \"{planName}\" (Day {day}). Finish it before starting another.",
+      "withPlan": "You already have an active session in \"{planName}\". Finish it before starting another.",
+      "generic": "You already have an active session. Finish it before starting another."
+    },
+    "retry": "Retry"
   }
 }
