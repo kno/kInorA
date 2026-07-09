@@ -1,20 +1,549 @@
 {
+  "marketing": {
+    "title": "kInorA",
+    "subtitle": "Entrenamiento personalizado con IA",
+    "cta": "Empezar",
+    "cinemaAlt": "Atleta tomando un descanso activo entre series, sentado en el suelo del gimnasio con las manos apoyadas en las rodillas",
+    "comoImgAlt": "Mujer realizando una sentadilla con barra cargada en el gimnasio, con postura correcta y concentración total",
+    "strengthImgAlt": "Manos con magnesio sujetando una barra de pesas antes de un levantamiento, listos para ejecutar el movimiento"
+  },
   "nav": {
-    "home": "Inicio",
-    "about": "Acerca de"
+    "products": "Producto",
+    "howItWorks": "Cómo funciona",
+    "pricing": "Precios",
+    "login": "Iniciar sesión",
+    "signup": "Empezar gratis",
+    "menuLabel": "Abrir menú",
+    "ariaLabel": "Principal"
   },
   "hero": {
-    "title": "Bienvenido a Kinora",
-    "greeting": "¡Hola, {name}!"
-  },
-  "wizard": {
-    "frequency": {
-      "days": "{n, plural, one {# día por semana} other {# días por semana}}"
+    "eyebrow": "Entrenador con IA",
+    "title": "Tu entrenador personal, ",
+    "titleAccent": "impulsado por IA",
+    "subtitle": "kInorA te escucha, arma tu rutina y la ajusta cada semana según tu progreso. Entrena con un plan que evoluciona contigo, no con uno genérico.",
+    "cta": {
+      "primary": "Empieza gratis",
+      "secondary": "Mira cómo funciona"
+    },
+    "meta": {
+      "nocard": "Sin tarjeta para empezar",
+      "homegym": "Para casa o gimnasio",
+      "iosandroid": "iOS y Android"
     }
+  },
+  "trust": {
+    "schedule": {
+      "title": "Se adapta a tu horario",
+      "desc": "Indica los días que puedes entrenar y la IA reorganiza tu semana."
+    },
+    "level": {
+      "title": "Plan para tu nivel",
+      "desc": "De principiante a avanzado, con sobrecarga progresiva."
+    },
+    "equipment": {
+      "title": "Sin equipamiento",
+      "desc": "Entrena en casa, en el parque o en el gimnasio."
+    },
+    "hands": {
+      "title": "Manos libres",
+      "desc": "Controla tu sesión por voz mientras entrenas."
+    }
+  },
+  "hiw": {
+    "eyebrow": "Cómo funciona",
+    "title": "De tu objetivo a tu rutina en tres pasos",
+    "subtitle": "Sin plantillas genéricas. Le cuentas qué quieres lograr y kInorA construye un plan a tu medida que mejora contigo.",
+    "step1": {
+      "num": "01",
+      "title": "Cuéntale tu objetivo",
+      "desc": "Habla o escribe: ganar fuerza, perder grasa, correr más. La IA aprende tu nivel, tu disponibilidad y tu equipamiento."
+    },
+    "step2": {
+      "num": "02",
+      "title": "La IA crea tu plan",
+      "desc": "En segundos obtienes una rutina semanal con ejercicios, series, repeticiones y descansos diseñados para ti."
+    },
+    "step3": {
+      "num": "03",
+      "title": "Entrena y mejora cada semana",
+      "desc": "Registra tus sesiones y la IA ajusta cargas y volumen para que sigas progresando sin estancarte."
+    }
+  },
+  "features": {
+    "eyebrow": "Producto",
+    "title": "Todo tu entrenamiento, en una sola app",
+    "subtitle": "Las herramientas que un entrenador te daría, disponibles cada día a cualquier hora.",
+    "adaptive": {
+      "title": "Plan adaptativo",
+      "desc": "Rutinas que se reajustan cada semana según tu progreso, tu cansancio y tu disponibilidad real."
+    },
+    "voice": {
+      "title": "Asistente de voz",
+      "desc": "Marca series, pide un cambio de ejercicio o lanza el descanso sin tocar la pantalla."
+    },
+    "tracking": {
+      "title": "Seguimiento en vivo",
+      "desc": "Temporizador de descanso, registro de series y guía de ejercicios durante toda tu sesión."
+    },
+    "stats": {
+      "title": "Estadísticas",
+      "desc": "Visualiza tu volumen, tu fuerza y tu constancia con gráficas claras y fáciles de leer."
+    },
+    "strength": {
+      "eyebrow": "Progresión real",
+      "title": "Cada kilo levantado, registrado",
+      "desc": "kInorA lleva el control de tus cargas y ajusta la progresión de manera inteligente. Sin hojas de cálculo, sin adivinar. Solo avance constante semana a semana."
+    }
+  },
+  "pricing": {
+    "eyebrow": "Precios",
+    "title": "Empieza gratis y crece cuando quieras",
+    "subtitle": "Sin compromiso. Cambia o cancela tu plan cuando quieras desde la app.",
+    "free": {
+      "tier": "Gratis",
+      "desc": "Para empezar a entrenar con IA.",
+      "amount": "0",
+      "per": "/ siempre",
+      "feat1": "Un plan adaptativo activo",
+      "feat2": "Seguimiento de sesiones",
+      "feat3": "Estadísticas básicas",
+      "feat4": "Asistente de voz",
+      "cta": "Crear cuenta"
+    },
+    "pro": {
+      "tier": "Pro",
+      "desc": "Para entrenar en serio cada semana.",
+      "per": "/ mes",
+      "feat1": "Planes ilimitados con ajustes semanales",
+      "feat2": "Asistente de voz con manos libres",
+      "feat3": "Estadísticas y récords avanzados",
+      "feat4": "Biblioteca completa de ejercicios",
+      "cta": "Empezar con Pro",
+      "badge": "Más popular"
+    },
+    "team": {
+      "tier": "Equipos",
+      "desc": "Para entrenadores y centros de entrenamiento.",
+      "per": "/ mes",
+      "feat1": "Todo lo de Pro para tu equipo",
+      "feat2": "Panel para gestionar atletas",
+      "feat3": "Planes y plantillas compartidas",
+      "feat4": "Soporte prioritario",
+      "cta": "Hablar con ventas"
+    }
+  },
+  "cta": {
+    "title": "Tu próxima rutina te está esperando",
+    "subtitle": "Crea tu plan en menos de un minuto. Gratis, sin tarjeta.",
+    "primary": "Empezar gratis",
+    "secondary": "Ver planes"
+  },
+  "auth": {
+    "login": {
+      "title": "Iniciar sesión",
+      "submit": "Iniciar sesión",
+      "google": "Iniciar sesión con Google",
+      "switchPrompt": "¿No tienes una cuenta?",
+      "switchLink": "Crear cuenta"
+    },
+    "signup": {
+      "title": "Crear cuenta",
+      "submit": "Crear cuenta",
+      "google": "Registrarse con Google",
+      "switchPrompt": "¿Ya tienes una cuenta?",
+      "switchLink": "Iniciar sesión"
+    },
+    "emailLabel": "Correo electrónico",
+    "passwordLabel": "Contraseña"
+  },
+  "footer": {
+    "tagline": "El entrenador con IA que arma tu plan, lo adapta cada semana y entrena contigo.",
+    "product": "Producto",
+    "features": "Funcionalidades",
+    "howItWorks": "Cómo funciona",
+    "pricing": "Precios",
+    "download": "Descargar app",
+    "company": "Empresa",
+    "about": "Sobre kInorA",
+    "blog": "Blog",
+    "careers": "Empleo",
+    "contact": "Contacto",
+    "legal": "Legal",
+    "privacy": "Privacidad",
+    "terms": "Términos",
+    "cookies": "Cookies",
+    "copyright": "© 2026 kInorA. Todos los derechos reservados."
+  },
+  "phone": {
+    "coachLabel": "Coach kInorA",
+    "dayLabel": "Día 4 · Fuerza",
+    "pillActive": "En curso",
+    "ringGoalLabel": "Objetivo semanal",
+    "ringGoalValue": "3 de 4 sesiones",
+    "workoutToday": "Entreno de hoy",
+    "workoutDuration": "42 min",
+    "ex1": {
+      "name": "Sentadilla con barra",
+      "set": "4 × 8"
+    },
+    "ex2": {
+      "name": "Press de banca",
+      "set": "4 × 10"
+    },
+    "ex3": {
+      "name": "Remo con mancuerna",
+      "set": "3 × 12"
+    },
+    "streakLabel": "Racha",
+    "day": {
+      "mon": "L",
+      "tue": "M",
+      "wed": "X",
+      "thu": "J",
+      "fri": "V",
+      "sat": "S",
+      "sun": "D"
+    },
+    "ariaLabel": "Vista previa de la app kInorA mostrando el entreno del día, la racha semanal y el progreso"
   },
   "plan": {
+    "generating": {
+      "title": "Generando tu plan…",
+      "desc": "Tu plan de entrenamiento personalizado está siendo creado. Esto suele tardar unos 30 segundos.",
+      "aria": "Generando plan"
+    },
+    "ready": {
+      "title": "Tu plan está listo"
+    },
+    "failed": {
+      "title": "Error al generar el plan",
+      "desc": "Algo salió mal al generar tu plan. Puedes intentarlo de nuevo."
+    },
+    "regenerate": {
+      "cta": "Regenerar plan"
+    },
+    "session": {
+      "day": "Día"
+    },
+    "exercises": {
+      "label": "Ejercicios",
+      "count": "ejercicios"
+    },
+    "sets": {
+      "label": "series"
+    },
+    "reps": {
+      "label": "reps"
+    },
+    "rest": {
+      "label": "descanso"
+    },
+    "limitation": {
+      "warningLabel": "Nota",
+      "title": "Nota importante"
+    },
+    "backToDashboard": "Volver al dashboard",
+    "nav": {
+      "empty": {
+        "title": "Sin plan todavía",
+        "desc": "Crea tu plan de entrenamiento personalizado para comenzar.",
+        "cta": "Crear tu plan"
+      }
+    },
     "selector": {
+      "label": "Seleccionar un plan",
       "option": "{status, select, ready {Listo} generating {Generando} failed {Fallido} other {Desconocido}}"
+    },
+    "name": {
+      "fieldLabel": "Nombre del plan (opcional)",
+      "placeholder": "p. ej. Bloque de fuerza de verano"
+    },
+    "viewDetailsOrRegenerate": "Ver detalles o regenerar",
+    "day": {
+      "label": "Día {n}",
+      "detailClose": "Cerrar",
+      "startCta": "Empezar sesión"
+    },
+    "est_duration": "est. {n, plural, one {# min} other {# min}}",
+    "summary": {
+      "sessions": "Sesiones planificadas",
+      "sessionsSub": "días de entrenamiento",
+      "rest": "Días de descanso",
+      "restSub": "por semana",
+      "duration": "Duración estimada",
+      "durationSub": "por semana (est.)",
+      "volume": "Volumen objetivo",
+      "volumeSub": "próximamente",
+      "volumePlaceholder": "—"
+    },
+    "table": {
+      "exercise": "Ejercicio",
+      "sets": "Series",
+      "reps": "Reps",
+      "rest": "Descanso"
+    },
+    "start": {
+      "conflict": "Tienes una sesión activa para {plan} · Día {n}. Retómala o termínala antes de empezar otra.",
+      "conflict_no_day": "Tienes una sesión activa para {plan}. Retómala o termínala antes de empezar otra.",
+      "conflict_generic": "Ya tienes una sesión de entrenamiento activa. Retómala o termínala antes de empezar otra."
     }
+  },
+  "tracker": {
+    "start": {
+      "cta": "Empezar entrenamiento"
+    },
+    "live": {
+      "eyebrow": "Sesión activa",
+      "title": "Entrenamiento en vivo"
+    },
+    "status": {
+      "active": "Activo",
+      "completed": "Completado"
+    },
+    "tracking": {
+      "day": "Día {n}"
+    },
+    "error": {
+      "start": "No pudimos iniciar la sesión. Inténtalo de nuevo.",
+      "record": "No pudimos guardar la serie. Inténtalo de nuevo.",
+      "complete": "No pudimos completar el entrenamiento. Inténtalo de nuevo."
+    },
+    "currentExercise": "Ejercicio actual",
+    "rpe": "RPE",
+    "notes": "Notas",
+    "set": {
+      "heading": "Serie"
+    },
+    "complete": {
+      "cta": "Completar entrenamiento"
+    },
+    "controlsLabel": "Controles de sesión",
+    "timerLabel": "Tiempo",
+    "pauseLabel": "Pausar sesión",
+    "resumeLabel": "Reanudar sesión",
+    "progress": {
+      "label": "Ejercicio {n} de {m}",
+      "valuetext": "Ejercicio {n} de {m}, {percent}%",
+      "aria": "Progreso de la sesión"
+    },
+    "target": {
+      "pill": "Objetivo · {reps} reps"
+    },
+    "metrics": {
+      "aria": "Resumen del ejercicio"
+    },
+    "metric": {
+      "volume": "Volumen"
+    },
+    "unit": {
+      "kg": "kg",
+      "reps": "reps"
+    },
+    "steppers": {
+      "aria": "Ajustar carga y repeticiones"
+    },
+    "load": {
+      "label": "Carga"
+    },
+    "reps": {
+      "label": "Reps",
+      "downLabel": "Reducir repeticiones",
+      "upLabel": "Aumentar repeticiones"
+    },
+    "weight": {
+      "downLabel": "Reducir carga 2.5 kg",
+      "upLabel": "Aumentar carga 2.5 kg"
+    },
+    "note": {
+      "placeholder": "Nota rápida"
+    },
+    "addNote": {
+      "cta": "Añadir nota"
+    },
+    "completeSet": {
+      "cta": "Completar serie"
+    },
+    "rest": {
+      "aria": "Temporizador de descanso",
+      "active": "Descanso activo",
+      "ready": "Listo para la serie",
+      "label": "descanso",
+      "skip": "Saltar",
+      "skipLabel": "Saltar descanso",
+      "addTime": "+15 s",
+      "addLabel": "Agregar 15 segundos",
+      "srActive": "Descanso activo, quedan {time}"
+    },
+    "next": {
+      "heading": "A continuación",
+      "sets": "{n, plural, one {# serie} other {# series}}",
+      "empty": "Último ejercicio de la sesión."
+    },
+    "timeline": {
+      "heading": "Timeline del entreno",
+      "meta": {
+        "done": "{n, plural, one {# serie · completado} other {# series · completado}}",
+        "active": "{n, plural, one {Serie # de {m} · en curso} other {Serie # de {m} · en curso}}",
+        "pending": "{n, plural, one {# serie · pendiente} other {# series · pendiente}}"
+      },
+      "done": "Hecho",
+      "now": "Ahora",
+      "next": "Pendiente"
+    },
+    "rail": {
+      "aria": "Panel de rendimiento",
+      "eyebrow": "Rendimiento",
+      "title": "Resumen de sesión",
+      "series": "Series",
+      "avgRest": "Descanso medio",
+      "streak": "Racha"
+    },
+    "stubSoon": "próximamente",
+    "aiNote": {
+      "heading": "Microajuste sugerido",
+      "stub": "Los ajustes del coach IA aparecerán aquí cuando estén disponibles."
+    }
+  },
+  "wizard": {
+    "step": {
+      "goalTitle": "¿Cuál es tu objetivo principal?",
+      "locationTitle": "¿Dónde vas a entrenar?",
+      "frequencyTitle": "¿Cuántos días por semana?",
+      "durationTitle": "¿Cuánto dura cada sesión?",
+      "equipmentTitle": "¿Qué equipamiento tienes?",
+      "limitationsTitle": "¿Alguna limitación a tener en cuenta?",
+      "progressAria": "Paso {step} de {total}"
+    },
+    "startOver": "Empezar de nuevo",
+    "back": "Atrás",
+    "finish": "Finalizar",
+    "continue": "Continuar",
+    "goal": {
+      "strength": {
+        "label": "Fuerza",
+        "desc": "Desarrolla potencia máxima"
+      },
+      "hypertrophy": {
+        "label": "Hipertrofia",
+        "desc": "Aumenta el tamaño muscular"
+      },
+      "fatLoss": {
+        "label": "Pérdida de grasa",
+        "desc": "Déficit calórico progresivo"
+      },
+      "generalFitness": {
+        "label": "Estado físico general",
+        "desc": "Mantente sano y activo"
+      }
+    },
+    "location": {
+      "home": {
+        "label": "Casa",
+        "desc": "Entrena en tu propio espacio"
+      },
+      "gym": {
+        "label": "Gimnasio",
+        "desc": "Acceso a equipamiento completo"
+      },
+      "outdoor": {
+        "label": "Aire libre",
+        "desc": "Parques, senderos, aire libre"
+      }
+    },
+    "frequency": {
+      "days": "{n, plural, one {# día} other {# días}}",
+      "highCommitment": "Compromiso alto",
+      "perWeek": "Por semana"
+    },
+    "duration": {
+      "min": "{n, plural, one {# min} other {# min}}",
+      "quickSession": "Sesión rápida",
+      "perSession": "Por sesión",
+      "customAria": "Duración personalizada en minutos",
+      "customPlaceholder": "p. ej. 75",
+      "setButton": "Establecer duración",
+      "errorEmpty": "Introduce una duración en minutos."
+    },
+    "equipment": {
+      "addAria": "Añadir equipamiento",
+      "addPlaceholder": "p. ej. trineo",
+      "addButton": "Añadir",
+      "errorEmpty": "Introduce un nombre de equipamiento.",
+      "errorDuplicate": "Ese equipamiento ya está en tu lista.",
+      "dumbbells": {
+        "label": "Mancuernas",
+        "alt": "Un par de mancuernas ajustables"
+      },
+      "resistanceBands": {
+        "label": "Bandas de resistencia",
+        "alt": "Un conjunto de bandas elásticas de resistencia"
+      },
+      "pullUpBar": {
+        "label": "Barra de dominadas",
+        "alt": "Barra de dominadas para marco de puerta"
+      },
+      "kettlebell": {
+        "label": "Pesa rusa",
+        "alt": "Pesa rusa"
+      },
+      "bench": {
+        "label": "Banco",
+        "alt": "Banco de pesas ajustable"
+      },
+      "barbell": {
+        "label": "Barra",
+        "alt": "Una barra olímpica cargada con discos"
+      },
+      "cableMachine": {
+        "label": "Máquina de cables",
+        "alt": "Una estación de poleas de cable en un gimnasio"
+      },
+      "smithMachine": {
+        "label": "Máquina Smith",
+        "alt": "Máquina Smith con barra guiada"
+      },
+      "legPress": {
+        "label": "Prensa de piernas",
+        "alt": "Máquina de prensa de piernas"
+      },
+      "bodyweight": {
+        "label": "Solo peso corporal",
+        "alt": "Un atleta haciendo una flexión a una mano"
+      },
+      "suspensionTrainer": {
+        "label": "Entrenador de suspensión",
+        "alt": "Correas de entrenador de suspensión"
+      }
+    },
+    "limitations": {
+      "addAria": "Añadir una limitación",
+      "addPlaceholder": "p. ej. dolor de rodilla",
+      "addButton": "Añadir"
+    },
+    "chip": {
+      "removeAria": "Eliminar {name}"
+    }
+  },
+  "dashboard": {
+    "title": "Panel",
+    "authenticated": "Has iniciado sesión.",
+    "logout": "Cerrar sesión"
+  },
+  "exercises": {
+    "title": "Ejercicios",
+    "description": "Explora y busca en la biblioteca de ejercicios para tus entrenamientos."
+  },
+  "stats": {
+    "title": "Estadísticas",
+    "description": "Sigue tu progreso y revisa tu historial de entrenamiento."
+  },
+  "profile": {
+    "title": "Perfil",
+    "description": "Gestiona los ajustes y las preferencias de tu cuenta."
+  },
+  "offline": {
+    "title": "Estás sin conexión",
+    "description": "Parece que en este momento no tienes conexión a internet. Comprueba tu conexión e inténtalo de nuevo.",
+    "syncNote": "Tus datos se sincronizarán cuando vuelvas a tener conexión."
   }
 }
