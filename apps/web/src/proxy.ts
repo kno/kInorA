@@ -47,7 +47,13 @@ export function proxy(request: NextRequest): NextResponse | Response {
   const lang = request.nextUrl.searchParams.get("lang");
 
   if (lang !== null) {
-    requestHeaders.set("x-kinora-lang", lang);
+    try {
+      requestHeaders.set("x-kinora-lang", lang);
+    } catch {
+      // Malformed value (e.g. control chars) — fail soft: treat as absent so
+      // resolution falls through to Accept-Language rather than 500ing.
+      requestHeaders.delete("x-kinora-lang");
+    }
   } else {
     requestHeaders.delete("x-kinora-lang");
   }

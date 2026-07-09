@@ -43,6 +43,14 @@ describe("proxy — ?lang= header injection", () => {
     expect(response.headers.get("x-middleware-request-x-kinora-lang")).toBe("es");
   });
 
+  it("fails soft (no 500) and omits x-kinora-lang when ?lang= contains control chars", () => {
+    const request = buildRequest("/");
+    request.nextUrl.searchParams.set("lang", "es\r\nX-Injected: 1");
+    const response = proxy(request);
+    expect(response.status).not.toBe(500);
+    expect(response.headers.get("x-middleware-request-x-kinora-lang")).toBeNull();
+  });
+
   it("excludes /_next/*, static assets, and /api/* from the matcher", () => {
     expect(config.matcher).toContain(
       "/((?!_next/|api/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|gif|ico|css|js|map|json|woff|woff2|ttf)$).*)"
