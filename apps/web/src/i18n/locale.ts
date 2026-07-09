@@ -8,23 +8,8 @@
  */
 
 export type SupportedLocale = "en" | "es";
-export type Messages = Record<string, string>;
 
 const SUPPORTED_LOCALES: ReadonlySet<string> = new Set(["en", "es"]);
-
-import enMessages from "./messages/en.json";
-import esMessages from "./messages/es.json";
-
-const MESSAGE_CATALOGUES: Record<SupportedLocale, Messages> = {
-  en: enMessages as unknown as Messages,
-  es: esMessages as unknown as Messages,
-};
-
-const FALLBACK_MESSAGES: Messages = {
-  title: "kInorA",
-  subtitle: "Personalized training powered by AI",
-  cta: "Get Started",
-};
 
 /**
  * Resolve the locale from the Accept-Language header and an optional
@@ -59,18 +44,6 @@ export function resolveLocale(
 
   // 3. Default fallback
   return "en";
-}
-
-/**
- * Load the message catalogue for the given locale.
- * Falls back to English for unknown locales.
- */
-export function loadMessages(locale: SupportedLocale): Messages {
-  const safeLocale: SupportedLocale = SUPPORTED_LOCALES.has(locale)
-    ? locale
-    : "en";
-
-  return { ...MESSAGE_CATALOGUES.en, ...MESSAGE_CATALOGUES[safeLocale] };
 }
 
 /**
