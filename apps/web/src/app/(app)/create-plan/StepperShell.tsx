@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type {
   PlanGoal,
   PlanLimitation,
@@ -46,21 +47,16 @@ export interface StepperShellProps {
    * Returns { planId, status } so the shell can navigate to /plan/[planId].
    */
   confirmPlanSpecAction: () => Promise<{ planId: string; status: string }>;
-  /** Resolved i18n catalogue passed down from the server page. */
-  messages?: Record<string, string>;
 }
 
-/** Catalog keys + English fallbacks for the six step titles. */
-const STEP_QUESTIONS: readonly { key: string; fallback: string }[] = [
-  { key: "wizard_step_goal_title", fallback: "What is your main goal?" },
-  { key: "wizard_step_location_title", fallback: "Where will you train?" },
-  { key: "wizard_step_equipment_title", fallback: "What equipment do you have?" },
-  { key: "wizard_step_frequency_title", fallback: "How many days per week?" },
-  { key: "wizard_step_duration_title", fallback: "How long is each session?" },
-  {
-    key: "wizard_step_limitations_title",
-    fallback: "Any limitations to keep in mind?",
-  },
+/** Catalog keys for the six step titles, in step order. */
+const STEP_QUESTION_KEYS: readonly string[] = [
+  "wizard.step.goalTitle",
+  "wizard.step.locationTitle",
+  "wizard.step.equipmentTitle",
+  "wizard.step.frequencyTitle",
+  "wizard.step.durationTitle",
+  "wizard.step.limitationsTitle",
 ] as const;
 
 /**
@@ -76,9 +72,8 @@ export function StepperShell({
   initialDraft,
   saveDraftAction,
   confirmPlanSpecAction,
-  messages = {},
 }: StepperShellProps) {
-  const t = (key: string, fallback: string): string => messages[key] ?? fallback;
+  const t = useTranslations();
   const router = useRouter();
   const [step, setStep] = useState(initialDraft?.step ?? 1);
   const [spec, setSpec] = useState<DraftSpec>(initialDraft?.spec ?? {});
@@ -201,7 +196,6 @@ export function StepperShell({
           <GoalStep
             value={spec.goal}
             onSelect={(goal: PlanGoal) => selectAndAdvance({ goal })}
-            messages={messages}
           />
         );
       case 2:
@@ -209,7 +203,6 @@ export function StepperShell({
           <LocationStep
             value={spec.location}
             onSelect={(location: TrainingLocation) => selectAndAdvance({ location })}
-            messages={messages}
           />
         );
       case 3:
@@ -218,7 +211,6 @@ export function StepperShell({
             value={spec.equipment ?? []}
             location={spec.location}
             onSelect={(equipment: string[]) => update({ equipment })}
-            messages={messages}
           />
         );
       case 4:
@@ -226,7 +218,6 @@ export function StepperShell({
           <FrequencyStep
             value={spec.daysPerWeek}
             onSelect={(daysPerWeek: number) => selectAndAdvance({ daysPerWeek })}
-            messages={messages}
           />
         );
       case 5:
@@ -241,7 +232,6 @@ export function StepperShell({
                 update({ sessionDurationMinutes });
               }
             }}
-            messages={messages}
           />
         );
       case 6:
@@ -250,13 +240,12 @@ export function StepperShell({
             <LimitationsStep
               value={spec.limitations ?? []}
               onSelect={(limitations: PlanLimitation[]) => update({ limitations })}
-              messages={messages}
             />
             {/* Optional plan name (#93). Blank is allowed — the server resolves a
                 date-based default via defaultPlanName on read. */}
             <div className={styles.nameField}>
               <label htmlFor="plan-name" className="kin-label">
-                {t("plan_name_field_label", "Plan name (optional)")}
+                {t("plan.name.fieldLabel")}
               </label>
               <input
                 id="plan-name"
@@ -264,7 +253,7 @@ export function StepperShell({
                 className="kin-input"
                 maxLength={120}
                 value={name}
-                placeholder={t("plan_name_placeholder", "e.g. Summer strength block")}
+                placeholder={t("plan.name.placeholder")}
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
@@ -284,22 +273,18 @@ export function StepperShell({
           value={step - 1}
           max={TOTAL_STEPS - 1}
           size={64}
-          aria-label={t("wizard_step_progress_aria", "Step {step} of {total}")
-            .replace("{step}", String(step))
-            .replace("{total}", String(TOTAL_STEPS))}
+          aria-label={t("wizard.step.progressAria", { step, total: TOTAL_STEPS })}
         >
           {`${step} / ${TOTAL_STEPS}`}
         </OrbitProgress>
-        <h1 className={styles.question}>
-          {t(STEP_QUESTIONS[step - 1]!.key, STEP_QUESTIONS[step - 1]!.fallback)}
-        </h1>
+        <h1 className={styles.question}>{t(STEP_QUESTION_KEYS[step - 1]!)}</h1>
         {resumed && (
           <button
             type="button"
             className={styles.startOver}
             onClick={handleStartOver}
           >
-            {t("wizard_start_over", "Start over")}
+            {t("wizard.startOver")}
           </button>
         )}
       </header>
@@ -314,7 +299,7 @@ export function StepperShell({
             onClick={handleBack}
             disabled={busy}
           >
-            {t("wizard_back", "Back")}
+            {t("wizard.back")}
           </button>
         )}
         {isLastStep ? (
@@ -324,7 +309,7 @@ export function StepperShell({
             onClick={handleFinish}
             disabled={busy || !isSpecComplete()}
           >
-            {t("wizard_finish", "Finish")}
+            {t("wizard.finish")}
           </button>
         ) : (
           <button
@@ -333,7 +318,7 @@ export function StepperShell({
             onClick={handleContinue}
             disabled={busy || !isCurrentStepComplete()}
           >
-            {t("wizard_continue", "Continue")}
+            {t("wizard.continue")}
           </button>
         )}
       </footer>
