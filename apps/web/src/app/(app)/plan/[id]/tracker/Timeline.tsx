@@ -1,19 +1,20 @@
-import type { TimelineEntry, Translate } from "./tracker-model";
+import { useTranslations } from "next-intl";
+import type { TimelineEntry } from "./tracker-model";
 import styles from "../TrackerPanel.module.css";
 
 interface TimelineProps {
-  t: Translate;
   items: TimelineEntry[];
 }
 
 /** Session timeline: every exercise with a done/active/pending state + tag. */
-export function Timeline({ t, items }: TimelineProps) {
+export function Timeline({ items }: TimelineProps) {
+  const t = useTranslations("tracker");
   return (
     <section
       className={`${styles.card} ${styles.timelineCard}`}
-      aria-label={t("tracker_timeline_heading", "Workout timeline")}
+      aria-label={t("timeline.heading")}
     >
-      <h3>{t("tracker_timeline_heading", "Workout timeline")}</h3>
+      <h3>{t("timeline.heading")}</h3>
       <div className={styles.timelineList}>
         {items.map((item) => {
           const itemCls =
@@ -24,24 +25,16 @@ export function Timeline({ t, items }: TimelineProps) {
                 : "";
           const meta =
             item.state === "done"
-              ? t("tracker_timeline_meta_done", "{n} sets · completed").replace(
-                  "{n}",
-                  String(item.setsCount),
-                )
+              ? t("timeline.meta.done", { n: item.setsCount })
               : item.state === "active"
-                ? t("tracker_timeline_meta_active", "Set {n} of {m} · in progress")
-                    .replace("{n}", String(item.setsDone + 1))
-                    .replace("{m}", String(item.setsCount))
-                : t("tracker_timeline_meta_pending", "{n} sets · pending").replace(
-                    "{n}",
-                    String(item.setsCount),
-                  );
+                ? t("timeline.meta.active", { n: item.setsDone + 1, m: item.setsCount })
+                : t("timeline.meta.pending", { n: item.setsCount });
           const tag =
             item.state === "done"
-              ? t("tracker_timeline_done", "Done")
+              ? t("timeline.done")
               : item.state === "active"
-                ? t("tracker_timeline_now", "Now")
-                : t("tracker_timeline_next", "Pending");
+                ? t("timeline.now")
+                : t("timeline.next");
           return (
             <div key={item.id} className={`${styles.timelineItem} ${itemCls}`}>
               <span className={styles.timelineIndex}>{item.index}</span>
