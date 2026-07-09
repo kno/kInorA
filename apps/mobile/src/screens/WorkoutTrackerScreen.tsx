@@ -12,7 +12,10 @@
  * is the thin container that wires them to state, timers, and the API — the
  * same "tested pure core + thin glue" pattern used across the mobile app.
  *
- * Copy is centralized in `copy/tracker.ts` (the app has no i18n layer yet).
+ * Copy comes from the shared `@kinora/i18n` catalog via `useIntl()` — 22 keys
+ * reuse the web `tracker.*` namespace verbatim, 23 reuse the mobile-only
+ * `mobileTracker.*` namespace authored in slice 9 (see `copy/__tests__/
+ * tracker-migration.test.ts` for the full old-copy → catalog-key mapping).
  */
 
 import React, {
@@ -31,6 +34,7 @@ import {
   View,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { useIntl } from "react-intl";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, {
   Circle,
@@ -45,7 +49,6 @@ import type { RouteProp } from "@react-navigation/native";
 import type { WorkoutSessionRecord } from "@kinora/contracts";
 
 import { colors, fonts, radius, spacing } from "../theme/tokens";
-import { trackerCopy as t } from "../copy/tracker";
 import {
   completeWorkoutSession,
   getWorkoutSession,
@@ -185,8 +188,76 @@ export default function WorkoutTrackerScreen({
   route,
 }: TrackerScreenProps) {
   const insets = useSafeAreaInsets();
+  const intl = useIntl();
   const params = route.params ?? {};
   const { sessionId, planId, day } = params;
+
+  // Catalog-key router shaped like the old `trackerCopy` API (same method
+  // names/signatures) so it drops in without touching every call-site below.
+  // Every branch routes to a real `@kinora/i18n` key — no hardcoded fallback
+  // text lives here. 22 keys reuse the web `tracker.*` namespace verbatim;
+  // 23 reuse the mobile-only `mobileTracker.*` namespace (slice 9).
+  const t = {
+    sessionActiveEyebrow: intl.formatMessage({ id: "tracker.live.eyebrow" }),
+    elapsedLabel: intl.formatMessage({ id: "tracker.timerLabel" }),
+    pauseLabel: intl.formatMessage({ id: "tracker.pauseLabel" }),
+    resumeLabel: intl.formatMessage({ id: "tracker.resumeLabel" }),
+    progressLabel: (current: number, total: number) =>
+      intl.formatMessage({ id: "tracker.progress.label" }, { n: current, m: total }),
+    progressA11y: (current: number, total: number) =>
+      intl.formatMessage({ id: "mobileTracker.progress.a11y" }, { current, total }),
+    progressValueText: (current: number, total: number, percent: number) =>
+      intl.formatMessage(
+        { id: "tracker.progress.valuetext" },
+        { n: current, m: total, percent },
+      ),
+    currentExerciseEyebrow: intl.formatMessage({ id: "tracker.currentExercise" }),
+    setInfo: (setNumber: number, setTotal: number, targetLabel: string) =>
+      intl.formatMessage({ id: "mobileTracker.set.info" }, { setNumber, setTotal, targetLabel }),
+    objectiveLabel: (weightKg: number, reps: string) =>
+      intl.formatMessage({ id: "mobileTracker.objective.withWeight" }, { weightKg, reps }),
+    objectiveLabelNoWeight: (reps: string) =>
+      intl.formatMessage({ id: "mobileTracker.objective.noWeight" }, { reps }),
+    loadLabel: intl.formatMessage({ id: "tracker.load.label" }),
+    loadUnit: intl.formatMessage({ id: "tracker.unit.kg" }),
+    repsLabel: intl.formatMessage({ id: "tracker.reps.label" }),
+    repsUnit: intl.formatMessage({ id: "tracker.unit.reps" }),
+    decreaseLoad: intl.formatMessage({ id: "tracker.weight.downLabel" }),
+    increaseLoad: intl.formatMessage({ id: "tracker.weight.upLabel" }),
+    decreaseReps: intl.formatMessage({ id: "mobileTracker.reps.decrease" }),
+    increaseReps: intl.formatMessage({ id: "mobileTracker.reps.increase" }),
+    completeSet: intl.formatMessage({ id: "tracker.completeSet.cta" }),
+    completeSetA11y: (setNumber: number) =>
+      intl.formatMessage({ id: "mobileTracker.completeSet.a11y" }, { setNumber }),
+    restActive: intl.formatMessage({ id: "tracker.rest.active" }),
+    restLabelSm: intl.formatMessage({ id: "tracker.rest.label" }),
+    addTime: intl.formatMessage({ id: "tracker.rest.addTime" }),
+    addTimeA11y: intl.formatMessage({ id: "tracker.rest.addLabel" }),
+    skip: intl.formatMessage({ id: "tracker.rest.skip" }),
+    skipRest: intl.formatMessage({ id: "tracker.rest.skipLabel" }),
+    restA11y: intl.formatMessage({ id: "tracker.rest.aria" }),
+    nextEyebrow: intl.formatMessage({ id: "tracker.next.heading" }),
+    nextDetail: (sets: number, weightKg: number, reps: string) =>
+      intl.formatMessage({ id: "mobileTracker.next.detail" }, { sets, weightKg, reps }),
+    nextDetailNoWeight: (sets: number, reps: string) =>
+      intl.formatMessage({ id: "mobileTracker.next.detailNoWeight" }, { sets, reps }),
+    finishSession: intl.formatMessage({ id: "mobileTracker.finish.cta" }),
+    finishSessionA11y: intl.formatMessage({ id: "mobileTracker.finish.a11y" }),
+    loading: intl.formatMessage({ id: "mobileTracker.loading" }),
+    sessionCompleteTitle: intl.formatMessage({ id: "mobileTracker.complete.title" }),
+    sessionCompleteBody: intl.formatMessage({ id: "mobileTracker.complete.body" }),
+    backHome: intl.formatMessage({ id: "mobileTracker.backHome" }),
+    conflictWithScope: (planName: string, day: number) =>
+      intl.formatMessage({ id: "mobileTracker.conflict.withScope" }, { planName, day }),
+    conflictWithPlan: (planName: string) =>
+      intl.formatMessage({ id: "mobileTracker.conflict.withPlan" }, { planName }),
+    conflictGeneric: intl.formatMessage({ id: "mobileTracker.conflict.generic" }),
+    errorStart: intl.formatMessage({ id: "mobileTracker.error.start" }),
+    errorLoad: intl.formatMessage({ id: "mobileTracker.error.load" }),
+    errorRecord: intl.formatMessage({ id: "mobileTracker.error.record" }),
+    errorComplete: intl.formatMessage({ id: "mobileTracker.error.complete" }),
+    retry: intl.formatMessage({ id: "mobileTracker.retry" }),
+  };
 
   const [session, setSession] = useState<WorkoutSessionRecord | undefined>();
   const [loading, setLoading] = useState(true);
