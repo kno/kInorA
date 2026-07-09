@@ -1,6 +1,11 @@
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
-import { coverageConfig, resolveConfig, testConfig } from "../../vitest.shared";
+import {
+  coverageConfig,
+  resolveConfig,
+  ssrResolveConfig,
+  testConfig,
+} from "../../vitest.shared";
 
 export default defineConfig({
   esbuild: {
@@ -18,6 +23,16 @@ export default defineConfig({
       "server-only": fileURLToPath(
         new URL("./test/__mocks__/server-only.ts", import.meta.url)
       ),
+    },
+  },
+  // Server modules (e.g. src/i18n/request.ts imports next/headers) resolve
+  // through Vitest's SSR pipeline, which does NOT inherit the top-level
+  // resolve.conditions. Without this, runtime value imports from @kinora/*
+  // workspace packages fall back to the "default" (dist) export and fail when
+  // no dist is built. Mirrors apps/api — see vitest.shared.ts.
+  ssr: {
+    resolve: {
+      ...ssrResolveConfig,
     },
   },
   test: {
