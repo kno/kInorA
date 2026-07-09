@@ -1,20 +1,549 @@
 {
+  "marketing": {
+    "title": "kInorA",
+    "subtitle": "Personalized training powered by AI",
+    "cta": "Get Started",
+    "cinemaAlt": "Athlete taking an active break between sets, sitting on the gym floor with hands resting on knees",
+    "comoImgAlt": "Woman performing a loaded barbell squat in the gym, with correct posture and full concentration",
+    "strengthImgAlt": "Chalked hands gripping a barbell before a lift, ready to execute the movement"
+  },
   "nav": {
-    "home": "Home",
-    "about": "About"
+    "products": "Product",
+    "howItWorks": "How it works",
+    "pricing": "Pricing",
+    "login": "Log in",
+    "signup": "Start free",
+    "menuLabel": "Open menu",
+    "ariaLabel": "Main"
   },
   "hero": {
-    "title": "Welcome to Kinora",
-    "greeting": "Hello, {name}!"
-  },
-  "wizard": {
-    "frequency": {
-      "days": "{n, plural, one {# day per week} other {# days per week}}"
+    "eyebrow": "AI Coach",
+    "title": "Your personal trainer, ",
+    "titleAccent": "powered by AI",
+    "subtitle": "kInorA listens to you, builds your routine, and adjusts it every week based on your progress. Train with a plan that evolves with you, not a generic one.",
+    "cta": {
+      "primary": "Start free",
+      "secondary": "See how it works"
+    },
+    "meta": {
+      "nocard": "No credit card required",
+      "homegym": "Home or gym",
+      "iosandroid": "iOS & Android"
     }
+  },
+  "trust": {
+    "schedule": {
+      "title": "Adapts to your schedule",
+      "desc": "Set the days you can train and the AI reorganizes your week."
+    },
+    "level": {
+      "title": "Plan for your level",
+      "desc": "From beginner to advanced, with progressive overload."
+    },
+    "equipment": {
+      "title": "No equipment required",
+      "desc": "Train at home, in the park, or at the gym."
+    },
+    "hands": {
+      "title": "Hands-free",
+      "desc": "Control your session by voice while you train."
+    }
+  },
+  "hiw": {
+    "eyebrow": "How it works",
+    "title": "From your goal to your routine in three steps",
+    "subtitle": "No generic templates. Tell kInorA what you want to achieve and it builds a custom plan that improves with you.",
+    "step1": {
+      "num": "01",
+      "title": "Tell it your goal",
+      "desc": "Speak or type: gain strength, lose fat, run farther. The AI learns your level, availability, and equipment."
+    },
+    "step2": {
+      "num": "02",
+      "title": "AI builds your plan",
+      "desc": "In seconds you get a weekly routine with exercises, sets, reps, and rest designed for you."
+    },
+    "step3": {
+      "num": "03",
+      "title": "Train and improve every week",
+      "desc": "Log your sessions and the AI adjusts loads and volume so you keep progressing without plateauing."
+    }
+  },
+  "features": {
+    "eyebrow": "Product",
+    "title": "Everything you need, in one app",
+    "subtitle": "The tools a personal trainer would give you, available every day at any hour.",
+    "adaptive": {
+      "title": "Adaptive plan",
+      "desc": "Routines that readjust each week based on your progress, fatigue, and actual availability."
+    },
+    "voice": {
+      "title": "Voice assistant",
+      "desc": "Mark sets, request an exercise change, or start your rest timer without touching the screen."
+    },
+    "tracking": {
+      "title": "Live tracking",
+      "desc": "Rest timer, set logging, and exercise guidance throughout your entire session."
+    },
+    "stats": {
+      "title": "Statistics",
+      "desc": "Visualize your volume, strength, and consistency with clear, easy-to-read charts."
+    },
+    "strength": {
+      "eyebrow": "Real progression",
+      "title": "Every kilo lifted, recorded",
+      "desc": "kInorA keeps track of your loads and adjusts progression intelligently. No spreadsheets, no guessing. Just steady progress week after week."
+    }
+  },
+  "pricing": {
+    "eyebrow": "Pricing",
+    "title": "Start free, grow when you're ready",
+    "subtitle": "No commitment. Change or cancel your plan anytime from the app.",
+    "free": {
+      "tier": "Free",
+      "desc": "To start training with AI.",
+      "amount": "0",
+      "per": "forever",
+      "feat1": "One adaptive plan active",
+      "feat2": "Session tracking",
+      "feat3": "Basic statistics",
+      "feat4": "Voice assistant",
+      "cta": "Create account"
+    },
+    "pro": {
+      "tier": "Pro",
+      "desc": "To train seriously every week.",
+      "per": "/ month",
+      "feat1": "Unlimited plans with weekly adjustments",
+      "feat2": "Hands-free voice assistant",
+      "feat3": "Advanced statistics & records",
+      "feat4": "Full exercise library",
+      "cta": "Start with Pro",
+      "badge": "Most popular"
+    },
+    "team": {
+      "tier": "Teams",
+      "desc": "For coaches and training centers.",
+      "per": "/ month",
+      "feat1": "Everything in Pro for your team",
+      "feat2": "Dashboard to manage athletes",
+      "feat3": "Shared plans and templates",
+      "feat4": "Priority support",
+      "cta": "Talk to sales"
+    }
+  },
+  "cta": {
+    "title": "Your next routine is waiting",
+    "subtitle": "Create your plan in under a minute. Free, no credit card.",
+    "primary": "Start free",
+    "secondary": "View plans"
+  },
+  "auth": {
+    "login": {
+      "title": "Log in",
+      "submit": "Log in",
+      "google": "Sign in with Google",
+      "switchPrompt": "Don't have an account?",
+      "switchLink": "Sign up"
+    },
+    "signup": {
+      "title": "Sign up",
+      "submit": "Sign up",
+      "google": "Sign up with Google",
+      "switchPrompt": "Already have an account?",
+      "switchLink": "Log in"
+    },
+    "emailLabel": "Email",
+    "passwordLabel": "Password"
+  },
+  "footer": {
+    "tagline": "The AI coach that builds your plan, adjusts it every week, and trains with you.",
+    "product": "Product",
+    "features": "Features",
+    "howItWorks": "How it works",
+    "pricing": "Pricing",
+    "download": "Download app",
+    "company": "Company",
+    "about": "About kInorA",
+    "blog": "Blog",
+    "careers": "Careers",
+    "contact": "Contact",
+    "legal": "Legal",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "cookies": "Cookies",
+    "copyright": "© 2026 kInorA. All rights reserved."
+  },
+  "phone": {
+    "coachLabel": "Coach kInorA",
+    "dayLabel": "Day 4 · Strength",
+    "pillActive": "In progress",
+    "ringGoalLabel": "Weekly goal",
+    "ringGoalValue": "3 of 4 sessions",
+    "workoutToday": "Today's workout",
+    "workoutDuration": "42 min",
+    "ex1": {
+      "name": "Barbell Squat",
+      "set": "4 × 8"
+    },
+    "ex2": {
+      "name": "Bench Press",
+      "set": "4 × 10"
+    },
+    "ex3": {
+      "name": "Dumbbell Row",
+      "set": "3 × 12"
+    },
+    "streakLabel": "Streak",
+    "day": {
+      "mon": "M",
+      "tue": "T",
+      "wed": "W",
+      "thu": "T",
+      "fri": "F",
+      "sat": "S",
+      "sun": "S"
+    },
+    "ariaLabel": "App preview showing today's workout, weekly streak, and progress"
   },
   "plan": {
+    "generating": {
+      "title": "Generating your plan…",
+      "desc": "Your personalized workout plan is being created. This usually takes about 30 seconds.",
+      "aria": "Generating plan"
+    },
+    "ready": {
+      "title": "Your plan is ready"
+    },
+    "failed": {
+      "title": "Plan generation failed",
+      "desc": "Something went wrong while generating your plan. You can try again."
+    },
+    "regenerate": {
+      "cta": "Regenerate plan"
+    },
+    "session": {
+      "day": "Day"
+    },
+    "exercises": {
+      "label": "Exercises",
+      "count": "exercises"
+    },
+    "sets": {
+      "label": "sets"
+    },
+    "reps": {
+      "label": "reps"
+    },
+    "rest": {
+      "label": "rest"
+    },
+    "limitation": {
+      "warningLabel": "Note",
+      "title": "Important note"
+    },
+    "backToDashboard": "Back to dashboard",
+    "nav": {
+      "empty": {
+        "title": "No plan yet",
+        "desc": "Create your personalized workout plan to get started.",
+        "cta": "Create your plan"
+      }
+    },
     "selector": {
+      "label": "Select a plan",
       "option": "{status, select, ready {Ready} generating {Generating} failed {Failed} other {Unknown}}"
+    },
+    "name": {
+      "fieldLabel": "Plan name (optional)",
+      "placeholder": "e.g. Summer strength block"
+    },
+    "viewDetailsOrRegenerate": "View details or regenerate",
+    "day": {
+      "label": "Day {n}",
+      "detailClose": "Close",
+      "startCta": "Start session"
+    },
+    "est_duration": "est. {n, plural, one {# min} other {# min}}",
+    "summary": {
+      "sessions": "Planned sessions",
+      "sessionsSub": "training days",
+      "rest": "Rest days",
+      "restSub": "per week",
+      "duration": "Estimated duration",
+      "durationSub": "per week (est.)",
+      "volume": "Target volume",
+      "volumeSub": "coming soon",
+      "volumePlaceholder": "—"
+    },
+    "table": {
+      "exercise": "Exercise",
+      "sets": "Sets",
+      "reps": "Reps",
+      "rest": "Rest"
+    },
+    "start": {
+      "conflict": "You have an active session for {plan} · Day {n}. Resume or finish it before starting another.",
+      "conflict_no_day": "You have an active session for {plan}. Resume or finish it before starting another.",
+      "conflict_generic": "You already have an active workout session. Resume or finish it before starting another."
     }
+  },
+  "tracker": {
+    "start": {
+      "cta": "Start workout"
+    },
+    "live": {
+      "eyebrow": "Active session",
+      "title": "Live workout"
+    },
+    "status": {
+      "active": "Active",
+      "completed": "Completed"
+    },
+    "tracking": {
+      "day": "Day {n}"
+    },
+    "error": {
+      "start": "We couldn't start the session. Please try again.",
+      "record": "We couldn't save the set. Please try again.",
+      "complete": "We couldn't complete the workout. Please try again."
+    },
+    "currentExercise": "Current exercise",
+    "rpe": "RPE",
+    "notes": "Notes",
+    "set": {
+      "heading": "Set"
+    },
+    "complete": {
+      "cta": "Complete workout"
+    },
+    "controlsLabel": "Session controls",
+    "timerLabel": "Time",
+    "pauseLabel": "Pause session",
+    "resumeLabel": "Resume session",
+    "progress": {
+      "label": "Exercise {n} of {m}",
+      "valuetext": "Exercise {n} of {m}, {percent}%",
+      "aria": "Session progress"
+    },
+    "target": {
+      "pill": "Target · {reps} reps"
+    },
+    "metrics": {
+      "aria": "Exercise summary"
+    },
+    "metric": {
+      "volume": "Volume"
+    },
+    "unit": {
+      "kg": "kg",
+      "reps": "reps"
+    },
+    "steppers": {
+      "aria": "Adjust load and reps"
+    },
+    "load": {
+      "label": "Load"
+    },
+    "reps": {
+      "label": "Reps",
+      "downLabel": "Decrease reps",
+      "upLabel": "Increase reps"
+    },
+    "weight": {
+      "downLabel": "Decrease load 2.5 kg",
+      "upLabel": "Increase load 2.5 kg"
+    },
+    "note": {
+      "placeholder": "Quick note"
+    },
+    "addNote": {
+      "cta": "Add note"
+    },
+    "completeSet": {
+      "cta": "Complete set"
+    },
+    "rest": {
+      "aria": "Rest timer",
+      "active": "Rest active",
+      "ready": "Ready for the set",
+      "label": "rest",
+      "skip": "Skip",
+      "skipLabel": "Skip rest",
+      "addTime": "+15 s",
+      "addLabel": "Add 15 seconds",
+      "srActive": "Rest active, {time} remaining"
+    },
+    "next": {
+      "heading": "Up next",
+      "sets": "{n, plural, one {# set} other {# sets}}",
+      "empty": "Last exercise of the session."
+    },
+    "timeline": {
+      "heading": "Workout timeline",
+      "meta": {
+        "done": "{n, plural, one {# set · completed} other {# sets · completed}}",
+        "active": "{n, plural, one {Set # of {m} · in progress} other {Set # of {m} · in progress}}",
+        "pending": "{n, plural, one {# set · pending} other {# sets · pending}}"
+      },
+      "done": "Done",
+      "now": "Now",
+      "next": "Pending"
+    },
+    "rail": {
+      "aria": "Performance panel",
+      "eyebrow": "Performance",
+      "title": "Session summary",
+      "series": "Sets",
+      "avgRest": "Avg rest",
+      "streak": "Streak"
+    },
+    "stubSoon": "coming soon",
+    "aiNote": {
+      "heading": "Suggested microadjust",
+      "stub": "AI coaching insights will appear here once available."
+    }
+  },
+  "wizard": {
+    "step": {
+      "goalTitle": "What is your main goal?",
+      "locationTitle": "Where will you train?",
+      "frequencyTitle": "How many days per week?",
+      "durationTitle": "How long is each session?",
+      "equipmentTitle": "What equipment do you have?",
+      "limitationsTitle": "Any limitations to keep in mind?",
+      "progressAria": "Step {step} of {total}"
+    },
+    "startOver": "Start over",
+    "back": "Back",
+    "finish": "Finish",
+    "continue": "Continue",
+    "goal": {
+      "strength": {
+        "label": "Strength",
+        "desc": "Build raw, maximal power"
+      },
+      "hypertrophy": {
+        "label": "Hypertrophy",
+        "desc": "Grow muscle size"
+      },
+      "fatLoss": {
+        "label": "Fat loss",
+        "desc": "Progressive calorie deficit"
+      },
+      "generalFitness": {
+        "label": "General fitness",
+        "desc": "Stay healthy and active"
+      }
+    },
+    "location": {
+      "home": {
+        "label": "Home",
+        "desc": "Train in your own space"
+      },
+      "gym": {
+        "label": "Gym",
+        "desc": "Full equipment access"
+      },
+      "outdoor": {
+        "label": "Outdoor",
+        "desc": "Parks, trails, open air"
+      }
+    },
+    "frequency": {
+      "days": "{n, plural, one {# day} other {# days}}",
+      "highCommitment": "High commitment",
+      "perWeek": "Per week"
+    },
+    "duration": {
+      "min": "{n, plural, one {# min} other {# min}}",
+      "quickSession": "Quick session",
+      "perSession": "Per session",
+      "customAria": "Custom duration in minutes",
+      "customPlaceholder": "e.g. 75",
+      "setButton": "Set duration",
+      "errorEmpty": "Enter a duration in minutes."
+    },
+    "equipment": {
+      "addAria": "Add equipment",
+      "addPlaceholder": "e.g. sled",
+      "addButton": "Add",
+      "errorEmpty": "Enter an equipment name.",
+      "errorDuplicate": "That equipment is already in your list.",
+      "dumbbells": {
+        "label": "Dumbbells",
+        "alt": "A pair of adjustable dumbbells"
+      },
+      "resistanceBands": {
+        "label": "Resistance bands",
+        "alt": "A set of elastic resistance bands"
+      },
+      "pullUpBar": {
+        "label": "Pull-up bar",
+        "alt": "Doorway pull-up bar"
+      },
+      "kettlebell": {
+        "label": "Kettlebell",
+        "alt": "Kettlebell"
+      },
+      "bench": {
+        "label": "Bench",
+        "alt": "Adjustable weight bench"
+      },
+      "barbell": {
+        "label": "Barbell",
+        "alt": "An Olympic barbell loaded with plates"
+      },
+      "cableMachine": {
+        "label": "Cable machine",
+        "alt": "A cable pulley station in a gym"
+      },
+      "smithMachine": {
+        "label": "Smith machine",
+        "alt": "A Smith machine with guided barbell rails"
+      },
+      "legPress": {
+        "label": "Leg press",
+        "alt": "Leg press machine"
+      },
+      "bodyweight": {
+        "label": "Bodyweight only",
+        "alt": "An athlete doing a one-arm push-up"
+      },
+      "suspensionTrainer": {
+        "label": "Suspension trainer",
+        "alt": "Suspension trainer straps"
+      }
+    },
+    "limitations": {
+      "addAria": "Add a limitation",
+      "addPlaceholder": "e.g. knee pain",
+      "addButton": "Add"
+    },
+    "chip": {
+      "removeAria": "Remove {name}"
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "authenticated": "You are authenticated.",
+    "logout": "Log out"
+  },
+  "exercises": {
+    "title": "Exercises",
+    "description": "Browse and search the exercise library for your workouts."
+  },
+  "stats": {
+    "title": "Statistics",
+    "description": "Track your progress and review your training history."
+  },
+  "profile": {
+    "title": "Profile",
+    "description": "Manage your account settings and preferences."
+  },
+  "offline": {
+    "title": "You're Offline",
+    "description": "It looks like you're currently disconnected from the internet. Please check your connection and try again.",
+    "syncNote": "Your data will be synced once you're back online."
   }
 }
