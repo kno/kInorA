@@ -1,58 +1,22 @@
+// @vitest-environment jsdom
 /**
- * Tests for the PlanStatusPage component.
- *
- * Three rendering states driven by `status`:
+ * Tests for PlanStatusView — verifies the four rendering states driven by the
+ * `status` prop:
  *   - "generating" → spinner (OrbitProgress indeterminate) + generating message
  *   - "ready"      → plan detail (sessions, exercises)
  *   - "failed"     → error message + Regenerate CTA button
+ *   - "error"      → connection-error message + Retry CTA (issue #42)
  *
- * The component renders as a server component for initial hydration.
- * State management (WS subscribe + local status) lives in a client child.
- * Tests use the React tree inspection pattern (textOf / findFirst) established
- * in the existing page tests — no RTL needed for pure server component tests.
- *
- * For the client status manager tests we use jsdom + RTL.
+ * PlanStatusView is a client component (`useTranslations`), so it is rendered
+ * via RTL + `renderWithIntl` rather than called directly as a plain function
+ * (calling a component with hooks outside of React's render cycle throws
+ * "Invalid hook call").
  */
-import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { screen } from "@testing-library/react";
+import { renderWithIntl } from "@/test-utils/render-with-intl";
 import { PlanStatusView } from "../PlanStatusView";
-import { OrbitProgress } from "@/components/orbit";
 import type { WorkoutProgram } from "@kinora/contracts";
-
-// --- React tree inspection helpers (same pattern as other page tests) ---
-
-type AnyProps = Record<string, unknown> & { children?: ReactNode };
-type AnyElement = ReactElement<AnyProps>;
-
-function findFirst(
-  node: ReactNode,
-  match: (el: AnyElement) => boolean,
-): AnyElement | undefined {
-  if (isReactElement(node)) {
-    if (match(node)) return node;
-    const inChildren = findFirst(node.props.children, match);
-    if (inChildren) return inChildren;
-  }
-  if (Array.isArray(node)) {
-    for (const child of node) {
-      const found = findFirst(child, match);
-      if (found) return found;
-    }
-  }
-  return undefined;
-}
-
-function textOf(node: ReactNode): string {
-  if (typeof node === "string") return node;
-  if (typeof node === "number") return String(node);
-  if (Array.isArray(node)) return node.map(textOf).join("");
-  if (isReactElement(node)) return textOf(node.props.children);
-  return "";
-}
-
-function isReactElement(node: ReactNode): node is AnyElement {
-  return typeof node === "object" && node !== null && "props" in node;
-}
 
 const sampleProgram: WorkoutProgram = {
   weeklySessions: [
@@ -74,116 +38,82 @@ const sampleProgram: WorkoutProgram = {
 
 describe("PlanStatusView — generating state", () => {
   it("renders the generating message when status is 'generating'", () => {
-    const view = PlanStatusView({ status: "generating", planId: "plan-1" });
-    expect(textOf(view)).toContain("Generating");
+    renderWithIntl(<PlanStatusView status="generating" planId="plan-1" />);
+    expect(screen.getByText("Generating your plan…")).toBeDefined();
   });
 
   it("does NOT render exercise content when status is 'generating'", () => {
-    const view = PlanStatusView({ status: "generating", planId: "plan-1" });
-    expect(textOf(view)).not.toContain("Barbell Squat");
+    renderWithIntl(<PlanStatusView status="generating" planId="plan-1" />);
+    expect(screen.queryByText("Barbell Squat")).toBeNull();
   });
 
   it("includes an OrbitProgress (indeterminate) element in the generating state", () => {
-    const view = PlanStatusView({ status: "generating", planId: "plan-1" });
-    // OrbitProgress is a component — find it by its type reference
-    const progress = findFirst(view, (el) => el.type === OrbitProgress);
+    renderWithIntl(<PlanStatusView status="generating" planId="plan-1" />);
+    const progress = screen.getByRole("progressbar", { name: "Generating plan" });
     expect(progress).toBeDefined();
-    // Must be in indeterminate mode (the brand spinner)
-    expect(progress?.props?.indeterminate).toBe(true);
   });
 });
 
 describe("PlanStatusView — ready state", () => {
   it("renders the plan sessions when status is 'ready'", () => {
-    const view = PlanStatusView({
-      status: "ready",
-      planId: "plan-1",
-      program: sampleProgram,
-    });
-    expect(textOf(view)).toContain("Day 1 · Strength");
+    renderWithIntl(
+      <PlanStatusView status="ready" planId="plan-1" program={sampleProgram} />,
+    );
+    expect(screen.getByText(/Day 1 · Strength/)).toBeDefined();
   });
 
   it("renders exercise names when status is 'ready'", () => {
-    const view = PlanStatusView({
-      status: "ready",
-      planId: "plan-1",
-      program: sampleProgram,
-    });
-    expect(textOf(view)).toContain("Barbell Squat");
+    renderWithIntl(
+      <PlanStatusView status="ready" planId="plan-1" program={sampleProgram} />,
+    );
+    expect(screen.getByText("Barbell Squat")).toBeDefined();
   });
 
   it("does NOT render the generating spinner when status is 'ready'", () => {
-    const view = PlanStatusView({
-      status: "ready",
-      planId: "plan-1",
-      program: sampleProgram,
-    });
-    // No progressbar in ready state
-    const progressbar = findFirst(
-      view,
-      (el) => el.props?.role === "progressbar",
+    renderWithIntl(
+      <PlanStatusView status="ready" planId="plan-1" program={sampleProgram} />,
     );
-    expect(progressbar).toBeUndefined();
+    expect(screen.queryByRole("progressbar")).toBeNull();
   });
 });
 
 describe("PlanStatusView — failed state", () => {
   it("renders an error message when status is 'failed'", () => {
-    const view = PlanStatusView({ status: "failed", planId: "plan-1" });
-    expect(textOf(view)).toContain("failed");
+    renderWithIntl(<PlanStatusView status="failed" planId="plan-1" />);
+    expect(screen.getByText("Plan generation failed")).toBeDefined();
   });
 
   it("renders a Regenerate button when status is 'failed'", () => {
-    const view = PlanStatusView({ status: "failed", planId: "plan-1" });
-    const regenerateBtn = findFirst(
-      view,
-      (el) =>
-        el.type === "button" &&
-        typeof el.props.children === "string" &&
-        (el.props.children as string).toLowerCase().includes("regenerate"),
-    );
-    expect(regenerateBtn).toBeDefined();
+    renderWithIntl(<PlanStatusView status="failed" planId="plan-1" />);
+    expect(screen.getByRole("button", { name: "Regenerate plan" })).toBeDefined();
   });
 
   it("does NOT render exercise content when status is 'failed'", () => {
-    const view = PlanStatusView({ status: "failed", planId: "plan-1" });
-    expect(textOf(view)).not.toContain("Barbell Squat");
+    renderWithIntl(<PlanStatusView status="failed" planId="plan-1" />);
+    expect(screen.queryByText("Barbell Squat")).toBeNull();
   });
 });
 
 describe("PlanStatusView — error state (issue #42 reliability: fail loud)", () => {
   it("renders a connection-error message when status is 'error' (not a stale spinner)", () => {
-    const view = PlanStatusView({ status: "error", planId: "plan-1" });
+    renderWithIntl(<PlanStatusView status="error" planId="plan-1" />);
     // Must NOT keep showing the generating spinner (that was the silent-stuck bug).
-    const progress = findFirst(view, (el) => el.type === OrbitProgress);
-    expect(progress).toBeUndefined();
-    const text = textOf(view).toLowerCase();
-    expect(text).toContain("connection");
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(screen.getByText("Connection problem")).toBeDefined();
   });
 
   it("does NOT render exercise content when status is 'error'", () => {
-    const view = PlanStatusView({
-      status: "error",
-      planId: "plan-1",
-      program: sampleProgram,
-    });
-    expect(textOf(view)).not.toContain("Barbell Squat");
+    renderWithIntl(
+      <PlanStatusView status="error" planId="plan-1" program={sampleProgram} />,
+    );
+    expect(screen.queryByText("Barbell Squat")).toBeNull();
   });
 
   it("offers a way to retry (Regenerate) when status is 'error' and a handler is provided", () => {
-    const view = PlanStatusView({
-      status: "error",
-      planId: "plan-1",
-      onRegenerate: () => {},
-    });
-    const retryBtn = findFirst(
-      view,
-      (el) =>
-        el.type === "button" &&
-        typeof el.props.children === "string" &&
-        (el.props.children as string).toLowerCase().includes("retry"),
+    renderWithIntl(
+      <PlanStatusView status="error" planId="plan-1" onRegenerate={() => {}} />,
     );
-    expect(retryBtn).toBeDefined();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeDefined();
   });
 });
 
@@ -192,10 +122,9 @@ describe("PlanStatusView — status-fetch fallback (WS not connected)", () => {
     // When WS is not connected and status is still generating,
     // the view shows the generating state with an OrbitProgress spinner.
     // The poll fallback works by re-rendering the same generating view.
-    const view = PlanStatusView({ status: "generating", planId: "plan-1" });
+    renderWithIntl(<PlanStatusView status="generating" planId="plan-1" />);
     // OrbitProgress (indeterminate) IS present — confirms the spinner is shown
-    const progress = findFirst(view, (el) => el.type === OrbitProgress);
-    expect(progress).toBeDefined();
-    expect(textOf(view)).toContain("Generating");
+    expect(screen.getByRole("progressbar")).toBeDefined();
+    expect(screen.getByText("Generating your plan…")).toBeDefined();
   });
 });

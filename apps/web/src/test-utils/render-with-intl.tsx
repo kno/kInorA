@@ -21,7 +21,7 @@ type UI = Parameters<typeof render>[0];
 
 export function renderWithIntl(ui: UI, options?: RenderOptions) {
   return render(
-    <NextIntlClientProvider locale="en" messages={catalogs.en}>
+    <NextIntlClientProvider locale="en" messages={catalogs.en} timeZone="UTC">
       {ui}
     </NextIntlClientProvider>,
     options,

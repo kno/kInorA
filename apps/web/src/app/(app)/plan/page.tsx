@@ -14,9 +14,8 @@
  *
  * searchParams is a Promise in Next 15+ (async searchParams). Await it.
  */
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { resolveLocale, loadMessages } from "@/i18n/locale";
+import { getTranslations } from "next-intl/server";
 import { listPlansAction } from "./actions";
 import { getPlanStatusAction } from "./[id]/actions";
 import { PlanStatusView } from "./[id]/PlanStatusView";
@@ -30,15 +29,7 @@ interface PlanPageProps {
 
 export default async function PlanPage({ searchParams }: PlanPageProps) {
   const params = await searchParams;
-
-  // Load i18n messages (Accept-Language header → locale → catalogue)
-  const requestHeaders = await headers();
-  const acceptLanguage = requestHeaders.get("accept-language");
-  const locale = resolveLocale(acceptLanguage, undefined);
-  const messages = loadMessages(locale);
-
-  // Helper: translate with English fallback
-  const t = (key: string, fallback: string) => messages[key] ?? fallback;
+  const t = await getTranslations();
 
   // 1. List all plans (fail-open: error → empty state)
   const listResult = await listPlansAction();
@@ -49,12 +40,10 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     return (
       <main className="kin-page">
         <div className="kin-card kin-card--center">
-          <h1 className="kin-title">{t("plan_nav_empty_title", "No plan yet")}</h1>
-          <p className="kin-text kin-muted">
-            {t("plan_nav_empty_desc", "Create your personalized workout plan to get started.")}
-          </p>
+          <h1 className="kin-title">{t("plan.nav.empty.title")}</h1>
+          <p className="kin-text kin-muted">{t("plan.nav.empty.desc")}</p>
           <a href="/create-plan" className="kin-btn kin-btn--primary">
-            {t("plan_nav_empty_cta", "Create your plan")}
+            {t("plan.nav.empty.cta")}
           </a>
         </div>
       </main>
@@ -79,12 +68,10 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     return (
       <main className="kin-page">
         <div className="kin-card kin-card--center">
-          <h1 className="kin-title">{t("plan_nav_empty_title", "No plan yet")}</h1>
-          <p className="kin-text kin-muted">
-            {t("plan_nav_empty_desc", "Create your personalized workout plan to get started.")}
-          </p>
+          <h1 className="kin-title">{t("plan.nav.empty.title")}</h1>
+          <p className="kin-text kin-muted">{t("plan.nav.empty.desc")}</p>
           <a href="/create-plan" className="kin-btn kin-btn--primary">
-            {t("plan_nav_empty_cta", "Create your plan")}
+            {t("plan.nav.empty.cta")}
           </a>
         </div>
       </main>
@@ -105,18 +92,11 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   if (plan.status === "failed") {
     return (
       <main className="kin-page">
-        {showSelector && (
-          <PlanSelector summaries={summaries} selectedId={resolvedId} messages={messages} />
-        )}
-        <PlanStatusView
-          planId={resolvedId}
-          status="failed"
-          specId={plan.specId}
-          messages={messages}
-        />
+        {showSelector && <PlanSelector summaries={summaries} selectedId={resolvedId} />}
+        <PlanStatusView planId={resolvedId} status="failed" specId={plan.specId} />
         <div className="kin-card kin-card--center">
           <a href={`/plan/${resolvedId}`} className="kin-link">
-            {t("plan_view_details_or_regenerate", "View details or regenerate")}
+            {t("plan.viewDetailsOrRegenerate")}
           </a>
         </div>
       </main>
@@ -126,12 +106,9 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   // status === "ready" — render the week-view layout (PlanWeekView server component)
   return (
     <main className="kin-page">
-      {showSelector && (
-        <PlanSelector summaries={summaries} selectedId={resolvedId} messages={messages} />
-      )}
+      {showSelector && <PlanSelector summaries={summaries} selectedId={resolvedId} />}
       <PlanWeekView
         program={plan.program as WorkoutProgram}
-        messages={messages}
         planName={plan.name}
         planId={resolvedId}
       />

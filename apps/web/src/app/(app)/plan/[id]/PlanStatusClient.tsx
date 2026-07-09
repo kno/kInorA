@@ -22,6 +22,7 @@
  * tradeoff. Prod proxies the API same-origin so the cookie path works.
  */
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { usePlanWs } from "@/hooks/use-plan-ws";
 import { getPlanStatusAction } from "./actions";
 import { regeneratePlanAction } from "@/app/(app)/create-plan/actions";
@@ -29,7 +30,6 @@ import { PlanStatusView } from "./PlanStatusView";
 import { TrackerPanel } from "./TrackerPanel";
 import { useWorkoutSession } from "@/app/(app)/plan/use-workout-session";
 import type { WorkoutProgram } from "@kinora/contracts";
-import type { Messages } from "@/i18n/locale";
 
 export interface PlanStatusClientProps {
   planId: string;
@@ -38,8 +38,25 @@ export interface PlanStatusClientProps {
   planName?: string;
   initialStatus: string;
   initialProgram?: WorkoutProgram;
-  messages?: Messages;
 }
+
+/**
+ * Maps the legacy `useWorkoutSession` error codes to their ICU catalog key.
+ * Mirrors the same mapping in `PlanTrackerClient` (the hook is shared but out
+ * of this slice's migration scope).
+ *
+ * Any code NOT in this map (unknown/future codes) falls back to
+ * `GENERIC_ERROR_KEY`, NOT to a specific start/record/complete message —
+ * mislabeling an unrelated error as "couldn't start the session" would be a
+ * user-facing regression.
+ */
+const GENERIC_ERROR_KEY = "tracker.error.generic";
+
+const ERROR_KEYS: Record<string, string> = {
+  tracker_error_start: "tracker.error.start",
+  tracker_error_record: "tracker.error.record",
+  tracker_error_complete: "tracker.error.complete",
+};
 
 export function PlanStatusClient({
   planId,
@@ -47,7 +64,6 @@ export function PlanStatusClient({
   planName,
   initialStatus,
   initialProgram,
-  messages,
 }: PlanStatusClientProps) {
   const [program, setProgram] = useState<WorkoutProgram | undefined>(
     initialProgram,
@@ -67,8 +83,8 @@ export function PlanStatusClient({
     handleCompleteWorkout,
   } = useWorkoutSession();
 
-  const t = (key: string, fallback: string): string =>
-    (messages as Record<string, string> | undefined)?.[key] ?? fallback;
+  const t = useTranslations();
+  const errorKey = error ? ERROR_KEYS[error] ?? GENERIC_ERROR_KEY : undefined;
 
   // usePlanWs opens the WebSocket and updates status on push messages.
   // Falls back to polling GET /workout-plans/:id if the WS connect fails.
@@ -121,10 +137,7 @@ export function PlanStatusClient({
   if (activeSession) {
     // The tracker takes over the whole view. Re-supply the plan name + day
     // identity above it, and surface any non-conflict action error inline.
-    const dayLabel =
-      activeDay != null
-        ? t("tracker_tracking_day", "Day {n}").replace("{n}", String(activeDay))
-        : null;
+    const dayLabel = activeDay != null ? t("tracker.tracking.day", { n: activeDay }) : null;
     return (
       <div>
         {(planName || dayLabel) && (
@@ -133,9 +146,9 @@ export function PlanStatusClient({
             {dayLabel && <p>{dayLabel}</p>}
           </header>
         )}
-        {error && (
+        {errorKey && (
           <p role="alert" data-testid="tracker-error">
-            {t(error, "Something went wrong. Please try again.")}
+            {t(errorKey)}
           </p>
         )}
         <TrackerPanel
@@ -147,25 +160,17 @@ export function PlanStatusClient({
     );
   }
 
-  // Localized conflict banner (#93 Slice 3) — reuses the plan_start_conflict*
+  // Localized conflict banner (#93 Slice 3) — reuses the plan.start.conflict*
   // keys so /plan/[id] matches /plan.
   const conflictText = (() => {
     if (!conflict) return "";
     if (!conflict.activePlanName) {
-      return t(
-        "plan_start_conflict_generic",
-        "You already have an active workout session.",
-      );
+      return t("plan.start.conflict_generic");
     }
     if (conflict.activeDay == null) {
-      return t(
-        "plan_start_conflict_no_day",
-        "You have an active session for {plan}.",
-      ).replace("{plan}", conflict.activePlanName);
+      return t("plan.start.conflict_no_day", { plan: conflict.activePlanName });
     }
-    return t("plan_start_conflict", "You have an active session for {plan} · Day {n}.")
-      .replace("{plan}", conflict.activePlanName)
-      .replace("{n}", String(conflict.activeDay));
+    return t("plan.start.conflict", { plan: conflict.activePlanName, n: conflict.activeDay });
   })();
 
   return (
@@ -175,9 +180,9 @@ export function PlanStatusClient({
           {conflictText}
         </p>
       )}
-      {error && (
+      {errorKey && (
         <p role="alert" data-testid="tracker-error">
-          {t(error, "Something went wrong. Please try again.")}
+          {t(errorKey)}
         </p>
       )}
       <PlanStatusView
@@ -185,7 +190,6 @@ export function PlanStatusClient({
         status={regenerating ? "generating" : status}
         program={program}
         specId={specId}
-        messages={messages as Record<string, string> | undefined}
         onRegenerate={handleRegenerate}
         onStartWorkout={handleStartWorkout}
       />

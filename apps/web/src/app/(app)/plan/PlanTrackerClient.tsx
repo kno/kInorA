@@ -27,6 +27,7 @@
  */
 
 import * as React from "react";
+import { useTranslations } from "next-intl";
 import type { WorkoutProgram } from "@kinora/contracts";
 import { DayDetailPanel } from "./DayDetailPanel";
 import { TrackerPanel } from "./[id]/TrackerPanel";
@@ -35,7 +36,6 @@ import { useWorkoutSession } from "./use-workout-session";
 export interface PlanTrackerClientProps {
   program: WorkoutProgram;
   planId: string;
-  messages: Record<string, string>;
   /** Resolved plan label — shown in the identity header while a session is active. */
   planName?: string;
   /**
@@ -46,10 +46,28 @@ export interface PlanTrackerClientProps {
   children?: React.ReactNode;
 }
 
+/**
+ * Maps the legacy `useWorkoutSession` error codes to their ICU catalog key.
+ * The hook is shared with `PlanStatusClient` and predates the i18n migration;
+ * translating the code here (instead of touching the hook, out of this
+ * slice's scope) keeps the mapping local to each consumer.
+ *
+ * Any code NOT in this map (unknown/future codes) falls back to
+ * `GENERIC_ERROR_KEY`, NOT to a specific start/record/complete message —
+ * mislabeling an unrelated error as "couldn't start the session" would be a
+ * user-facing regression.
+ */
+const GENERIC_ERROR_KEY = "tracker.error.generic";
+
+const ERROR_KEYS: Record<string, string> = {
+  tracker_error_start: "tracker.error.start",
+  tracker_error_record: "tracker.error.record",
+  tracker_error_complete: "tracker.error.complete",
+};
+
 export function PlanTrackerClient({
   program,
   planId,
-  messages,
   planName,
   children,
 }: PlanTrackerClientProps) {
@@ -63,16 +81,14 @@ export function PlanTrackerClient({
     handleCompleteWorkout,
   } = useWorkoutSession();
 
-  const t = (key: string, fallback: string): string => messages[key] ?? fallback;
+  const t = useTranslations();
+  const errorKey = error ? ERROR_KEYS[error] ?? GENERIC_ERROR_KEY : undefined;
 
   // Session active → the tracker takes over the whole view (no navigation).
   // The identity header re-supplies the plan name + day, since `children`
   // (the server-rendered plan name) is hidden in this branch.
   if (activeSession) {
-    const dayLabel =
-      activeDay != null
-        ? t("tracker_tracking_day", "Day {n}").replace("{n}", String(activeDay))
-        : null;
+    const dayLabel = activeDay != null ? t("tracker.tracking.day", { n: activeDay }) : null;
     return (
       <div>
         {(planName || dayLabel) && (
@@ -81,9 +97,9 @@ export function PlanTrackerClient({
             {dayLabel && <p>{dayLabel}</p>}
           </header>
         )}
-        {error && (
+        {errorKey && (
           <p role="alert" data-testid="tracker-error">
-            {t(error, "Something went wrong. Please try again.")}
+            {t(errorKey)}
           </p>
         )}
         <TrackerPanel
@@ -98,14 +114,13 @@ export function PlanTrackerClient({
   return (
     <div>
       {children}
-      {error && (
+      {errorKey && (
         <p role="alert" data-testid="tracker-error">
-          {t(error, "Something went wrong. Please try again.")}
+          {t(errorKey)}
         </p>
       )}
       <DayDetailPanel
         sessions={program.weeklySessions}
-        messages={messages}
         onStartWorkout={(day) => handleStartWorkout(planId, day)}
         conflict={conflict}
       />
