@@ -51,7 +51,19 @@ function argumentNames(value: string): string[] {
  * - no empty/whitespace-only values
  * - identical ICU argument names per key across both locales
  */
-export function validateCatalogParity(en: NestedMessages, locale: NestedMessages): ParityResult {
+export type ParityLabels = {
+  base?: string;
+  locale?: string;
+};
+
+export function validateCatalogParity(
+  en: NestedMessages,
+  locale: NestedMessages,
+  labels: ParityLabels = {}
+): ParityResult {
+  const baseLabel = labels.base ?? "en";
+  const localeLabel = labels.locale ?? "es";
+
   const errors: string[] = [];
   const enFlat = flattenMessages(en);
   const localeFlat = flattenMessages(locale);
@@ -61,23 +73,23 @@ export function validateCatalogParity(en: NestedMessages, locale: NestedMessages
 
   for (const key of enKeys) {
     if (!localeKeys.has(key)) {
-      errors.push(`Missing key "${key}" in locale "es"`);
+      errors.push(`Missing key "${key}" in locale "${localeLabel}"`);
     }
   }
   for (const key of localeKeys) {
     if (!enKeys.has(key)) {
-      errors.push(`Missing key "${key}" in locale "en"`);
+      errors.push(`Missing key "${key}" in locale "${baseLabel}"`);
     }
   }
 
   for (const [key, value] of Object.entries(enFlat)) {
     if (value.trim().length === 0) {
-      errors.push(`Empty value for key "${key}" in locale "en"`);
+      errors.push(`Empty value for key "${key}" in locale "${baseLabel}"`);
     }
   }
   for (const [key, value] of Object.entries(localeFlat)) {
     if (value.trim().length === 0) {
-      errors.push(`Empty value for key "${key}" in locale "es"`);
+      errors.push(`Empty value for key "${key}" in locale "${localeLabel}"`);
     }
   }
 
@@ -91,7 +103,7 @@ export function validateCatalogParity(en: NestedMessages, locale: NestedMessages
 
     if (!argsMatch) {
       errors.push(
-        `ICU argument mismatch for key "${key}": en has [${enArgs.join(", ")}], locale has [${localeArgs.join(", ")}]`
+        `ICU argument mismatch for key "${key}": ${baseLabel} has [${enArgs.join(", ")}], ${localeLabel} has [${localeArgs.join(", ")}]`
       );
     }
   }

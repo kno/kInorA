@@ -52,4 +52,17 @@ describe("mergeWithBase", () => {
       },
     });
   });
+
+  it("retains a namespace present only in the locale catalog", () => {
+    const en = { nav: { home: "Home" } };
+    const es = {
+      nav: { home: "Inicio" },
+      promo: { banner: "Oferta especial" },
+    };
+
+    expect(mergeWithBase(en, es)).toEqual({
+      nav: { home: "Inicio" },
+      promo: { banner: "Oferta especial" },
+    });
+  });
 });
