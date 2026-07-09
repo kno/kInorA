@@ -83,4 +83,16 @@ describe("validateCatalogParity", () => {
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
   });
+
+  it("uses custom locale labels in error messages when provided", () => {
+    const en = { nav: { home: "Home", about: "About" } };
+    const fr = { nav: { home: "Accueil" } };
+
+    const result = validateCatalogParity(en, fr, { base: "en", locale: "fr" });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes("nav.about") && error.includes('in locale "fr"'))).toBe(
+      true
+    );
+  });
 });
