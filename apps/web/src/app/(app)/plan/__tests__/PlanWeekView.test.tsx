@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { screen, fireEvent } from "@testing-library/react";
+import { renderWithIntl } from "@/test-utils/render-with-intl";
+import { createServerTranslator } from "@/test-utils/server-translator";
 import type { ReactElement, ReactNode } from "react";
 import type { WorkoutProgram } from "@kinora/contracts";
 
@@ -13,6 +15,11 @@ vi.mock("../[id]/actions", () => ({
   startWorkoutSessionAction: vi.fn(),
   recordWorkoutSetAction: vi.fn(),
   completeWorkoutSessionAction: vi.fn(),
+}));
+// PlanWeekView is a server component (`getTranslations`) — see
+// `server-translator.ts` for why this is mocked rather than run for real.
+vi.mock("next-intl/server", () => ({
+  getTranslations: async () => createServerTranslator(),
 }));
 
 // --- React tree inspection helpers ---
@@ -71,28 +78,6 @@ import { PlanWeekView } from "../PlanWeekView";
 
 // --- Test fixtures ---
 
-const messages: Record<string, string> = {
-  plan_summary_sessions: "Planned sessions",
-  plan_summary_sessions_sub: "training days",
-  plan_summary_rest: "Rest days",
-  plan_summary_rest_sub: "per week",
-  plan_summary_duration: "Estimated duration",
-  plan_summary_duration_sub: "per week (est.)",
-  plan_summary_volume: "Target volume",
-  plan_summary_volume_sub: "coming soon",
-  plan_summary_volume_placeholder: "—",
-  plan_day_label: "Day {n}",
-  plan_exercises_count: "exercises",
-  plan_est_duration: "est. {n} min",
-  plan_table_exercise: "Exercise",
-  plan_table_sets: "Sets",
-  plan_table_reps: "Reps",
-  plan_table_rest: "Rest",
-  plan_limitation_title: "Important note",
-  plan_day_detail_close: "Close",
-  plan_day_start_cta: "Start session",
-};
-
 const twoSessionProgram: WorkoutProgram = {
   weeklySessions: [
     {
@@ -142,10 +127,9 @@ const fiveSessionProgram: WorkoutProgram = {
 // --- Tests ---
 
 describe("PlanWeekView — plan name header (#93)", () => {
-  it("renders the plan name in a heading when planName is provided", () => {
-    const view = PlanWeekView({
+  it("renders the plan name in a heading when planName is provided", async () => {
+    const view = await PlanWeekView({
       program: twoSessionProgram,
-      messages,
       planName: "Summer Cut",
       planId: "plan-x",
     });
@@ -154,40 +138,39 @@ describe("PlanWeekView — plan name header (#93)", () => {
     expect(textOf(heading)).toContain("Summer Cut");
   });
 
-  it("renders a different plan name (triangulate)", () => {
-    const view = PlanWeekView({
+  it("renders a different plan name (triangulate)", async () => {
+    const view = await PlanWeekView({
       program: twoSessionProgram,
-      messages,
       planName: "Winter Bulk",
       planId: "plan-x",
     });
     expect(textOf(view)).toContain("Winter Bulk");
   });
 
-  it("omits the name heading when planName is absent", () => {
-    const view = PlanWeekView({ program: twoSessionProgram, messages, planId: "plan-x" });
+  it("omits the name heading when planName is absent", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
     const heading = findFirst(view, (el) => el.type === "h1" || el.type === "h2");
     expect(heading).toBeUndefined();
   });
 });
 
 describe("PlanWeekView — summary strip", () => {
-  it("SC-01: session count tile shows the number of weeklySessions (2 sessions)", () => {
-    const view = PlanWeekView({ program: twoSessionProgram, messages, planId: "plan-x" });
+  it("SC-01: session count tile shows the number of weeklySessions (2 sessions)", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
     const text = textOf(view);
     // The sessions count value should be "2"
     expect(text).toContain("2");
     expect(text).toContain("Planned sessions");
   });
 
-  it("SC-01 triangulation: session count tile shows correct number for 5 sessions", () => {
-    const view = PlanWeekView({ program: fiveSessionProgram, messages, planId: "plan-x" });
+  it("SC-01 triangulation: session count tile shows correct number for 5 sessions", async () => {
+    const view = await PlanWeekView({ program: fiveSessionProgram, planId: "plan-x" });
     const text = textOf(view);
     expect(text).toContain("5");
     expect(text).toContain("Planned sessions");
   });
 
-  it("SC-02: rest-days tile shows 7 − N (1 session → 6 rest days — value unique in tree)", () => {
+  it("SC-02: rest-days tile shows 7 − N (1 session → 6 rest days — value unique in tree)", async () => {
     // Use 1 session → 6 rest days: the value "6" is unique in the rendered tree
     // (there are no exercises with 6 sets and no session day numbered 6),
     // so the assertion is unambiguous.
@@ -201,7 +184,7 @@ describe("PlanWeekView — summary strip", () => {
       ],
       limitationWarnings: [],
     };
-    const view = PlanWeekView({ program: oneSessionProgram, messages, planId: "plan-x" });
+    const view = await PlanWeekView({ program: oneSessionProgram, planId: "plan-x" });
     // Find the summary tile that contains "Rest days" label
     const restTile = findFirst(
       view,
@@ -218,7 +201,7 @@ describe("PlanWeekView — summary strip", () => {
     expect(tileText).toContain("Rest days");
   });
 
-  it("SC-02 triangulation: rest-days tile shows 1 for 6 sessions (7 − 6 = 1 — unique value)", () => {
+  it("SC-02 triangulation: rest-days tile shows 1 for 6 sessions (7 − 6 = 1 — unique value)", async () => {
     // 6 sessions → 1 rest day: "1" as a rest-day value is unique
     // (session days are 1–6, but we inspect only the rest-tile node).
     const sixSessionProgram: WorkoutProgram = {
@@ -229,7 +212,7 @@ describe("PlanWeekView — summary strip", () => {
       })),
       limitationWarnings: [],
     };
-    const view = PlanWeekView({ program: sixSessionProgram, messages, planId: "plan-x" });
+    const view = await PlanWeekView({ program: sixSessionProgram, planId: "plan-x" });
     const restTile = findFirst(
       view,
       (el) =>
@@ -244,22 +227,22 @@ describe("PlanWeekView — summary strip", () => {
     expect(tileText).toContain("Rest days");
   });
 
-  it("SC-03: estimated duration tile shows correct derived value (2 sessions = 21 min)", () => {
-    const view = PlanWeekView({ program: twoSessionProgram, messages, planId: "plan-x" });
+  it("SC-03: estimated duration tile shows correct derived value (2 sessions = 21 min)", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
     const text = textOf(view);
     expect(text).toContain("21");
     expect(text).toContain("Estimated duration");
   });
 
-  it("SC-03 triangulation: duration for 5 sessions each with 1 squat (3×150s → 8min each, total 40 min)", () => {
-    const view = PlanWeekView({ program: fiveSessionProgram, messages, planId: "plan-x" });
+  it("SC-03 triangulation: duration for 5 sessions each with 1 squat (3×150s → 8min each, total 40 min)", async () => {
+    const view = await PlanWeekView({ program: fiveSessionProgram, planId: "plan-x" });
     const text = textOf(view);
     expect(text).toContain("40");
     expect(text).toContain("Estimated duration");
   });
 
-  it("SC-04: volume tile renders the — placeholder, not a real value", () => {
-    const view = PlanWeekView({ program: twoSessionProgram, messages, planId: "plan-x" });
+  it("SC-04: volume tile renders the — placeholder, not a real value", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
     const text = textOf(view);
     expect(text).toContain("—");
     expect(text).toContain("Target volume");
@@ -267,20 +250,20 @@ describe("PlanWeekView — summary strip", () => {
 });
 
 describe("PlanWeekView — limitation warning banner", () => {
-  it("SC-16: banner renders when limitationWarnings has entries", () => {
+  it("SC-16: banner renders when limitationWarnings has entries", async () => {
     const programWithWarnings: WorkoutProgram = {
       ...twoSessionProgram,
       limitationWarnings: ["Avoid overhead movements", "Limit knee flexion"],
     };
-    const view = PlanWeekView({ program: programWithWarnings, messages, planId: "plan-x" });
+    const view = await PlanWeekView({ program: programWithWarnings, planId: "plan-x" });
     const text = textOf(view);
     expect(text).toContain("Important note");
     expect(text).toContain("Avoid overhead movements");
     expect(text).toContain("Limit knee flexion");
   });
 
-  it("SC-17: banner is absent when limitationWarnings is empty", () => {
-    const view = PlanWeekView({ program: twoSessionProgram, messages, planId: "plan-x" });
+  it("SC-17: banner is absent when limitationWarnings is empty", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
     const text = textOf(view);
     // The limitation title should NOT appear when warnings array is empty
     expect(text).not.toContain("Important note");
@@ -291,10 +274,9 @@ describe("PlanWeekView — interactive day grid + start CTA (#93 Slice 3)", () =
   // Behavior-first: assert what the USER sees (a startable day grid rendered by
   // the wrapping client island), not the internal component identity. A rename
   // of the wrapper no longer silently breaks or passes these tests.
-  it("SC-06: renders one interactive day card per session (2 sessions) with a working Start CTA", () => {
-    render(
-      <>{PlanWeekView({ program: twoSessionProgram, messages, planId: "plan-x" })}</>,
-    );
+  it("SC-06: renders one interactive day card per session (2 sessions) with a working Start CTA", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
+    renderWithIntl(<>{view}</>);
 
     // Two day cards, addressable by their aria-label.
     expect(screen.getByRole("button", { name: "Day 1" })).toBeDefined();
@@ -307,10 +289,9 @@ describe("PlanWeekView — interactive day grid + start CTA (#93 Slice 3)", () =
     expect(screen.getByRole("button", { name: "Start session" })).toBeDefined();
   });
 
-  it("SC-06 triangulation: renders one day card per session for a 5-session program", () => {
-    render(
-      <>{PlanWeekView({ program: fiveSessionProgram, messages, planId: "plan-x" })}</>,
-    );
+  it("SC-06 triangulation: renders one day card per session for a 5-session program", async () => {
+    const view = await PlanWeekView({ program: fiveSessionProgram, planId: "plan-x" });
+    renderWithIntl(<>{view}</>);
 
     for (const day of [1, 2, 3, 4, 5]) {
       expect(screen.getByRole("button", { name: `Day ${day}` })).toBeDefined();

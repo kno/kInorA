@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useFormatter, useTranslations } from "next-intl";
 
 /**
  * Lightweight plan summary shape for the selector.
@@ -24,7 +25,6 @@ export interface PlanSummaryItem {
 export interface PlanSelectorProps {
   summaries: PlanSummaryItem[];
   selectedId: string;
-  messages?: Record<string, string>;
 }
 
 /**
@@ -42,11 +42,10 @@ export interface PlanSelectorProps {
  * and MUST NOT reference API_BASE_URL / NEXT_PUBLIC_API_BASE_URL — it only
  * navigates (ui-api-guard enforces this at build time).
  */
-export function PlanSelector({ summaries, selectedId, messages }: PlanSelectorProps) {
+export function PlanSelector({ summaries, selectedId }: PlanSelectorProps) {
   const router = useRouter();
-
-  // Translate with fallback
-  const t = (key: string, fallback: string) => messages?.[key] ?? fallback;
+  const t = useTranslations();
+  const format = useFormatter();
 
   function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
     router.push(`/plan?planId=${encodeURIComponent(e.target.value)}`);
@@ -55,7 +54,7 @@ export function PlanSelector({ summaries, selectedId, messages }: PlanSelectorPr
   return (
     <div className="kin-plan-selector">
       <label htmlFor="plan-selector" className="kin-label">
-        {t("plan_selector_label", "Select a plan")}
+        {t("plan.selector.label")}
       </label>
       <select
         id="plan-selector"
@@ -68,12 +67,9 @@ export function PlanSelector({ summaries, selectedId, messages }: PlanSelectorPr
           // label. The server normally resolves it via defaultPlanName, but the
           // field is optional, so fall back to the date/status template for any
           // legacy/undefined summary served without a name (no crash).
-          const date = new Date(plan.createdAt).toLocaleDateString();
-          const optionLabel = plan.name
-            ? plan.name
-            : t("plan_selector_option", "{date} ({status})")
-                .replace("{date}", date)
-                .replace("{status}", plan.status);
+          const date = format.dateTime(new Date(plan.createdAt));
+          const statusLabel = t("plan.selector.option", { status: plan.status });
+          const optionLabel = plan.name ? plan.name : `${date} (${statusLabel})`;
           return (
             <option key={plan.id} value={plan.id}>
               {optionLabel}

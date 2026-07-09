@@ -25,32 +25,23 @@ vi.mock("../[id]/actions", () => ({
   completeWorkoutSessionAction: (...args: unknown[]) => completeWorkoutSessionAction(...args),
 }));
 
+// Pass-through mock (real implementation) so a single test below can
+// `vi.spyOn` the hook's return value to inject an error code the REAL hook
+// never produces (an unmapped/unknown code) — every other test in this file
+// exercises the real hook via the mocked actions above, unaffected by this.
+vi.mock("../use-workout-session", async () => {
+  const actual = await vi.importActual<typeof import("../use-workout-session")>(
+    "../use-workout-session",
+  );
+  return { ...actual };
+});
+
 import { PlanTrackerClient } from "../PlanTrackerClient";
+import * as useWorkoutSessionModule from "../use-workout-session";
 
 afterEach(() => {
   vi.clearAllMocks();
 });
-
-const messages: Record<string, string> = {
-  plan_day_label: "Day {n}",
-  plan_exercises_count: "exercises",
-  plan_est_duration: "est. {n} min",
-  plan_table_exercise: "Exercise",
-  plan_table_sets: "Sets",
-  plan_table_reps: "Reps",
-  plan_table_rest: "Rest",
-  plan_day_detail_close: "Close",
-  plan_day_start_cta: "Start session",
-  plan_start_conflict: "You have an active session for {plan} · Day {n}.",
-  plan_start_conflict_no_day: "You have an active session for {plan}.",
-  plan_start_conflict_generic: "You already have an active workout session.",
-  tracker_live_title: "Live workout",
-  tracker_complete_cta: "Complete workout",
-  tracker_tracking_day: "Day {n}",
-  tracker_error_start: "We couldn't start the session. Please try again.",
-  tracker_error_record: "We couldn't save the set. Please try again.",
-  tracker_error_complete: "We couldn't complete the workout. Please try again.",
-};
 
 const program: WorkoutProgram = {
   weeklySessions: [
@@ -107,7 +98,7 @@ describe("PlanTrackerClient — inline state swap (#93 Slice 3)", () => {
 
   it("initially renders the DayDetailPanel (day cards), not the tracker", () => {
     renderWithIntl(
-      <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
+      <PlanTrackerClient program={program} planId="plan-a" />,
     );
     expect(screen.getByText("Push Day")).toBeDefined();
     expect(screen.queryByRole("region", { name: "Live workout" })).toBeNull();
@@ -117,7 +108,7 @@ describe("PlanTrackerClient — inline state swap (#93 Slice 3)", () => {
     startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: fakeSession });
 
     renderWithIntl(
-      <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
+      <PlanTrackerClient program={program} planId="plan-a" />,
     );
 
     // Open day 1 and click Start session.
@@ -134,7 +125,7 @@ describe("PlanTrackerClient — inline state swap (#93 Slice 3)", () => {
     startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: fakeSession });
 
     renderWithIntl(
-      <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
+      <PlanTrackerClient program={program} planId="plan-a" />,
     );
 
     fireEvent.click(screen.getByText("Pull Day")); // day 2
@@ -153,7 +144,7 @@ describe("PlanTrackerClient — inline state swap (#93 Slice 3)", () => {
     });
 
     renderWithIntl(
-      <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
+      <PlanTrackerClient program={program} planId="plan-a" />,
     );
 
     fireEvent.click(screen.getByText("Push Day"));
@@ -180,7 +171,7 @@ describe("PlanTrackerClient — completion returns to the plan view (BLOCKER #93
     });
 
     renderWithIntl(
-      <PlanTrackerClient program={program} planId="plan-a" messages={messages}>
+      <PlanTrackerClient program={program} planId="plan-a">
         <div>Summary strip</div>
       </PlanTrackerClient>,
     );
@@ -209,7 +200,7 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
     startWorkoutSessionAction.mockRejectedValue(new Error("api_unreachable"));
 
     renderWithIntl(
-      <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
+      <PlanTrackerClient program={program} planId="plan-a" />,
     );
 
     fireEvent.click(screen.getByText("Push Day"));
@@ -230,7 +221,7 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
     recordWorkoutSetAction.mockRejectedValue(new Error("api_unreachable"));
 
     renderWithIntl(
-      <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
+      <PlanTrackerClient program={program} planId="plan-a" />,
     );
 
     fireEvent.click(screen.getByText("Push Day"));
@@ -253,7 +244,7 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
     completeWorkoutSessionAction.mockRejectedValue(new Error("api_unreachable"));
 
     renderWithIntl(
-      <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
+      <PlanTrackerClient program={program} planId="plan-a" />,
     );
 
     fireEvent.click(screen.getByText("Push Day"));
@@ -269,6 +260,29 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
     // Complete failed → still on the tracker (not dismissed).
     expect(screen.getByRole("region", { name: "Live workout" })).toBeDefined();
   });
+
+  it("an unmapped/unknown error code renders the generic fallback, NOT the start-error text (CRITICAL regression guard)", () => {
+    // The real useWorkoutSession hook only ever produces the 3 known codes
+    // (tracker_error_start/record/complete) — inject a code it never
+    // produces to prove the fallback is neutral, not mislabeled as "start".
+    const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+      activeSession: undefined,
+      activeDay: undefined,
+      conflict: undefined,
+      error: "some_unknown_error",
+      handleStartWorkout: vi.fn(),
+      handleRecordSet: vi.fn(),
+      handleCompleteWorkout: vi.fn(),
+    });
+
+    renderWithIntl(<PlanTrackerClient program={program} planId="plan-a" />);
+
+    const alert = screen.getByTestId("tracker-error");
+    expect(alert.textContent).toBe("Something went wrong. Please try again.");
+    expect(alert.textContent).not.toContain("start the session");
+
+    spy.mockRestore();
+  });
 });
 
 describe("PlanTrackerClient — plan/day identity in the active tracker (CRITICAL #93)", () => {
@@ -280,7 +294,7 @@ describe("PlanTrackerClient — plan/day identity in the active tracker (CRITICA
         program={program}
         planId="plan-a"
         planName="Summer Cut"
-        messages={messages}
+       
       />,
     );
 
@@ -306,7 +320,7 @@ describe("PlanTrackerClient — conflict then retry (#93)", () => {
       .mockResolvedValueOnce({ kind: "ok", session: { ...fakeSession, day: 2 } });
 
     renderWithIntl(
-      <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
+      <PlanTrackerClient program={program} planId="plan-a" />,
     );
 
     // First attempt on day 1 → conflict.

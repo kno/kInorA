@@ -13,6 +13,7 @@
  */
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import type { WorkoutSession } from "@kinora/contracts";
 import styles from "./plan-week-view.module.css";
 import { estimateSessionMinutes } from "./plan-utils";
@@ -22,7 +23,6 @@ const DETAIL_PANEL_ID = "day-detail-panel";
 
 export interface DayDetailPanelProps {
   sessions: WorkoutSession[];
-  messages: Record<string, string>;
   /**
    * Per-day start handler (#93 Slice 3). When provided, each open day panel
    * shows a "Start session" CTA that calls this with the day number. When
@@ -41,33 +41,24 @@ export interface DayDetailPanelProps {
 
 export function DayDetailPanel({
   sessions,
-  messages,
   onStartWorkout,
   conflict,
 }: DayDetailPanelProps) {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
-  const t = (key: string, fallback: string): string => messages[key] ?? fallback;
+  const t = useTranslations();
 
   // Derived localized conflict message (readability: no per-render fn, no
   // side effects). Empty string when there is no conflict.
   const conflictText = ((): string => {
     if (!conflict) return "";
     if (!conflict.activePlanName) {
-      return t(
-        "plan_start_conflict_generic",
-        "You already have an active workout session.",
-      );
+      return t("plan.start.conflict_generic");
     }
     if (conflict.activeDay == null) {
-      return t("plan_start_conflict_no_day", "You have an active session for {plan}.").replace(
-        "{plan}",
-        conflict.activePlanName,
-      );
+      return t("plan.start.conflict_no_day", { plan: conflict.activePlanName });
     }
-    return t("plan_start_conflict", "You have an active session for {plan} · Day {n}.")
-      .replace("{plan}", conflict.activePlanName)
-      .replace("{n}", String(conflict.activeDay));
+    return t("plan.start.conflict", { plan: conflict.activePlanName, n: conflict.activeDay });
   })();
 
   function handleCardClick(day: number): void {
@@ -98,19 +89,9 @@ export function DayDetailPanel({
         {sessions.map((session) => {
           const isActive = session.day === selectedDay;
           const estMin = estimateSessionMinutes(session.exercises);
-          const dayLabel = t("plan_day_label", "Day {n}").replace(
-            "{n}",
-            String(session.day),
-          );
-          const exercisesLabel = `${session.exercises.length} ${t("plan_exercises_count", "exercises")}`;
-          // Known limitation: "1 exercises" is grammatically incorrect.
-          // ICU plural ({count, plural, one {exercise} other {exercises}}) would fix
-          // this, but the project currently uses a plain key-value i18n catalogue
-          // without MessageFormat/ICU support. Left as-is until the catalogue is upgraded.
-          const durationLabel = t("plan_est_duration", "est. {n} min").replace(
-            "{n}",
-            String(estMin),
-          );
+          const dayLabel = t("plan.day.label", { n: session.day });
+          const exercisesLabel = `${session.exercises.length} ${t("plan.exercises.count")}`;
+          const durationLabel = t("plan.est_duration", { n: estMin });
 
           return (
             <div
@@ -140,30 +121,26 @@ export function DayDetailPanel({
           <div className={styles.detailHeader}>
             <div className={styles.detailTitleBlock}>
               <div className={styles.detailEyebrow}>
-                {t("plan_day_label", "Day {n}").replace(
-                  "{n}",
-                  String(selectedSession.day),
-                )}
+                {t("plan.day.label", { n: selectedSession.day })}
               </div>
               <h2 className={styles.detailTitle}>{selectedSession.title}</h2>
               {/* Fix 2: meta line uses catalogue keys, no hardcoded "min" or "·" */}
               <div className={styles.detailMeta}>
                 {selectedSession.exercises.length}{" "}
-                {t("plan_exercises_count", "exercises")}
+                {t("plan.exercises.count")}
                 {" · "}
-                {t("plan_est_duration", "est. {n} min").replace(
-                  "{n}",
-                  String(estimateSessionMinutes(selectedSession.exercises)),
-                )}
+                {t("plan.est_duration", {
+                  n: estimateSessionMinutes(selectedSession.exercises),
+                })}
               </div>
             </div>
             <button
               type="button"
               className={styles.detailClose}
               onClick={() => setSelectedDay(null)}
-              aria-label={t("plan_day_detail_close", "Close")}
+              aria-label={t("plan.day.detailClose")}
             >
-              {t("plan_day_detail_close", "Close")}
+              {t("plan.day.detailClose")}
             </button>
           </div>
 
@@ -171,10 +148,10 @@ export function DayDetailPanel({
           <table className={styles.exTable}>
             <thead>
               <tr>
-                <th>{t("plan_table_exercise", "Exercise")}</th>
-                <th>{t("plan_table_sets", "Sets")}</th>
-                <th>{t("plan_table_reps", "Reps")}</th>
-                <th>{t("plan_table_rest", "Rest")}</th>
+                <th>{t("plan.table.exercise")}</th>
+                <th>{t("plan.table.sets")}</th>
+                <th>{t("plan.table.reps")}</th>
+                <th>{t("plan.table.rest")}</th>
               </tr>
             </thead>
             <tbody>
@@ -230,7 +207,7 @@ export function DayDetailPanel({
               className="kin-btn kin-btn--primary"
               onClick={() => onStartWorkout(selectedSession.day)}
             >
-              {t("plan_day_start_cta", "Start session")}
+              {t("plan.day.startCta")}
             </button>
           )}
         </div>

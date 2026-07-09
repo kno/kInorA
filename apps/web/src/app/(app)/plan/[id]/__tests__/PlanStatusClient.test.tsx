@@ -12,7 +12,8 @@
  * usePlanWs must be called WITHOUT a token — the token must never reach client JS.
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
+import { renderWithIntl } from "@/test-utils/render-with-intl";
 import { PlanStatusClient } from "../PlanStatusClient";
 
 // --- Module mocks ---
@@ -53,6 +54,19 @@ vi.mock("../PlanStatusView", () => ({
   ),
 }));
 
+// Pass-through mock (real implementation) so a single test below can
+// `vi.spyOn` the hook's return value to inject an error code the REAL hook
+// never produces (an unmapped/unknown code) — every other test in this file
+// is unaffected, since it doesn't touch the hook's `error` state.
+vi.mock("@/app/(app)/plan/use-workout-session", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/app/(app)/plan/use-workout-session")
+  >("@/app/(app)/plan/use-workout-session");
+  return { ...actual };
+});
+
+import * as useWorkoutSessionModule from "@/app/(app)/plan/use-workout-session";
+
 afterEach(() => {
   vi.clearAllMocks();
 });
@@ -66,7 +80,7 @@ describe("PlanStatusClient — Regenerate button (Fix 4)", () => {
     defaultWsReturn("failed");
     regeneratePlanAction.mockResolvedValue({ planId: "plan-1", status: "generating" });
 
-    render(
+    renderWithIntl(
       <PlanStatusClient
         planId="plan-1"
         specId="spec-1"
@@ -88,7 +102,7 @@ describe("PlanStatusClient — Regenerate button (Fix 4)", () => {
 
     const fetchSpy = vi.spyOn(globalThis, "fetch");
 
-    render(
+    renderWithIntl(
       <PlanStatusClient
         planId="plan-1"
         specId="spec-2"
@@ -112,7 +126,7 @@ describe("PlanStatusClient — Regenerate button (Fix 4)", () => {
     // Never resolves during this test — simulates in-flight
     regeneratePlanAction.mockReturnValue(new Promise(() => {}));
 
-    render(
+    renderWithIntl(
       <PlanStatusClient
         planId="plan-1"
         specId="spec-1"
@@ -131,7 +145,7 @@ describe("PlanStatusClient — Regenerate button (Fix 4)", () => {
   it("does not call regeneratePlanAction when specId is undefined", async () => {
     defaultWsReturn("failed");
 
-    render(
+    renderWithIntl(
       <PlanStatusClient
         planId="plan-1"
         initialStatus="failed"
@@ -149,7 +163,7 @@ describe("PlanStatusClient — no session token exposed to client JS (Fix #42)",
   it("calls usePlanWs WITHOUT a token — WS auth relies on the same-origin cookie", () => {
     defaultWsReturn("generating");
 
-    render(
+    renderWithIntl(
       <PlanStatusClient
         planId="plan-1"
         specId="spec-1"
@@ -164,5 +178,33 @@ describe("PlanStatusClient — no session token exposed to client JS (Fix #42)",
     );
     const options = usePlanWs.mock.calls[0]![1] as Record<string, unknown>;
     expect(options.token).toBeUndefined();
+  });
+});
+
+describe("PlanStatusClient — unmapped error code (CRITICAL regression guard)", () => {
+  it("renders the generic fallback, NOT the start-error text, for an unknown error code", () => {
+    defaultWsReturn("failed");
+    // The real useWorkoutSession hook only ever produces the 3 known codes
+    // (tracker_error_start/record/complete) — inject a code it never
+    // produces to prove the fallback is neutral, not mislabeled as "start".
+    const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+      activeSession: undefined,
+      activeDay: undefined,
+      conflict: undefined,
+      error: "some_unknown_error",
+      handleStartWorkout: vi.fn(),
+      handleRecordSet: vi.fn(),
+      handleCompleteWorkout: vi.fn(),
+    });
+
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="failed" />,
+    );
+
+    const alert = screen.getByTestId("tracker-error");
+    expect(alert.textContent).toBe("Something went wrong. Please try again.");
+    expect(alert.textContent).not.toContain("start the session");
+
+    spy.mockRestore();
   });
 });
