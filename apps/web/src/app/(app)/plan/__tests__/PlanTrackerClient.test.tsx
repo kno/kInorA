@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import type { WorkoutProgram, WorkoutSessionRecord } from "@kinora/contracts";
+import { renderWithIntl } from "@/test-utils/render-with-intl";
 
 // Mock the CSS modules to avoid transform errors.
 vi.mock("../plan-week-view.module.css", () => ({
@@ -105,7 +106,7 @@ describe("PlanTrackerClient — inline state swap (#93 Slice 3)", () => {
   });
 
   it("initially renders the DayDetailPanel (day cards), not the tracker", () => {
-    render(
+    renderWithIntl(
       <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
     );
     expect(screen.getByText("Push Day")).toBeDefined();
@@ -115,7 +116,7 @@ describe("PlanTrackerClient — inline state swap (#93 Slice 3)", () => {
   it("on a started result, swaps to TrackerPanel without navigating", async () => {
     startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: fakeSession });
 
-    render(
+    renderWithIntl(
       <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
     );
 
@@ -132,7 +133,7 @@ describe("PlanTrackerClient — inline state swap (#93 Slice 3)", () => {
   it("threads the correct day for a different day card", async () => {
     startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: fakeSession });
 
-    render(
+    renderWithIntl(
       <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
     );
 
@@ -151,7 +152,7 @@ describe("PlanTrackerClient — inline state swap (#93 Slice 3)", () => {
       activeDay: 5,
     });
 
-    render(
+    renderWithIntl(
       <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
     );
 
@@ -178,7 +179,7 @@ describe("PlanTrackerClient — completion returns to the plan view (BLOCKER #93
       status: "completed",
     });
 
-    render(
+    renderWithIntl(
       <PlanTrackerClient program={program} planId="plan-a" messages={messages}>
         <div>Summary strip</div>
       </PlanTrackerClient>,
@@ -207,7 +208,7 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
   it("a thrown error from START sets an inline error and does NOT crash", async () => {
     startWorkoutSessionAction.mockRejectedValue(new Error("api_unreachable"));
 
-    render(
+    renderWithIntl(
       <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
     );
 
@@ -228,7 +229,7 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
     startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: fakeSession });
     recordWorkoutSetAction.mockRejectedValue(new Error("api_unreachable"));
 
-    render(
+    renderWithIntl(
       <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
     );
 
@@ -251,7 +252,7 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
     startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: fakeSession });
     completeWorkoutSessionAction.mockRejectedValue(new Error("api_unreachable"));
 
-    render(
+    renderWithIntl(
       <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
     );
 
@@ -274,7 +275,7 @@ describe("PlanTrackerClient — plan/day identity in the active tracker (CRITICA
   it("shows the plan name and the started day above the tracker", async () => {
     startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: fakeSession });
 
-    render(
+    renderWithIntl(
       <PlanTrackerClient
         program={program}
         planId="plan-a"
@@ -304,7 +305,7 @@ describe("PlanTrackerClient — conflict then retry (#93)", () => {
       })
       .mockResolvedValueOnce({ kind: "ok", session: { ...fakeSession, day: 2 } });
 
-    render(
+    renderWithIntl(
       <PlanTrackerClient program={program} planId="plan-a" messages={messages} />,
     );
 

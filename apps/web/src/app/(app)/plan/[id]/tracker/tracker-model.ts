@@ -10,9 +10,6 @@ import type {
   WorkoutSessionRecord,
 } from "@kinora/contracts";
 
-/** Localized-string getter injected from the app's i18n (fallback-safe). */
-export type Translate = (key: string, fallback: string) => string;
-
 export const WEIGHT_STEP = 2.5;
 export const RING_RADIUS = 66;
 export const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;

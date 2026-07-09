@@ -88,7 +88,6 @@ export function PlanTrackerClient({
         )}
         <TrackerPanel
           session={activeSession}
-          messages={messages}
           onRecordSet={handleRecordSet}
           onCompleteSession={handleCompleteWorkout}
         />

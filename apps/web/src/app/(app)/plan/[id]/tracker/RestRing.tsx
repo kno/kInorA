@@ -1,9 +1,8 @@
+import { useTranslations } from "next-intl";
 import { RING_CIRCUMFERENCE, RING_RADIUS, formatRest } from "./tracker-model";
-import type { Translate } from "./tracker-model";
 import styles from "../TrackerPanel.module.css";
 
 interface RestRingProps {
-  t: Translate;
   /** Full rest duration (seconds) used to scale the ring. */
   duration: number;
   /** Seconds left, or `null` while idle. */
@@ -13,7 +12,8 @@ interface RestRingProps {
 }
 
 /** Rest countdown ring: amber, turning lime in the last 15s. Client-only. */
-export function RestRing({ t, duration, remaining, onSkip, onAddTime }: RestRingProps) {
+export function RestRing({ duration, remaining, onSkip, onAddTime }: RestRingProps) {
+  const t = useTranslations("tracker");
   const active = remaining != null;
   const low = active && remaining <= 15;
   // Guard against a non-positive rest duration (e.g. an exercise configured
@@ -28,16 +28,13 @@ export function RestRing({ t, duration, remaining, onSkip, onAddTime }: RestRing
   // Announced to assistive tech: the visible countdown lives inside an
   // `aria-hidden` node, so this sr-only live region carries the state + time.
   const srStatus = active
-    ? t("tracker_rest_sr_active", "Rest active, {time} remaining").replace(
-        "{time}",
-        formatRest(remaining),
-      )
-    : t("tracker_rest_ready", "Ready for the set");
+    ? t("rest.srActive", { time: formatRest(remaining) })
+    : t("rest.ready");
 
   return (
     <section
       className={`${styles.card} ${styles.restCard}`}
-      aria-label={t("tracker_rest_aria", "Rest timer")}
+      aria-label={t("rest.aria")}
     >
       <span className={styles.srOnly} aria-live="polite">
         {srStatus}
@@ -48,20 +45,16 @@ export function RestRing({ t, duration, remaining, onSkip, onAddTime }: RestRing
             className={`${styles.restDot} ${active ? "" : styles.restDotIdle}`}
             aria-hidden="true"
           />
-          <span>
-            {active
-              ? t("tracker_rest_active", "Rest active")
-              : t("tracker_rest_ready", "Ready for the set")}
-          </span>
+          <span>{active ? t("rest.active") : t("rest.ready")}</span>
         </span>
         <button
           type="button"
           className={styles.btn}
           onClick={onSkip}
-          aria-label={t("tracker_rest_skip_label", "Skip rest")}
+          aria-label={t("rest.skipLabel")}
           disabled={!active}
         >
-          {t("tracker_rest_skip", "Skip")}
+          {t("rest.skip")}
         </button>
       </div>
       <div className={styles.ringWrap} aria-hidden="true">
@@ -83,7 +76,7 @@ export function RestRing({ t, duration, remaining, onSkip, onAddTime }: RestRing
           <span className={`${styles.ringTime} ${low ? styles.ringTimeLow : ""}`}>
             {formatRest(remaining ?? duration)}
           </span>
-          <span className={styles.ringLabelSm}>{t("tracker_rest_label", "rest")}</span>
+          <span className={styles.ringLabelSm}>{t("rest.label")}</span>
         </div>
       </div>
       <div className={styles.restActions}>
@@ -91,19 +84,19 @@ export function RestRing({ t, duration, remaining, onSkip, onAddTime }: RestRing
           type="button"
           className={`${styles.btn} ${styles.btnWarn}`}
           onClick={onAddTime}
-          aria-label={t("tracker_rest_add_label", "Add 15 seconds")}
+          aria-label={t("rest.addLabel")}
           disabled={!active}
         >
-          {t("tracker_rest_add_time", "+15 s")}
+          {t("rest.addTime")}
         </button>
         <button
           type="button"
           className={styles.btn}
           onClick={onSkip}
-          aria-label={t("tracker_rest_skip_label", "Skip rest")}
+          aria-label={t("rest.skipLabel")}
           disabled={!active}
         >
-          {t("tracker_rest_skip", "Skip")}
+          {t("rest.skip")}
         </button>
       </div>
     </section>

@@ -1,9 +1,8 @@
-import type { Translate } from "./tracker-model";
+import { useTranslations } from "next-intl";
 import { formatMMSS } from "./tracker-model";
 import styles from "../TrackerPanel.module.css";
 
 interface TrackerTopbarProps {
-  t: Translate;
   title: string;
   elapsed: number;
   paused: boolean;
@@ -14,7 +13,6 @@ interface TrackerTopbarProps {
 
 /** Topbar: eyebrow + current-exercise H1, live timer, pause + finish controls. */
 export function TrackerTopbar({
-  t,
   title,
   elapsed,
   paused,
@@ -22,26 +20,23 @@ export function TrackerTopbar({
   onTogglePause,
   onComplete,
 }: TrackerTopbarProps) {
+  const t = useTranslations("tracker");
   return (
     <header className={styles.topbar}>
       <div>
-        <p className={styles.eyebrow}>{t("tracker_live_eyebrow", "Active session")}</p>
+        <p className={styles.eyebrow}>{t("live.eyebrow")}</p>
         <h1 className={styles.title}>{title}</h1>
       </div>
-      <div className={styles.sessionControls} aria-label={t("tracker_controls_label", "Session controls")}>
+      <div className={styles.sessionControls} aria-label={t("controlsLabel")}>
         <div className={styles.timerBox} aria-live="polite">
-          <span className={styles.timerLabel}>{t("tracker_timer_label", "Time")}</span>
+          <span className={styles.timerLabel}>{t("timerLabel")}</span>
           <span className={styles.timerValue}>{formatMMSS(elapsed)}</span>
         </div>
         <button
           type="button"
           className={styles.iconBtn}
           onClick={onTogglePause}
-          aria-label={
-            paused
-              ? t("tracker_resume_label", "Resume session")
-              : t("tracker_pause_label", "Pause session")
-          }
+          aria-label={paused ? t("resumeLabel") : t("pauseLabel")}
           aria-pressed={paused}
           disabled={isCompleted}
         >
@@ -62,7 +57,7 @@ export function TrackerTopbar({
           onClick={onComplete}
           disabled={isCompleted}
         >
-          {t("tracker_complete_cta", "Complete workout")}
+          {t("complete.cta")}
         </button>
       </div>
     </header>
