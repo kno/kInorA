@@ -314,6 +314,11 @@
       "complete": "We couldn't complete the workout. Please try again.",
       "generic": "Something went wrong. Please try again."
     },
+    "sync": {
+      "reload_required": "Your saved changes are safe, but you need to reload the page to finish syncing.",
+      "auth_required": "Your session expired while syncing. Your changes are still saved locally — reload the page or sign in again to finish syncing.",
+      "dropped": "Some of your changes couldn't be saved and were discarded because the server rejected them. Please redo those changes."
+    },
     "currentExercise": "Current exercise",
     "rpe": "RPE",
     "notes": "Notes",

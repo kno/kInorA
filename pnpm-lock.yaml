@@ -196,6 +196,9 @@ importers:
       '@serwist/next':
         specifier: 9.5.11
         version: 9.5.11(next@16.2.9(@playwright/test@1.61.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react@19.2.7)(typescript@5.8.3)
+      idb:
+        specifier: 8.0.3
+        version: 8.0.3
       next:
         specifier: 16.2.9
         version: 16.2.9(@playwright/test@1.61.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

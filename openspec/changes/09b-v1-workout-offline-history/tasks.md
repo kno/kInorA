@@ -73,26 +73,26 @@ Ask the user: chain strategy (stacked-to-main vs feature-branch-chain) before `s
 
 ## Phase 4: Web Offline (Slice 3 — PR 3, depends on Phase 1 & 2)
 
-- [ ] 4.1 RED: Write failing test — `unwrapWorkoutSession` in `apps/web/.../actions.ts` preserves `FlushErrorCode` (not just `Error(message)`)
-- [ ] 4.2 GREEN: Modify `unwrapWorkoutSession` to return discriminated error shape
-- [ ] 4.3 RED: Write failing test — `tracker-client.ts` propagates HTTP status/`FlushErrorCode` beyond the existing 409-only case
-- [ ] 4.4 GREEN: Modify `apps/web/src/app/(app)/plan/[id]/tracker-client.ts` to preserve/propagate status/code
-- [ ] 4.5 RED: Write failing tests for idb-backed `PendingMutation` queue persistence (enqueue-before-snapshot ordering) in `apps/web/.../plan/offline/`
-- [ ] 4.6 GREEN: Implement idb queue module with `clientSeq` persistence across restart (`lastClientSeq` high-water-mark)
-- [ ] 4.7 RED: Write failing tests for `WorkoutSessionSnapshot` cache read/write, eviction on complete+synced, clear-on-logout
-- [ ] 4.8 GREEN: Implement snapshot cache module, identity-scoped key namespace `offline:${tenantId}:${userId}:...`
-- [ ] 4.9 RED: Write failing tests for `ConnectivityMonitor` web impl (`navigator.onLine` + online/offline events)
-- [ ] 4.10 GREEN: Implement web `ConnectivityMonitor` in `apps/web/.../plan/offline/`
-- [ ] 4.11 RED: Write failing tests for sequential flush in `use-workout-session.ts` — one in-flight request at a time, `collapseQueue()` applied before flush, complete ordered last
-- [ ] 4.12 GREEN: Implement flush loop in `use-workout-session.ts` invoking existing `recordWorkoutSetAction`/`completeWorkoutSessionAction`
-- [ ] 4.13 RED: Write failing tests for stale-action-reference detection (distinct from `api_unreachable`/4xx) surfacing "reload to sync" prompt, entry stays queued
-- [ ] 4.14 GREEN: Implement stale-action detection branch in flush handler
-- [ ] 4.15 RED: Write failing tests — offline reload hydrates UI from snapshot + replays queued mutations without network GET
-- [ ] 4.16 GREEN: Wire snapshot hydration into tracker page load path
-- [ ] 4.17 RED: Write failing test — logout clears identity-scoped queue + snapshot
-- [ ] 4.18 GREEN: Implement clear-on-logout hook
-- [ ] 4.19 Run `pnpm architecture` to confirm `idb` import does not trip deps-guard (per design: no edit expected)
-- [ ] 4.20 REFACTOR: Consolidate offline module structure under `apps/web/.../plan/offline/`; run `pnpm type-check` and `pnpm test` for web workspace
+- [x] 4.1 RED: Write failing test — `unwrapWorkoutSession` in `apps/web/.../actions.ts` preserves `FlushErrorCode` (not just `Error(message)`)
+- [x] 4.2 GREEN: Modify `unwrapWorkoutSession` to return discriminated error shape
+- [x] 4.3 RED: Write failing test — `tracker-client.ts` propagates HTTP status/`FlushErrorCode` beyond the existing 409-only case
+- [x] 4.4 GREEN: Modify `apps/web/src/app/(app)/plan/[id]/tracker-client.ts` to preserve/propagate status/code
+- [x] 4.5 RED: Write failing tests for idb-backed `PendingMutation` queue persistence (enqueue-before-snapshot ordering) in `apps/web/.../plan/offline/`
+- [x] 4.6 GREEN: Implement idb queue module with `clientSeq` persistence across restart (`lastClientSeq` high-water-mark)
+- [x] 4.7 RED: Write failing tests for `WorkoutSessionSnapshot` cache read/write, eviction on complete+synced, clear-on-logout
+- [x] 4.8 GREEN: Implement snapshot cache module, identity-scoped key namespace (deviation: `${identityKey}:...` where `identityKey` is a per-login SHA-256 hash resolved via `getOfflineIdentityKeyAction` — see apply-progress deviation note; the browser never sees a raw `tenantId`/`userId`)
+- [x] 4.9 RED: Write failing tests for `ConnectivityMonitor` web impl (`navigator.onLine` + online/offline events)
+- [x] 4.10 GREEN: Implement web `ConnectivityMonitor` in `apps/web/.../plan/offline/`
+- [x] 4.11 RED: Write failing tests for sequential flush in `use-workout-session.ts` — one in-flight request at a time, `collapseQueue()` applied before flush, complete ordered last
+- [x] 4.12 GREEN: Implement flush loop in `use-workout-session.ts` invoking existing `recordWorkoutSetAction`/`completeWorkoutSessionAction`
+- [x] 4.13 RED: Write failing tests for stale-action-reference detection (distinct from `api_unreachable`/4xx) surfacing "reload to sync" prompt, entry stays queued
+- [x] 4.14 GREEN: Implement stale-action detection branch in flush handler
+- [x] 4.15 RED: Write failing tests — offline reload hydrates UI from snapshot + replays queued mutations without network GET
+- [x] 4.16 GREEN: Wire snapshot hydration into tracker page load path
+- [x] 4.17 RED: Write failing test — logout clears identity-scoped queue + snapshot
+- [x] 4.18 GREEN: Implement clear-on-logout hook (deviation: implemented as `ensureIdentityScope`, detecting an identity change on next mount rather than hooking the logout Server Action directly — see apply-progress deviation note)
+- [x] 4.19 Run `pnpm architecture`/`pnpm deps-guard` to confirm `idb` import does not trip deps-guard (confirmed: no edit needed, per design)
+- [x] 4.20 REFACTOR: Consolidate offline module structure under `apps/web/.../plan/offline/`; run `pnpm type-check` and `pnpm test` for web workspace (both green)
 
 ## Phase 5: Mobile Offline (Slice 4 — PR 4, depends on Phase 1 & 4 contracts)
 

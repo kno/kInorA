@@ -192,6 +192,7 @@ describe("PlanStatusClient — unmapped error code (CRITICAL regression guard)",
       activeDay: undefined,
       conflict: undefined,
       error: "some_unknown_error",
+      syncNotice: undefined,
       handleStartWorkout: vi.fn(),
       handleRecordSet: vi.fn(),
       handleCompleteWorkout: vi.fn(),
@@ -204,6 +205,56 @@ describe("PlanStatusClient — unmapped error code (CRITICAL regression guard)",
     const alert = screen.getByTestId("tracker-error");
     expect(alert.textContent).toBe("Something went wrong. Please try again.");
     expect(alert.textContent).not.toContain("start the session");
+
+    spy.mockRestore();
+  });
+});
+
+describe("PlanStatusClient — offline sync notices (Judgment Day fix #3/#4)", () => {
+  it("renders a 'session expired' prompt when the hook surfaces an auth_required syncNotice", () => {
+    defaultWsReturn("generating");
+    const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+      activeSession: undefined,
+      activeDay: undefined,
+      conflict: undefined,
+      error: undefined,
+      syncNotice: "auth_required",
+      handleStartWorkout: vi.fn(),
+      handleRecordSet: vi.fn(),
+      handleCompleteWorkout: vi.fn(),
+    });
+
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="ready" />,
+    );
+
+    expect(screen.getByTestId("tracker-sync-notice").textContent).toContain(
+      "session expired",
+    );
+
+    spy.mockRestore();
+  });
+
+  it("surfaces a 'changes discarded' notice when the hook reports a poison-dropped mutation", () => {
+    defaultWsReturn("generating");
+    const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+      activeSession: undefined,
+      activeDay: undefined,
+      conflict: undefined,
+      error: undefined,
+      syncNotice: "dropped",
+      handleStartWorkout: vi.fn(),
+      handleRecordSet: vi.fn(),
+      handleCompleteWorkout: vi.fn(),
+    });
+
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="ready" />,
+    );
+
+    expect(screen.getByTestId("tracker-sync-notice").textContent).toContain(
+      "couldn't be saved",
+    );
 
     spy.mockRestore();
   });

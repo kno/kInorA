@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
 import { AuthService, SESSION_TTL_MS } from "../../auth/service.js";
 import { authPlugin } from "../../auth/plugin.js";
+import { computeTokenHash } from "../../auth/session.js";
 import { authRoutes } from "../auth.js";
 import type { Database } from "../../db/client.js";
 import { hashPassword } from "@kinora/domain";
@@ -230,6 +231,85 @@ describe("Auth routes integration", () => {
         method: "POST",
         url: "/auth/login",
         payload: { email: "user@example.com", password: "WrongPass456!" },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+  });
+
+  describe("GET /auth/identity (Phase 4 web offline — stable identity key derivation)", () => {
+    /**
+     * The web offline module needs a STABLE, server-resolved identity to
+     * scope its client-side IndexedDB store (design: identity key derived
+     * from `(tenantId, userId)`, not the session token — which rotates
+     * every login). The web Server Action has no direct DB access, so it
+     * resolves `(tenantId, userId)` via this authenticated endpoint before
+     * hashing them into the opaque identity key.
+     */
+    function buildIdentityDb(opts: {
+      sessionRow?: unknown;
+      membershipRow?: unknown;
+    }) {
+      const sessionRows = opts.sessionRow ? [opts.sessionRow] : [];
+      const membershipRows = opts.membershipRow ? [opts.membershipRow] : [];
+      return {
+        select: vi
+          .fn()
+          .mockReturnValueOnce(selectChain(sessionRows))
+          .mockReturnValueOnce(selectChain(membershipRows)),
+      } as unknown as Database;
+    }
+
+    it("returns the tenantId + userId from the resolved auth context for a valid Bearer token", async () => {
+      const rawToken = "a".repeat(64);
+      const db = buildIdentityDb({
+        sessionRow: {
+          tokenHash: computeTokenHash(rawToken),
+          userId: "user-uuid-1",
+          tenantId: "tenant-uuid-1",
+          createdAt: new Date(),
+          expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+        },
+        membershipRow: {
+          id: "m-1",
+          tenantId: "tenant-uuid-1",
+          userId: "user-uuid-1",
+          role: "owner",
+          status: "active",
+        },
+      });
+      app = await buildTestApp(db);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/auth/identity",
+        headers: { authorization: `Bearer ${rawToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        tenantId: "tenant-uuid-1",
+        userId: "user-uuid-1",
+      });
+    });
+
+    it("returns 401 when there is no Bearer token", async () => {
+      const db = buildIdentityDb({});
+      app = await buildTestApp(db);
+
+      const response = await app.inject({ method: "GET", url: "/auth/identity" });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it("returns 401 for an unknown/expired session token", async () => {
+      const db = buildIdentityDb({});
+      app = await buildTestApp(db);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/auth/identity",
+        headers: { authorization: `Bearer ${"a".repeat(64)}` },
       });
 
       expect(response.statusCode).toBe(401);
