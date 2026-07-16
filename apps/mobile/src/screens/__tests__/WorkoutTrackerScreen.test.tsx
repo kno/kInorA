@@ -121,6 +121,27 @@ const completedSession: WorkoutSessionRecord = {
   })),
 };
 
+// `Text` children are now `<FormattedMessage>` elements (module-level
+// `defineMessages` refactor), not raw strings — `root.findAllByProps({
+// children: exactString })` walks the *instance* tree and no longer matches,
+// even though the visible text is identical. Assert on the flattened
+// *rendered* output instead, which reflects what actually reaches the screen.
+function flattenText(node: unknown, out: string[] = []): string[] {
+  if (node == null) return out;
+  if (typeof node === "string") {
+    out.push(node);
+  } else if (Array.isArray(node)) {
+    node.forEach((child) => flattenText(child, out));
+  } else if (typeof node === "object" && "children" in (node as any)) {
+    flattenText((node as any).children, out);
+  }
+  return out;
+}
+
+function renderedText(renderer: ReturnType<typeof create>): string {
+  return flattenText(renderer.toJSON()).join("");
+}
+
 function renderScreen(locale: "en" | "es", routeParams: Record<string, unknown> = { sessionId: "s1" }) {
   let renderer!: ReturnType<typeof create>;
   act(() => {
@@ -140,10 +161,10 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
   it("renders the loading state via useIntl(), in EN and ES", async () => {
     getWorkoutSession.mockReturnValue(new Promise(() => {})); // never resolves
     const en = renderScreen("en");
-    expect(en.root.findAllByProps({ children: "Loading session…" }).length).toBeGreaterThan(0);
+    expect(renderedText(en)).toContain("Loading session…");
 
     const es = renderScreen("es");
-    expect(es.root.findAllByProps({ children: "Cargando sesión…" }).length).toBeGreaterThan(0);
+    expect(renderedText(es)).toContain("Cargando sesión…");
   });
 
   it("renders the active-session state's tracker copy via useIntl(), in EN and ES", async () => {
@@ -153,19 +174,21 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
     await act(async () => {
       await Promise.resolve();
     });
-    expect(en.root.findAllByProps({ children: "Active session" }).length).toBeGreaterThan(0);
-    expect(en.root.findAllByProps({ children: "Current exercise" }).length).toBeGreaterThan(0);
-    expect(en.root.findAllByProps({ children: "Complete set" }).length).toBeGreaterThan(0);
-    expect(en.root.findAllByProps({ children: "Finish session" }).length).toBeGreaterThan(0);
+    const enText = renderedText(en);
+    expect(enText).toContain("Active session");
+    expect(enText).toContain("Current exercise");
+    expect(enText).toContain("Complete set");
+    expect(enText).toContain("Finish session");
 
     const es = renderScreen("es");
     await act(async () => {
       await Promise.resolve();
     });
-    expect(es.root.findAllByProps({ children: "Sesión activa" }).length).toBeGreaterThan(0);
-    expect(es.root.findAllByProps({ children: "Ejercicio actual" }).length).toBeGreaterThan(0);
-    expect(es.root.findAllByProps({ children: "Completar serie" }).length).toBeGreaterThan(0);
-    expect(es.root.findAllByProps({ children: "Finalizar sesión" }).length).toBeGreaterThan(0);
+    const esText = renderedText(es);
+    expect(esText).toContain("Sesión activa");
+    expect(esText).toContain("Ejercicio actual");
+    expect(esText).toContain("Completar serie");
+    expect(esText).toContain("Finalizar sesión");
   });
 
   it("renders the session-complete state via useIntl(), in EN and ES", async () => {
@@ -175,15 +198,17 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
     await act(async () => {
       await Promise.resolve();
     });
-    expect(en.root.findAllByProps({ children: "Session completed" }).length).toBeGreaterThan(0);
-    expect(en.root.findAllByProps({ children: "Back to home" }).length).toBeGreaterThan(0);
+    const enText = renderedText(en);
+    expect(enText).toContain("Session completed");
+    expect(enText).toContain("Back to home");
 
     const es = renderScreen("es");
     await act(async () => {
       await Promise.resolve();
     });
-    expect(es.root.findAllByProps({ children: "Sesión completada" }).length).toBeGreaterThan(0);
-    expect(es.root.findAllByProps({ children: "Volver al inicio" }).length).toBeGreaterThan(0);
+    const esText = renderedText(es);
+    expect(esText).toContain("Sesión completada");
+    expect(esText).toContain("Volver al inicio");
   });
 
   it("renders the active-session conflict state via useIntl(), in EN and ES", async () => {
@@ -198,21 +223,17 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
     await act(async () => {
       await Promise.resolve();
     });
-    expect(
-      en.root.findAllByProps({
-        children: 'You already have an active session in "Fuerza" (Day 3). Finish it before starting another.',
-      }).length,
-    ).toBeGreaterThan(0);
+    expect(renderedText(en)).toContain(
+      'You already have an active session in "Fuerza" (Day 3). Finish it before starting another.',
+    );
 
     const es = renderScreen("es");
     await act(async () => {
       await Promise.resolve();
     });
-    expect(
-      es.root.findAllByProps({
-        children: "Ya tenés una sesión activa en «Fuerza» (Día 3). Terminala antes de empezar otra.",
-      }).length,
-    ).toBeGreaterThan(0);
+    expect(renderedText(es)).toContain(
+      "Ya tenés una sesión activa en «Fuerza» (Día 3). Terminala antes de empezar otra.",
+    );
   });
 
   it("renders the conflict-with-plan-only branch (no day) via useIntl(), in EN and ES", async () => {
@@ -227,22 +248,17 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
     await act(async () => {
       await Promise.resolve();
     });
-    expect(
-      en.root.findAllByProps({
-        children:
-          'You already have an active session in "Fuerza". Finish it before starting another.',
-      }).length,
-    ).toBeGreaterThan(0);
+    expect(renderedText(en)).toContain(
+      'You already have an active session in "Fuerza". Finish it before starting another.',
+    );
 
     const es = renderScreen("es");
     await act(async () => {
       await Promise.resolve();
     });
-    expect(
-      es.root.findAllByProps({
-        children: "Ya tenés una sesión activa en «Fuerza». Terminala antes de empezar otra.",
-      }).length,
-    ).toBeGreaterThan(0);
+    expect(renderedText(es)).toContain(
+      "Ya tenés una sesión activa en «Fuerza». Terminala antes de empezar otra.",
+    );
   });
 
   it("renders the generic conflict branch (no plan name) via useIntl(), in EN and ES", async () => {
@@ -257,21 +273,17 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
     await act(async () => {
       await Promise.resolve();
     });
-    expect(
-      en.root.findAllByProps({
-        children: "You already have an active session. Finish it before starting another.",
-      }).length,
-    ).toBeGreaterThan(0);
+    expect(renderedText(en)).toContain(
+      "You already have an active session. Finish it before starting another.",
+    );
 
     const es = renderScreen("es");
     await act(async () => {
       await Promise.resolve();
     });
-    expect(
-      es.root.findAllByProps({
-        children: "Ya tenés una sesión activa. Terminala antes de empezar otra.",
-      }).length,
-    ).toBeGreaterThan(0);
+    expect(renderedText(es)).toContain(
+      "Ya tenés una sesión activa. Terminala antes de empezar otra.",
+    );
   });
 
   it("renders the errorLoad state via useIntl(), in EN and ES", async () => {
@@ -284,20 +296,12 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
     await act(async () => {
       await Promise.resolve();
     });
-    expect(
-      en.root.findAllByProps({
-        children: "We couldn't load the session. Please try again.",
-      }).length,
-    ).toBeGreaterThan(0);
+    expect(renderedText(en)).toContain("We couldn't load the session. Please try again.");
 
     const es = renderScreen("es");
     await act(async () => {
       await Promise.resolve();
     });
-    expect(
-      es.root.findAllByProps({
-        children: "No pudimos cargar la sesión. Intentá de nuevo.",
-      }).length,
-    ).toBeGreaterThan(0);
+    expect(renderedText(es)).toContain("No pudimos cargar la sesión. Intentá de nuevo.");
   });
 });
