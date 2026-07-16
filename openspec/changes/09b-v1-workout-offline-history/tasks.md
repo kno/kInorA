@@ -49,12 +49,12 @@ Ask the user: chain strategy (stacked-to-main vs feature-branch-chain) before `s
 
 ## Phase 2: Idempotent Complete (Slice 1 — PR 1)
 
-- [ ] 2.1 RED: Write failing integration test — retry `completeSession` after success returns 200 no-op, tenant/user-scoped re-read matches `findById` scoping (`apps/api/src/db/repositories/workout-session.ts` tests)
-- [ ] 2.2 RED: Write failing test — scoped re-read across a different tenant/user returns 404 (no IDOR)
-- [ ] 2.3 GREEN: Modify `completeSession` in `apps/api/src/db/repositories/workout-session.ts` — on 0-row update, re-read scoped by `(tenantId, userId, id)`; return existing row if already `completed`
-- [ ] 2.4 RED: Write failing Fastify `.inject()` test for `POST /workout-sessions/:id/complete` retry-after-success
-- [ ] 2.5 GREEN: Confirm route in `apps/api/src/routes/workout-session.ts` requires no change (repo-level fix only); verify tests pass
-- [ ] 2.6 REFACTOR: Confirm no route/schema drift; run `pnpm test` scoped to api workspace
+- [x] 2.1 RED: Write failing integration test — retry `completeSession` after success returns 200 no-op, tenant/user-scoped re-read matches `findById` scoping (`apps/api/src/db/repositories/workout-session.ts` tests)
+- [x] 2.2 RED: Write failing test — scoped re-read across a different tenant/user returns 404 (no IDOR)
+- [x] 2.3 GREEN: Modify `completeSession` in `apps/api/src/db/repositories/workout-session.ts` — on 0-row update, re-read scoped by `(tenantId, userId, id)`; return existing row if already `completed`
+- [x] 2.4 RED: Write failing Fastify `.inject()` test for `POST /workout-sessions/:id/complete` retry-after-success
+- [x] 2.5 GREEN: Confirm route in `apps/api/src/routes/workout-session.ts` requires no change (repo-level fix only); verify tests pass
+- [x] 2.6 REFACTOR: Confirm no route/schema drift; run `pnpm test` scoped to api workspace
 
 ## Phase 3: Session History (Slice 2 — PR 2)
 
