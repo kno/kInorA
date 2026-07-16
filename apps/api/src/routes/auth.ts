@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { AuthService, AuthError } from "../auth/service.js";
+import { requireAuth } from "../auth/plugin.js";
 import type { RegisterRequest, LoginRequest } from "@kinora/contracts";
 
 /**
@@ -67,6 +68,33 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
     { schema: loginSchema },
     async (request: FastifyRequest<{ Body: LoginRequest }>) => {
       return authService.login(request.body);
+    }
+  );
+
+  /**
+   * GET /auth/identity — resolves the caller's `(tenantId, userId)` from the
+   * authenticated session (Phase 4 web offline, 09b-v1).
+   *
+   * The web app's Server Actions run server-side but have NO direct DB
+   * access (they call this API over HTTP, like every other web→api path);
+   * they cannot call `resolveAuthContextFromToken` themselves. This
+   * endpoint is the minimal authenticated surface that lets
+   * `getOfflineIdentityKeyAction` derive a STABLE, per-account identity key
+   * from `(tenantId, userId)` instead of hashing the session token (which
+   * rotates every login and would otherwise cause the offline module to
+   * treat every re-login as a brand-new identity, silently purging the
+   * user's own unsynced queue — see `identity.ts`).
+   *
+   * Never returns the raw `tenantId`/`userId` to be persisted client-side
+   * as-is by the offline module — the caller hashes them into an opaque,
+   * context-prefixed key before using them to namespace IndexedDB.
+   */
+  fastify.get(
+    "/auth/identity",
+    { preHandler: requireAuth() },
+    async (request: FastifyRequest) => {
+      const { tenantId, userId } = request.authContext!;
+      return { tenantId, userId };
     }
   );
 };

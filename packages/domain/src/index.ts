@@ -38,3 +38,10 @@ export {
   assertSessionNotExpired,
   InvalidSessionTokenError,
 } from "./auth/session.js";
+
+export { collapseQueue } from "./offline/collapse-queue.js";
+export {
+  computeAverageRpe,
+  computeSessionVolume,
+  computeVolumeTrend,
+} from "./offline/session-aggregation.js";

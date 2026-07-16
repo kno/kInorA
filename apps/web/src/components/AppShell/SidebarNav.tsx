@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreateIcon, ExercisesIcon, HomeIcon, PlanIcon, StatsIcon } from "@/components/icons";
+import { CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, StatsIcon } from "@/components/icons";
 import { isActivePath } from "./nav-utils";
 import styles from "./SidebarNav.module.css";
 
@@ -10,7 +10,7 @@ import styles from "./SidebarNav.module.css";
 interface NavItem {
   label: string;
   href: string;
-  icon: "home" | "plan" | "stats" | "create" | "exercises";
+  icon: "home" | "plan" | "stats" | "history" | "create" | "exercises";
 }
 
 /** Minimal identity shape for the sidebar user area. */
@@ -31,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "home" },
   { label: "Plan", href: "/plan", icon: "plan" },
   { label: "Statistics", href: "/stats", icon: "stats" },
+  { label: "History", href: "/history", icon: "history" },
   { label: "Create Plan", href: "/create-plan", icon: "create" },
   { label: "Exercises", href: "/exercises", icon: "exercises" },
 ];
@@ -104,6 +105,8 @@ function NavIcon({ name }: { name: NavItem["icon"] }) {
       return <PlanIcon className={styles.icon} size={20} />;
     case "stats":
       return <StatsIcon className={styles.icon} size={20} />;
+    case "history":
+      return <HistoryIcon className={styles.icon} size={20} />;
     case "create":
       return <CreateIcon className={styles.icon} size={20} />;
     case "exercises":

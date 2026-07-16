@@ -38,14 +38,14 @@ Ask the user: chain strategy (stacked-to-main vs feature-branch-chain) before `s
 
 ## Phase 1: Contracts & Domain (Foundation — shared by slices 3 & 4)
 
-- [ ] 1.1 RED: Write failing tests for `PendingMutation`, `WorkoutSessionSnapshot`, `ConnectivityMonitor`, `WorkoutHistoryEntry`, `WorkoutHistoryQuery`, `FlushErrorCode` type contracts in `packages/contracts/src/index.ts` (compile-level/type tests)
-- [ ] 1.2 GREEN: Add DTOs/types to `packages/contracts/src/index.ts` per design Interfaces section
-- [ ] 1.3 RED: Write failing Vitest tests for `collapseQueue` (clientSeq-keyed LWW, complete-ordered-last) in `packages/domain/src/offline/__tests__/`
-- [ ] 1.4 GREEN: Implement `collapseQueue` in `packages/domain/src/offline/`
-- [ ] 1.5 RED: Write failing tests for `computeSessionVolume`, `computeAverageRpe`, `computeVolumeTrend`
-- [ ] 1.6 GREEN: Implement `computeSessionVolume`, `computeAverageRpe`, `computeVolumeTrend` in `packages/domain/src/offline/`
-- [ ] 1.7 REFACTOR: Extract shared helpers, export via `packages/domain/src/plan/index.ts` barrel
-- [ ] 1.8 Run `pnpm architecture` to confirm no deps-guard violation (idb/AsyncStorage/NetInfo not yet imported at this phase — sanity baseline)
+- [x] 1.1 RED: Write failing tests for `PendingMutation`, `WorkoutSessionSnapshot`, `ConnectivityMonitor`, `WorkoutHistoryEntry`, `WorkoutHistoryQuery`, `FlushErrorCode` type contracts in `packages/contracts/src/index.ts` (compile-level/type tests)
+- [x] 1.2 GREEN: Add DTOs/types to `packages/contracts/src/index.ts` per design Interfaces section
+- [x] 1.3 RED: Write failing Vitest tests for `collapseQueue` (clientSeq-keyed LWW, complete-ordered-last) in `packages/domain/src/offline/__tests__/`
+- [x] 1.4 GREEN: Implement `collapseQueue` in `packages/domain/src/offline/`
+- [x] 1.5 RED: Write failing tests for `computeSessionVolume`, `computeAverageRpe`, `computeVolumeTrend`
+- [x] 1.6 GREEN: Implement `computeSessionVolume`, `computeAverageRpe`, `computeVolumeTrend` in `packages/domain/src/offline/`
+- [x] 1.7 REFACTOR: Extract shared helpers, export via `packages/domain/src/offline/index.ts` barrel (new offline barrel, wired into `packages/domain/src/index.ts` and `package.json` `./offline` export condition)
+- [x] 1.8 Run `pnpm architecture` to confirm no deps-guard violation (idb/AsyncStorage/NetInfo not yet imported at this phase — sanity baseline)
 
 ## Phase 2: Idempotent Complete (Slice 1 — PR 1)
 
@@ -58,59 +58,60 @@ Ask the user: chain strategy (stacked-to-main vs feature-branch-chain) before `s
 
 ## Phase 3: Session History (Slice 2 — PR 2)
 
-- [ ] 3.1 RED: Write failing tests for `listCompletedSessions` — batched `inArray` fetch, constant query count regardless of page size, no per-row loop
-- [ ] 3.2 GREEN: Implement `listCompletedSessions(tenantId, userId, { limit, offset })` in `apps/api/src/db/repositories/workout-session.ts` (session query → `inArray(sessionIds)` for `session_exercises` → `inArray(sessionExerciseId)` for `set_records`, grouped in memory)
-- [ ] 3.3 RED: Write failing test — trend lookback query returns prior session for oldest page item without breaking pagination or adding N+1 queries
-- [ ] 3.4 GREEN: Implement bounded lookback (`LIMIT n+1` or secondary single-row query) feeding `computeVolumeTrend`
-- [ ] 3.5 RED: Write failing Fastify `.inject()` test for `GET /workout-sessions/history` with `WorkoutHistoryQuery` (default `limit=20`, `offset=0`), asserting `trend` field present per entry
-- [ ] 3.6 GREEN: Implement route in `apps/api/src/routes/workout-session.ts` (injected repo port, paginated query DTO)
-- [ ] 3.7 RED: Write failing web test for `getWorkoutHistoryAction` (paginated Server Action) in `apps/web/.../history/`
-- [ ] 3.8 GREEN: Implement history route/tab + `getWorkoutHistoryAction` in `apps/web/.../history/`
-- [ ] 3.9 RED: Write failing test for mobile `HistoryScreen.tsx` + `getWorkoutHistory` api client call
-- [ ] 3.10 GREEN: Implement `apps/mobile/src/screens/HistoryScreen.tsx` + api client method
-- [ ] 3.11 REFACTOR: Confirm history rendering works with empty/unavailable offline queue (spec: "History available without pending sync activity")
+- [x] 3.1 RED: Write failing tests for `listCompletedSessions` — batched `inArray` fetch, constant query count regardless of page size, no per-row loop
+- [x] 3.2 GREEN: Implement `listCompletedSessions(tenantId, userId, { limit, offset })` in `apps/api/src/db/repositories/workout-session.ts` (session query → `inArray(sessionIds)` for `session_exercises` → `inArray(sessionExerciseId)` for `set_records`, grouped in memory)
+- [x] 3.3 RED: Write failing test — trend lookback query returns prior session for oldest page item without breaking pagination or adding N+1 queries
+- [x] 3.4 GREEN: Implement bounded lookback (`LIMIT n+1` or secondary single-row query) feeding `computeVolumeTrend`
+- [x] 3.5 RED: Write failing Fastify `.inject()` test for `GET /workout-sessions/history` with `WorkoutHistoryQuery` (default `limit=20`, `offset=0`), asserting `trend` field present per entry
+- [x] 3.6 GREEN: Implement route in `apps/api/src/routes/workout-session.ts` (injected repo port, paginated query DTO)
+- [x] 3.7 RED: Write failing web test for `getWorkoutHistoryAction` (paginated Server Action) in `apps/web/.../history/`
+- [x] 3.8 GREEN: Implement history route/tab + `getWorkoutHistoryAction` in `apps/web/.../history/`
+- [x] 3.9 RED: Write failing test for mobile `HistoryScreen.tsx` + `getWorkoutHistory` api client call
+- [x] 3.10 GREEN: Implement `apps/mobile/src/screens/HistoryScreen.tsx` + api client method
+- [x] 3.11 REFACTOR: Confirm history rendering works with empty/unavailable offline queue (spec: "History available without pending sync activity")
+- [x] 3.12 RED/GREEN: Wire History into in-app navigation for discoverability (spec: "WHEN they open history") — web `SidebarNav`/`MobileNav` add a `/history` entry (new `history` icon in `KinIcon` registry); mobile `App.tsx` registers `HistoryScreen` on the `RootStackParamList` and `HomeScreen` gets a pressable entry point (`history.title` i18n key) that navigates to it
 
 ## Phase 4: Web Offline (Slice 3 — PR 3, depends on Phase 1 & 2)
 
-- [ ] 4.1 RED: Write failing test — `unwrapWorkoutSession` in `apps/web/.../actions.ts` preserves `FlushErrorCode` (not just `Error(message)`)
-- [ ] 4.2 GREEN: Modify `unwrapWorkoutSession` to return discriminated error shape
-- [ ] 4.3 RED: Write failing test — `tracker-client.ts` propagates HTTP status/`FlushErrorCode` beyond the existing 409-only case
-- [ ] 4.4 GREEN: Modify `apps/web/src/app/(app)/plan/[id]/tracker-client.ts` to preserve/propagate status/code
-- [ ] 4.5 RED: Write failing tests for idb-backed `PendingMutation` queue persistence (enqueue-before-snapshot ordering) in `apps/web/.../plan/offline/`
-- [ ] 4.6 GREEN: Implement idb queue module with `clientSeq` persistence across restart (`lastClientSeq` high-water-mark)
-- [ ] 4.7 RED: Write failing tests for `WorkoutSessionSnapshot` cache read/write, eviction on complete+synced, clear-on-logout
-- [ ] 4.8 GREEN: Implement snapshot cache module, identity-scoped key namespace `offline:${tenantId}:${userId}:...`
-- [ ] 4.9 RED: Write failing tests for `ConnectivityMonitor` web impl (`navigator.onLine` + online/offline events)
-- [ ] 4.10 GREEN: Implement web `ConnectivityMonitor` in `apps/web/.../plan/offline/`
-- [ ] 4.11 RED: Write failing tests for sequential flush in `use-workout-session.ts` — one in-flight request at a time, `collapseQueue()` applied before flush, complete ordered last
-- [ ] 4.12 GREEN: Implement flush loop in `use-workout-session.ts` invoking existing `recordWorkoutSetAction`/`completeWorkoutSessionAction`
-- [ ] 4.13 RED: Write failing tests for stale-action-reference detection (distinct from `api_unreachable`/4xx) surfacing "reload to sync" prompt, entry stays queued
-- [ ] 4.14 GREEN: Implement stale-action detection branch in flush handler
-- [ ] 4.15 RED: Write failing tests — offline reload hydrates UI from snapshot + replays queued mutations without network GET
-- [ ] 4.16 GREEN: Wire snapshot hydration into tracker page load path
-- [ ] 4.17 RED: Write failing test — logout clears identity-scoped queue + snapshot
-- [ ] 4.18 GREEN: Implement clear-on-logout hook
-- [ ] 4.19 Run `pnpm architecture` to confirm `idb` import does not trip deps-guard (per design: no edit expected)
-- [ ] 4.20 REFACTOR: Consolidate offline module structure under `apps/web/.../plan/offline/`; run `pnpm type-check` and `pnpm test` for web workspace
+- [x] 4.1 RED: Write failing test — `unwrapWorkoutSession` in `apps/web/.../actions.ts` preserves `FlushErrorCode` (not just `Error(message)`)
+- [x] 4.2 GREEN: Modify `unwrapWorkoutSession` to return discriminated error shape
+- [x] 4.3 RED: Write failing test — `tracker-client.ts` propagates HTTP status/`FlushErrorCode` beyond the existing 409-only case
+- [x] 4.4 GREEN: Modify `apps/web/src/app/(app)/plan/[id]/tracker-client.ts` to preserve/propagate status/code
+- [x] 4.5 RED: Write failing tests for idb-backed `PendingMutation` queue persistence (enqueue-before-snapshot ordering) in `apps/web/.../plan/offline/`
+- [x] 4.6 GREEN: Implement idb queue module with `clientSeq` persistence across restart (`lastClientSeq` high-water-mark)
+- [x] 4.7 RED: Write failing tests for `WorkoutSessionSnapshot` cache read/write, eviction on complete+synced, clear-on-logout
+- [x] 4.8 GREEN: Implement snapshot cache module, identity-scoped key namespace (deviation: `${identityKey}:...` where `identityKey` is a per-login SHA-256 hash resolved via `getOfflineIdentityKeyAction` — see apply-progress deviation note; the browser never sees a raw `tenantId`/`userId`)
+- [x] 4.9 RED: Write failing tests for `ConnectivityMonitor` web impl (`navigator.onLine` + online/offline events)
+- [x] 4.10 GREEN: Implement web `ConnectivityMonitor` in `apps/web/.../plan/offline/`
+- [x] 4.11 RED: Write failing tests for sequential flush in `use-workout-session.ts` — one in-flight request at a time, `collapseQueue()` applied before flush, complete ordered last
+- [x] 4.12 GREEN: Implement flush loop in `use-workout-session.ts` invoking existing `recordWorkoutSetAction`/`completeWorkoutSessionAction`
+- [x] 4.13 RED: Write failing tests for stale-action-reference detection (distinct from `api_unreachable`/4xx) surfacing "reload to sync" prompt, entry stays queued
+- [x] 4.14 GREEN: Implement stale-action detection branch in flush handler
+- [x] 4.15 RED: Write failing tests — offline reload hydrates UI from snapshot + replays queued mutations without network GET
+- [x] 4.16 GREEN: Wire snapshot hydration into tracker page load path
+- [x] 4.17 RED: Write failing test — logout clears identity-scoped queue + snapshot
+- [x] 4.18 GREEN: Implement clear-on-logout hook (deviation: implemented as `ensureIdentityScope`, detecting an identity change on next mount rather than hooking the logout Server Action directly — see apply-progress deviation note)
+- [x] 4.19 Run `pnpm architecture`/`pnpm deps-guard` to confirm `idb` import does not trip deps-guard (confirmed: no edit needed, per design)
+- [x] 4.20 REFACTOR: Consolidate offline module structure under `apps/web/.../plan/offline/`; run `pnpm type-check` and `pnpm test` for web workspace (both green)
 
 ## Phase 5: Mobile Offline (Slice 4 — PR 4, depends on Phase 1 & 4 contracts)
 
-- [ ] 5.1 RED: Write failing test — `apps/mobile/src/api/workout-session.ts` preserves `FlushErrorCode` beyond existing 409-only case
-- [ ] 5.2 GREEN: Modify mobile API client to propagate discriminated error shape
-- [ ] 5.3 RED: Write failing tests for AsyncStorage-backed `PendingMutation` queue (enqueue-before-snapshot, `clientSeq` persistence across restart) in `apps/mobile/.../offline/`
-- [ ] 5.4 GREEN: Implement AsyncStorage queue module
-- [ ] 5.5 RED: Write failing tests for `WorkoutSessionSnapshot` cache (mobile), eviction, clear-on-logout, identity-scoped keys
-- [ ] 5.6 GREEN: Implement mobile snapshot cache module
-- [ ] 5.7 RED: Write failing tests for `ConnectivityMonitor` mobile impl (`@react-native-community/netinfo`)
-- [ ] 5.8 GREEN: Implement mobile `ConnectivityMonitor`
-- [ ] 5.9 RED: Write failing tests for sequential flush in `WorkoutTrackerScreen.tsx` — collapseQueue applied, one in-flight request, complete ordered last, direct API calls
-- [ ] 5.10 GREEN: Implement mobile flush loop invoking direct API via `apps/mobile/src/api/workout-session.ts`
-- [ ] 5.11 RED: Write failing tests — offline restart hydrates UI from snapshot + replays queued mutations without network call
-- [ ] 5.12 GREEN: Wire snapshot hydration into `WorkoutTrackerScreen.tsx` mount
-- [ ] 5.13 RED: Write failing test — logout clears identity-scoped mobile queue + snapshot
-- [ ] 5.14 GREEN: Implement clear-on-logout hook (mobile)
-- [ ] 5.15 Run `pnpm architecture` to confirm NetInfo/AsyncStorage do not trip deps-guard
-- [ ] 5.16 REFACTOR: Consolidate `apps/mobile/.../offline/` module structure; run `pnpm type-check` and `pnpm test` for mobile workspace
+- [x] 5.1 RED: Write failing test — `apps/mobile/src/api/workout-session.ts` preserves `FlushErrorCode` beyond existing 409-only case
+- [x] 5.2 GREEN: Modify mobile API client to propagate discriminated error shape
+- [x] 5.3 RED: Write failing tests for AsyncStorage-backed `PendingMutation` queue (enqueue-before-snapshot, `clientSeq` persistence across restart) in `apps/mobile/.../offline/`
+- [x] 5.4 GREEN: Implement AsyncStorage queue module
+- [x] 5.5 RED: Write failing tests for `WorkoutSessionSnapshot` cache (mobile), eviction, clear-on-logout, identity-scoped keys
+- [x] 5.6 GREEN: Implement mobile snapshot cache module
+- [x] 5.7 RED: Write failing tests for `ConnectivityMonitor` mobile impl (`@react-native-community/netinfo`)
+- [x] 5.8 GREEN: Implement mobile `ConnectivityMonitor`
+- [x] 5.9 RED: Write failing tests for sequential flush in `WorkoutTrackerScreen.tsx` — collapseQueue applied, one in-flight request, complete ordered last, direct API calls
+- [x] 5.10 GREEN: Implement mobile flush loop invoking direct API via `apps/mobile/src/api/workout-session.ts`
+- [x] 5.11 RED: Write failing tests — offline restart hydrates UI from snapshot + replays queued mutations without network call
+- [x] 5.12 GREEN: Wire snapshot hydration into `WorkoutTrackerScreen.tsx` mount
+- [x] 5.13 RED: Write failing test — logout clears identity-scoped mobile queue + snapshot
+- [x] 5.14 GREEN: Implement clear-on-logout hook (mobile)
+- [x] 5.15 Run `pnpm architecture` to confirm NetInfo/AsyncStorage do not trip deps-guard
+- [x] 5.16 REFACTOR: Consolidate `apps/mobile/.../offline/` module structure; run `pnpm type-check` and `pnpm test` for mobile workspace
 
 ## Phase 6: Cross-Cutting Verification
 

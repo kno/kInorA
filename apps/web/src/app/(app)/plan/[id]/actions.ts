@@ -1,16 +1,20 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { fetchPlanStatus, type FetchPlanResult } from "@/app/(app)/create-plan/plan-draft-client";
 import {
   completeWorkoutSession,
+  fetchAuthIdentity,
   fetchWorkoutSession,
   recordWorkoutSet,
   startWorkoutSession,
 } from "./tracker-client";
 import type { WorkoutSetUpdateInput } from "./tracker-types";
 import type { WorkoutSessionRecord } from "@kinora/contracts";
+import type { WorkoutSessionResult } from "./tracker-client";
+import { WorkoutSessionActionError } from "./action-errors";
 
 /**
  * Result of the start-workout server action (#93 F1).
@@ -34,14 +38,14 @@ async function sessionToken(): Promise<string | undefined> {
 }
 
 async function unwrapWorkoutSession(
-  resultPromise: Promise<
-    | { kind: "ok"; session: WorkoutSessionRecord }
-    | { kind: "error"; message: string }
-  >,
+  resultPromise: Promise<WorkoutSessionResult>,
 ): Promise<WorkoutSessionRecord> {
   const result = await resultPromise;
   if (result.kind === "error") {
-    throw new Error(result.message);
+    // Defensive fallback: any caller that omits `code` (e.g. the 409 conflict
+    // shape reused for start, or a not-yet-migrated mock) is treated as a
+    // retryable server-side failure, never silently poison-dropped.
+    throw new WorkoutSessionActionError(result.message, result.code ?? "SERVER");
   }
 
   return result.session;
@@ -62,6 +66,47 @@ async function unwrapWorkoutSession(
 export async function getPlanStatusAction(planId: string): Promise<FetchPlanResult> {
   const token = await sessionToken();
   return fetchPlanStatus(planId, token);
+}
+
+/**
+ * Resolves an opaque, PER-ACCOUNT identity key for scoping the client-side
+ * offline store (Phase 4 web offline design: "Local store is scoped per
+ * authenticated identity and cleared on logout").
+ *
+ * The browser never sees a client-visible tenantId/userId — the session
+ * token stays httpOnly-server-only by design (issue #42). This Server
+ * Action runs server-side but has NO direct DB access (like every other
+ * web→api path, it calls the API over HTTP); it resolves `(tenantId,
+ * userId)` via the authenticated `GET /auth/identity` endpoint
+ * (`fetchAuthIdentity`) and hashes them into an opaque, context-prefixed
+ * key.
+ *
+ * Deliberately derived from `(tenantId, userId)`, NOT the session token:
+ * the token is a random-entropy value that ROTATES on every login, so a
+ * token-hash key would treat the SAME user's re-login as a brand-new
+ * identity — `ensureIdentityScope` would then silently purge that user's
+ * own unsynced queue as if it belonged to a different account (a confirmed
+ * data-loss bug). Deriving from `(tenantId, userId)` instead is:
+ *   - STABLE across logins/reloads for the same account (no more self-purge)
+ *   - DISTINCT per account (cross-account queues stay isolated)
+ *   - non-reversible and does not reuse any of the API's internal
+ *     correlator keys (e.g. the session's `tokenHash`/`SessionId`) — the
+ *     `"workout-offline:"` prefix scopes the hash to this one use case.
+ *
+ * Returns `undefined` when there is no session, or when the identity lookup
+ * fails (expired/revoked session) — the offline module must not crash if it
+ * does; callers degrade to the pre-offline direct-call behavior.
+ */
+export async function getOfflineIdentityKeyAction(): Promise<string | undefined> {
+  const token = await sessionToken();
+  if (!token) return undefined;
+
+  const identity = await fetchAuthIdentity(token);
+  if (identity.kind === "error") return undefined;
+
+  return createHash("sha256")
+    .update(`workout-offline:${identity.tenantId}:${identity.userId}`)
+    .digest("hex");
 }
 
 export async function startWorkoutSessionAction(
