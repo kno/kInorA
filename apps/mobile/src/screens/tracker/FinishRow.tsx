@@ -6,12 +6,12 @@
  */
 
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { FormattedMessage, useIntl } from "react-intl";
 
-import { colors, fonts, radius, spacing } from "../../theme/tokens";
 import { StopIcon } from "./icons";
 import { messages as M } from "./messages";
+import { styles } from "./FinishRow.styles";
 
 interface FinishRowProps {
   onFinish: () => void;
@@ -48,27 +48,3 @@ export function FinishRow({ onFinish, submitting, showCompleteError }: FinishRow
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  finishRow: { marginHorizontal: 16, marginTop: spacing[2], alignItems: "center" },
-  btnFinish: {
-    borderWidth: 1,
-    borderColor: colors.dangerBorder,
-    borderRadius: radius.sm,
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[1],
-  },
-  btnFinishPressed: { backgroundColor: colors.dangerTint },
-  btnFinishText: { color: colors.danger, fontSize: 13, fontFamily: fonts.bodySemiBold },
-  completeError: {
-    color: colors.danger,
-    fontFamily: fonts.bodyMedium,
-    fontSize: 13,
-    marginTop: spacing[2],
-    textAlign: "center",
-    marginHorizontal: 16,
-  },
-});

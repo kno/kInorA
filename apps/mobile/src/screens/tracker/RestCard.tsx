@@ -8,13 +8,13 @@
  */
 
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { FormattedMessage, useIntl } from "react-intl";
 
-import { colors, fonts, radius, spacing } from "../../theme/tokens";
 import { formatCountdown } from "./tracker-logic";
 import { RestRing } from "./RestRing";
 import { messages as M } from "./messages";
+import { styles } from "./RestCard.styles";
 
 interface RestCardProps {
   restRemaining: number;
@@ -98,77 +98,3 @@ export function RestCard({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  restCard: {
-    marginHorizontal: 16,
-    marginTop: spacing[2],
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.cardLg,
-    padding: 20,
-    alignItems: "center",
-    gap: spacing[3],
-  },
-  restHeaderRow: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  restHeading: { flexDirection: "row", alignItems: "center", gap: 6 },
-  restHeadingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.warning },
-  restHeadingText: { fontSize: 14, fontFamily: fonts.bodySemiBold, color: colors.fg },
-  restSkipBtnTop: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
-  restSkipBtnTopText: { fontSize: 13, fontFamily: fonts.bodySemiBold, color: colors.muted },
-  ringWrap: { width: 130, height: 130, alignItems: "center", justifyContent: "center" },
-  ringCenter: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 2,
-  },
-  ringTime: {
-    fontFamily: fonts.displayBold,
-    fontSize: 32,
-    letterSpacing: -0.5,
-    fontVariant: ["tabular-nums"],
-  },
-  ringLabelSm: {
-    fontSize: 11,
-    color: colors.muted,
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    fontFamily: fonts.bodySemiBold,
-  },
-  restActions: { flexDirection: "row", gap: 10, width: "100%" },
-  btnAddTime: {
-    flex: 1,
-    height: 44,
-    backgroundColor: colors.warningTint,
-    borderWidth: 1,
-    borderColor: colors.warningBorder,
-    borderRadius: radius.btn,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  btnAddTimePressed: { backgroundColor: colors.warningTintHover },
-  btnAddTimeText: { color: colors.warning, fontSize: 14, fontFamily: fonts.bodySemiBold },
-  btnSkip: {
-    flex: 1,
-    height: 44,
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.btn,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  btnSkipPressed: { backgroundColor: colors.border },
-  btnSkipText: { color: colors.fg, fontSize: 14, fontFamily: fonts.bodySemiBold },
-});
