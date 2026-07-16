@@ -270,6 +270,7 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
       activeDay: undefined,
       conflict: undefined,
       error: "some_unknown_error",
+      syncNotice: undefined,
       handleStartWorkout: vi.fn(),
       handleRecordSet: vi.fn(),
       handleCompleteWorkout: vi.fn(),
@@ -280,6 +281,69 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
     const alert = screen.getByTestId("tracker-error");
     expect(alert.textContent).toBe("Something went wrong. Please try again.");
     expect(alert.textContent).not.toContain("start the session");
+
+    spy.mockRestore();
+  });
+
+  it("renders a 'reload to sync' prompt when the hook surfaces a stale-action syncNotice (Phase 4 web offline)", () => {
+    const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+      activeSession: undefined,
+      activeDay: undefined,
+      conflict: undefined,
+      error: undefined,
+      syncNotice: "reload_required",
+      handleStartWorkout: vi.fn(),
+      handleRecordSet: vi.fn(),
+      handleCompleteWorkout: vi.fn(),
+    });
+
+    renderWithIntl(<PlanTrackerClient program={program} planId="plan-a" />);
+
+    expect(screen.getByTestId("tracker-sync-notice").textContent).toContain(
+      "reload the page",
+    );
+
+    spy.mockRestore();
+  });
+
+  it("renders a 'session expired' prompt when the hook surfaces an auth_required syncNotice (Judgment Day fix #3/#4)", () => {
+    const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+      activeSession: undefined,
+      activeDay: undefined,
+      conflict: undefined,
+      error: undefined,
+      syncNotice: "auth_required",
+      handleStartWorkout: vi.fn(),
+      handleRecordSet: vi.fn(),
+      handleCompleteWorkout: vi.fn(),
+    });
+
+    renderWithIntl(<PlanTrackerClient program={program} planId="plan-a" />);
+
+    expect(screen.getByTestId("tracker-sync-notice").textContent).toContain(
+      "session expired",
+    );
+
+    spy.mockRestore();
+  });
+
+  it("surfaces a 'changes discarded' notice when the hook reports a poison-dropped mutation (Judgment Day fix #3 — never silent)", () => {
+    const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+      activeSession: undefined,
+      activeDay: undefined,
+      conflict: undefined,
+      error: undefined,
+      syncNotice: "dropped",
+      handleStartWorkout: vi.fn(),
+      handleRecordSet: vi.fn(),
+      handleCompleteWorkout: vi.fn(),
+    });
+
+    renderWithIntl(<PlanTrackerClient program={program} planId="plan-a" />);
+
+    expect(screen.getByTestId("tracker-sync-notice").textContent).toContain(
+      "couldn't be saved",
+    );
 
     spy.mockRestore();
   });

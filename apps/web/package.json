@@ -15,6 +15,7 @@
     "@kinora/domain": "workspace:*",
     "@kinora/i18n": "workspace:*",
     "@serwist/next": "9.5.11",
+    "idb": "8.0.3",
     "next": "16.2.9",
     "next-intl": "^4.13.1",
     "react": "19.2.7",

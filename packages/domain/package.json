@@ -15,6 +15,11 @@
       "source": "./src/plan/index.ts",
       "types": "./src/plan/index.ts",
       "default": "./dist/plan/index.js"
+    },
+    "./offline": {
+      "source": "./src/offline/index.ts",
+      "types": "./src/offline/index.ts",
+      "default": "./dist/offline/index.js"
     }
   },
   "scripts": {

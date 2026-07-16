@@ -5,7 +5,7 @@ import { workoutSessionRoutes } from "../workout-session.js";
 import { WorkoutSessionRepository } from "../../db/repositories/workout-session.js";
 import { workoutPlans, workoutSessions } from "../../db/schema.js";
 import type { Database } from "../../db/client.js";
-import type { WorkoutSessionRecord } from "@kinora/contracts";
+import type { WorkoutHistoryEntry, WorkoutSessionRecord } from "@kinora/contracts";
 import {
   VALID_TOKEN,
   buildActiveMembershipRow,
@@ -57,6 +57,7 @@ function buildRepoMock(overrides: Partial<Record<keyof ReturnType<typeof buildRe
     findById: vi.fn().mockResolvedValue(activeSession),
     recordSet: vi.fn().mockResolvedValue(activeSession),
     completeSession: vi.fn().mockResolvedValue({ ...activeSession, status: "completed", completedAt: "2026-07-04T09:20:00.000Z" }),
+    listCompletedSessions: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }
@@ -360,5 +361,62 @@ describe("Workout session routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual(completedSession);
     expect(repo.completeSession).toHaveBeenCalledWith(TENANT_A, USER_A, SESSION_ID);
+  });
+
+  describe("GET /workout-sessions/history", () => {
+    it("returns 401 when history is requested without authentication", async () => {
+      app = await buildTestApp(buildRepoMock(), createCyclingAuthMockDb({ sessionRows: [], membershipRows: [] }));
+
+      const response = await app.inject({ method: "GET", url: "/workout-sessions/history" });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it("returns the paginated history entries with default pagination and per-entry trend", async () => {
+      const historyEntry: WorkoutHistoryEntry = {
+        session: { ...activeSession, status: "completed", completedAt: "2026-07-04T09:20:00.000Z" },
+        totalVolume: 100,
+        averageRpe: 8,
+        trend: { volumeDelta: 20, direction: "up" },
+      };
+      const repo = buildRepoMock({ listCompletedSessions: vi.fn().mockResolvedValue([historyEntry]) });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/workout-sessions/history",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual([historyEntry]);
+      expect(repo.listCompletedSessions).toHaveBeenCalledWith(TENANT_A, USER_A, { limit: 20, offset: 0 });
+    });
+
+    it("forwards caller-supplied limit and offset to the repo", async () => {
+      const repo = buildRepoMock();
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/workout-sessions/history?limit=5&offset=10",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(repo.listCompletedSessions).toHaveBeenCalledWith(TENANT_A, USER_A, { limit: 5, offset: 10 });
+    });
+
+    it("returns 422 when limit or offset is not a valid non-negative integer", async () => {
+      app = await buildTestApp();
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/workout-sessions/history?limit=-1",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(422);
+    });
   });
 });

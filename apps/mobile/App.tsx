@@ -53,6 +53,7 @@ import HomeScreen from "./src/screens/HomeScreen";
 import WorkoutTrackerScreen, {
   type TrackerRouteParams,
 } from "./src/screens/WorkoutTrackerScreen";
+import HistoryScreen from "./src/screens/HistoryScreen";
 
 import {
   getSessionToken,
@@ -72,10 +73,11 @@ type RootStackParamList = {
   SignUp: undefined;
   Home: undefined;
   Tracker: TrackerRouteParams;
+  History: undefined;
 };
 
 /** Routes that require an authenticated session; auth routes are never guarded. */
-const PROTECTED_ROUTES: (keyof RootStackParamList)[] = ["Home", "Tracker"];
+const PROTECTED_ROUTES: (keyof RootStackParamList)[] = ["Home", "Tracker", "History"];
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
@@ -181,6 +183,11 @@ export default function App() {
             name="Tracker"
             component={WorkoutTrackerScreen}
             options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="History"
+            component={HistoryScreen}
+            options={{ title: "History" }}
           />
         </Stack.Navigator>
       </NavigationContainer>
