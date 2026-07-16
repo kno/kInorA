@@ -42,7 +42,7 @@ The home-grown i18n is a liability. Web has no `t` hook or context: a `messages`
 ## Affected Areas
 
 | Area | Impact | Description |
-|------|--------|-------------|
+|------|--------|--------------|
 | `packages/i18n/**` | New | Shared ICU catalogs, parity/validation, type gen |
 | `apps/web/src/i18n/{request,locale}.ts` | Modified | Feed next-intl from existing resolution |
 | `apps/web/src/i18n/messages/{en,es}.json` | Modified | Move to shared package; ICU conversion |
@@ -75,9 +75,9 @@ The home-grown i18n is a liability. Web has no `t` hook or context: a `messages`
 
 ## Success Criteria
 
-- [ ] `@kinora/i18n` ships EN/ES ICU catalogs, parity/validation, and generated key types; consumed by web and mobile.
-- [ ] Zero local `t(key, fallback)` closures and zero `.replace()` interpolation sites remain in `apps/web`.
-- [ ] ICU interpolation, plurals, select, and locale-aware number/date are exercised by tests in both runtimes.
-- [ ] Mobile renders EN and ES with a provider and locale switch; `trackerCopy` served from shared catalogs.
-- [ ] Web locale resolution (`?lang=` + `Accept-Language`) behaves as before via next-intl.
-- [ ] Parity guard passes (identical EN/ES key + ICU-arg sets); type-check green.
+- [x] `@kinora/i18n` ships EN/ES ICU catalogs, parity/validation, and generated key types; consumed by web and mobile.
+- [x] Zero local `t(key, fallback)` closures and zero `.replace()` interpolation sites remain in `apps/web`.
+- [x] ICU interpolation, plurals, select, and locale-aware number/date are exercised by tests in both runtimes.
+- [x] Mobile renders EN and ES with a provider and locale switch; `trackerCopy` served from shared catalogs.
+- [x] Web locale resolution (`?lang=` + `Accept-Language`) behaves as before via next-intl.
+- [x] Parity guard passes (identical EN/ES key + ICU-arg sets); type-check green.
