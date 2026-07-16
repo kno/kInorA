@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import type { WorkoutSessionRecord } from "@kinora/contracts";
+import type {
+  WorkoutHistoryEntry,
+  WorkoutSessionRecord,
+} from "@kinora/contracts";
 import {
   completeWorkoutSession,
+  getWorkoutHistory,
   getWorkoutSession,
   recordWorkoutSet,
   startWorkoutSession,
@@ -103,7 +107,107 @@ describe("workout-session client", () => {
         throw new Error("offline");
       }),
     });
-    expect(res).toEqual({ kind: "error", message: "api_unreachable" });
+    expect(res).toEqual({
+      kind: "error",
+      message: "api_unreachable",
+      code: "UNREACHABLE",
+    });
+  });
+
+  // Phase 5 mobile offline (09b-v1) — the flush handler routes retry/poison/
+  // auth decisions off a discriminated `code`, not the raw status or a
+  // string-matched `message`. Mirrors web's `flushErrorCodeFromStatus`.
+  describe("FlushErrorCode propagation", () => {
+    it("maps 401 to AUTH", async () => {
+      const res = await recordWorkoutSet(
+        "sess_1",
+        "set_9",
+        { completed: true },
+        { getToken: token, fetchImpl: mockFetch(jsonResponse({ error: "unauthorized" }, 401)) },
+      );
+      expect(res).toEqual({
+        kind: "error",
+        message: "unauthorized",
+        code: "AUTH",
+      });
+    });
+
+    it("maps 403 to AUTH", async () => {
+      const res = await recordWorkoutSet(
+        "sess_1",
+        "set_9",
+        { completed: true },
+        { getToken: token, fetchImpl: mockFetch(jsonResponse({ error: "forbidden" }, 403)) },
+      );
+      expect(res.kind === "error" && res.code).toBe("AUTH");
+    });
+
+    it("maps 404 to NOT_FOUND", async () => {
+      const res = await recordWorkoutSet(
+        "sess_1",
+        "set_9",
+        { completed: true },
+        { getToken: token, fetchImpl: mockFetch(jsonResponse({ error: "not_found" }, 404)) },
+      );
+      expect(res.kind === "error" && res.code).toBe("NOT_FOUND");
+    });
+
+    it("maps other 4xx (400/422) to VALIDATION", async () => {
+      const res400 = await recordWorkoutSet(
+        "sess_1",
+        "set_9",
+        { completed: true },
+        { getToken: token, fetchImpl: mockFetch(jsonResponse({ error: "bad_input" }, 400)) },
+      );
+      expect(res400.kind === "error" && res400.code).toBe("VALIDATION");
+
+      const res422 = await recordWorkoutSet(
+        "sess_1",
+        "set_9",
+        { completed: true },
+        { getToken: token, fetchImpl: mockFetch(jsonResponse({ error: "invalid" }, 422)) },
+      );
+      expect(res422.kind === "error" && res422.code).toBe("VALIDATION");
+    });
+
+    it("maps 5xx to SERVER", async () => {
+      const res = await recordWorkoutSet(
+        "sess_1",
+        "set_9",
+        { completed: true },
+        { getToken: token, fetchImpl: mockFetch(jsonResponse({ error: "boom" }, 500)) },
+      );
+      expect(res.kind === "error" && res.code).toBe("SERVER");
+    });
+
+    it("preserves the existing 409 active_session_conflict shape (no code)", async () => {
+      const res = await startWorkoutSession("plan_1", 1, {
+        getToken: token,
+        fetchImpl: mockFetch(
+          jsonResponse({ error: "active_session_conflict", activeDay: 2 }, 409),
+        ),
+      });
+      expect(res).toEqual({
+        kind: "error",
+        message: "active_session_conflict",
+        activePlanName: undefined,
+        activeDay: 2,
+      });
+    });
+
+    it("maps a network throw on completeWorkoutSession to UNREACHABLE", async () => {
+      const res = await completeWorkoutSession("sess_1", {
+        getToken: token,
+        fetchImpl: mockFetch(() => {
+          throw new Error("offline");
+        }),
+      });
+      expect(res).toEqual({
+        kind: "error",
+        message: "api_unreachable",
+        code: "UNREACHABLE",
+      });
+    });
   });
 
   it("PATCHes a set update", async () => {
@@ -145,5 +249,62 @@ describe("workout-session client", () => {
       fetchImpl: mockFetch(jsonResponse({ nope: true })),
     });
     expect(res).toEqual({ kind: "error", message: "invalid_response" });
+  });
+
+  describe("getWorkoutHistory", () => {
+    const historyEntry: WorkoutHistoryEntry = {
+      session: { ...sessionFixture, status: "completed", completedAt: "2026-07-08T11:00:00.000Z" },
+      totalVolume: 100,
+      averageRpe: 8,
+      trend: { volumeDelta: 20, direction: "up" },
+    };
+
+    it("returns no_session when no token is stored, without calling fetch", async () => {
+      const fetchImpl = vi.fn();
+      const res = await getWorkoutHistory(
+        {},
+        { getToken: async () => null, fetchImpl },
+      );
+      expect(res).toEqual({ kind: "error", message: "no_session" });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it("GETs /workout-sessions/history with limit/offset query params and a Bearer token", async () => {
+      const fetchImpl = mockFetch(jsonResponse([historyEntry]));
+      const res = await getWorkoutHistory(
+        { limit: 5, offset: 10 },
+        { getToken: token, apiBaseUrl: "http://api.test", fetchImpl },
+      );
+
+      expect(res).toEqual({ kind: "ok", entries: [historyEntry] });
+      const { url, init } = firstCall(fetchImpl);
+      expect(url).toBe("http://api.test/workout-sessions/history?limit=5&offset=10");
+      expect(init.method).toBe("GET");
+      expect(init.headers.authorization).toBe("Bearer tok_123");
+    });
+
+    it("omits query params when no pagination is supplied", async () => {
+      const fetchImpl = mockFetch(jsonResponse([]));
+      await getWorkoutHistory({}, { getToken: token, apiBaseUrl: "http://api.test", fetchImpl });
+
+      const { url } = firstCall(fetchImpl);
+      expect(url).toBe("http://api.test/workout-sessions/history");
+    });
+
+    it("maps a malformed (non-array) 200 payload to invalid_response", async () => {
+      const res = await getWorkoutHistory(
+        {},
+        { getToken: token, fetchImpl: mockFetch(jsonResponse({ nope: true })) },
+      );
+      expect(res).toEqual({ kind: "error", message: "invalid_response" });
+    });
+
+    it("maps a network failure to api_unreachable", async () => {
+      const fetchImpl = vi.fn<FetchLike>(async () => {
+        throw new Error("network down");
+      });
+      const res = await getWorkoutHistory({}, { getToken: token, fetchImpl });
+      expect(res).toEqual({ kind: "error", message: "api_unreachable" });
+    });
   });
 });

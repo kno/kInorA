@@ -52,6 +52,18 @@ export const styles = StyleSheet.create({
   },
   startButtonPressed: { opacity: 0.92 },
   startButtonText: { color: colors.accentFg, fontSize: 16, fontFamily: fonts.bodyBold },
+  historyButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    alignItems: "center",
+    minHeight: 44,
+    justifyContent: "center",
+    marginTop: spacing[2],
+  },
+  historyButtonPressed: { opacity: 0.92 },
+  historyText: { color: colors.fg, fontSize: 15, fontFamily: fonts.bodySemiBold },
   logoutButton: { padding: spacing[2], alignItems: "center", minHeight: 44, justifyContent: "center" },
   logoutText: { color: colors.muted, fontSize: 15, fontFamily: fonts.bodySemiBold },
 });

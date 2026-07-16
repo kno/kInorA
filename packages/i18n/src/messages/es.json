@@ -314,6 +314,11 @@
       "complete": "No pudimos completar el entrenamiento. Inténtalo de nuevo.",
       "generic": "Algo salió mal. Inténtalo de nuevo."
     },
+    "sync": {
+      "reload_required": "Tus cambios guardados están a salvo, pero necesitás recargar la página para terminar de sincronizar.",
+      "auth_required": "Tu sesión expiró mientras sincronizábamos. Tus cambios siguen guardados localmente — recargá la página o volvé a iniciar sesión para terminar de sincronizar.",
+      "dropped": "Algunos de tus cambios no se pudieron guardar y se descartaron porque el servidor los rechazó. Por favor, volvé a hacer esos cambios."
+    },
     "currentExercise": "Ejercicio actual",
     "rpe": "RPE",
     "notes": "Notas",
@@ -542,6 +547,20 @@
   "stats": {
     "title": "Estadísticas",
     "description": "Sigue tu progreso y revisa tu historial de entrenamiento."
+  },
+  "history": {
+    "title": "Historial",
+    "description": "Revisa tus sesiones de entrenamiento completadas.",
+    "empty": "Todavía no hay sesiones completadas.",
+    "duration": "{minutes} min",
+    "totalVolume": "Volumen total: {volume} kg",
+    "averageRpe": "RPE promedio: {rpe}",
+    "trend": {
+      "up": "Volumen sube {volume} kg frente a la sesión anterior",
+      "down": "Volumen baja {volume} kg frente a la sesión anterior",
+      "flat": "Volumen sin cambios frente a la sesión anterior"
+    },
+    "loadMore": "Cargar más"
   },
   "profile": {
     "title": "Perfil",

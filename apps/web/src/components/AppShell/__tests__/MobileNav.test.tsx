@@ -14,9 +14,9 @@ describe("MobileNav", () => {
     mockedUsePathname.mockReturnValue("/dashboard");
   });
 
-  it("renders all 4 tab items", () => {
+  it("renders all 5 tab items", () => {
     const html = renderToString(MobileNav());
-    const tabLabels = ["Dashboard", "Plan", "Statistics", "Exercises"];
+    const tabLabels = ["Dashboard", "Plan", "Statistics", "History", "Exercises"];
     for (const label of tabLabels) {
       expect(html).toContain(label);
     }
@@ -29,9 +29,9 @@ describe("MobileNav", () => {
     expect(html).toContain('href="/create-plan"');
   });
 
-  it("renders exactly 4 nav items as links with correct hrefs", () => {
+  it("renders exactly 5 nav items as links with correct hrefs", () => {
     const html = renderToString(MobileNav());
-    const hrefs = ["/dashboard", "/plan", "/stats", "/exercises"];
+    const hrefs = ["/dashboard", "/plan", "/stats", "/history", "/exercises"];
     for (const href of hrefs) {
       expect(html).toContain(`href="${href}"`);
     }
@@ -41,7 +41,7 @@ describe("MobileNav", () => {
     const html = renderToString(MobileNav());
 
     const iconCount = (html.match(/focusable="false"/g) || []).length;
-    expect(iconCount).toBe(5);
+    expect(iconCount).toBe(6);
   });
 
   it("marks the active tab with aria-current=\"page\"", () => {
