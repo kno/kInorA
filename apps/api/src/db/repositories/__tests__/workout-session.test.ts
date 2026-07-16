@@ -626,8 +626,11 @@ describe("WorkoutSessionRepository", () => {
     });
 
     it("does not complete a session owned by another user in the same tenant", async () => {
-      // The user-scoped completion update matches no row, so nothing is returned.
-      const select = createQueuedSelectDb(new Map<object, unknown[][]>()).select;
+      // The user-scoped completion update matches no row, AND the recovery
+      // re-read (scoped identically to findById) finds nothing for USER_B
+      // either, so the caller correctly gets undefined (404), not a leak.
+      const queues = new Map<object, unknown[][]>([[workoutSessions, [[]]]]);
+      const select = createQueuedSelectDb(queues).select;
       const returning = vi.fn().mockResolvedValue([]);
       const where = vi.fn().mockReturnValue({ returning });
       const set = vi.fn().mockReturnValue({ where });
@@ -635,6 +638,51 @@ describe("WorkoutSessionRepository", () => {
       const repo = new WorkoutSessionRepository({ select, update } as never);
 
       const result = await repo.completeSession(TENANT_A, USER_B, SESSION_ID);
+
+      expect(result).toBeUndefined();
+    });
+
+    it("idempotent retry — a completed session is re-read scoped by (tenantId, userId, id) and returned as a 200 no-op, without re-running completion side effects", async () => {
+      // The update's WHERE status='active' guard matches 0 rows because the
+      // session was already completed by a prior successful request. The
+      // repo must recover via a re-read scoped EXACTLY like findById
+      // (tenantId, userId, id) and return the already-completed row instead
+      // of treating the 0-row update as a 404.
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[completedSessionRow]]],
+        [sessionExercises, [exerciseRows]],
+        [setRecords, [completedSetRows]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const returning = vi.fn().mockResolvedValue([]);
+      const where = vi.fn().mockReturnValue({ returning });
+      const set = vi.fn().mockReturnValue({ where });
+      const update = vi.fn().mockReturnValue({ set });
+      const repo = new WorkoutSessionRepository({ select, update } as never);
+
+      const result = await repo.completeSession(TENANT_A, USER_A, SESSION_ID);
+
+      // Exactly one UPDATE attempt — no retry loop, no second completion side effect.
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(result?.status).toBe("completed");
+      expect(result?.id).toBe(SESSION_ID);
+    });
+
+    it("NEGATIVE CONTROL (no IDOR) — a 0-row update recovery re-read is scoped by (tenantId, userId, id), so retrying against another tenant/user's completed session returns undefined, never that session's data", async () => {
+      // Attack shape: caller retries complete for a sessionId that exists and
+      // is already completed, but under the WRONG (tenantId, userId). The
+      // recovery re-read must be scoped identically to findById — never an
+      // unscoped `WHERE id = :id` — so it finds nothing for this caller and
+      // returns undefined (404), not the other tenant's/user's session data.
+      const queues = new Map<object, unknown[][]>([[workoutSessions, [[]]]]);
+      const select = createQueuedSelectDb(queues).select;
+      const returning = vi.fn().mockResolvedValue([]);
+      const where = vi.fn().mockReturnValue({ returning });
+      const set = vi.fn().mockReturnValue({ where });
+      const update = vi.fn().mockReturnValue({ set });
+      const repo = new WorkoutSessionRepository({ select, update } as never);
+
+      const result = await repo.completeSession(TENANT_B, USER_A, SESSION_ID);
 
       expect(result).toBeUndefined();
     });
