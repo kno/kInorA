@@ -20,7 +20,6 @@ import {
   stepReps,
   stepWeight,
 } from "./tracker-logic";
-import { trackerCopy } from "../../copy/tracker";
 
 function set(overrides: Partial<SetRecordDTO> & { id: string }): SetRecordDTO {
   return {
@@ -197,18 +196,11 @@ describe("objectiveWeightFor", () => {
   });
 });
 
-describe("progress a11y value coherence (copy)", () => {
-  it("announces a single coherent unit (exercise position + percent)", () => {
-    // Regression: the old numeric range mixed units (max=exercises,
-    // now=sets) → "9 of 3". The value text keeps one unit throughout.
-    expect(trackerCopy.progressValueText(2, 6, 33)).toBe(
-      "Ejercicio 2 de 6, 33%",
-    );
-  });
-  it("objectiveLabelNoWeight omits the weight for bodyweight sets", () => {
-    expect(trackerCopy.objectiveLabelNoWeight("12")).toBe("12 reps");
-  });
-});
+// Progress a11y value coherence and objectiveLabelNoWeight's copy behavior
+// (the regression this described — a mixed-unit numeric range reading as
+// "9 of 3" — plus the bodyweight-only reps case) are now covered against
+// the `@kinora/i18n` catalog keys in `copy/__tests__/tracker-migration.test.ts`
+// (`tracker.progress.valuetext`, `mobileTracker.objective.noWeight`).
 
 describe("formatWeight", () => {
   it("renders integers without decimals", () => {

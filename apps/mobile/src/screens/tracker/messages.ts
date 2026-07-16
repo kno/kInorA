@@ -1,0 +1,56 @@
+/**
+ * id-only descriptors for `WorkoutTrackerScreen` — no `defaultMessage`,
+ * since the `@kinora/i18n` catalog is the single source of truth for copy.
+ * Names mirror the pre-refactor `t` object (see `copy/__tests__/
+ * tracker-migration.test.ts`).
+ */
+
+import { defineMessages } from "react-intl";
+
+export const messages = defineMessages({
+  sessionActiveEyebrow: { id: "tracker.live.eyebrow" },
+  elapsedLabel: { id: "tracker.timerLabel" },
+  pauseLabel: { id: "tracker.pauseLabel" },
+  resumeLabel: { id: "tracker.resumeLabel" },
+  progressLabel: { id: "tracker.progress.label" },
+  progressA11y: { id: "mobileTracker.progress.a11y" },
+  progressValueText: { id: "tracker.progress.valuetext" },
+  currentExerciseEyebrow: { id: "tracker.currentExercise" },
+  setInfo: { id: "mobileTracker.set.info" },
+  objectiveLabel: { id: "mobileTracker.objective.withWeight" },
+  objectiveLabelNoWeight: { id: "mobileTracker.objective.noWeight" },
+  loadLabel: { id: "tracker.load.label" },
+  loadUnit: { id: "tracker.unit.kg" },
+  repsLabel: { id: "tracker.reps.label" },
+  repsUnit: { id: "tracker.unit.reps" },
+  decreaseLoad: { id: "tracker.weight.downLabel" },
+  increaseLoad: { id: "tracker.weight.upLabel" },
+  decreaseReps: { id: "mobileTracker.reps.decrease" },
+  increaseReps: { id: "mobileTracker.reps.increase" },
+  completeSet: { id: "tracker.completeSet.cta" },
+  completeSetA11y: { id: "mobileTracker.completeSet.a11y" },
+  restActive: { id: "tracker.rest.active" },
+  restLabelSm: { id: "tracker.rest.label" },
+  addTime: { id: "tracker.rest.addTime" },
+  addTimeA11y: { id: "tracker.rest.addLabel" },
+  skip: { id: "tracker.rest.skip" },
+  skipRest: { id: "tracker.rest.skipLabel" },
+  restA11y: { id: "tracker.rest.aria" },
+  nextEyebrow: { id: "tracker.next.heading" },
+  nextDetail: { id: "mobileTracker.next.detail" },
+  nextDetailNoWeight: { id: "mobileTracker.next.detailNoWeight" },
+  finishSession: { id: "mobileTracker.finish.cta" },
+  finishSessionA11y: { id: "mobileTracker.finish.a11y" },
+  loading: { id: "mobileTracker.loading" },
+  sessionCompleteTitle: { id: "mobileTracker.complete.title" },
+  sessionCompleteBody: { id: "mobileTracker.complete.body" },
+  backHome: { id: "mobileTracker.backHome" },
+  conflictWithScope: { id: "mobileTracker.conflict.withScope" },
+  conflictWithPlan: { id: "mobileTracker.conflict.withPlan" },
+  conflictGeneric: { id: "mobileTracker.conflict.generic" },
+  errorStart: { id: "mobileTracker.error.start" },
+  errorLoad: { id: "mobileTracker.error.load" },
+  errorRecord: { id: "mobileTracker.error.record" },
+  errorComplete: { id: "mobileTracker.error.complete" },
+  retry: { id: "mobileTracker.retry" },
+});
