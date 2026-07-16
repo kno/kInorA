@@ -230,6 +230,20 @@ export class WorkoutSessionRepository {
     return this.findById(tenantId, userId, sessionId);
   }
 
+  /**
+   * Completes an active session (idempotent — #09b).
+   *
+   * The `WHERE status='active'` guard means a retried complete call (e.g.
+   * after a dropped response) affects 0 rows on the second attempt. Rather
+   * than mapping that straight to 404, we recover by re-reading the session
+   * scoped **exactly like `findById`** — `(tenantId, userId, id)` — NEVER an
+   * unscoped `WHERE id = :id` (that would be the same IDOR class already
+   * fixed in `recordSet`, see its documented BLOCKER comment above). If the
+   * scoped re-read finds the row and it is already `completed`, we return it
+   * as a 200 no-op without re-running completion side effects. If the scoped
+   * re-read finds nothing (wrong tenant/user, or truly nonexistent id), we
+   * return undefined so the route maps it to 404 — unchanged contract.
+   */
   async completeSession(
     tenantId: string,
     userId: string,
@@ -247,11 +261,16 @@ export class WorkoutSessionRepository {
         )
       )
       .returning();
-    if (rows.length === 0) {
-      return undefined;
+    if (rows.length > 0) {
+      return this.findById(tenantId, userId, id);
     }
 
-    return this.findById(tenantId, userId, id);
+    const existing = await this.findById(tenantId, userId, id);
+    if (existing?.status === "completed") {
+      return existing;
+    }
+
+    return undefined;
   }
 
   private async findLatestActiveSession(

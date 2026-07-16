@@ -338,4 +338,27 @@ describe("Workout session routes", () => {
     expect(response.json()).toEqual(completedSession);
     expect(repo.completeSession).toHaveBeenCalledWith(TENANT_A, USER_A, SESSION_ID);
   });
+
+  it("returns 200 (no-op) when retrying complete after a prior successful completion", async () => {
+    // The repo's idempotent recovery path returns the already-completed
+    // session rather than undefined; the route must surface that as 200,
+    // never a 404, on a retried complete call.
+    const completedSession = {
+      ...activeSession,
+      status: "completed" as const,
+      completedAt: "2026-07-04T09:20:00.000Z",
+    };
+    const repo = buildRepoMock({ completeSession: vi.fn().mockResolvedValue(completedSession) });
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/workout-sessions/${SESSION_ID}/complete`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(completedSession);
+    expect(repo.completeSession).toHaveBeenCalledWith(TENANT_A, USER_A, SESSION_ID);
+  });
 });
