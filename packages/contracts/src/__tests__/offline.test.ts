@@ -93,7 +93,7 @@ describe("offline contract types (09b-v1-workout-offline-history)", () => {
 
   it("FlushErrorCode enumerates the discriminated flush-failure taxonomy", () => {
     expectTypeOf<FlushErrorCode>().toEqualTypeOf<
-      "UNREACHABLE" | "STALE_ACTION" | "VALIDATION" | "NOT_FOUND" | "SERVER"
+      "UNREACHABLE" | "STALE_ACTION" | "AUTH" | "VALIDATION" | "NOT_FOUND" | "SERVER"
     >();
   });
 });

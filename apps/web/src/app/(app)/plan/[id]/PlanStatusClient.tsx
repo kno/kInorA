@@ -78,6 +78,7 @@ export function PlanStatusClient({
     activeDay,
     conflict,
     error,
+    syncNotice,
     handleStartWorkout: startWorkout,
     handleRecordSet,
     handleCompleteWorkout,
@@ -85,6 +86,25 @@ export function PlanStatusClient({
 
   const t = useTranslations();
   const errorKey = error ? ERROR_KEYS[error] ?? GENERIC_ERROR_KEY : undefined;
+  // Phase 4 web offline: surface a notice regardless of which view is
+  // showing for every flush outcome that needs user awareness — a stale
+  // Server Action reference (post-redeploy, "reload to sync"), a session
+  // that expired mid-flush ("auth_required" — still queued, retryable), or
+  // a poison-dropped mutation ("dropped" — permanently lost, MUST be
+  // surfaced, never silent, Judgment Day fix #3). Mirrors PlanTrackerClient.
+  const syncNoticeKey =
+    syncNotice === "reload_required"
+      ? "tracker.sync.reload_required"
+      : syncNotice === "auth_required"
+        ? "tracker.sync.auth_required"
+        : syncNotice === "dropped"
+          ? "tracker.sync.dropped"
+          : undefined;
+  const syncNoticeBanner = syncNoticeKey && (
+    <p role="status" data-testid="tracker-sync-notice">
+      {t(syncNoticeKey)}
+    </p>
+  );
 
   // usePlanWs opens the WebSocket and updates status on push messages.
   // Falls back to polling GET /workout-plans/:id if the WS connect fails.
@@ -146,6 +166,7 @@ export function PlanStatusClient({
             {dayLabel && <p>{dayLabel}</p>}
           </header>
         )}
+        {syncNoticeBanner}
         {errorKey && (
           <p role="alert" data-testid="tracker-error">
             {t(errorKey)}
@@ -180,6 +201,7 @@ export function PlanStatusClient({
           {conflictText}
         </p>
       )}
+      {syncNoticeBanner}
       {errorKey && (
         <p role="alert" data-testid="tracker-error">
           {t(errorKey)}

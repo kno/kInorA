@@ -356,6 +356,10 @@ export interface ConnectivityMonitor {
  *
  * - `UNREACHABLE`: network/offline error — retry, entry stays queued.
  * - `VALIDATION` / `NOT_FOUND`: 4xx poison-message — drop the entry, surface to the user.
+ * - `AUTH`: 401/403 — the session expired or was revoked (or a membership was
+ *   suspended) between enqueue and flush. Retryable, NOT poison-dropped (the
+ *   mutation itself may be perfectly valid) — entry stays queued and the
+ *   caller surfaces a "session expired — reload / sign in to sync" notice.
  * - `STALE_ACTION` (web only): stale Server Action reference on redeploy —
  *   entry stays queued, surface "reload to sync".
  * - `SERVER`: 5xx or unexpected failure — retryable, entry stays queued
@@ -364,6 +368,7 @@ export interface ConnectivityMonitor {
 export type FlushErrorCode =
   | "UNREACHABLE"
   | "STALE_ACTION"
+  | "AUTH"
   | "VALIDATION"
   | "NOT_FOUND"
   | "SERVER";

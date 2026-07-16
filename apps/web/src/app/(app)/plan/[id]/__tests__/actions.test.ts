@@ -8,6 +8,7 @@ const startWorkoutSession = vi.fn();
 const fetchWorkoutSession = vi.fn();
 const recordWorkoutSet = vi.fn();
 const completeWorkoutSession = vi.fn();
+const fetchAuthIdentity = vi.fn();
 
 const sessionRecord: WorkoutSessionRecord = {
   id: "session-1",
@@ -47,6 +48,7 @@ vi.mock("../tracker-client", () => ({
   fetchWorkoutSession: (...args: unknown[]) => fetchWorkoutSession(...args),
   recordWorkoutSet: (...args: unknown[]) => recordWorkoutSet(...args),
   completeWorkoutSession: (...args: unknown[]) => completeWorkoutSession(...args),
+  fetchAuthIdentity: (...args: unknown[]) => fetchAuthIdentity(...args),
 }));
 
 import {
@@ -197,5 +199,115 @@ describe("workout tracker server actions", () => {
 
     expect(completeWorkoutSession).toHaveBeenCalledWith("session-1", "tok");
     expect(result.status).toBe("completed");
+  });
+});
+
+describe("getOfflineIdentityKeyAction (Phase 4 web offline — stable (tenantId,userId) derivation)", () => {
+  /**
+   * Fix for the confirmed relogin data-loss bug: the identity key MUST be
+   * derived from the STABLE (tenantId, userId) pair, resolved server-side
+   * via `fetchAuthIdentity` — NOT from the session token, which rotates
+   * every login. Hashing the token would make the same user's re-login
+   * resolve to a NEW identity key, causing `ensureIdentityScope` to
+   * silently purge their own unsynced queue.
+   */
+  it("resolves a stable, non-empty identity key derived from tenantId+userId (never the raw token)", async () => {
+    cookieGet.mockReturnValue({ value: "session-tok-abc" });
+    fetchAuthIdentity.mockResolvedValue({ kind: "ok", tenantId: "tenant-1", userId: "user-1" });
+    const { getOfflineIdentityKeyAction } = await import("../actions");
+
+    const key = await getOfflineIdentityKeyAction();
+
+    expect(key).toBeTruthy();
+    expect(key).not.toBe("session-tok-abc");
+    expect(key).not.toBe("tenant-1");
+    expect(key).not.toBe("user-1");
+  });
+
+  it("resolves the SAME identity key across two SEPARATE logins for the SAME user (no relogin data loss)", async () => {
+    fetchAuthIdentity.mockResolvedValue({ kind: "ok", tenantId: "tenant-1", userId: "user-1" });
+    const { getOfflineIdentityKeyAction } = await import("../actions");
+
+    cookieGet.mockReturnValue({ value: "session-tok-abc" });
+    const first = await getOfflineIdentityKeyAction();
+
+    // A brand-new session token (as issued by a fresh login) for the SAME
+    // (tenantId, userId) must resolve to the SAME identity key.
+    cookieGet.mockReturnValue({ value: "session-tok-xyz-different-login" });
+    const second = await getOfflineIdentityKeyAction();
+
+    expect(first).toBe(second);
+  });
+
+  it("resolves a DIFFERENT identity key for a different user (cross-account isolation preserved)", async () => {
+    cookieGet.mockReturnValue({ value: "tok" });
+    const { getOfflineIdentityKeyAction } = await import("../actions");
+
+    fetchAuthIdentity.mockResolvedValue({ kind: "ok", tenantId: "tenant-1", userId: "user-1" });
+    const first = await getOfflineIdentityKeyAction();
+
+    fetchAuthIdentity.mockResolvedValue({ kind: "ok", tenantId: "tenant-1", userId: "user-2" });
+    const second = await getOfflineIdentityKeyAction();
+
+    expect(first).not.toBe(second);
+  });
+
+  it("resolves undefined when there is no session cookie", async () => {
+    cookieGet.mockReturnValue(undefined);
+    const { getOfflineIdentityKeyAction } = await import("../actions");
+
+    const key = await getOfflineIdentityKeyAction();
+
+    expect(key).toBeUndefined();
+    expect(fetchAuthIdentity).not.toHaveBeenCalled();
+  });
+
+  it("resolves undefined when the identity lookup fails (e.g. expired session)", async () => {
+    cookieGet.mockReturnValue({ value: "tok" });
+    fetchAuthIdentity.mockResolvedValue({ kind: "error", message: "auth_identity_request_failed" });
+    const { getOfflineIdentityKeyAction } = await import("../actions");
+
+    const key = await getOfflineIdentityKeyAction();
+
+    expect(key).toBeUndefined();
+  });
+});
+
+describe("unwrapWorkoutSession — FlushErrorCode propagation (Phase 4 web offline)", () => {
+  it("throws an error carrying the VALIDATION FlushErrorCode from a 4xx failure", async () => {
+    cookieGet.mockReturnValue({ value: "tok" });
+    recordWorkoutSet.mockResolvedValue({
+      kind: "error",
+      message: "invalid_input",
+      code: "VALIDATION",
+    });
+
+    await expect(
+      recordWorkoutSetAction("session-1", "set-1", { completed: true }),
+    ).rejects.toMatchObject({ message: "invalid_input", code: "VALIDATION" });
+  });
+
+  it("throws an error carrying the UNREACHABLE FlushErrorCode from a network failure", async () => {
+    cookieGet.mockReturnValue({ value: "tok" });
+    completeWorkoutSession.mockResolvedValue({
+      kind: "error",
+      message: "api_unreachable",
+      code: "UNREACHABLE",
+    });
+
+    await expect(completeWorkoutSessionAction("session-1")).rejects.toMatchObject({
+      message: "api_unreachable",
+      code: "UNREACHABLE",
+    });
+  });
+
+  it("defaults to the SERVER FlushErrorCode when tracker-client omits a code (defensive fallback)", async () => {
+    cookieGet.mockReturnValue({ value: "tok" });
+    completeWorkoutSession.mockResolvedValue({ kind: "error", message: "boom" });
+
+    await expect(completeWorkoutSessionAction("session-1")).rejects.toMatchObject({
+      message: "boom",
+      code: "SERVER",
+    });
   });
 });

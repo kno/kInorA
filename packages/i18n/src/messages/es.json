@@ -314,6 +314,11 @@
       "complete": "No pudimos completar el entrenamiento. Inténtalo de nuevo.",
       "generic": "Algo salió mal. Inténtalo de nuevo."
     },
+    "sync": {
+      "reload_required": "Tus cambios guardados están a salvo, pero necesitás recargar la página para terminar de sincronizar.",
+      "auth_required": "Tu sesión expiró mientras sincronizábamos. Tus cambios siguen guardados localmente — recargá la página o volvé a iniciar sesión para terminar de sincronizar.",
+      "dropped": "Algunos de tus cambios no se pudieron guardar y se descartaron porque el servidor los rechazó. Por favor, volvé a hacer esos cambios."
+    },
     "currentExercise": "Ejercicio actual",
     "rpe": "RPE",
     "notes": "Notas",
