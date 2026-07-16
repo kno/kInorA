@@ -1,6 +1,7 @@
 export {
   CreateIcon,
   ExercisesIcon,
+  HistoryIcon,
   HomeIcon,
   KinIcon,
   OrbitLogoIcon,

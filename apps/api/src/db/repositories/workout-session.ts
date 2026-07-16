@@ -1,10 +1,12 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { defaultPlanName } from "@kinora/domain";
+import { computeAverageRpe, computeSessionVolume, computeVolumeTrend, defaultPlanName } from "@kinora/domain";
 import type {
   SessionExerciseRecord,
   SetRecordDTO,
   StartSessionOutcome,
   WorkoutExercise,
+  WorkoutHistoryEntry,
+  WorkoutHistoryQuery,
   WorkoutProgram,
   WorkoutSessionRecord,
 } from "@kinora/contracts";
@@ -52,6 +54,8 @@ interface SetRecordRow {
 }
 
 type StartTx = Pick<Database, "insert">;
+
+const DEFAULT_HISTORY_LIMIT = 20;
 
 export interface UpdateSetRecordInput {
   actualReps?: number;
@@ -230,6 +234,20 @@ export class WorkoutSessionRepository {
     return this.findById(tenantId, userId, sessionId);
   }
 
+  /**
+   * Completes an active session (idempotent — #09b).
+   *
+   * The `WHERE status='active'` guard means a retried complete call (e.g.
+   * after a dropped response) affects 0 rows on the second attempt. Rather
+   * than mapping that straight to 404, we recover by re-reading the session
+   * scoped **exactly like `findById`** — `(tenantId, userId, id)` — NEVER an
+   * unscoped `WHERE id = :id` (that would be the same IDOR class already
+   * fixed in `recordSet`, see its documented BLOCKER comment above). If the
+   * scoped re-read finds the row and it is already `completed`, we return it
+   * as a 200 no-op without re-running completion side effects. If the scoped
+   * re-read finds nothing (wrong tenant/user, or truly nonexistent id), we
+   * return undefined so the route maps it to 404 — unchanged contract.
+   */
   async completeSession(
     tenantId: string,
     userId: string,
@@ -247,11 +265,120 @@ export class WorkoutSessionRepository {
         )
       )
       .returning();
-    if (rows.length === 0) {
-      return undefined;
+    if (rows.length > 0) {
+      return this.findById(tenantId, userId, id);
     }
 
-    return this.findById(tenantId, userId, id);
+    const existing = await this.findById(tenantId, userId, id);
+    if (existing?.status === "completed") {
+      return existing;
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Paginated, read-only history of completed sessions (#09b Session
+   * History — sync-independent, never touches the offline queue/snapshot).
+   *
+   * Batch-fetches with a **constant, bounded number of queries regardless of
+   * page size**: (1) one page query over `workout_sessions` scoped by
+   * `(tenantId, userId)`, ordered newest-first, fetching `limit + 1` rows —
+   * the `+1` row is a bounded lookback used only to derive the oldest page
+   * item's trend, never returned as a page entry itself; (2) one
+   * `inArray(sessionIds)` query across every fetched session (including the
+   * lookback row) for `session_exercises`; (3) one `inArray(sessionExerciseId)`
+   * query for `set_records` (which has no `sessionId` column, so it can only
+   * be reached via the exercise ids from step 2). Results are grouped in
+   * memory to reassemble each `WorkoutHistoryEntry`.
+   *
+   * Anti-pattern (explicitly rejected by design): looping the page and
+   * calling `findById` once per session — that is correct for a single-session
+   * read but an N+1 bug at list scale, and MUST NOT be reintroduced here.
+   *
+   * Trend: each entry's `trend` compares it against the row immediately
+   * after it in the SAME fetched result set (which is already ordered
+   * newest-first) — so entry `i` pairs with fetched row `i + 1`. For the
+   * last page item, that pairing is exactly the `+1` lookback row. A
+   * mismatched `workoutPlanId` between the pair yields `trend: undefined`
+   * (no cross-plan comparison), matching `computeVolumeTrend`'s "no prior
+   * session in scope" contract.
+   */
+  async listCompletedSessions(
+    tenantId: string,
+    userId: string,
+    query: WorkoutHistoryQuery
+  ): Promise<WorkoutHistoryEntry[]> {
+    const limit = query.limit ?? DEFAULT_HISTORY_LIMIT;
+    const offset = query.offset ?? 0;
+
+    const sessionRows = (await this.db
+      .select()
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.status, "completed")
+        )
+      )
+      .orderBy(desc(workoutSessions.completedAt))
+      .limit(limit + 1)
+      .offset(offset)) as WorkoutSessionRow[];
+
+    if (sessionRows.length === 0) {
+      return [];
+    }
+
+    const sessionIds = sessionRows.map((row) => row.id);
+    const exerciseRows = (await this.db
+      .select()
+      .from(sessionExercises)
+      .where(inArray(sessionExercises.workoutSessionId, sessionIds))) as SessionExerciseRow[];
+
+    const exerciseIds = exerciseRows.map((exercise) => exercise.id);
+    const setRows =
+      exerciseIds.length === 0
+        ? []
+        : ((await this.db
+            .select()
+            .from(setRecords)
+            .where(inArray(setRecords.sessionExerciseId, exerciseIds))) as SetRecordRow[]);
+
+    const exercisesBySession = new Map<string, SessionExerciseRow[]>();
+    for (const exerciseRow of exerciseRows) {
+      const current = exercisesBySession.get(exerciseRow.workoutSessionId) ?? [];
+      current.push(exerciseRow);
+      exercisesBySession.set(exerciseRow.workoutSessionId, current);
+    }
+
+    const setsByExercise = new Map<string, SetRecordRow[]>();
+    for (const setRow of setRows) {
+      const current = setsByExercise.get(setRow.sessionExerciseId) ?? [];
+      current.push(setRow);
+      setsByExercise.set(setRow.sessionExerciseId, current);
+    }
+
+    const records = sessionRows.map((sessionRow) => {
+      const ownExercises = exercisesBySession.get(sessionRow.id) ?? [];
+      const ownSets = ownExercises.flatMap((exercise) => setsByExercise.get(exercise.id) ?? []);
+      return mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets);
+    });
+
+    return records.slice(0, limit).map((session, index) => {
+      const priorSession = records[index + 1];
+      const trend =
+        priorSession && priorSession.workoutPlanId === session.workoutPlanId
+          ? computeVolumeTrend(session, priorSession)
+          : undefined;
+
+      return {
+        session,
+        totalVolume: computeSessionVolume(session),
+        averageRpe: computeAverageRpe(session),
+        trend,
+      };
+    });
   }
 
   private async findLatestActiveSession(

@@ -183,6 +183,13 @@ export const kinIconRegistry = {
   menu: createOpenDesignIcon("Menu", ({ className }) => (
     <path className={className} d="M4 7h16M4 12h16M4 17h16" />
   )),
+  history: createOpenDesignIcon("History", ({ className }) => (
+    <>
+      <path className={className} d="M3 12A9 9 0 1 0 6 5.3" />
+      <path className={className} d="M3 4V9H8" />
+      <path className={className} d="M12 7V12L16 14.5" />
+    </>
+  )),
 } as const;
 
 export type KinIconName = keyof typeof kinIconRegistry;
@@ -234,6 +241,7 @@ export const PlanIcon = (props: Omit<KinIconProps, "name">) => <KinIcon name="pl
 export const StatsIcon = (props: Omit<KinIconProps, "name">) => <KinIcon name="stats" {...props} />;
 export const CreateIcon = (props: Omit<KinIconProps, "name">) => <KinIcon name="create" {...props} />;
 export const ExercisesIcon = (props: Omit<KinIconProps, "name">) => <KinIcon name="exercises" {...props} />;
+export const HistoryIcon = (props: Omit<KinIconProps, "name">) => <KinIcon name="history" {...props} />;
 export const OrbitLogoIcon = (props: Omit<KinIconProps, "name" | "size"> & { size?: 16 | 24 | 32 }) => (
   <KinIcon name="orbitLogo" size={props.size ?? 24} {...props} />
 );

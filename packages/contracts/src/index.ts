@@ -270,3 +270,127 @@ export interface SessionResponse {
   user: { id: UserId; email: string };
   tenant: { id: TenantId; name: string };
 }
+
+// ---------------------------------------------------------------------------
+// Offline capture, reconnect sync & session history types — 09b-v1
+// These are the cross-boundary shapes for the client-side mutation queue
+// (web idb / mobile AsyncStorage), the session snapshot cache, connectivity
+// detection, and the read-only session history aggregation. No Drizzle or
+// idb/AsyncStorage/NetInfo imports are permitted here — this package stays
+// runtime-agnostic; platform implementations live in each app.
+// ---------------------------------------------------------------------------
+
+/**
+ * Input shape for recording/updating a workout set (PATCH /workout-sessions/:id/sets/:setId).
+ * Single source of truth — web (`tracker-types.ts`) and mobile
+ * (`apps/mobile/src/api/workout-session.ts`) currently hold local copies of
+ * this shape; a later slice (PR 3/PR 4) migrates those call sites to import
+ * from here instead of redefining it.
+ */
+export interface WorkoutSetUpdateInput {
+  actualReps?: number;
+  weightKg?: number;
+  rpe?: number;
+  completed: boolean;
+  notes?: string;
+}
+
+/**
+ * A single queued offline mutation, persisted client-side (idb on web,
+ * AsyncStorage on mobile) before being flushed through the existing
+ * idempotent write paths on reconnect.
+ *
+ * `clientSeq` is the monotonic, collision-free ordering + last-write-wins
+ * tie-break key (persisted across app restart via a `lastClientSeq`
+ * high-water-mark — never reset to 0 on load).
+ *
+ * `queuedAt` (wall-clock `Date.now()`) is diagnostics/FIFO-display only —
+ * it MUST NOT be used for ordering or LWW decisions, since it can tie under
+ * rapid taps at ~1ms resolution.
+ */
+export type PendingMutation =
+  | {
+      kind: "set";
+      sessionId: string;
+      setId: string;
+      input: WorkoutSetUpdateInput;
+      queuedAt: number;
+      clientSeq: number;
+    }
+  | {
+      kind: "complete";
+      sessionId: string;
+      queuedAt: number;
+      clientSeq: number;
+    };
+
+/**
+ * Local-store snapshot cache (idb / AsyncStorage) — the read-side complement
+ * to the `PendingMutation` queue. Lets the tracker hydrate its UI from the
+ * last-known server state (with queued mutations re-applied on top) during
+ * an offline reload/restart, without requiring a network GET.
+ */
+export interface WorkoutSessionSnapshot {
+  sessionId: string;
+  session: WorkoutSessionRecord;
+  cachedAt: number;
+}
+
+/**
+ * Platform-agnostic connectivity detection port. Implementations are
+ * necessarily platform-specific (`navigator.onLine` + online/offline events
+ * on web; `@react-native-community/netinfo` on mobile) and live in each app;
+ * only the shape is shared here.
+ */
+export interface ConnectivityMonitor {
+  isOnline(): boolean;
+  /** Registers a listener for connectivity changes; returns an unsubscribe function. */
+  subscribe(cb: (online: boolean) => void): () => void;
+}
+
+/**
+ * Discriminated flush-failure taxonomy, threaded through `unwrapWorkoutSession`
+ * (web) and the mobile `workout-session.ts` API client, so the flush handler
+ * on each platform can route retry/poison/stale-action decisions without
+ * string-matching on `message`.
+ *
+ * - `UNREACHABLE`: network/offline error — retry, entry stays queued.
+ * - `VALIDATION` / `NOT_FOUND`: 4xx poison-message — drop the entry, surface to the user.
+ * - `AUTH`: 401/403 — the session expired or was revoked (or a membership was
+ *   suspended) between enqueue and flush. Retryable, NOT poison-dropped (the
+ *   mutation itself may be perfectly valid) — entry stays queued and the
+ *   caller surfaces a "session expired — reload / sign in to sync" notice.
+ * - `STALE_ACTION` (web only): stale Server Action reference on redeploy —
+ *   entry stays queued, surface "reload to sync".
+ * - `SERVER`: 5xx or unexpected failure — retryable, entry stays queued
+ *   (never poison-dropped).
+ */
+export type FlushErrorCode =
+  | "UNREACHABLE"
+  | "STALE_ACTION"
+  | "AUTH"
+  | "VALIDATION"
+  | "NOT_FOUND"
+  | "SERVER";
+
+/**
+ * One entry in the paginated session history list. `trend` compares this
+ * session vs. the immediately-prior completed session for the same
+ * plan/exercise scope; `undefined` when there is no prior session (e.g. the
+ * first session in scope).
+ */
+export interface WorkoutHistoryEntry {
+  session: WorkoutSessionRecord;
+  totalVolume: number;
+  averageRpe?: number;
+  trend?: { volumeDelta: number; direction: "up" | "down" | "flat" };
+}
+
+/**
+ * Pagination contract for `GET /workout-sessions/history` — offset-based,
+ * default page size 20 (both fields tunable by the caller).
+ */
+export interface WorkoutHistoryQuery {
+  limit?: number;
+  offset?: number;
+}
