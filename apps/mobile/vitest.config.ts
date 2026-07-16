@@ -1,6 +1,6 @@
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
-import { resolveConfig, ssrResolveConfig } from "../../vitest.shared";
+import { resolveConfig, ssrResolveConfig, testConfig } from "../../vitest.shared";
 
 export default defineConfig({
   esbuild: {
@@ -30,6 +30,7 @@ export default defineConfig({
     },
   },
   test: {
+    ...testConfig,
     globals: true,
     include: ["src/**/*.test.{ts,tsx}"],
   },

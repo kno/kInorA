@@ -19,6 +19,7 @@
  */
 
 import type {
+  FlushErrorCode,
   WorkoutHistoryEntry,
   WorkoutHistoryQuery,
   WorkoutSessionRecord,
@@ -53,7 +54,40 @@ export type WorkoutSessionResult =
       /** Populated only on a 409 conflict, mirroring the web client. */
       activePlanName?: string;
       activeDay?: number | null;
+      /**
+       * Discriminated flush-failure taxonomy (Phase 5 mobile offline,
+       * 09b-v1 design "Error discrimination through the Server Actions /
+       * API client boundary"). Previously this client held the HTTP status
+       * internally but discarded it for every case except 409 — the
+       * offline flush handler needs `code` to route retry (`UNREACHABLE`/
+       * `SERVER`), poison-drop (`VALIDATION`/`NOT_FOUND`), and auth
+       * (`AUTH`) decisions without string-matching on `message`.
+       *
+       * Absent on the 409 `active_session_conflict` branch (that shape is
+       * a structural start-conflict, not a flush-taxonomy failure) and on
+       * `no_session`/`invalid_response` (client-local failures, never
+       * routed through the flush taxonomy). `STALE_ACTION` never appears
+       * here — mobile calls the API directly (no Next.js Server Actions),
+       * so that web-only failure mode does not apply.
+       */
+      code?: FlushErrorCode;
     };
+
+/**
+ * Maps an HTTP status (for any non-409, non-ok response) to a
+ * `FlushErrorCode`, mirroring web's `flushErrorCodeFromStatus`:
+ *   401/403 → AUTH (retryable, entry stays queued, never poison-dropped —
+ *     the session went stale, not necessarily the mutation itself)
+ *   404 → NOT_FOUND (poison — drop + surface)
+ *   other 4xx (400/422/...) → VALIDATION (poison — drop + surface)
+ *   5xx / anything else → SERVER (retryable, treated like UNREACHABLE)
+ */
+function flushErrorCodeFromStatus(status: number): FlushErrorCode {
+  if (status === 401 || status === 403) return "AUTH";
+  if (status === 404) return "NOT_FOUND";
+  if (status >= 400 && status < 500) return "VALIDATION";
+  return "SERVER";
+}
 
 /**
  * Narrow fetch shape this client actually uses (URL string + init). Decoupled
@@ -110,6 +144,7 @@ async function parseResponse(res: Response): Promise<WorkoutSessionResult> {
     return {
       kind: "error",
       message: payload.error ?? "workout_session_request_failed",
+      code: flushErrorCodeFromStatus(res.status),
     };
   }
 
@@ -138,7 +173,7 @@ async function request(
   try {
     res = await fetchImpl(`${base}${path}`, requestInit(method, token, body));
   } catch {
-    return { kind: "error", message: "api_unreachable" };
+    return { kind: "error", message: "api_unreachable", code: "UNREACHABLE" };
   }
   return parseResponse(res);
 }
