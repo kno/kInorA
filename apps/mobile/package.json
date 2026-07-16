@@ -13,6 +13,8 @@
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.1",
     "@expo-google-fonts/space-grotesk": "^0.4.1",
+    "@formatjs/intl-locale": "^5.3.10",
+    "@formatjs/intl-pluralrules": "^6.3.13",
     "@kinora/contracts": "workspace:*",
     "@kinora/i18n": "workspace:*",
     "@react-navigation/native": "^7.1.14",
