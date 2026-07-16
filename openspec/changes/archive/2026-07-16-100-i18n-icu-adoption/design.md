@@ -167,8 +167,12 @@ under the 400-line budget. `Decision needed before apply: No`. `Chained PRs
 recommended: Yes` (stacked). `400-line budget risk: Low`. Slice 8 is the LAST
 web slice and the sole point of no return.
 
-## Open Questions (VALIDATE at apply)
+## Open Questions (VALIDATE at apply) — RESOLVED at apply/verify
 
-- [ ] Middleware-injected `x-kinora-lang` header reliably reaches
-      `getRequestConfig`'s `await headers()` in Next 16 Turbopack.
-- [ ] Hermes `Intl.PluralRules` ES output on RN 0.79.5.
+- [x] Middleware-injected `x-kinora-lang` header reliably reaches
+      `getRequestConfig`'s `await headers()` in Next 16 Turbopack. VALIDATED
+      (slice 3, tasks.md 3.3.2/3.3.3): confirmed under both Turbopack dev and
+      `next build --webpack` + `next start`.
+- [ ] Hermes `Intl.PluralRules` ES output on RN 0.79.5. NOT VALIDATED —
+      headless apply pass cannot exercise a real Hermes device/simulator.
+      Deferred, tracked in issue #117 (see archive-report.md).
