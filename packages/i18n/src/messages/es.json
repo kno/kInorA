@@ -543,6 +543,20 @@
     "title": "Estadísticas",
     "description": "Sigue tu progreso y revisa tu historial de entrenamiento."
   },
+  "history": {
+    "title": "Historial",
+    "description": "Revisa tus sesiones de entrenamiento completadas.",
+    "empty": "Todavía no hay sesiones completadas.",
+    "duration": "{minutes} min",
+    "totalVolume": "Volumen total: {volume} kg",
+    "averageRpe": "RPE promedio: {rpe}",
+    "trend": {
+      "up": "Volumen sube {volume} kg frente a la sesión anterior",
+      "down": "Volumen baja {volume} kg frente a la sesión anterior",
+      "flat": "Volumen sin cambios frente a la sesión anterior"
+    },
+    "loadMore": "Cargar más"
+  },
   "profile": {
     "title": "Perfil",
     "description": "Gestiona los ajustes y las preferencias de tu cuenta."

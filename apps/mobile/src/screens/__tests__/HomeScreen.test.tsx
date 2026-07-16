@@ -35,9 +35,8 @@ vi.mock("../../auth/session-storage.js", () => ({
 
 const HomeScreen = (await import("../HomeScreen.js")).default;
 
-// Pure UI screen, no navigation needed for this assertion — a minimal stub
-// satisfies the `navigation` prop's shape.
-const navigation = { replace: vi.fn() } as any;
+// Pure UI screen — a minimal stub satisfies the `navigation` prop's shape.
+const navigation = { replace: vi.fn(), navigate: vi.fn() } as any;
 
 function renderWithLocale(locale: "en" | "es") {
   let renderer!: ReturnType<typeof create>;
@@ -62,5 +61,14 @@ describe("HomeScreen (first mobile screen migrated off prop-drilled copy — 9.4
     const renderer = renderWithLocale("es");
     const text = renderer.root.findAllByProps({ children: "Cerrar sesión" });
     expect(text.length).toBeGreaterThan(0);
+  });
+
+  it("navigates to the History screen when the history entry point is pressed (09b nav wiring)", () => {
+    const renderer = renderWithLocale("en");
+    const historyButton = renderer.root.find(
+      (n) => n.props.accessibilityLabel === "History"
+    );
+    historyButton.props.onPress();
+    expect(navigation.navigate).toHaveBeenCalledWith("History");
   });
 });

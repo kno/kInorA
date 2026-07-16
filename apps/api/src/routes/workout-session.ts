@@ -1,7 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
 import { requireAuth } from "../auth/plugin.js";
 import { validateRpe } from "@kinora/domain";
-import type { StartSessionOutcome, WorkoutSessionRecord } from "@kinora/contracts";
+import type {
+  StartSessionOutcome,
+  WorkoutHistoryEntry,
+  WorkoutHistoryQuery,
+  WorkoutSessionRecord,
+} from "@kinora/contracts";
 
 interface UpdateSetBody {
   actualReps?: number;
@@ -22,6 +27,11 @@ interface SessionParams {
 
 interface SetParams extends SessionParams {
   setId: string;
+}
+
+interface HistoryQuerystring {
+  limit?: number;
+  offset?: number;
 }
 
 export interface WorkoutSessionRouteRepo {
@@ -48,6 +58,11 @@ export interface WorkoutSessionRouteRepo {
     userId: string,
     id: string
   ): Promise<WorkoutSessionRecord | undefined>;
+  listCompletedSessions(
+    tenantId: string,
+    userId: string,
+    query: WorkoutHistoryQuery
+  ): Promise<WorkoutHistoryEntry[]>;
 }
 
 export interface WorkoutSessionRoutesOptions {
@@ -64,6 +79,17 @@ const startSessionSchema = {
       // (a program has one session per training day, max 7/week); values >7
       // are rejected with a 422 (risk-WARNING). minimum:1 stays.
       day: { type: "integer", minimum: 1, maximum: 7 },
+    },
+    additionalProperties: false,
+  },
+};
+
+const historySchema = {
+  querystring: {
+    type: "object",
+    properties: {
+      limit: { type: "integer", minimum: 1, maximum: 100 },
+      offset: { type: "integer", minimum: 0 },
     },
     additionalProperties: false,
   },
@@ -117,6 +143,27 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
 
       // started | resumed → 200 with the session snapshot (unchanged shape).
       return reply.code(200).send(outcome.session);
+    }
+  );
+
+  // Registered BEFORE `/workout-sessions/:id` — a static path segment always
+  // wins over a parametric one in Fastify's router regardless of
+  // registration order, but the ordering here documents that intent
+  // explicitly. History is sync-independent: it never touches the offline
+  // queue/snapshot, only reads completed sessions.
+  fastify.get<{ Querystring: HistoryQuerystring }>(
+    "/workout-sessions/history",
+    { schema: historySchema, preHandler: requireAuth() },
+    async (request, reply) => {
+      const { tenantId, userId } = request.authContext!;
+      const { limit, offset } = request.query;
+
+      const entries = await repo.listCompletedSessions(tenantId, userId, {
+        limit: limit ?? 20,
+        offset: offset ?? 0,
+      });
+
+      return reply.code(200).send(entries);
     }
   );
 

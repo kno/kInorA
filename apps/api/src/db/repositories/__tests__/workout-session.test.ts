@@ -687,4 +687,179 @@ describe("WorkoutSessionRepository", () => {
       expect(result).toBeUndefined();
     });
   });
+
+  describe("listCompletedSessions", () => {
+    const SESSION_A_ID = "dddddddd-0000-0000-0000-0000000000a1";
+    const SESSION_B_ID = "dddddddd-0000-0000-0000-0000000000b2";
+    const SESSION_C_ID = "dddddddd-0000-0000-0000-0000000000c3";
+    const EXERCISE_A_ID = "eeeeeeee-0000-0000-0000-00000000a001";
+    const EXERCISE_B_ID = "eeeeeeee-0000-0000-0000-00000000b002";
+    const EXERCISE_C_ID = "eeeeeeee-0000-0000-0000-00000000c003";
+
+    function buildCompletedSessionRow(id: string, completedAt: Date) {
+      return {
+        id,
+        tenantId: TENANT_A,
+        userId: USER_A,
+        workoutPlanId: PLAN_ID,
+        status: "completed" as const,
+        day: 1,
+        startedAt: new Date(completedAt.getTime() - 45 * 60 * 1000),
+        completedAt,
+      };
+    }
+
+    // Newest → oldest: A (page[0]), B (page[1], only 2 requested), C (the
+    // limit+1 lookback row — supplies B's trend prior, never returned itself).
+    const sessionRowA = buildCompletedSessionRow(SESSION_A_ID, new Date("2026-07-10T09:00:00Z"));
+    const sessionRowB = buildCompletedSessionRow(SESSION_B_ID, new Date("2026-07-08T09:00:00Z"));
+    const sessionRowC = buildCompletedSessionRow(SESSION_C_ID, new Date("2026-07-06T09:00:00Z"));
+
+    const exerciseRowA = {
+      id: EXERCISE_A_ID,
+      workoutSessionId: SESSION_A_ID,
+      exerciseIndex: 0,
+      title: "Bench Press",
+      restSeconds: 90,
+      notes: null,
+    };
+    const exerciseRowB = { ...exerciseRowA, id: EXERCISE_B_ID, workoutSessionId: SESSION_B_ID };
+    const exerciseRowC = { ...exerciseRowA, id: EXERCISE_C_ID, workoutSessionId: SESSION_C_ID };
+
+    function buildSetRow(id: string, sessionExerciseId: string, weightKg: string, rpe: number) {
+      return {
+        id,
+        sessionExerciseId,
+        setIndex: 0,
+        targetReps: "8-10",
+        actualReps: 10,
+        weightKg,
+        rpe,
+        completed: true,
+        notes: null,
+      };
+    }
+
+    // A: 10 * 10 = 100 volume. B: 8 * 10 = 80. C: 6 * 10 = 60.
+    const setRowA = buildSetRow("ffffffff-0000-0000-0000-00000000a001", EXERCISE_A_ID, "10.00", 8);
+    const setRowB = buildSetRow("ffffffff-0000-0000-0000-00000000b002", EXERCISE_B_ID, "8.00", 7);
+    const setRowC = buildSetRow("ffffffff-0000-0000-0000-00000000c003", EXERCISE_C_ID, "6.00", 6);
+
+    function createHistoryDb(sessionRows: unknown[], exerciseRows: unknown[], setRows: unknown[]) {
+      const sessionsWhere = vi.fn().mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({
+          limit: vi.fn().mockReturnValue({
+            offset: vi.fn().mockResolvedValue(sessionRows),
+          }),
+        }),
+      });
+      const exercisesWhere = vi.fn().mockResolvedValue(exerciseRows);
+      const setsWhere = vi.fn().mockResolvedValue(setRows);
+
+      const select = vi.fn().mockImplementation(() => ({
+        from: vi.fn().mockImplementation((table: object) => {
+          if (table === workoutSessions) return { where: sessionsWhere };
+          if (table === sessionExercises) return { where: exercisesWhere };
+          if (table === setRecords) return { where: setsWhere };
+          throw new Error(`Unexpected select table: ${String(table)}`);
+        }),
+      }));
+
+      return { select, sessionsWhere, exercisesWhere, setsWhere };
+    }
+
+    it("batch-fetches a page via a constant, bounded number of queries — never one query per row", async () => {
+      const { select, sessionsWhere, exercisesWhere, setsWhere } = createHistoryDb(
+        [sessionRowA, sessionRowB, sessionRowC],
+        [exerciseRowA, exerciseRowB, exerciseRowC],
+        [setRowA, setRowB, setRowC],
+      );
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const entries = await repo.listCompletedSessions(TENANT_A, USER_A, { limit: 2, offset: 0 });
+
+      // Exactly 3 queries total (sessions page, exercises inArray, sets
+      // inArray) — NOT 3 + (2 * per-row findById calls). This is the
+      // constant-query-count assertion the design forbids regressing.
+      expect(select).toHaveBeenCalledTimes(3);
+      expect(sessionsWhere).toHaveBeenCalledTimes(1);
+      expect(exercisesWhere).toHaveBeenCalledTimes(1);
+      expect(setsWhere).toHaveBeenCalledTimes(1);
+      expect(entries).toHaveLength(2);
+      expect(entries[0]?.session.id).toBe(SESSION_A_ID);
+      expect(entries[0]?.totalVolume).toBe(100);
+      expect(entries[0]?.averageRpe).toBe(8);
+      expect(entries[1]?.session.id).toBe(SESSION_B_ID);
+      expect(entries[1]?.totalVolume).toBe(80);
+    });
+
+    it("returns an empty page when the caller has no completed sessions, issuing no follow-up queries", async () => {
+      const { select, exercisesWhere, setsWhere } = createHistoryDb([], [], []);
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const entries = await repo.listCompletedSessions(TENANT_A, USER_A, { limit: 2, offset: 0 });
+
+      expect(entries).toEqual([]);
+      expect(exercisesWhere).not.toHaveBeenCalled();
+      expect(setsWhere).not.toHaveBeenCalled();
+    });
+
+    it("computes trend via the bounded n+1 lookback row, without an extra query beyond the 3 batch queries", async () => {
+      const { select } = createHistoryDb(
+        [sessionRowA, sessionRowB, sessionRowC],
+        [exerciseRowA, exerciseRowB, exerciseRowC],
+        [setRowA, setRowB, setRowC],
+      );
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const entries = await repo.listCompletedSessions(TENANT_A, USER_A, { limit: 2, offset: 0 });
+
+      // A (page[0]) vs its immediate prior B: 100 - 80 = 20, up.
+      expect(entries[0]?.trend).toEqual({ volumeDelta: 20, direction: "up" });
+      // B (the OLDEST page item) vs the lookback-only row C: 80 - 60 = 20, up.
+      // C itself is never returned as a page entry.
+      expect(entries[1]?.trend).toEqual({ volumeDelta: 20, direction: "up" });
+      expect(entries.some((entry) => entry.session.id === SESSION_C_ID)).toBe(false);
+      // Still exactly 3 queries — the lookback row came from the SAME
+      // limit+1 page query, not a separate lookback round-trip.
+      expect(select).toHaveBeenCalledTimes(3);
+    });
+
+    it("omits trend for the last page item when there is no prior session at all (fewer than limit+1 rows returned)", async () => {
+      const { select } = createHistoryDb(
+        [sessionRowA, sessionRowB],
+        [exerciseRowA, exerciseRowB],
+        [setRowA, setRowB],
+      );
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const entries = await repo.listCompletedSessions(TENANT_A, USER_A, { limit: 2, offset: 0 });
+
+      expect(entries).toHaveLength(2);
+      expect(entries[0]?.trend).toEqual({ volumeDelta: 20, direction: "up" });
+      expect(entries[1]?.trend).toBeUndefined();
+      expect(select).toHaveBeenCalledTimes(3);
+    });
+
+    it("scopes the page query to (tenantId, userId) — a different tenant sees no rows", async () => {
+      const { select } = createHistoryDb([], [], []);
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const entries = await repo.listCompletedSessions(TENANT_B, USER_A, { limit: 2, offset: 0 });
+
+      expect(entries).toEqual([]);
+    });
+
+    it("defaults limit to 20 and offset to 0 when the caller omits pagination", async () => {
+      const { select, sessionsWhere } = createHistoryDb([], [], []);
+      const limitMock = vi.fn().mockReturnValue({ offset: vi.fn().mockResolvedValue([]) });
+      sessionsWhere.mockReturnValue({ orderBy: vi.fn().mockReturnValue({ limit: limitMock }) });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      await repo.listCompletedSessions(TENANT_A, USER_A, {});
+
+      // limit+1 lookback row → 21 when the caller's default limit is 20.
+      expect(limitMock).toHaveBeenCalledWith(21);
+    });
+  });
 });

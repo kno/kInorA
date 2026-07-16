@@ -25,12 +25,13 @@ describe("@kinora/i18n package assembly", () => {
     expect(result.valid).toBe(true);
   });
 
-  it("the full catalog carries all 352 migrated leaf keys per locale", () => {
+  it("the full catalog carries all 362 migrated leaf keys per locale", () => {
     // 329 web-migrated keys + 23 `mobileTracker.*` keys authored in slice 9
     // for the mobile-unique tracker copy that has no EN/web equivalent (see
-    // 9.3.1 enumeration in tasks.md).
+    // 9.3.1 enumeration in tasks.md) + 10 `history.*` keys authored in 09b
+    // Phase 3 (Session History) for the web/mobile history surfaces.
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(352);
+    expect(Object.keys(flat)).toHaveLength(362);
   });
 
   it("the mobileTracker namespace is present with EN+ES parity (9.3.3)", () => {
