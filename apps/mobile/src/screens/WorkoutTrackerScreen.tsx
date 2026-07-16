@@ -34,7 +34,7 @@ import {
   View,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { useIntl } from "react-intl";
+import { defineMessages, FormattedMessage, useIntl } from "react-intl";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, {
   Circle,
@@ -71,6 +71,57 @@ import {
 } from "./tracker/tracker-logic";
 import { RestRing } from "./tracker/RestRing";
 import { deleteSessionToken } from "../auth/session-storage";
+
+// id-only descriptors — no `defaultMessage`, since the @kinora/i18n catalog is
+// the single source of truth for copy. Names mirror the pre-refactor `t`
+// object (see `copy/__tests__/tracker-migration.test.ts`).
+const M = defineMessages({
+  sessionActiveEyebrow: { id: "tracker.live.eyebrow" },
+  elapsedLabel: { id: "tracker.timerLabel" },
+  pauseLabel: { id: "tracker.pauseLabel" },
+  resumeLabel: { id: "tracker.resumeLabel" },
+  progressLabel: { id: "tracker.progress.label" },
+  progressA11y: { id: "mobileTracker.progress.a11y" },
+  progressValueText: { id: "tracker.progress.valuetext" },
+  currentExerciseEyebrow: { id: "tracker.currentExercise" },
+  setInfo: { id: "mobileTracker.set.info" },
+  objectiveLabel: { id: "mobileTracker.objective.withWeight" },
+  objectiveLabelNoWeight: { id: "mobileTracker.objective.noWeight" },
+  loadLabel: { id: "tracker.load.label" },
+  loadUnit: { id: "tracker.unit.kg" },
+  repsLabel: { id: "tracker.reps.label" },
+  repsUnit: { id: "tracker.unit.reps" },
+  decreaseLoad: { id: "tracker.weight.downLabel" },
+  increaseLoad: { id: "tracker.weight.upLabel" },
+  decreaseReps: { id: "mobileTracker.reps.decrease" },
+  increaseReps: { id: "mobileTracker.reps.increase" },
+  completeSet: { id: "tracker.completeSet.cta" },
+  completeSetA11y: { id: "mobileTracker.completeSet.a11y" },
+  restActive: { id: "tracker.rest.active" },
+  restLabelSm: { id: "tracker.rest.label" },
+  addTime: { id: "tracker.rest.addTime" },
+  addTimeA11y: { id: "tracker.rest.addLabel" },
+  skip: { id: "tracker.rest.skip" },
+  skipRest: { id: "tracker.rest.skipLabel" },
+  restA11y: { id: "tracker.rest.aria" },
+  nextEyebrow: { id: "tracker.next.heading" },
+  nextDetail: { id: "mobileTracker.next.detail" },
+  nextDetailNoWeight: { id: "mobileTracker.next.detailNoWeight" },
+  finishSession: { id: "mobileTracker.finish.cta" },
+  finishSessionA11y: { id: "mobileTracker.finish.a11y" },
+  loading: { id: "mobileTracker.loading" },
+  sessionCompleteTitle: { id: "mobileTracker.complete.title" },
+  sessionCompleteBody: { id: "mobileTracker.complete.body" },
+  backHome: { id: "mobileTracker.backHome" },
+  conflictWithScope: { id: "mobileTracker.conflict.withScope" },
+  conflictWithPlan: { id: "mobileTracker.conflict.withPlan" },
+  conflictGeneric: { id: "mobileTracker.conflict.generic" },
+  errorStart: { id: "mobileTracker.error.start" },
+  errorLoad: { id: "mobileTracker.error.load" },
+  errorRecord: { id: "mobileTracker.error.record" },
+  errorComplete: { id: "mobileTracker.error.complete" },
+  retry: { id: "mobileTracker.retry" },
+});
 
 export type TrackerRouteParams = {
   sessionId?: string;
@@ -475,32 +526,31 @@ export default function WorkoutTrackerScreen({
       <View style={[styles.centered, { paddingTop: insets.top }]}>
         <StatusBar style="light" />
         <Text style={styles.stateText}>
-          {intl.formatMessage({ id: "mobileTracker.loading" })}
+          <FormattedMessage {...M.loading} />
         </Text>
       </View>
     );
   }
 
   if (conflict) {
-    const message =
+    const conflictMsg =
       conflict.activePlanName && conflict.activeDay !== null
-        ? intl.formatMessage(
-            { id: "mobileTracker.conflict.withScope" },
-            { planName: conflict.activePlanName, day: conflict.activeDay },
-          )
+        ? M.conflictWithScope
         : conflict.activePlanName
-          ? intl.formatMessage(
-              { id: "mobileTracker.conflict.withPlan" },
-              { planName: conflict.activePlanName },
-            )
-          : intl.formatMessage({ id: "mobileTracker.conflict.generic" });
+          ? M.conflictWithPlan
+          : M.conflictGeneric;
     return (
       <View style={[styles.centered, { paddingTop: insets.top }]}>
         <StatusBar style="light" />
-        <Text style={[styles.stateText, styles.conflictText]}>{message}</Text>
+        <Text style={[styles.stateText, styles.conflictText]}>
+          <FormattedMessage
+            {...conflictMsg}
+            values={{ planName: conflict.activePlanName, day: conflict.activeDay }}
+          />
+        </Text>
         <Pressable style={styles.secondaryBtn} onPress={goHome} accessibilityRole="button">
           <Text style={styles.secondaryBtnText}>
-            {intl.formatMessage({ id: "mobileTracker.backHome" })}
+            <FormattedMessage {...M.backHome} />
           </Text>
         </Pressable>
       </View>
@@ -508,17 +558,16 @@ export default function WorkoutTrackerScreen({
   }
 
   if (errorKey && !session) {
-    const message =
-      errorKey === "errorLoad"
-        ? intl.formatMessage({ id: "mobileTracker.error.load" })
-        : intl.formatMessage({ id: "mobileTracker.error.start" });
+    const errorMsg = errorKey === "errorLoad" ? M.errorLoad : M.errorStart;
     return (
       <View style={[styles.centered, { paddingTop: insets.top }]}>
         <StatusBar style="light" />
-        <Text style={[styles.stateText, styles.errorText]}>{message}</Text>
+        <Text style={[styles.stateText, styles.errorText]}>
+          <FormattedMessage {...errorMsg} />
+        </Text>
         <Pressable style={styles.secondaryBtn} onPress={loadSession} accessibilityRole="button">
           <Text style={styles.secondaryBtnText}>
-            {intl.formatMessage({ id: "mobileTracker.retry" })}
+            <FormattedMessage {...M.retry} />
           </Text>
         </Pressable>
       </View>
@@ -530,7 +579,7 @@ export default function WorkoutTrackerScreen({
       <View style={[styles.centered, { paddingTop: insets.top }]}>
         <StatusBar style="light" />
         <Text style={styles.stateText}>
-          {intl.formatMessage({ id: "mobileTracker.error.load" })}
+          <FormattedMessage {...M.errorLoad} />
         </Text>
       </View>
     );
@@ -541,14 +590,14 @@ export default function WorkoutTrackerScreen({
       <View style={[styles.centered, { paddingTop: insets.top }]}>
         <StatusBar style="light" />
         <Text style={styles.completeTitle}>
-          {intl.formatMessage({ id: "mobileTracker.complete.title" })}
+          <FormattedMessage {...M.sessionCompleteTitle} />
         </Text>
         <Text style={styles.stateText}>
-          {intl.formatMessage({ id: "mobileTracker.complete.body" })}
+          <FormattedMessage {...M.sessionCompleteBody} />
         </Text>
         <Pressable style={styles.secondaryBtn} onPress={goHome} accessibilityRole="button">
           <Text style={styles.secondaryBtnText}>
-            {intl.formatMessage({ id: "mobileTracker.backHome" })}
+            <FormattedMessage {...M.backHome} />
           </Text>
         </Pressable>
       </View>
@@ -560,7 +609,7 @@ export default function WorkoutTrackerScreen({
   const current = view.currentExercise;
   // Referenced twice below (accessibility label + visible text) — hoisted so
   // the elapsed timer's 1s re-render only formats it once per tick.
-  const elapsedLabel = intl.formatMessage({ id: "tracker.timerLabel" });
+  const elapsedLabel = intl.formatMessage(M.elapsedLabel);
   // The objective is the plan's FIXED target for this set — never the live
   // stepper `weight` (which the user mutates while logging). Source the weight
   // from the set's prescribed `weightKg`; fall back to a reps-only objective
@@ -570,14 +619,8 @@ export default function WorkoutTrackerScreen({
   const objective = !current
     ? ""
     : objectiveWeight !== undefined
-      ? intl.formatMessage(
-          { id: "mobileTracker.objective.withWeight" },
-          { weightKg: objectiveWeight, reps: objectiveReps },
-        )
-      : intl.formatMessage(
-          { id: "mobileTracker.objective.noWeight" },
-          { reps: objectiveReps },
-        );
+      ? intl.formatMessage(M.objectiveLabel, { weightKg: objectiveWeight, reps: objectiveReps })
+      : intl.formatMessage(M.objectiveLabelNoWeight, { reps: objectiveReps });
   const restColor =
     restRemaining !== null && restRemaining <= REST_LOW_THRESHOLD
       ? colors.accent
@@ -591,15 +634,16 @@ export default function WorkoutTrackerScreen({
     const firstSet = nextSets[0];
     const nextReps = firstSet?.targetReps ?? "—";
     if (firstSet?.weightKg !== undefined) {
-      nextDetail = intl.formatMessage(
-        { id: "mobileTracker.next.detail" },
-        { sets: nextSets.length, weightKg: firstSet.weightKg, reps: nextReps },
-      );
+      nextDetail = intl.formatMessage(M.nextDetail, {
+        sets: nextSets.length,
+        weightKg: firstSet.weightKg,
+        reps: nextReps,
+      });
     } else {
-      nextDetail = intl.formatMessage(
-        { id: "mobileTracker.next.detailNoWeight" },
-        { sets: nextSets.length, reps: nextReps },
-      );
+      nextDetail = intl.formatMessage(M.nextDetailNoWeight, {
+        sets: nextSets.length,
+        reps: nextReps,
+      });
     }
   }
 
@@ -616,7 +660,7 @@ export default function WorkoutTrackerScreen({
         <View style={styles.sessionHeader}>
           <View style={styles.sessionMeta}>
             <Text style={styles.sessionSubtitle}>
-              {intl.formatMessage({ id: "tracker.live.eyebrow" })}
+              <FormattedMessage {...M.sessionActiveEyebrow} />
             </Text>
             <Text style={styles.sessionTitle} numberOfLines={1}>
               {current?.title ?? ""}
@@ -637,9 +681,7 @@ export default function WorkoutTrackerScreen({
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel={
-                paused
-                  ? intl.formatMessage({ id: "tracker.resumeLabel" })
-                  : intl.formatMessage({ id: "tracker.pauseLabel" })
+                paused ? intl.formatMessage(M.resumeLabel) : intl.formatMessage(M.pauseLabel)
               }
             >
               {paused ? <PlayIcon /> : <PauseIcon />}
@@ -651,10 +693,10 @@ export default function WorkoutTrackerScreen({
         <View style={styles.progressArea}>
           <View style={styles.progressInfo}>
             <Text style={styles.progressInfoLabel}>
-              {intl.formatMessage(
-                { id: "tracker.progress.label" },
-                { n: view.currentExerciseNumber, m: view.exerciseCount },
-              )}
+              <FormattedMessage
+                {...M.progressLabel}
+                values={{ n: view.currentExerciseNumber, m: view.exerciseCount }}
+              />
             </Text>
             <Text style={styles.progressInfoCount}>{view.percent}%</Text>
           </View>
@@ -662,19 +704,16 @@ export default function WorkoutTrackerScreen({
             style={styles.segBar}
             accessibilityRole="progressbar"
             accessibilityValue={{
-              text: intl.formatMessage(
-                { id: "tracker.progress.valuetext" },
-                {
-                  n: view.currentExerciseNumber,
-                  m: view.exerciseCount,
-                  percent: view.percent,
-                },
-              ),
+              text: intl.formatMessage(M.progressValueText, {
+                n: view.currentExerciseNumber,
+                m: view.exerciseCount,
+                percent: view.percent,
+              }),
             }}
-            accessibilityLabel={intl.formatMessage(
-              { id: "mobileTracker.progress.a11y" },
-              { current: view.currentExerciseNumber, total: view.exerciseCount },
-            )}
+            accessibilityLabel={intl.formatMessage(M.progressA11y, {
+              current: view.currentExerciseNumber,
+              total: view.exerciseCount,
+            })}
           >
             {segments.map((state, i) => (
               <View
@@ -693,39 +732,39 @@ export default function WorkoutTrackerScreen({
         <View style={styles.exerciseCard}>
           <View style={styles.cardTopAccent} />
           <Text style={styles.excardEyebrow}>
-            {intl.formatMessage({ id: "tracker.currentExercise" })}
+            <FormattedMessage {...M.currentExerciseEyebrow} />
           </Text>
           <Text style={styles.excardName}>{current?.title ?? ""}</Text>
           <Text style={styles.excardSetInfo}>
-            {intl.formatMessage(
-              { id: "mobileTracker.set.info" },
-              {
+            <FormattedMessage
+              {...M.setInfo}
+              values={{
                 setNumber: view.currentSetNumber,
                 setTotal: view.setsInCurrentExercise,
                 targetLabel: objective,
-              },
-            )}
+              }}
+            />
           </Text>
 
           <View style={styles.steppersRow}>
             <Stepper
-              label={intl.formatMessage({ id: "tracker.load.label" })}
+              label={intl.formatMessage(M.loadLabel)}
               value={formatWeight(weight)}
-              unit={intl.formatMessage({ id: "tracker.unit.kg" })}
+              unit={intl.formatMessage(M.loadUnit)}
               onDecrement={() => setWeight((w) => stepWeight(w, -1))}
               onIncrement={() => setWeight((w) => stepWeight(w, 1))}
-              decrementLabel={intl.formatMessage({ id: "tracker.weight.downLabel" })}
-              incrementLabel={intl.formatMessage({ id: "tracker.weight.upLabel" })}
+              decrementLabel={intl.formatMessage(M.decreaseLoad)}
+              incrementLabel={intl.formatMessage(M.increaseLoad)}
               disabled={isResting}
             />
             <Stepper
-              label={intl.formatMessage({ id: "tracker.reps.label" })}
+              label={intl.formatMessage(M.repsLabel)}
               value={String(reps)}
-              unit={intl.formatMessage({ id: "tracker.unit.reps" })}
+              unit={intl.formatMessage(M.repsUnit)}
               onDecrement={() => setReps((r) => stepReps(r, -1))}
               onIncrement={() => setReps((r) => stepReps(r, 1))}
-              decrementLabel={intl.formatMessage({ id: "mobileTracker.reps.decrease" })}
-              incrementLabel={intl.formatMessage({ id: "mobileTracker.reps.increase" })}
+              decrementLabel={intl.formatMessage(M.decreaseReps)}
+              incrementLabel={intl.formatMessage(M.increaseReps)}
               disabled={isResting}
             />
           </View>
@@ -739,21 +778,20 @@ export default function WorkoutTrackerScreen({
             onPress={handleCompleteSet}
             disabled={isResting || submitting}
             accessibilityRole="button"
-            accessibilityLabel={intl.formatMessage(
-              { id: "mobileTracker.completeSet.a11y" },
-              { setNumber: view.currentSetNumber },
-            )}
+            accessibilityLabel={intl.formatMessage(M.completeSetA11y, {
+              setNumber: view.currentSetNumber,
+            })}
             accessibilityState={{ disabled: isResting || submitting }}
           >
             <CheckIcon />
             <Text style={styles.btnCompleteText}>
-              {intl.formatMessage({ id: "tracker.completeSet.cta" })}
+              <FormattedMessage {...M.completeSet} />
             </Text>
           </Pressable>
 
           {errorKey === "errorRecord" && (
             <Text style={styles.inlineError} accessibilityRole="alert">
-              {intl.formatMessage({ id: "mobileTracker.error.record" })}
+              <FormattedMessage {...M.errorRecord} />
             </Text>
           )}
         </View>
@@ -762,18 +800,18 @@ export default function WorkoutTrackerScreen({
         {isResting && (() => {
           // Same skip label backs 3 spots in this card (top-right shortcut +
           // the bottom button's a11y label and its visible text) — one call.
-          const skipRestLabel = intl.formatMessage({ id: "tracker.rest.skipLabel" });
+          const skipRestLabel = intl.formatMessage(M.skipRest);
           return (
             <View
               style={styles.restCard}
-              accessibilityLabel={intl.formatMessage({ id: "tracker.rest.aria" })}
+              accessibilityLabel={intl.formatMessage(M.restA11y)}
               accessibilityLiveRegion="polite"
             >
               <View style={styles.restHeaderRow}>
                 <View style={styles.restHeading}>
                   <View style={styles.restHeadingDot} />
                   <Text style={styles.restHeadingText}>
-                    {intl.formatMessage({ id: "tracker.rest.active" })}
+                    <FormattedMessage {...M.restActive} />
                   </Text>
                 </View>
                 <Pressable
@@ -784,7 +822,7 @@ export default function WorkoutTrackerScreen({
                   accessibilityLabel={skipRestLabel}
                 >
                   <Text style={styles.restSkipBtnTopText}>
-                    {intl.formatMessage({ id: "tracker.rest.skip" })}
+                    <FormattedMessage {...M.skip} />
                   </Text>
                 </Pressable>
               </View>
@@ -800,7 +838,7 @@ export default function WorkoutTrackerScreen({
                     {formatCountdown(restRemaining ?? 0)}
                   </Text>
                   <Text style={styles.ringLabelSm}>
-                    {intl.formatMessage({ id: "tracker.rest.label" })}
+                    <FormattedMessage {...M.restLabelSm} />
                   </Text>
                 </View>
               </View>
@@ -813,10 +851,10 @@ export default function WorkoutTrackerScreen({
                   ]}
                   onPress={handleAddRestTime}
                   accessibilityRole="button"
-                  accessibilityLabel={intl.formatMessage({ id: "tracker.rest.addLabel" })}
+                  accessibilityLabel={intl.formatMessage(M.addTimeA11y)}
                 >
                   <Text style={styles.btnAddTimeText}>
-                    {intl.formatMessage({ id: "tracker.rest.addTime" })}
+                    <FormattedMessage {...M.addTime} />
                   </Text>
                 </Pressable>
                 <Pressable
@@ -835,7 +873,7 @@ export default function WorkoutTrackerScreen({
         {/* NEXT PREVIEW */}
         {next && (() => {
           // Used both as the card's a11y label and its visible eyebrow text.
-          const nextEyebrow = intl.formatMessage({ id: "tracker.next.heading" });
+          const nextEyebrow = intl.formatMessage(M.nextEyebrow);
           return (
             <View style={styles.nextPreview} accessibilityLabel={nextEyebrow}>
               <View style={styles.nextThumb}>
@@ -860,19 +898,19 @@ export default function WorkoutTrackerScreen({
             onPress={handleFinish}
             disabled={submitting}
             accessibilityRole="button"
-            accessibilityLabel={intl.formatMessage({ id: "mobileTracker.finish.a11y" })}
+            accessibilityLabel={intl.formatMessage(M.finishSessionA11y)}
             accessibilityState={{ disabled: submitting }}
           >
             <StopIcon />
             <Text style={styles.btnFinishText}>
-              {intl.formatMessage({ id: "mobileTracker.finish.cta" })}
+              <FormattedMessage {...M.finishSession} />
             </Text>
           </Pressable>
         </View>
 
         {errorKey === "errorComplete" && (
           <Text style={[styles.inlineError, styles.centeredError]} accessibilityRole="alert">
-            {intl.formatMessage({ id: "mobileTracker.error.complete" })}
+            <FormattedMessage {...M.errorComplete} />
           </Text>
         )}
       </ScrollView>
