@@ -38,14 +38,14 @@ Ask the user: chain strategy (stacked-to-main vs feature-branch-chain) before `s
 
 ## Phase 1: Contracts & Domain (Foundation — shared by slices 3 & 4)
 
-- [ ] 1.1 RED: Write failing tests for `PendingMutation`, `WorkoutSessionSnapshot`, `ConnectivityMonitor`, `WorkoutHistoryEntry`, `WorkoutHistoryQuery`, `FlushErrorCode` type contracts in `packages/contracts/src/index.ts` (compile-level/type tests)
-- [ ] 1.2 GREEN: Add DTOs/types to `packages/contracts/src/index.ts` per design Interfaces section
-- [ ] 1.3 RED: Write failing Vitest tests for `collapseQueue` (clientSeq-keyed LWW, complete-ordered-last) in `packages/domain/src/offline/__tests__/`
-- [ ] 1.4 GREEN: Implement `collapseQueue` in `packages/domain/src/offline/`
-- [ ] 1.5 RED: Write failing tests for `computeSessionVolume`, `computeAverageRpe`, `computeVolumeTrend`
-- [ ] 1.6 GREEN: Implement `computeSessionVolume`, `computeAverageRpe`, `computeVolumeTrend` in `packages/domain/src/offline/`
-- [ ] 1.7 REFACTOR: Extract shared helpers, export via `packages/domain/src/plan/index.ts` barrel
-- [ ] 1.8 Run `pnpm architecture` to confirm no deps-guard violation (idb/AsyncStorage/NetInfo not yet imported at this phase — sanity baseline)
+- [x] 1.1 RED: Write failing tests for `PendingMutation`, `WorkoutSessionSnapshot`, `ConnectivityMonitor`, `WorkoutHistoryEntry`, `WorkoutHistoryQuery`, `FlushErrorCode` type contracts in `packages/contracts/src/index.ts` (compile-level/type tests)
+- [x] 1.2 GREEN: Add DTOs/types to `packages/contracts/src/index.ts` per design Interfaces section
+- [x] 1.3 RED: Write failing Vitest tests for `collapseQueue` (clientSeq-keyed LWW, complete-ordered-last) in `packages/domain/src/offline/__tests__/`
+- [x] 1.4 GREEN: Implement `collapseQueue` in `packages/domain/src/offline/`
+- [x] 1.5 RED: Write failing tests for `computeSessionVolume`, `computeAverageRpe`, `computeVolumeTrend`
+- [x] 1.6 GREEN: Implement `computeSessionVolume`, `computeAverageRpe`, `computeVolumeTrend` in `packages/domain/src/offline/`
+- [x] 1.7 REFACTOR: Extract shared helpers, export via `packages/domain/src/offline/index.ts` barrel (new offline barrel, wired into `packages/domain/src/index.ts` and `package.json` `./offline` export condition)
+- [x] 1.8 Run `pnpm architecture` to confirm no deps-guard violation (idb/AsyncStorage/NetInfo not yet imported at this phase — sanity baseline)
 
 ## Phase 2: Idempotent Complete (Slice 1 — PR 1)
 
