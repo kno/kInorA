@@ -28,7 +28,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AppState, Pressable, ScrollView, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -36,7 +36,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import type { WorkoutSessionRecord } from "@kinora/contracts";
 
-import { colors, fonts, radius, spacing } from "../theme/tokens";
+import { colors, spacing } from "../theme/tokens";
 import {
   completeWorkoutSession,
   getWorkoutSession,
@@ -62,6 +62,7 @@ import { RestCard } from "./tracker/RestCard";
 import { NextExercisePreview } from "./tracker/NextExercisePreview";
 import { FinishRow } from "./tracker/FinishRow";
 import { deleteSessionToken } from "../auth/session-storage";
+import { styles } from "./WorkoutTrackerScreen.styles";
 
 export type TrackerRouteParams = {
   sessionId?: string;
@@ -557,46 +558,3 @@ export default function WorkoutTrackerScreen({
     </View>
   );
 }
-
-/* ──────────────────────────────── Styles ──────────────────────────────── */
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  centered: {
-    flex: 1,
-    backgroundColor: colors.bg,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing[4],
-    gap: spacing[3],
-  },
-  stateText: {
-    color: colors.muted,
-    fontFamily: fonts.body,
-    fontSize: 15,
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  conflictText: { color: colors.fg },
-  errorText: { color: colors.danger },
-  completeTitle: {
-    color: colors.fg,
-    fontFamily: fonts.displayBold,
-    fontSize: 26,
-    letterSpacing: -0.5,
-    textAlign: "center",
-  },
-
-  /* Shared secondary button (state screens) */
-  secondaryBtn: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
-    borderRadius: radius.btn,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  secondaryBtnText: { color: colors.fg, fontSize: 15, fontFamily: fonts.bodySemiBold },
-});
