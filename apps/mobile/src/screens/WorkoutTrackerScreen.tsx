@@ -9,13 +9,16 @@
  *
  * Architecture: all math/branching lives in `tracker/tracker-logic.ts` (pure,
  * unit-tested) and the data layer in `api/workout-session.ts`; this component
- * is the thin container that wires them to state, timers, and the API — the
- * same "tested pure core + thin glue" pattern used across the mobile app.
+ * is the thin CONTAINER that wires them to state, timers, and the API, then
+ * composes the presentational children in `tracker/` (SessionHeader,
+ * SessionProgress, ExerciseCard, RestCard, NextExercisePreview, FinishRow) —
+ * the same "tested pure core + thin glue" pattern used across the mobile app
+ * and mirroring the web tracker's decomposition.
  *
- * Copy comes from the shared `@kinora/i18n` catalog via `useIntl()` — 22 keys
- * reuse the web `tracker.*` namespace verbatim, 23 reuse the mobile-only
- * `mobileTracker.*` namespace authored in slice 9 (see `copy/__tests__/
- * tracker-migration.test.ts` for the full old-copy → catalog-key mapping).
+ * Copy comes from the shared `@kinora/i18n` catalog via `useIntl()`: each
+ * presentational child reads its own ids from `tracker/messages.ts`; the
+ * container only formats the values it derives (the `objective` and next-
+ * `detail` strings, which depend on domain logic) and the non-session states.
  */
 
 import React, {
@@ -25,25 +28,10 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  AppState,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { FormattedMessage, useIntl } from "react-intl";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, {
-  Circle,
-  Line,
-  Path,
-  Polygon,
-  Polyline,
-  Rect,
-} from "react-native-svg";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import type { WorkoutSessionRecord } from "@kinora/contracts";
@@ -59,9 +47,6 @@ import {
   computeElapsedSeconds,
   computeRestRemaining,
   deriveTrackerView,
-  formatCountdown,
-  formatElapsed,
-  formatWeight,
   objectiveWeightFor,
   orderedSets,
   seedFromSet,
@@ -69,8 +54,13 @@ import {
   stepReps,
   stepWeight,
 } from "./tracker/tracker-logic";
-import { RestRing } from "./tracker/RestRing";
 import { messages as M } from "./tracker/messages";
+import { SessionHeader } from "./tracker/SessionHeader";
+import { SessionProgress } from "./tracker/SessionProgress";
+import { ExerciseCard } from "./tracker/ExerciseCard";
+import { RestCard } from "./tracker/RestCard";
+import { NextExercisePreview } from "./tracker/NextExercisePreview";
+import { FinishRow } from "./tracker/FinishRow";
 import { deleteSessionToken } from "../auth/session-storage";
 
 export type TrackerRouteParams = {
@@ -88,101 +78,6 @@ const DEFAULT_REST_SECONDS = 90;
 const REST_LOW_THRESHOLD = 15;
 
 type ConflictState = { activePlanName?: string; activeDay: number | null };
-
-/* ─────────────────────────── Inline SVG icons ─────────────────────────── */
-
-const PauseIcon = () => (
-  <Svg width={16} height={16} viewBox="0 0 16 16">
-    <Rect x={3} y={2} width={4} height={12} rx={1.5} fill={colors.muted} />
-    <Rect x={9} y={2} width={4} height={12} rx={1.5} fill={colors.muted} />
-  </Svg>
-);
-const PlayIcon = () => (
-  <Svg width={16} height={16} viewBox="0 0 16 16">
-    <Polygon points="3,2 14,8 3,14" fill={colors.muted} />
-  </Svg>
-);
-const MinusIcon = () => (
-  <Svg width={16} height={16} viewBox="0 0 16 16">
-    <Line x1={3} y1={8} x2={13} y2={8} stroke={colors.fg} strokeWidth={2.2} strokeLinecap="round" />
-  </Svg>
-);
-const PlusIcon = () => (
-  <Svg width={16} height={16} viewBox="0 0 16 16">
-    <Line x1={8} y1={3} x2={8} y2={13} stroke={colors.fg} strokeWidth={2.2} strokeLinecap="round" />
-    <Line x1={3} y1={8} x2={13} y2={8} stroke={colors.fg} strokeWidth={2.2} strokeLinecap="round" />
-  </Svg>
-);
-const CheckIcon = () => (
-  <Svg width={18} height={18} viewBox="0 0 18 18">
-    <Polyline points="3,9 7.5,13.5 15,4" fill="none" stroke={colors.accentFg} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
-const PersonIcon = () => (
-  <Svg width={22} height={22} viewBox="0 0 22 22">
-    <Circle cx={11} cy={7} r={3} fill="none" stroke={colors.muted} strokeWidth={1.8} />
-    <Path d="M5 19c0-3.3 2.7-6 6-6s6 2.7 6 6" fill="none" stroke={colors.muted} strokeWidth={1.8} strokeLinecap="round" />
-  </Svg>
-);
-const ChevronIcon = () => (
-  <Svg width={18} height={18} viewBox="0 0 18 18">
-    <Polyline points="7,4 13,9 7,14" fill="none" stroke={colors.muted} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
-const StopIcon = () => (
-  <Svg width={15} height={15} viewBox="0 0 15 15">
-    <Rect x={2} y={2} width={11} height={11} rx={2} fill="none" stroke={colors.danger} strokeWidth={2} />
-  </Svg>
-);
-
-/* ──────────────────────────────── Stepper ─────────────────────────────── */
-
-function Stepper(props: {
-  label: string;
-  value: string;
-  unit: string;
-  onDecrement: () => void;
-  onIncrement: () => void;
-  decrementLabel: string;
-  incrementLabel: string;
-  disabled?: boolean;
-}) {
-  return (
-    <View style={styles.stepperGroup}>
-      <Text style={styles.stepperLabel}>{props.label}</Text>
-      <View style={styles.stepperControls}>
-        <Pressable
-          style={({ pressed }) => [styles.stepBtn, pressed && styles.stepBtnPressed]}
-          onPress={props.onDecrement}
-          disabled={props.disabled}
-          hitSlop={6}
-          accessibilityRole="button"
-          accessibilityLabel={props.decrementLabel}
-          accessibilityState={{ disabled: !!props.disabled }}
-        >
-          <MinusIcon />
-        </Pressable>
-        <View style={styles.stepValueWrap}>
-          <Text style={styles.stepValue}>{props.value}</Text>
-          <Text style={styles.stepUnit}>{props.unit}</Text>
-        </View>
-        <Pressable
-          style={({ pressed }) => [styles.stepBtn, pressed && styles.stepBtnPressed]}
-          onPress={props.onIncrement}
-          disabled={props.disabled}
-          hitSlop={6}
-          accessibilityRole="button"
-          accessibilityLabel={props.incrementLabel}
-          accessibilityState={{ disabled: !!props.disabled }}
-        >
-          <PlusIcon />
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-/* ───────────────────────────────── Screen ─────────────────────────────── */
 
 export default function WorkoutTrackerScreen({
   navigation,
@@ -387,6 +282,15 @@ export default function WorkoutTrackerScreen({
     reconcileRest();
   }, [reconcileElapsed, reconcileRest]);
 
+  const handleStepWeight = useCallback(
+    (direction: 1 | -1) => setWeight((w) => stepWeight(w, direction)),
+    [],
+  );
+  const handleStepReps = useCallback(
+    (direction: 1 | -1) => setReps((r) => stepReps(r, direction)),
+    [],
+  );
+
   const handleCompleteSet = useCallback(async () => {
     if (!session || !view?.currentSet || submitting) return;
     const setId = view.currentSet.id;
@@ -557,9 +461,6 @@ export default function WorkoutTrackerScreen({
   /* ── Active session render ── */
 
   const current = view.currentExercise;
-  // Referenced twice below (accessibility label + visible text) — hoisted so
-  // the elapsed timer's 1s re-render only formats it once per tick.
-  const elapsedLabel = intl.formatMessage(M.elapsedLabel);
   // The objective is the plan's FIXED target for this set — never the live
   // stepper `weight` (which the user mutates while logging). Source the weight
   // from the set's prescribed `weightKg`; fall back to a reps-only objective
@@ -606,263 +507,52 @@ export default function WorkoutTrackerScreen({
           paddingBottom: insets.bottom + spacing[5],
         }}
       >
-        {/* SESSION HEADER */}
-        <View style={styles.sessionHeader}>
-          <View style={styles.sessionMeta}>
-            <Text style={styles.sessionSubtitle}>
-              <FormattedMessage {...M.sessionActiveEyebrow} />
-            </Text>
-            <Text style={styles.sessionTitle} numberOfLines={1}>
-              {current?.title ?? ""}
-            </Text>
-          </View>
-          <View style={styles.sessionRight}>
-            <View
-              style={styles.elapsedTimer}
-              accessibilityLiveRegion="polite"
-              accessibilityLabel={`${elapsedLabel} ${formatElapsed(elapsed)}`}
-            >
-              <Text style={styles.elapsedLabel}>{elapsedLabel}</Text>
-              <Text style={styles.elapsedValue}>{formatElapsed(elapsed)}</Text>
-            </View>
-            <Pressable
-              style={({ pressed }) => [styles.pauseBtn, pressed && styles.pauseBtnPressed]}
-              onPress={handleTogglePause}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={
-                paused ? intl.formatMessage(M.resumeLabel) : intl.formatMessage(M.pauseLabel)
-              }
-            >
-              {paused ? <PlayIcon /> : <PauseIcon />}
-            </Pressable>
-          </View>
-        </View>
+        <SessionHeader
+          title={current?.title ?? ""}
+          elapsed={elapsed}
+          paused={paused}
+          onTogglePause={handleTogglePause}
+        />
 
-        {/* PROGRESS */}
-        <View style={styles.progressArea}>
-          <View style={styles.progressInfo}>
-            <Text style={styles.progressInfoLabel}>
-              <FormattedMessage
-                {...M.progressLabel}
-                values={{ n: view.currentExerciseNumber, m: view.exerciseCount }}
-              />
-            </Text>
-            <Text style={styles.progressInfoCount}>{view.percent}%</Text>
-          </View>
-          <View
-            style={styles.segBar}
-            accessibilityRole="progressbar"
-            accessibilityValue={{
-              text: intl.formatMessage(M.progressValueText, {
-                n: view.currentExerciseNumber,
-                m: view.exerciseCount,
-                percent: view.percent,
-              }),
-            }}
-            accessibilityLabel={intl.formatMessage(M.progressA11y, {
-              current: view.currentExerciseNumber,
-              total: view.exerciseCount,
-            })}
-          >
-            {segments.map((state, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.seg,
-                  state === "done" && styles.segDone,
-                  state === "active" && styles.segActive,
-                ]}
-              />
-            ))}
-          </View>
-        </View>
+        <SessionProgress
+          currentExerciseNumber={view.currentExerciseNumber}
+          exerciseCount={view.exerciseCount}
+          percent={view.percent}
+          segments={segments}
+        />
 
-        {/* CURRENT EXERCISE CARD */}
-        <View style={styles.exerciseCard}>
-          <View style={styles.cardTopAccent} />
-          <Text style={styles.excardEyebrow}>
-            <FormattedMessage {...M.currentExerciseEyebrow} />
-          </Text>
-          <Text style={styles.excardName}>{current?.title ?? ""}</Text>
-          <Text style={styles.excardSetInfo}>
-            <FormattedMessage
-              {...M.setInfo}
-              values={{
-                setNumber: view.currentSetNumber,
-                setTotal: view.setsInCurrentExercise,
-                targetLabel: objective,
-              }}
-            />
-          </Text>
+        <ExerciseCard
+          title={current?.title ?? ""}
+          currentSetNumber={view.currentSetNumber}
+          setsInCurrentExercise={view.setsInCurrentExercise}
+          objective={objective}
+          weight={weight}
+          reps={reps}
+          onStepWeight={handleStepWeight}
+          onStepReps={handleStepReps}
+          onCompleteSet={handleCompleteSet}
+          isResting={isResting}
+          submitting={submitting}
+          showRecordError={errorKey === "errorRecord"}
+        />
 
-          <View style={styles.steppersRow}>
-            <Stepper
-              label={intl.formatMessage(M.loadLabel)}
-              value={formatWeight(weight)}
-              unit={intl.formatMessage(M.loadUnit)}
-              onDecrement={() => setWeight((w) => stepWeight(w, -1))}
-              onIncrement={() => setWeight((w) => stepWeight(w, 1))}
-              decrementLabel={intl.formatMessage(M.decreaseLoad)}
-              incrementLabel={intl.formatMessage(M.increaseLoad)}
-              disabled={isResting}
-            />
-            <Stepper
-              label={intl.formatMessage(M.repsLabel)}
-              value={String(reps)}
-              unit={intl.formatMessage(M.repsUnit)}
-              onDecrement={() => setReps((r) => stepReps(r, -1))}
-              onIncrement={() => setReps((r) => stepReps(r, 1))}
-              decrementLabel={intl.formatMessage(M.decreaseReps)}
-              incrementLabel={intl.formatMessage(M.increaseReps)}
-              disabled={isResting}
-            />
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.btnComplete,
-              (isResting || submitting) && styles.btnCompleteDisabled,
-              pressed && styles.btnCompletePressed,
-            ]}
-            onPress={handleCompleteSet}
-            disabled={isResting || submitting}
-            accessibilityRole="button"
-            accessibilityLabel={intl.formatMessage(M.completeSetA11y, {
-              setNumber: view.currentSetNumber,
-            })}
-            accessibilityState={{ disabled: isResting || submitting }}
-          >
-            <CheckIcon />
-            <Text style={styles.btnCompleteText}>
-              <FormattedMessage {...M.completeSet} />
-            </Text>
-          </Pressable>
-
-          {errorKey === "errorRecord" && (
-            <Text style={styles.inlineError} accessibilityRole="alert">
-              <FormattedMessage {...M.errorRecord} />
-            </Text>
-          )}
-        </View>
-
-        {/* REST TIMER CARD */}
-        {isResting && (() => {
-          // Same skip label backs 3 spots in this card (top-right shortcut +
-          // the bottom button's a11y label and its visible text) — one call.
-          const skipRestLabel = intl.formatMessage(M.skipRest);
-          return (
-            <View
-              style={styles.restCard}
-              accessibilityLabel={intl.formatMessage(M.restA11y)}
-              accessibilityLiveRegion="polite"
-            >
-              <View style={styles.restHeaderRow}>
-                <View style={styles.restHeading}>
-                  <View style={styles.restHeadingDot} />
-                  <Text style={styles.restHeadingText}>
-                    <FormattedMessage {...M.restActive} />
-                  </Text>
-                </View>
-                <Pressable
-                  style={styles.restSkipBtnTop}
-                  onPress={handleSkipRest}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel={skipRestLabel}
-                >
-                  <Text style={styles.restSkipBtnTopText}>
-                    <FormattedMessage {...M.skip} />
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.ringWrap}>
-                <RestRing
-                  remaining={restRemaining ?? 0}
-                  duration={restDuration}
-                  strokeColor={restColor}
-                />
-                <View style={styles.ringCenter} pointerEvents="none">
-                  <Text style={[styles.ringTime, { color: restColor }]}>
-                    {formatCountdown(restRemaining ?? 0)}
-                  </Text>
-                  <Text style={styles.ringLabelSm}>
-                    <FormattedMessage {...M.restLabelSm} />
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.restActions}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.btnAddTime,
-                    pressed && styles.btnAddTimePressed,
-                  ]}
-                  onPress={handleAddRestTime}
-                  accessibilityRole="button"
-                  accessibilityLabel={intl.formatMessage(M.addTimeA11y)}
-                >
-                  <Text style={styles.btnAddTimeText}>
-                    <FormattedMessage {...M.addTime} />
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [styles.btnSkip, pressed && styles.btnSkipPressed]}
-                  onPress={handleSkipRest}
-                  accessibilityRole="button"
-                  accessibilityLabel={skipRestLabel}
-                >
-                  <Text style={styles.btnSkipText}>{skipRestLabel}</Text>
-                </Pressable>
-              </View>
-            </View>
-          );
-        })()}
-
-        {/* NEXT PREVIEW */}
-        {next && (() => {
-          // Used both as the card's a11y label and its visible eyebrow text.
-          const nextEyebrow = intl.formatMessage(M.nextEyebrow);
-          return (
-            <View style={styles.nextPreview} accessibilityLabel={nextEyebrow}>
-              <View style={styles.nextThumb}>
-                <PersonIcon />
-              </View>
-              <View style={styles.nextInfo}>
-                <Text style={styles.nextEyebrow}>{nextEyebrow}</Text>
-                <Text style={styles.nextName} numberOfLines={1}>
-                  {next.title}
-                </Text>
-                <Text style={styles.nextDetail}>{nextDetail}</Text>
-              </View>
-              <ChevronIcon />
-            </View>
-          );
-        })()}
-
-        {/* FINISH ROW */}
-        <View style={styles.finishRow}>
-          <Pressable
-            style={({ pressed }) => [styles.btnFinish, pressed && styles.btnFinishPressed]}
-            onPress={handleFinish}
-            disabled={submitting}
-            accessibilityRole="button"
-            accessibilityLabel={intl.formatMessage(M.finishSessionA11y)}
-            accessibilityState={{ disabled: submitting }}
-          >
-            <StopIcon />
-            <Text style={styles.btnFinishText}>
-              <FormattedMessage {...M.finishSession} />
-            </Text>
-          </Pressable>
-        </View>
-
-        {errorKey === "errorComplete" && (
-          <Text style={[styles.inlineError, styles.centeredError]} accessibilityRole="alert">
-            <FormattedMessage {...M.errorComplete} />
-          </Text>
+        {isResting && (
+          <RestCard
+            restRemaining={restRemaining ?? 0}
+            restDuration={restDuration}
+            restColor={restColor}
+            onAddTime={handleAddRestTime}
+            onSkip={handleSkipRest}
+          />
         )}
+
+        {next && <NextExercisePreview title={next.title} detail={nextDetail} />}
+
+        <FinishRow
+          onFinish={handleFinish}
+          submitting={submitting}
+          showCompleteError={errorKey === "errorComplete"}
+        />
       </ScrollView>
     </View>
   );
@@ -896,295 +586,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     textAlign: "center",
   },
-
-  /* Session header */
-  sessionHeader: {
-    paddingHorizontal: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing[2],
-  },
-  sessionMeta: { flexDirection: "column", gap: 2, flexShrink: 1 },
-  sessionSubtitle: { fontSize: 12, color: colors.muted, fontFamily: fonts.bodyMedium },
-  sessionTitle: {
-    fontFamily: fonts.display,
-    fontSize: 18,
-    color: colors.fg,
-    letterSpacing: -0.4,
-  },
-  sessionRight: { flexDirection: "row", alignItems: "center", gap: 10 },
-  elapsedTimer: { flexDirection: "column", alignItems: "flex-end" },
-  elapsedLabel: {
-    fontSize: 10,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    color: colors.muted,
-    fontFamily: fonts.bodySemiBold,
-  },
-  elapsedValue: {
-    fontFamily: fonts.displayBold,
-    fontSize: 22,
-    color: colors.fg,
-    letterSpacing: -0.4,
-    fontVariant: ["tabular-nums"],
-  },
-  pauseBtn: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  pauseBtnPressed: { backgroundColor: colors.surface2 },
-
-  /* Progress */
-  progressArea: { paddingHorizontal: 20, paddingTop: spacing[3] },
-  progressInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: spacing[1],
-  },
-  progressInfoLabel: { fontSize: 13, fontFamily: fonts.bodySemiBold, color: colors.fg },
-  progressInfoCount: {
-    fontSize: 13,
-    color: colors.muted,
-    fontFamily: fonts.display,
-    fontVariant: ["tabular-nums"],
-  },
-  segBar: { flexDirection: "row", gap: 4, height: 5 },
-  seg: { flex: 1, borderRadius: radius.pill, backgroundColor: colors.surface2 },
-  segDone: { backgroundColor: colors.accent },
-  segActive: { backgroundColor: colors.accentActive },
-
-  /* Exercise card */
-  exerciseCard: {
-    marginHorizontal: 16,
-    marginTop: spacing[3],
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.cardLg,
-    padding: 20,
-    overflow: "hidden",
-  },
-  cardTopAccent: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: colors.accent,
-  },
-  excardEyebrow: {
-    fontSize: 11,
-    letterSpacing: 1.6,
-    textTransform: "uppercase",
-    color: colors.muted,
-    fontFamily: fonts.bodySemiBold,
-    marginBottom: 6,
-  },
-  excardName: {
-    fontFamily: fonts.displayBold,
-    fontSize: 26,
-    color: colors.fg,
-    letterSpacing: -0.5,
-    marginBottom: 4,
-  },
-  excardSetInfo: { fontSize: 13, color: colors.muted, fontFamily: fonts.body, marginBottom: 20 },
-
-  steppersRow: { flexDirection: "row", gap: spacing[2], marginBottom: 20 },
-  stepperGroup: {
-    flex: 1,
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing[2],
-    gap: 6,
-  },
-  stepperLabel: {
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    color: colors.muted,
-    fontFamily: fonts.bodySemiBold,
-    textAlign: "center",
-  },
-  stepperControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 4,
-  },
-  stepBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepBtnPressed: { backgroundColor: colors.border },
-  stepValueWrap: { flex: 1, alignItems: "center" },
-  stepValue: {
-    fontFamily: fonts.displayBold,
-    fontSize: 28,
-    color: colors.fg,
-    letterSpacing: -0.5,
-    fontVariant: ["tabular-nums"],
-  },
-  stepUnit: { fontSize: 13, color: colors.muted, fontFamily: fonts.body },
-
-  btnComplete: {
-    width: "100%",
-    height: 54,
-    backgroundColor: colors.accent,
-    borderRadius: radius.md,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing[1],
-  },
-  btnCompletePressed: { opacity: 0.92 },
-  btnCompleteDisabled: { opacity: 0.4 },
-  btnCompleteText: { color: colors.accentFg, fontSize: 16, fontFamily: fonts.bodyBold },
-
-  inlineError: { color: colors.danger, fontFamily: fonts.bodyMedium, fontSize: 13, marginTop: spacing[2] },
-  centeredError: { textAlign: "center", marginHorizontal: 16 },
-
-  /* Rest card */
-  restCard: {
-    marginHorizontal: 16,
-    marginTop: spacing[2],
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.cardLg,
-    padding: 20,
-    alignItems: "center",
-    gap: spacing[3],
-  },
-  restHeaderRow: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  restHeading: { flexDirection: "row", alignItems: "center", gap: 6 },
-  restHeadingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.warning },
-  restHeadingText: { fontSize: 14, fontFamily: fonts.bodySemiBold, color: colors.fg },
-  restSkipBtnTop: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
-  restSkipBtnTopText: { fontSize: 13, fontFamily: fonts.bodySemiBold, color: colors.muted },
-
-  ringWrap: { width: 130, height: 130, alignItems: "center", justifyContent: "center" },
-  ringCenter: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 2,
-  },
-  ringTime: {
-    fontFamily: fonts.displayBold,
-    fontSize: 32,
-    letterSpacing: -0.5,
-    fontVariant: ["tabular-nums"],
-  },
-  ringLabelSm: {
-    fontSize: 11,
-    color: colors.muted,
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    fontFamily: fonts.bodySemiBold,
-  },
-
-  restActions: { flexDirection: "row", gap: 10, width: "100%" },
-  btnAddTime: {
-    flex: 1,
-    height: 44,
-    backgroundColor: colors.warningTint,
-    borderWidth: 1,
-    borderColor: colors.warningBorder,
-    borderRadius: radius.btn,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  btnAddTimePressed: { backgroundColor: colors.warningTintHover },
-  btnAddTimeText: { color: colors.warning, fontSize: 14, fontFamily: fonts.bodySemiBold },
-  btnSkip: {
-    flex: 1,
-    height: 44,
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.btn,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  btnSkipPressed: { backgroundColor: colors.border },
-  btnSkipText: { color: colors.fg, fontSize: 14, fontFamily: fonts.bodySemiBold },
-
-  /* Next preview */
-  nextPreview: {
-    marginHorizontal: 16,
-    marginTop: spacing[2],
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    opacity: 0.6,
-  },
-  nextThumb: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  nextInfo: { flex: 1 },
-  nextEyebrow: {
-    fontSize: 10,
-    letterSpacing: 1.4,
-    textTransform: "uppercase",
-    color: colors.muted,
-    fontFamily: fonts.bodySemiBold,
-    marginBottom: 3,
-  },
-  nextName: { fontFamily: fonts.bodySemiBold, fontSize: 15, color: colors.fg, letterSpacing: -0.2 },
-  nextDetail: { fontSize: 13, color: colors.muted, fontFamily: fonts.body, marginTop: 2 },
-
-  /* Finish row */
-  finishRow: { marginHorizontal: 16, marginTop: spacing[2], alignItems: "center" },
-  btnFinish: {
-    borderWidth: 1,
-    borderColor: colors.dangerBorder,
-    borderRadius: radius.sm,
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[1],
-  },
-  btnFinishPressed: { backgroundColor: colors.dangerTint },
-  btnFinishText: { color: colors.danger, fontSize: 13, fontFamily: fonts.bodySemiBold },
 
   /* Shared secondary button (state screens) */
   secondaryBtn: {
