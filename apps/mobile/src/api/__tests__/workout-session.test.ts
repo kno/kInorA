@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import type { WorkoutHistoryEntry, WorkoutSessionRecord } from "@kinora/contracts";
+import type {
+  WorkoutHistoryEntry,
+  WorkoutSessionRecord,
+} from "@kinora/contracts";
 import {
   completeWorkoutSession,
   getWorkoutHistory,
@@ -104,7 +107,107 @@ describe("workout-session client", () => {
         throw new Error("offline");
       }),
     });
-    expect(res).toEqual({ kind: "error", message: "api_unreachable" });
+    expect(res).toEqual({
+      kind: "error",
+      message: "api_unreachable",
+      code: "UNREACHABLE",
+    });
+  });
+
+  // Phase 5 mobile offline (09b-v1) — the flush handler routes retry/poison/
+  // auth decisions off a discriminated `code`, not the raw status or a
+  // string-matched `message`. Mirrors web's `flushErrorCodeFromStatus`.
+  describe("FlushErrorCode propagation", () => {
+    it("maps 401 to AUTH", async () => {
+      const res = await recordWorkoutSet(
+        "sess_1",
+        "set_9",
+        { completed: true },
+        { getToken: token, fetchImpl: mockFetch(jsonResponse({ error: "unauthorized" }, 401)) },
+      );
+      expect(res).toEqual({
+        kind: "error",
+        message: "unauthorized",
+        code: "AUTH",
+      });
+    });
+
+    it("maps 403 to AUTH", async () => {
+      const res = await recordWorkoutSet(
+        "sess_1",
+        "set_9",
+        { completed: true },
+        { getToken: token, fetchImpl: mockFetch(jsonResponse({ error: "forbidden" }, 403)) },
+      );
+      expect(res.kind === "error" && res.code).toBe("AUTH");
+    });
+
+    it("maps 404 to NOT_FOUND", async () => {
+      const res = await recordWorkoutSet(
+        "sess_1",
+        "set_9",
+        { completed: true },
+        { getToken: token, fetchImpl: mockFetch(jsonResponse({ error: "not_found" }, 404)) },
+      );
+      expect(res.kind === "error" && res.code).toBe("NOT_FOUND");
+    });
+
+    it("maps other 4xx (400/422) to VALIDATION", async () => {
+      const res400 = await recordWorkoutSet(
+        "sess_1",
+        "set_9",
+        { completed: true },
+        { getToken: token, fetchImpl: mockFetch(jsonResponse({ error: "bad_input" }, 400)) },
+      );
+      expect(res400.kind === "error" && res400.code).toBe("VALIDATION");
+
+      const res422 = await recordWorkoutSet(
+        "sess_1",
+        "set_9",
+        { completed: true },
+        { getToken: token, fetchImpl: mockFetch(jsonResponse({ error: "invalid" }, 422)) },
+      );
+      expect(res422.kind === "error" && res422.code).toBe("VALIDATION");
+    });
+
+    it("maps 5xx to SERVER", async () => {
+      const res = await recordWorkoutSet(
+        "sess_1",
+        "set_9",
+        { completed: true },
+        { getToken: token, fetchImpl: mockFetch(jsonResponse({ error: "boom" }, 500)) },
+      );
+      expect(res.kind === "error" && res.code).toBe("SERVER");
+    });
+
+    it("preserves the existing 409 active_session_conflict shape (no code)", async () => {
+      const res = await startWorkoutSession("plan_1", 1, {
+        getToken: token,
+        fetchImpl: mockFetch(
+          jsonResponse({ error: "active_session_conflict", activeDay: 2 }, 409),
+        ),
+      });
+      expect(res).toEqual({
+        kind: "error",
+        message: "active_session_conflict",
+        activePlanName: undefined,
+        activeDay: 2,
+      });
+    });
+
+    it("maps a network throw on completeWorkoutSession to UNREACHABLE", async () => {
+      const res = await completeWorkoutSession("sess_1", {
+        getToken: token,
+        fetchImpl: mockFetch(() => {
+          throw new Error("offline");
+        }),
+      });
+      expect(res).toEqual({
+        kind: "error",
+        message: "api_unreachable",
+        code: "UNREACHABLE",
+      });
+    });
   });
 
   it("PATCHes a set update", async () => {

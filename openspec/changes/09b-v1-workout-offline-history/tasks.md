@@ -96,22 +96,22 @@ Ask the user: chain strategy (stacked-to-main vs feature-branch-chain) before `s
 
 ## Phase 5: Mobile Offline (Slice 4 — PR 4, depends on Phase 1 & 4 contracts)
 
-- [ ] 5.1 RED: Write failing test — `apps/mobile/src/api/workout-session.ts` preserves `FlushErrorCode` beyond existing 409-only case
-- [ ] 5.2 GREEN: Modify mobile API client to propagate discriminated error shape
-- [ ] 5.3 RED: Write failing tests for AsyncStorage-backed `PendingMutation` queue (enqueue-before-snapshot, `clientSeq` persistence across restart) in `apps/mobile/.../offline/`
-- [ ] 5.4 GREEN: Implement AsyncStorage queue module
-- [ ] 5.5 RED: Write failing tests for `WorkoutSessionSnapshot` cache (mobile), eviction, clear-on-logout, identity-scoped keys
-- [ ] 5.6 GREEN: Implement mobile snapshot cache module
-- [ ] 5.7 RED: Write failing tests for `ConnectivityMonitor` mobile impl (`@react-native-community/netinfo`)
-- [ ] 5.8 GREEN: Implement mobile `ConnectivityMonitor`
-- [ ] 5.9 RED: Write failing tests for sequential flush in `WorkoutTrackerScreen.tsx` — collapseQueue applied, one in-flight request, complete ordered last, direct API calls
-- [ ] 5.10 GREEN: Implement mobile flush loop invoking direct API via `apps/mobile/src/api/workout-session.ts`
-- [ ] 5.11 RED: Write failing tests — offline restart hydrates UI from snapshot + replays queued mutations without network call
-- [ ] 5.12 GREEN: Wire snapshot hydration into `WorkoutTrackerScreen.tsx` mount
-- [ ] 5.13 RED: Write failing test — logout clears identity-scoped mobile queue + snapshot
-- [ ] 5.14 GREEN: Implement clear-on-logout hook (mobile)
-- [ ] 5.15 Run `pnpm architecture` to confirm NetInfo/AsyncStorage do not trip deps-guard
-- [ ] 5.16 REFACTOR: Consolidate `apps/mobile/.../offline/` module structure; run `pnpm type-check` and `pnpm test` for mobile workspace
+- [x] 5.1 RED: Write failing test — `apps/mobile/src/api/workout-session.ts` preserves `FlushErrorCode` beyond existing 409-only case
+- [x] 5.2 GREEN: Modify mobile API client to propagate discriminated error shape
+- [x] 5.3 RED: Write failing tests for AsyncStorage-backed `PendingMutation` queue (enqueue-before-snapshot, `clientSeq` persistence across restart) in `apps/mobile/.../offline/`
+- [x] 5.4 GREEN: Implement AsyncStorage queue module
+- [x] 5.5 RED: Write failing tests for `WorkoutSessionSnapshot` cache (mobile), eviction, clear-on-logout, identity-scoped keys
+- [x] 5.6 GREEN: Implement mobile snapshot cache module
+- [x] 5.7 RED: Write failing tests for `ConnectivityMonitor` mobile impl (`@react-native-community/netinfo`)
+- [x] 5.8 GREEN: Implement mobile `ConnectivityMonitor`
+- [x] 5.9 RED: Write failing tests for sequential flush in `WorkoutTrackerScreen.tsx` — collapseQueue applied, one in-flight request, complete ordered last, direct API calls
+- [x] 5.10 GREEN: Implement mobile flush loop invoking direct API via `apps/mobile/src/api/workout-session.ts`
+- [x] 5.11 RED: Write failing tests — offline restart hydrates UI from snapshot + replays queued mutations without network call
+- [x] 5.12 GREEN: Wire snapshot hydration into `WorkoutTrackerScreen.tsx` mount
+- [x] 5.13 RED: Write failing test — logout clears identity-scoped mobile queue + snapshot
+- [x] 5.14 GREEN: Implement clear-on-logout hook (mobile)
+- [x] 5.15 Run `pnpm architecture` to confirm NetInfo/AsyncStorage do not trip deps-guard
+- [x] 5.16 REFACTOR: Consolidate `apps/mobile/.../offline/` module structure; run `pnpm type-check` and `pnpm test` for mobile workspace
 
 ## Phase 6: Cross-Cutting Verification
 

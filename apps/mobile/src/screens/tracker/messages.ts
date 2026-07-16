@@ -53,4 +53,12 @@ export const messages = defineMessages({
   errorRecord: { id: "mobileTracker.error.record" },
   errorComplete: { id: "mobileTracker.error.complete" },
   retry: { id: "mobileTracker.retry" },
+  // Phase 5 mobile offline (09b-v1) — reuses the SAME shared `tracker.sync.*`
+  // catalog keys web's PlanTrackerClient/PlanStatusClient already surface
+  // (EN/ES parity guaranteed by the shared @kinora/i18n catalog). Mobile
+  // never emits `reload_required` (that failure mode is web-only — a stale
+  // Next.js Server Action reference, which does not exist on a direct API
+  // client), so only `auth_required`/`dropped` are used here.
+  syncAuthRequired: { id: "tracker.sync.auth_required" },
+  syncDropped: { id: "tracker.sync.dropped" },
 });
