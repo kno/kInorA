@@ -18,7 +18,11 @@
  *   POST   /workout-sessions/:id/complete           {}
  */
 
-import type { WorkoutSessionRecord } from "@kinora/contracts";
+import type {
+  WorkoutHistoryEntry,
+  WorkoutHistoryQuery,
+  WorkoutSessionRecord,
+} from "@kinora/contracts";
 
 /**
  * Default token source. Imported lazily so this module's graph does not pull
@@ -183,4 +187,52 @@ export function completeWorkoutSession(
     {},
     options,
   );
+}
+
+export type FetchHistoryResult =
+  | { kind: "ok"; entries: WorkoutHistoryEntry[] }
+  | { kind: "error"; message: string };
+
+function historyPath(query: WorkoutHistoryQuery): string {
+  const params = new URLSearchParams();
+  if (query.limit !== undefined) params.set("limit", String(query.limit));
+  if (query.offset !== undefined) params.set("offset", String(query.offset));
+
+  const search = params.toString();
+  return search ? `/workout-sessions/history?${search}` : "/workout-sessions/history";
+}
+
+/**
+ * Fetch a page of completed-session history via `GET /workout-sessions/history`
+ * (#09b Session History — sync-independent, never touches the offline
+ * mutation queue or session snapshot cache).
+ */
+export async function getWorkoutHistory(
+  query: WorkoutHistoryQuery,
+  options: ClientOptions = {},
+): Promise<FetchHistoryResult> {
+  const token = await (options.getToken ?? defaultGetToken)();
+  if (!token) return { kind: "error", message: "no_session" };
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}${historyPath(query)}`, requestInit("GET", token));
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? "fetch_history_failed" };
+  }
+
+  const body = (await res.json().catch(() => null)) as WorkoutHistoryEntry[] | null;
+  if (!Array.isArray(body)) {
+    return { kind: "error", message: "invalid_response" };
+  }
+
+  return { kind: "ok", entries: body };
 }

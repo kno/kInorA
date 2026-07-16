@@ -2,20 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreateIcon, ExercisesIcon, HomeIcon, PlanIcon, StatsIcon } from "@/components/icons";
+import { CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, StatsIcon } from "@/components/icons";
 import { isActivePath } from "./nav-utils";
 import styles from "./MobileNav.module.css";
 
 interface TabItem {
   label: string;
   href: string;
-  icon: "home" | "plan" | "stats" | "exercises";
+  icon: "home" | "plan" | "stats" | "history" | "exercises";
 }
 
 const TABS: TabItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "home" },
   { label: "Plan", href: "/plan", icon: "plan" },
   { label: "Statistics", href: "/stats", icon: "stats" },
+  { label: "History", href: "/history", icon: "history" },
   { label: "Exercises", href: "/exercises", icon: "exercises" },
 ];
 
@@ -54,8 +55,8 @@ export function MobileNav() {
           </Link>
         </div>
 
-        {/* Right tabs: Statistics, Exercises */}
-        {TABS.slice(2, 4).map((tab) => (
+        {/* Right tabs: Statistics, History, Exercises */}
+        {TABS.slice(2, 5).map((tab) => (
           <MobileTab
             key={tab.href}
             tab={tab}
@@ -98,6 +99,8 @@ function TabIcon({ name }: { name: TabItem["icon"] }) {
       return <PlanIcon className={styles.icon} size={22} />;
     case "stats":
       return <StatsIcon className={styles.icon} size={22} />;
+    case "history":
+      return <HistoryIcon className={styles.icon} size={22} />;
     case "exercises":
       return <ExercisesIcon className={styles.icon} size={22} />;
   }

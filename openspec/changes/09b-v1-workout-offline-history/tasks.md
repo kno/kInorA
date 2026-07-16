@@ -58,17 +58,18 @@ Ask the user: chain strategy (stacked-to-main vs feature-branch-chain) before `s
 
 ## Phase 3: Session History (Slice 2 — PR 2)
 
-- [ ] 3.1 RED: Write failing tests for `listCompletedSessions` — batched `inArray` fetch, constant query count regardless of page size, no per-row loop
-- [ ] 3.2 GREEN: Implement `listCompletedSessions(tenantId, userId, { limit, offset })` in `apps/api/src/db/repositories/workout-session.ts` (session query → `inArray(sessionIds)` for `session_exercises` → `inArray(sessionExerciseId)` for `set_records`, grouped in memory)
-- [ ] 3.3 RED: Write failing test — trend lookback query returns prior session for oldest page item without breaking pagination or adding N+1 queries
-- [ ] 3.4 GREEN: Implement bounded lookback (`LIMIT n+1` or secondary single-row query) feeding `computeVolumeTrend`
-- [ ] 3.5 RED: Write failing Fastify `.inject()` test for `GET /workout-sessions/history` with `WorkoutHistoryQuery` (default `limit=20`, `offset=0`), asserting `trend` field present per entry
-- [ ] 3.6 GREEN: Implement route in `apps/api/src/routes/workout-session.ts` (injected repo port, paginated query DTO)
-- [ ] 3.7 RED: Write failing web test for `getWorkoutHistoryAction` (paginated Server Action) in `apps/web/.../history/`
-- [ ] 3.8 GREEN: Implement history route/tab + `getWorkoutHistoryAction` in `apps/web/.../history/`
-- [ ] 3.9 RED: Write failing test for mobile `HistoryScreen.tsx` + `getWorkoutHistory` api client call
-- [ ] 3.10 GREEN: Implement `apps/mobile/src/screens/HistoryScreen.tsx` + api client method
-- [ ] 3.11 REFACTOR: Confirm history rendering works with empty/unavailable offline queue (spec: "History available without pending sync activity")
+- [x] 3.1 RED: Write failing tests for `listCompletedSessions` — batched `inArray` fetch, constant query count regardless of page size, no per-row loop
+- [x] 3.2 GREEN: Implement `listCompletedSessions(tenantId, userId, { limit, offset })` in `apps/api/src/db/repositories/workout-session.ts` (session query → `inArray(sessionIds)` for `session_exercises` → `inArray(sessionExerciseId)` for `set_records`, grouped in memory)
+- [x] 3.3 RED: Write failing test — trend lookback query returns prior session for oldest page item without breaking pagination or adding N+1 queries
+- [x] 3.4 GREEN: Implement bounded lookback (`LIMIT n+1` or secondary single-row query) feeding `computeVolumeTrend`
+- [x] 3.5 RED: Write failing Fastify `.inject()` test for `GET /workout-sessions/history` with `WorkoutHistoryQuery` (default `limit=20`, `offset=0`), asserting `trend` field present per entry
+- [x] 3.6 GREEN: Implement route in `apps/api/src/routes/workout-session.ts` (injected repo port, paginated query DTO)
+- [x] 3.7 RED: Write failing web test for `getWorkoutHistoryAction` (paginated Server Action) in `apps/web/.../history/`
+- [x] 3.8 GREEN: Implement history route/tab + `getWorkoutHistoryAction` in `apps/web/.../history/`
+- [x] 3.9 RED: Write failing test for mobile `HistoryScreen.tsx` + `getWorkoutHistory` api client call
+- [x] 3.10 GREEN: Implement `apps/mobile/src/screens/HistoryScreen.tsx` + api client method
+- [x] 3.11 REFACTOR: Confirm history rendering works with empty/unavailable offline queue (spec: "History available without pending sync activity")
+- [x] 3.12 RED/GREEN: Wire History into in-app navigation for discoverability (spec: "WHEN they open history") — web `SidebarNav`/`MobileNav` add a `/history` entry (new `history` icon in `KinIcon` registry); mobile `App.tsx` registers `HistoryScreen` on the `RootStackParamList` and `HomeScreen` gets a pressable entry point (`history.title` i18n key) that navigates to it
 
 ## Phase 4: Web Offline (Slice 3 — PR 3, depends on Phase 1 & 2)
 
