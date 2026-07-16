@@ -22,6 +22,12 @@
  * integrates the session guard (3.4) + deep-link callback handler (3.3).
  */
 
+// MUST be the first import: Hermes lacks native `Intl.PluralRules`, and
+// `react-intl` resolves ICU plural messages via `Intl.PluralRules` as soon
+// as `LocaleProvider` mounts `IntlProvider` below. Keep this pinned above
+// every other import — do not let an import-sorter reorder it.
+import "./src/i18n/intl-polyfill";
+
 import React, { useEffect, useState } from "react";
 import {
   NavigationContainer,
