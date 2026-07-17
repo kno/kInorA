@@ -1,12 +1,14 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { computeAverageRpe, computeSessionVolume, computeVolumeTrend, defaultPlanName } from "@kinora/domain";
 import { classifyExerciseMuscleGroup } from "../muscle-classifier.js";
-import { computeAdherence, computeStreak, computeWeeklyRollup } from "../progress-domain.js";
+import { computeAdherence, computeStreak, computeWeeklyRollup, delta } from "../progress-domain.js";
 import type {
   DashboardSummaryDTO,
+  KpiWithDelta,
   SessionExerciseRecord,
   SetRecordDTO,
   StartSessionOutcome,
+  StatsSummaryDTO,
   WorkoutExercise,
   WorkoutHistoryEntry,
   WorkoutHistoryQuery,
@@ -91,6 +93,83 @@ function utcWeekBounds(reference: Date): { start: Date; end: Date } {
   const start = addUtcDays(day, -mondayOffset);
   const end = new Date(addUtcDays(start, 7).getTime() - 1);
   return { start, end };
+}
+
+/** First-of-month 00:00:00.000 UTC .. last-of-month 23:59:59.999 UTC bounds of `reference`'s month. */
+function utcMonthBounds(reference: Date): { start: Date; end: Date } {
+  const start = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth() + 1, 1) - 1);
+  return { start, end };
+}
+
+/** Jan 1 00:00:00.000 UTC .. Dec 31 23:59:59.999 UTC bounds of `reference`'s year. */
+function utcYearBounds(reference: Date): { start: Date; end: Date } {
+  const start = new Date(Date.UTC(reference.getUTCFullYear(), 0, 1));
+  const end = new Date(Date.UTC(reference.getUTCFullYear() + 1, 0, 1) - 1);
+  return { start, end };
+}
+
+interface StatsRangeBounds {
+  currentStart: Date;
+  currentEnd: Date;
+  previousStart: Date;
+  previousEnd: Date;
+}
+
+/**
+ * Resolves the current/previous UTC period bounds for `getStatsRange`
+ * (09c-v1-progress-dashboard-stats, Slice 3a). `previousStart..currentEnd`
+ * is one contiguous span, so the repository can fetch both periods with a
+ * single bounded date-range query (design.md "Timezone: fixed UTC reference").
+ */
+function statsRangeBounds(range: "week" | "month" | "year", now: Date): StatsRangeBounds {
+  if (range === "week") {
+    const current = utcWeekBounds(now);
+    const previous = utcWeekBounds(addUtcDays(current.start, -1));
+    return {
+      currentStart: current.start,
+      currentEnd: current.end,
+      previousStart: previous.start,
+      previousEnd: previous.end,
+    };
+  }
+
+  if (range === "year") {
+    const current = utcYearBounds(now);
+    const previous = utcYearBounds(new Date(current.start.getTime() - 1));
+    return {
+      currentStart: current.start,
+      currentEnd: current.end,
+      previousStart: previous.start,
+      previousEnd: previous.end,
+    };
+  }
+
+  const current = utcMonthBounds(now);
+  const previous = utcMonthBounds(new Date(current.start.getTime() - 1));
+  return {
+    currentStart: current.start,
+    currentEnd: current.end,
+    previousStart: previous.start,
+    previousEnd: previous.end,
+  };
+}
+
+function zeroKpi(): KpiWithDelta {
+  return { value: 0, deltaVsPreviousPeriod: null };
+}
+
+function emptyStatsSummary(range: "week" | "month" | "year"): StatsSummaryDTO {
+  return {
+    range,
+    totalVolumeKg: zeroKpi(),
+    sessionCount: zeroKpi(),
+    totalDurationMin: zeroKpi(),
+    prCount: zeroKpi(),
+    volumeTrend: { current: [], previous: [] },
+    muscleGroupDistribution: [],
+    personalRecords: [],
+  };
 }
 
 function recentDailyCompletion(completedAtDates: string[], now: Date, days = 7): boolean[] {
@@ -554,6 +633,131 @@ export class WorkoutSessionRepository {
         volumeKg: computeSessionVolume(session),
       };
     });
+  }
+
+  /**
+   * Statistics summary (09c-v1-progress-dashboard-stats, Slice 3a) — KPIs
+   * (volume, session count, duration, PR count) each with a delta vs. the
+   * previous period, plus the volume-trend series. `prCount` /
+   * `muscleGroupDistribution` / `personalRecords` are placeholders here
+   * (TODO(3b): wire `computeMuscleGroupDistribution` + `computePersonalRecords`
+   * once the `muscle_group` column backfill — Slice 1b — is queryable from
+   * this surface); the DTO shape stays contract-correct in the meantime.
+   *
+   * Bounded, no N+1: (1) one date-ranged query over the caller's completed
+   * sessions spanning `previousStart..currentEnd` in a single WHERE, scoped
+   * by (tenantId, userId); (2)+(3) two bounded `inArray` follow-ups
+   * (session_exercises, set_records) to compute per-session volume — skipped
+   * entirely when no session falls in range, mirroring
+   * `getDashboardSummary`'s empty-state short circuit.
+   */
+  async getStatsRange(
+    tenantId: string,
+    userId: string,
+    range: "week" | "month" | "year",
+    now: Date = new Date()
+  ): Promise<StatsSummaryDTO> {
+    const { currentStart, currentEnd, previousStart, previousEnd } = statsRangeBounds(range, now);
+
+    const sessionRows = (await this.db
+      .select()
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.status, "completed"),
+          gte(workoutSessions.completedAt, previousStart),
+          lte(workoutSessions.completedAt, currentEnd)
+        )
+      )
+      .orderBy(desc(workoutSessions.completedAt))) as WorkoutSessionRow[];
+
+    if (sessionRows.length === 0) {
+      return emptyStatsSummary(range);
+    }
+
+    const sessionIds = sessionRows.map((row) => row.id);
+    const exerciseRows = (await this.db
+      .select()
+      .from(sessionExercises)
+      .where(inArray(sessionExercises.workoutSessionId, sessionIds))) as SessionExerciseRow[];
+
+    const exerciseIds = exerciseRows.map((exercise) => exercise.id);
+    const setRows =
+      exerciseIds.length === 0
+        ? []
+        : ((await this.db
+            .select()
+            .from(setRecords)
+            .where(inArray(setRecords.sessionExerciseId, exerciseIds))) as SetRecordRow[]);
+
+    const exercisesBySession = new Map<string, SessionExerciseRow[]>();
+    for (const exerciseRow of exerciseRows) {
+      const current = exercisesBySession.get(exerciseRow.workoutSessionId) ?? [];
+      current.push(exerciseRow);
+      exercisesBySession.set(exerciseRow.workoutSessionId, current);
+    }
+
+    const setsByExercise = new Map<string, SetRecordRow[]>();
+    for (const setRow of setRows) {
+      const current = setsByExercise.get(setRow.sessionExerciseId) ?? [];
+      current.push(setRow);
+      setsByExercise.set(setRow.sessionExerciseId, current);
+    }
+
+    interface StatsBucketEntry {
+      completedAt: Date;
+      volumeKg: number;
+      durationMin: number;
+    }
+    const currentEntries: StatsBucketEntry[] = [];
+    const previousEntries: StatsBucketEntry[] = [];
+
+    for (const sessionRow of sessionRows) {
+      const completedAt = sessionRow.completedAt!;
+      const ownExercises = exercisesBySession.get(sessionRow.id) ?? [];
+      const ownSets = ownExercises.flatMap((exercise) => setsByExercise.get(exercise.id) ?? []);
+      const session = mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets);
+      const volumeKg = computeSessionVolume(session);
+      const durationMin = Math.max(0, Math.round((completedAt.getTime() - sessionRow.startedAt.getTime()) / 60000));
+      const entry: StatsBucketEntry = { completedAt, volumeKg, durationMin };
+
+      if (completedAt >= currentStart && completedAt <= currentEnd) {
+        currentEntries.push(entry);
+      } else if (completedAt >= previousStart && completedAt <= previousEnd) {
+        previousEntries.push(entry);
+      }
+    }
+
+    const sum = (entries: StatsBucketEntry[], pick: (entry: StatsBucketEntry) => number): number =>
+      entries.reduce((total, entry) => total + pick(entry), 0);
+
+    const ascendingByDate = (entries: StatsBucketEntry[]): number[] =>
+      entries
+        .slice()
+        .sort((left, right) => left.completedAt.getTime() - right.completedAt.getTime())
+        .map((entry) => entry.volumeKg);
+
+    const currentVolume = sum(currentEntries, (entry) => entry.volumeKg);
+    const previousVolume = sum(previousEntries, (entry) => entry.volumeKg);
+    const currentDuration = sum(currentEntries, (entry) => entry.durationMin);
+    const previousDuration = sum(previousEntries, (entry) => entry.durationMin);
+    const currentCount = currentEntries.length;
+    const previousCount = previousEntries.length;
+
+    return {
+      range,
+      totalVolumeKg: { value: currentVolume, deltaVsPreviousPeriod: delta(currentVolume, previousVolume) },
+      sessionCount: { value: currentCount, deltaVsPreviousPeriod: delta(currentCount, previousCount) },
+      totalDurationMin: { value: currentDuration, deltaVsPreviousPeriod: delta(currentDuration, previousDuration) },
+      // TODO(3b): compute real PR count via `computePersonalRecords`.
+      prCount: zeroKpi(),
+      volumeTrend: { current: ascendingByDate(currentEntries), previous: ascendingByDate(previousEntries) },
+      // TODO(3b): wire `computeMuscleGroupDistribution` + `computePersonalRecords`.
+      muscleGroupDistribution: [],
+      personalRecords: [],
+    };
   }
 
   private async findLatestActiveSession(

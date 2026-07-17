@@ -561,7 +561,24 @@
   },
   "stats": {
     "title": "Estadísticas",
-    "description": "Sigue tu progreso y revisa tu historial de entrenamiento."
+    "description": "Sigue tu progreso y revisa tu historial de entrenamiento.",
+    "rangeWeek": "Semana",
+    "rangeMonth": "Mes",
+    "rangeYear": "Año",
+    "volumeLabel": "Volumen total",
+    "sessionsLabel": "Sesiones",
+    "durationLabel": "Tiempo total",
+    "prLabel": "PRs / récords",
+    "deltaNew": "Nuevo — aún no hay periodo anterior",
+    "deltaSuffix": "vs. periodo anterior",
+    "volumeTrendTitle": "Volumen de entrenamiento",
+    "volumeTrendCurrentLabel": "Este periodo",
+    "volumeTrendPreviousLabel": "Periodo anterior",
+    "volumeTrendEmpty": "Todavía no hay datos suficientes para mostrar una tendencia.",
+    "distributionTitle": "Series por grupo muscular",
+    "distributionComingSoon": "La distribución por grupo muscular estará disponible pronto.",
+    "prTitle": "Récords personales",
+    "prComingSoon": "Los récords personales estarán disponibles pronto."
   },
   "history": {
     "title": "Historial",
