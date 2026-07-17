@@ -66,15 +66,15 @@ Delivery decision (ask-on-risk gate resolved with the user): the two High-risk s
 
 ## Slice 3a: Statistics — KPIs + deltas + volume trend (PR 3a, base = 2)
 
-- [ ] 3a.1 RED: write unit tests for the KPI delta function (null when previous-period value is 0/absent; never Infinity/NaN)
-- [ ] 3a.2 GREEN: implement the shared delta helper in `packages/domain/src/progress/delta.ts`
-- [ ] 3a.3 RED: write integration test for `getStatsRange({tenantId, userId, range})` asserting bounded query, (tenantId,userId) scoping, and sparse/absent-data degrade (KPIs + volume trend)
-- [ ] 3a.4 GREEN: implement `getStatsRange` on the progress repository — KPIs (volume/sessions/time/PR-count) with period deltas + volume-trend series (current vs. previous)
-- [ ] 3a.5 Create thin `GET /progress/stats` route in `apps/api/src/routes/progress.ts`
-- [ ] 3a.6 Pull `screens/web-stats.html` via OpenDesign MCP; build the `apps/web/.../stats/page.tsx` shell with the period toggle, KPI cards w/ deltas, and the volume-trend chart — no adherence KPI; leave distribution + PR sections for 3b
-- [ ] 3a.7 Add EN/ES stats KPI copy to i18n messages
-- [ ] 3a.8 RED/GREEN: component tests for the stats KPIs — delta null-state render, EN/ES parity
-- [ ] 3a.9 Verify: `pnpm test`, `pnpm type-check`, `pnpm architecture`, `pnpm deps-guard`, `pnpm build` all pass
+- [x] 3a.1 RED: write unit tests for the KPI delta function (null when previous-period value is 0/absent; never Infinity/NaN)
+- [x] 3a.2 GREEN: implement the shared delta helper in `packages/domain/src/progress/delta.ts`
+- [x] 3a.3 RED: write integration test for `getStatsRange({tenantId, userId, range})` asserting bounded query, (tenantId,userId) scoping, and sparse/absent-data degrade (KPIs + volume trend)
+- [x] 3a.4 GREEN: implement `getStatsRange` on the progress repository — KPIs (volume/sessions/time/PR-count) with period deltas + volume-trend series (current vs. previous)
+- [x] 3a.5 Create thin `GET /progress/stats` route in `apps/api/src/routes/progress.ts`
+- [x] 3a.6 Pull `screens/web-stats.html` via OpenDesign MCP; build the `apps/web/.../stats/page.tsx` shell with the period toggle, KPI cards w/ deltas, and the volume-trend chart — no adherence KPI; leave distribution + PR sections for 3b
+- [x] 3a.7 Add EN/ES stats KPI copy to i18n messages
+- [x] 3a.8 RED/GREEN: component tests for the stats KPIs — delta null-state render, EN/ES parity
+- [x] 3a.9 Verify: `pnpm test`, `pnpm type-check`, `pnpm architecture`, `pnpm deps-guard`, `pnpm build` all pass
 
 ## Slice 3b: Statistics — muscle-group distribution + PRs (PR 3b, base = 3a; needs 1b's `muscle_group` column)
 

@@ -561,7 +561,24 @@
   },
   "stats": {
     "title": "Statistics",
-    "description": "Track your progress and review your training history."
+    "description": "Track your progress and review your training history.",
+    "rangeWeek": "Week",
+    "rangeMonth": "Month",
+    "rangeYear": "Year",
+    "volumeLabel": "Total volume",
+    "sessionsLabel": "Sessions",
+    "durationLabel": "Total time",
+    "prLabel": "PRs / records",
+    "deltaNew": "New — no previous period yet",
+    "deltaSuffix": "vs previous period",
+    "volumeTrendTitle": "Training volume",
+    "volumeTrendCurrentLabel": "This period",
+    "volumeTrendPreviousLabel": "Previous period",
+    "volumeTrendEmpty": "Not enough data yet to show a trend.",
+    "distributionTitle": "Sets per muscle group",
+    "distributionComingSoon": "Muscle-group distribution is coming soon.",
+    "prTitle": "Personal records",
+    "prComingSoon": "Personal records are coming soon."
   },
   "history": {
     "title": "History",

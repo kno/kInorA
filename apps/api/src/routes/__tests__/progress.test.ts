@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
-import type { DashboardSummaryDTO } from "@kinora/contracts";
+import type { DashboardSummaryDTO, StatsSummaryDTO } from "@kinora/contracts";
 import { authPlugin } from "../../auth/plugin.js";
 import { progressRoutes } from "../progress.js";
 import {
@@ -21,6 +21,18 @@ const emptySummary: DashboardSummaryDTO = {
   weeklyRollup: [],
 };
 
+const zeroKpi = { value: 0, deltaVsPreviousPeriod: null };
+const emptyStatsSummary: StatsSummaryDTO = {
+  range: "month",
+  totalVolumeKg: zeroKpi,
+  sessionCount: zeroKpi,
+  totalDurationMin: zeroKpi,
+  prCount: zeroKpi,
+  volumeTrend: { current: [], previous: [] },
+  muscleGroupDistribution: [],
+  personalRecords: [],
+};
+
 function buildSessionDb() {
   return createCyclingAuthMockDb({
     sessionRows: [buildSessionRow({ tenantId: TENANT_A, userId: USER_A })],
@@ -28,9 +40,12 @@ function buildSessionDb() {
   });
 }
 
-function buildRepoMock(overrides: Partial<{ getDashboardSummary: unknown }> = {}) {
+function buildRepoMock(
+  overrides: Partial<{ getDashboardSummary: unknown; getStatsRange: unknown }> = {}
+) {
   return {
     getDashboardSummary: vi.fn().mockResolvedValue(emptySummary),
+    getStatsRange: vi.fn().mockResolvedValue(emptyStatsSummary),
     ...overrides,
   };
 }
@@ -78,5 +93,62 @@ describe("GET /progress/dashboard", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual(emptySummary);
     expect(repo.getDashboardSummary).toHaveBeenCalledWith(TENANT_A, USER_A);
+  });
+});
+
+describe("GET /progress/stats", () => {
+  let app: FastifyInstance;
+
+  afterEach(async () => {
+    if (app) await app.close();
+  });
+
+  it("returns 401 without authentication", async () => {
+    app = await buildTestApp(buildRepoMock(), createCyclingAuthMockDb({ sessionRows: [], membershipRows: [] }));
+
+    const response = await app.inject({ method: "GET", url: "/progress/stats" });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("returns the stats summary scoped to the authenticated tenant/user, defaulting to 'month'", async () => {
+    const repo = buildRepoMock();
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/progress/stats",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(emptyStatsSummary);
+    expect(repo.getStatsRange).toHaveBeenCalledWith(TENANT_A, USER_A, "month");
+  });
+
+  it("passes through a valid ?range= query param", async () => {
+    const repo = buildRepoMock();
+    app = await buildTestApp(repo);
+
+    await app.inject({
+      method: "GET",
+      url: "/progress/stats?range=week",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(repo.getStatsRange).toHaveBeenCalledWith(TENANT_A, USER_A, "week");
+  });
+
+  it("falls back to 'month' for an invalid ?range= value", async () => {
+    const repo = buildRepoMock();
+    app = await buildTestApp(repo);
+
+    await app.inject({
+      method: "GET",
+      url: "/progress/stats?range=bogus",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(repo.getStatsRange).toHaveBeenCalledWith(TENANT_A, USER_A, "month");
   });
 });
