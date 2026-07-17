@@ -408,6 +408,64 @@ describe("WorkoutSessionRepository", () => {
         expect(result.session.id).toBe(SESSION_ID);
       }
     });
+
+    it("classifies each exercise's muscle_group at write time via classifyExerciseMuscleGroup (09c-v1 Slice 1b)", async () => {
+      // Bench Press -> chest (bare "bench press"); Chest Supported Row -> back
+      // (bare "row"), matching the fixtures already used across this file.
+      const { db, insert } = createStartDb();
+      const repo = new WorkoutSessionRepository(db as never);
+
+      await repo.startSession(TENANT_A, USER_A, PLAN_ID, 1);
+
+      const exercisesInsert = insert.mock.results[1]!.value as {
+        values: ReturnType<typeof vi.fn>;
+      };
+      expect(exercisesInsert.values).toHaveBeenCalledWith([
+        expect.objectContaining({ title: "Bench Press", muscleGroup: "chest" }),
+        expect.objectContaining({ title: "Chest Supported Row", muscleGroup: "back" }),
+      ]);
+    });
+
+    it("degrades to a null muscle_group for an unclassifiable exercise title", async () => {
+      const unclassifiableProgram: WorkoutProgram = {
+        weeklySessions: [
+          {
+            day: 1,
+            title: "Odd Day",
+            exercises: [{ name: "Farmer's Carry", sets: 3, reps: "40m", restSeconds: 60 }],
+          },
+        ],
+        limitationWarnings: [],
+      };
+      const planRow = { ...readyPlanRow, programJson: unclassifiableProgram };
+      const select = createQueuedSelectDb(
+        new Map<object, unknown[][]>([
+          [workoutSessions, [[]]],
+          [workoutPlans, [[planRow]]],
+        ]),
+      ).select;
+
+      const insert = vi.fn().mockImplementation((table: object) => ({
+        values: vi.fn().mockImplementation(() => {
+          if (table === workoutSessions) return { returning: vi.fn().mockResolvedValue([sessionRow]) };
+          if (table === sessionExercises) return { returning: vi.fn().mockResolvedValue([]) };
+          if (table === setRecords) return { returning: vi.fn().mockResolvedValue([]) };
+          throw new Error(`Unexpected insert table: ${String(table)}`);
+        }),
+      }));
+      const tx = { insert, select };
+      const transaction = vi.fn().mockImplementation(async (cb: (db: typeof tx) => Promise<unknown>) => cb(tx));
+      const repo = new WorkoutSessionRepository({ select, transaction } as never);
+
+      await repo.startSession(TENANT_A, USER_A, PLAN_ID, 1);
+
+      const exercisesInsert = insert.mock.results[1]!.value as {
+        values: ReturnType<typeof vi.fn>;
+      };
+      expect(exercisesInsert.values).toHaveBeenCalledWith([
+        expect.objectContaining({ title: "Farmer's Carry", muscleGroup: null }),
+      ]);
+    });
   });
 
   describe("findById", () => {

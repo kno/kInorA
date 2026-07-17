@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { computeAverageRpe, computeSessionVolume, computeVolumeTrend, defaultPlanName } from "@kinora/domain";
+import { classifyExerciseMuscleGroup } from "../muscle-classifier.js";
 import type {
   SessionExerciseRecord,
   SetRecordDTO,
@@ -39,6 +40,13 @@ interface SessionExerciseRow {
   title: string;
   restSeconds: number;
   notes: string | null;
+  /**
+   * Derived muscle-group classification (09c-v1 Slice 1b). Populated at
+   * write time via `classifyExerciseMuscleGroup`; `null` when the title is
+   * unmapped. Not yet surfaced on `SessionExerciseRecord` — that DTO wiring
+   * belongs to a later slice (3b) that reads this column.
+   */
+  muscleGroup: string | null;
 }
 
 interface SetRecordRow {
@@ -471,6 +479,7 @@ export class WorkoutSessionRepository {
           title: exercise.name,
           restSeconds: exercise.restSeconds,
           notes: combineExerciseNotes(exercise),
+          muscleGroup: classifyExerciseMuscleGroup(exercise.name),
         }))
       )
       .returning();

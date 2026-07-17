@@ -41,12 +41,12 @@ Delivery decision (ask-on-risk gate resolved with the user): the two High-risk s
 
 ## Slice 1b: Schema column + backfill (PR 1b, base = 1a)
 
-- [ ] 1b.1 Add nullable additive `muscle_group varchar` column + drizzle migration to `apps/api/src/db/schema.ts`; update the `session_exercises` doc comment to "immutable except the derived `muscle_group` classification column"
-- [ ] 1b.2 RED: write integration test asserting `insertSessionExercises` populates `muscle_group` at write time via the classifier
-- [ ] 1b.3 GREEN: wire `classifyExerciseMuscleGroup` (from 1a) into `insertSessionExercises` in `apps/api/src/db/repositories/workout-session.ts`
-- [ ] 1b.4 RED: write tests for the backfill script — idempotency, batching/chunking by `id`, resume-after-interruption, and versioned reclassify path
-- [ ] 1b.5 GREEN: implement the idempotent, batched backfill script in `apps/api/src/db/` (`WHERE muscle_group IS NULL` fill + explicit reclassify mode)
-- [ ] 1b.6 Verify: `pnpm test`, `pnpm type-check`, `pnpm architecture`, `pnpm deps-guard`, `pnpm build` all pass
+- [x] 1b.1 Add nullable additive `muscle_group varchar` column + drizzle migration to `apps/api/src/db/schema.ts`; update the `session_exercises` doc comment to "immutable except the derived `muscle_group` classification column"
+- [x] 1b.2 RED: write integration test asserting `insertSessionExercises` populates `muscle_group` at write time via the classifier
+- [x] 1b.3 GREEN: wire `classifyExerciseMuscleGroup` (from 1a) into `insertSessionExercises` in `apps/api/src/db/repositories/workout-session.ts`
+- [x] 1b.4 RED: write tests for the backfill script — idempotency, batching/chunking by `id`, resume-after-interruption, and versioned reclassify path
+- [x] 1b.5 GREEN: implement the idempotent, batched backfill script in `apps/api/src/db/` (`WHERE muscle_group IS NULL` fill + explicit reclassify mode)
+- [x] 1b.6 Verify: `pnpm test`, `pnpm type-check`, `pnpm architecture`, `pnpm deps-guard`, `pnpm build` all pass
 
 ## Slice 2: Dashboard (PR 2, base = 1b)
 
