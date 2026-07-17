@@ -32,12 +32,12 @@ Delivery decision (ask-on-risk gate resolved with the user): the two High-risk s
 
 ## Slice 1a: Contracts + Classifier + `progress` subpath (PR 1a)
 
-- [ ] 1a.1 RED: write unit tests for `classifyExerciseMuscleGroup` in `packages/domain/src/progress/classify.test.ts` covering EN + ES keyword sets, normalized-title matching (diacritics/whitespace/case), and null-degrade for unmapped titles
-- [ ] 1a.2 GREEN: implement `classifyExerciseMuscleGroup` + shared title-normalization helper in `packages/domain/src/progress/classify.ts`
-- [ ] 1a.3 Add `MuscleGroup`, `MUSCLE_GROUPS`, `MuscleRegion` to `packages/contracts/src/index.ts`; add `PersonalRecord`, `DashboardSummaryDTO`, `StatsSummaryDTO`, `WeeklyOverviewDTO`, `ExerciseDetailDTO`
-- [ ] 1a.4 Create `packages/domain/src/progress/index.ts` barrel; add `./progress` subpath export in `packages/domain/package.json` (never via root barrel)
-- [ ] 1a.5 RED: write a deps-guard/import test asserting no `@kinora/domain/progress` consumer imports the root `@kinora/domain` barrel
-- [ ] 1a.6 Verify: `pnpm test`, `pnpm type-check`, `pnpm architecture`, `pnpm deps-guard`, `pnpm build` all pass
+- [x] 1a.1 RED: write unit tests for `classifyExerciseMuscleGroup` in `packages/domain/src/progress/classify.test.ts` covering EN + ES keyword sets, normalized-title matching (diacritics/whitespace/case), and null-degrade for unmapped titles
+- [x] 1a.2 GREEN: implement `classifyExerciseMuscleGroup` + shared title-normalization helper in `packages/domain/src/progress/classify.ts`
+- [x] 1a.3 Add `MuscleGroup`, `MUSCLE_GROUPS`, `MuscleRegion` to `packages/contracts/src/index.ts`; add `PersonalRecord`, `DashboardSummaryDTO`, `StatsSummaryDTO`, `WeeklyOverviewDTO`, `ExerciseDetailDTO`
+- [x] 1a.4 Create `packages/domain/src/progress/index.ts` barrel; add `./progress` subpath export in `packages/domain/package.json` (never via root barrel)
+- [x] 1a.5 RED: write a deps-guard/import test asserting no `@kinora/domain/progress` consumer imports the root `@kinora/domain` barrel
+- [x] 1a.6 Verify: `pnpm test`, `pnpm type-check`, `pnpm architecture`, `pnpm deps-guard`, `pnpm build` all pass
 
 ## Slice 1b: Schema column + backfill (PR 1b, base = 1a)
 
