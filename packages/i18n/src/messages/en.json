@@ -538,7 +538,22 @@
   "dashboard": {
     "title": "Dashboard",
     "authenticated": "You are authenticated.",
-    "logout": "Log out"
+    "logout": "Log out",
+    "heroKicker": "Today's recommended session",
+    "heroLead": "Keep your streak going and close this week's plan.",
+    "startSession": "Start session",
+    "viewPlan": "View full plan",
+    "streakLabel": "Active streak",
+    "streakSub": "{count} consecutive training days",
+    "streakSubZero": "No active streak yet",
+    "weeklyLabel": "Weekly progress",
+    "weeklySubPending": "{remaining} session(s) left to close this week",
+    "weeklySubDone": "Weekly goal complete",
+    "weekRouteEyebrow": "Weekly plan",
+    "weekRouteTitle": "Load route",
+    "emptyTitle": "No workouts yet",
+    "emptyBody": "Create a plan or start a workout to see your progress here.",
+    "emptyCta": "Create a plan"
   },
   "exercises": {
     "title": "Exercises",

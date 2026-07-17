@@ -459,6 +459,14 @@ export interface DashboardSummaryDTO {
   weeklyCompleted: number;
   /** Planned sessions for the current calendar week (UTC). */
   weeklyPlanned: number;
+  /**
+   * Per-planned-day load for the "Ruta de carga" week-route strip (Slice 2).
+   * `dayIndex` is the 0-based Monday-first weekday index (0=Mon..6=Sun),
+   * matching the plan's sequential day → weekday display convention
+   * (design.md "Planned-day → weekday mapping"). Empty when there is no
+   * active ready plan.
+   */
+  weeklyRollup: Array<{ dayIndex: number; focus?: string; loadKg: number; loadPercent: number }>;
 }
 
 /** Statistics summary DTO. Deliberately carries no adherence KPI (design.md "Adherence lives on the Dashboard, not Statistics"). */

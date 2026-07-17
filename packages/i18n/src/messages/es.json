@@ -538,7 +538,22 @@
   "dashboard": {
     "title": "Panel",
     "authenticated": "Has iniciado sesión.",
-    "logout": "Cerrar sesión"
+    "logout": "Cerrar sesión",
+    "heroKicker": "Sesión recomendada hoy",
+    "heroLead": "Mantén tu racha y cierra el plan de esta semana.",
+    "startSession": "Empezar sesión",
+    "viewPlan": "Ver plan completo",
+    "streakLabel": "Racha activa",
+    "streakSub": "{count} días consecutivos entrenando",
+    "streakSubZero": "Aún no tienes una racha activa",
+    "weeklyLabel": "Progreso semanal",
+    "weeklySubPending": "{remaining} sesión(es) pendiente(s) para cerrar la semana",
+    "weeklySubDone": "Objetivo semanal completado",
+    "weekRouteEyebrow": "Plan semanal",
+    "weekRouteTitle": "Ruta de carga",
+    "emptyTitle": "Aún no hay entrenamientos",
+    "emptyBody": "Crea un plan o empieza un entrenamiento para ver tu progreso aquí.",
+    "emptyCta": "Crear plan"
   },
   "exercises": {
     "title": "Ejercicios",

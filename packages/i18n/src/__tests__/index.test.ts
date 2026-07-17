@@ -25,7 +25,7 @@ describe("@kinora/i18n package assembly", () => {
     expect(result.valid).toBe(true);
   });
 
-  it("the full catalog carries all 365 migrated leaf keys per locale", () => {
+  it("the full catalog carries all 380 migrated leaf keys per locale", () => {
     // 329 web-migrated keys + 23 `mobileTracker.*` keys authored in slice 9
     // for the mobile-unique tracker copy that has no EN/web equivalent (see
     // 9.3.1 enumeration in tasks.md) + 10 `history.*` keys authored in 09b
@@ -33,9 +33,12 @@ describe("@kinora/i18n package assembly", () => {
     // `tracker.sync.*` keys authored in 09b Phase 4 (Web Offline) for the
     // stale-Server-Action "reload to sync" prompt (`reload_required`), the
     // Judgment Day PR4 fixes' session-expired-mid-flush prompt
-    // (`auth_required`), and the poison-drop-must-surface prompt (`dropped`).
+    // (`auth_required`), and the poison-drop-must-surface prompt (`dropped`)
+    // + 15 `dashboard.*` keys authored in 09c-v1-progress-dashboard-stats
+    // Slice 2 for the data-backed dashboard (hero, streak, weekly progress,
+    // week-route strip, empty state).
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(365);
+    expect(Object.keys(flat)).toHaveLength(380);
   });
 
   it("the mobileTracker namespace is present with EN+ES parity (9.3.3)", () => {

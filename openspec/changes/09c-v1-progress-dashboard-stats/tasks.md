@@ -50,19 +50,19 @@ Delivery decision (ask-on-risk gate resolved with the user): the two High-risk s
 
 ## Slice 2: Dashboard (PR 2, base = 1b)
 
-- [ ] 2.1 RED: write unit tests for `computeStreak` (consecutive UTC calendar days, gap-day reset, ends today or yesterday)
-- [ ] 2.2 GREEN: implement `computeStreak` in `packages/domain/src/progress/streak.ts`
-- [ ] 2.3 RED: write unit tests for `computeAdherence` (completed vs. planned sessions for current UTC calendar week, no inflated counts mid-week)
-- [ ] 2.4 GREEN: implement `computeAdherence` in `packages/domain/src/progress/adherence.ts`
-- [ ] 2.5 RED: write unit tests for `computeWeeklyRollup` (per-day load/volume bars for "Ruta de carga")
-- [ ] 2.6 GREEN: implement `computeWeeklyRollup` in `packages/domain/src/progress/weekly-rollup.ts`
-- [ ] 2.7 RED: write integration test for `getDashboardSummary({tenantId, userId})` asserting bounded query, (tenantId,userId) scoping, and empty-state (no history) behavior
-- [ ] 2.8 GREEN: implement `getDashboardSummary` on the progress repository in `apps/api/src/db/repositories/workout-session.ts`
-- [ ] 2.9 Create thin `GET /progress/dashboard` route in `apps/api/src/routes/progress.ts`
-- [ ] 2.10 Pull `screens/web-dashboard.html` via OpenDesign MCP; build `apps/web/.../dashboard/page.tsx` (streak sparkline, weekly progress X/Y, week-route strip) — exclude Coach AI card and readiness ring (out of scope)
-- [ ] 2.11 Add EN/ES dashboard copy to `packages/i18n/src/messages/{en,es}.json`
-- [ ] 2.12 RED/GREEN: component tests for dashboard page — data render, empty state, EN/ES parity
-- [ ] 2.13 Verify: `pnpm test`, `pnpm type-check`, `pnpm architecture`, `pnpm deps-guard`, `pnpm build` all pass
+- [x] 2.1 RED: write unit tests for `computeStreak` (consecutive UTC calendar days, gap-day reset, ends today or yesterday)
+- [x] 2.2 GREEN: implement `computeStreak` in `packages/domain/src/progress/streak.ts`
+- [x] 2.3 RED: write unit tests for `computeAdherence` (completed vs. planned sessions for current UTC calendar week, no inflated counts mid-week)
+- [x] 2.4 GREEN: implement `computeAdherence` in `packages/domain/src/progress/adherence.ts`
+- [x] 2.5 RED: write unit tests for `computeWeeklyRollup` (per-day load/volume bars for "Ruta de carga")
+- [x] 2.6 GREEN: implement `computeWeeklyRollup` in `packages/domain/src/progress/weekly-rollup.ts`
+- [x] 2.7 RED: write integration test for `getDashboardSummary({tenantId, userId})` asserting bounded query, (tenantId,userId) scoping, and empty-state (no history) behavior
+- [x] 2.8 GREEN: implement `getDashboardSummary` on the progress repository in `apps/api/src/db/repositories/workout-session.ts`
+- [x] 2.9 Create thin `GET /progress/dashboard` route in `apps/api/src/routes/progress.ts`
+- [x] 2.10 Pull `screens/web-dashboard.html` via OpenDesign MCP; build `apps/web/.../dashboard/page.tsx` (streak sparkline, weekly progress X/Y, week-route strip) — exclude Coach AI card and readiness ring (out of scope)
+- [x] 2.11 Add EN/ES dashboard copy to `packages/i18n/src/messages/{en,es}.json`
+- [x] 2.12 RED/GREEN: component tests for dashboard page — data render, empty state, EN/ES parity
+- [x] 2.13 Verify: `pnpm test`, `pnpm type-check`, `pnpm architecture`, `pnpm deps-guard`, `pnpm build` all pass
 
 ## Slice 3a: Statistics — KPIs + deltas + volume trend (PR 3a, base = 2)
 
