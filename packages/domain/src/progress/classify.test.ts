@@ -14,7 +14,10 @@ describe("classifyExerciseMuscleGroup (09c-v1 progress domain, Slice 1a)", () =>
     ["Squat", "quads"],
     ["Leg Curl", "hamstrings"],
     ["Calf Raise", "calves"],
-    ["Deadlift", "back"],
+    // Deadlift decision (documented in classify.ts): ALL deadlift variants,
+    // including the plain/conventional lift, classify as hamstrings — see
+    // the "Deadlift variants" adversarial block below for the full set.
+    ["Deadlift", "hamstrings"],
     ["Romanian Deadlift", "hamstrings"],
     // ES keyword sets — mirror the OpenDesign muscle-library manifest labels
     ["Press de Banca", "chest"],
@@ -33,14 +36,29 @@ describe("classifyExerciseMuscleGroup (09c-v1 progress domain, Slice 1a)", () =>
     });
   });
 
-  it("distinguishes 'Leg Curl' (hamstrings) from a bare biceps 'curl' match", () => {
+  it("distinguishes 'Leg Curl' (hamstrings, specific phrase) from a bare 'curl' fallback (biceps)", () => {
+    // "leg curl" is checked as a specific phrase BEFORE the bare "curl" ->
+    // biceps fallback runs, so the hamstring-specific phrase always wins.
     expect(classifyExerciseMuscleGroup("Leg Curl")).toBe("hamstrings");
+    expect(classifyExerciseMuscleGroup("Barbell Curl")).toBe("biceps");
+    expect(classifyExerciseMuscleGroup("Preacher Curl")).toBe("biceps");
+    expect(classifyExerciseMuscleGroup("Concentration Curl")).toBe("biceps");
+    expect(classifyExerciseMuscleGroup("Cable Curl")).toBe("biceps");
     expect(classifyExerciseMuscleGroup("Bicep Curl")).toBe("biceps");
   });
 
-  it("distinguishes 'Romanian Deadlift' (hamstrings) from plain 'Deadlift' (back)", () => {
-    expect(classifyExerciseMuscleGroup("Romanian Deadlift")).toBe("hamstrings");
-    expect(classifyExerciseMuscleGroup("Deadlift")).toBe("back");
+  describe("deadlift variants — documented decision: all map to hamstrings", () => {
+    it.each([
+      ["Deadlift", "hamstrings"],
+      ["Romanian Deadlift", "hamstrings"],
+      ["Sumo Deadlift", "hamstrings"],
+      ["Stiff-Leg Deadlift", "hamstrings"],
+      ["Trap-Bar Deadlift", "hamstrings"],
+      ["Peso Muerto", "hamstrings"],
+      ["Peso Muerto Rumano", "hamstrings"],
+    ])('maps "%s" to %s', (title, expected) => {
+      expect(classifyExerciseMuscleGroup(title)).toBe(expected);
+    });
   });
 
   describe("normalized-title matching (case, whitespace, diacritics)", () => {
@@ -72,6 +90,47 @@ describe("classifyExerciseMuscleGroup (09c-v1 progress domain, Slice 1a)", () =>
 
     it("returns null for an empty string", () => {
       expect(classifyExerciseMuscleGroup("")).toBeNull();
+    });
+  });
+
+  describe("adversarial — real-world titles NOT equal to seed keywords (Judgment Day PR 1a)", () => {
+    it.each([
+      // MUST-FIX 1: "fly" bare keyword must not shadow rear-delt phrases.
+      ["Reverse Fly", "shoulders"],
+      ["Rear Delt Fly", "shoulders"],
+      ["Rear Fly", "shoulders"],
+      // Genuine chest flys still classify correctly (specific-before-bare
+      // precedence must not swallow real chest exercises).
+      ["Cable Fly", "chest"],
+      ["Dumbbell Fly", "chest"],
+      ["Chest Fly", "chest"],
+      ["Pec Deck", "chest"],
+      // MUST-FIX 2: bare "curl" -> biceps fallback, specific phrases win.
+      ["Barbell Curl", "biceps"],
+      ["Preacher Curl", "biceps"],
+      ["Leg Curl", "hamstrings"],
+      // SHOULD-FIX 3: "row" family -> back, except "upright row" -> shoulders.
+      ["Upright Row", "shoulders"],
+      ["Dumbbell Row", "back"],
+      ["Seated Row", "back"],
+      ["Cable Row", "back"],
+      ["T-Bar Row", "back"],
+      ["Pendlay Row", "back"],
+      ["Barbell Row", "back"],
+      // SHOULD-FIX 4: Spanish plurals classify the same as their singulars.
+      ["Elevaciones Laterales", "shoulders"],
+      ["Sentadillas", "quads"],
+      ["Dominadas", "back"],
+      ["Flexiones", "chest"],
+      // SHOULD-FIX 5: deadlift variants (documented decision: hamstrings).
+      ["Romanian Deadlift", "hamstrings"],
+      ["Sentadilla Búlgara", "quads"],
+      ["Remo con Barra", "back"],
+      // Genuinely unknown titles must still degrade to null.
+      ["Mobility Flow", null],
+      ["Foam Rolling", null],
+    ])('maps "%s" to %s', (title, expected) => {
+      expect(classifyExerciseMuscleGroup(title)).toBe(expected);
     });
   });
 });
