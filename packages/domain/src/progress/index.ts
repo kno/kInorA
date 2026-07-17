@@ -11,3 +11,8 @@
 
 export { classifyExerciseMuscleGroup } from "./classify.js";
 export { normalizeTitle } from "./normalize.js";
+export { computeStreak } from "./streak.js";
+export { computeAdherence } from "./adherence.js";
+export type { ComputeAdherenceInput, AdherenceResult } from "./adherence.js";
+export { computeWeeklyRollup } from "./weekly-rollup.js";
+export type { WeeklyRollupPlanDay, WeeklyRollupSession, WeeklyRollupRow } from "./weekly-rollup.js";

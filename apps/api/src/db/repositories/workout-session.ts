@@ -1,7 +1,9 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { computeAverageRpe, computeSessionVolume, computeVolumeTrend, defaultPlanName } from "@kinora/domain";
 import { classifyExerciseMuscleGroup } from "../muscle-classifier.js";
+import { computeAdherence, computeStreak, computeWeeklyRollup } from "../progress-domain.js";
 import type {
+  DashboardSummaryDTO,
   SessionExerciseRecord,
   SetRecordDTO,
   StartSessionOutcome,
@@ -64,6 +66,42 @@ interface SetRecordRow {
 type StartTx = Pick<Database, "insert">;
 
 const DEFAULT_HISTORY_LIMIT = 20;
+
+/**
+ * Bounded lookback window for `getDashboardSummary` (09c-v1
+ * progress-dashboard-stats, Slice 2). Wide enough to cover any realistic
+ * streak/weekly-progress calculation while staying a single bounded query,
+ * mirroring `listCompletedSessions`'s bounded-page approach.
+ */
+const DASHBOARD_HISTORY_LIMIT = 60;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function startOfUtcDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function addUtcDays(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * MS_PER_DAY);
+}
+
+/** Monday 00:00:00.000 UTC .. Sunday 23:59:59.999 UTC bounds of `reference`'s week. */
+function utcWeekBounds(reference: Date): { start: Date; end: Date } {
+  const day = startOfUtcDay(reference);
+  const mondayOffset = (day.getUTCDay() + 6) % 7;
+  const start = addUtcDays(day, -mondayOffset);
+  const end = new Date(addUtcDays(start, 7).getTime() - 1);
+  return { start, end };
+}
+
+function recentDailyCompletion(completedAtDates: string[], now: Date, days = 7): boolean[] {
+  const dayKeys = new Set(completedAtDates.map((iso) => iso.slice(0, 10)));
+  const result: boolean[] = [];
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const day = addUtcDays(startOfUtcDay(now), -offset);
+    result.push(dayKeys.has(day.toISOString().slice(0, 10)));
+  }
+  return result;
+}
 
 export interface UpdateSetRecordInput {
   actualReps?: number;
@@ -385,6 +423,135 @@ export class WorkoutSessionRepository {
         totalVolume: computeSessionVolume(session),
         averageRpe: computeAverageRpe(session),
         trend,
+      };
+    });
+  }
+
+  /**
+   * Dashboard summary (09c-v1-progress-dashboard-stats, Slice 2) — streak,
+   * weekly progress (X/Y), and the "Ruta de carga" per-day rollup.
+   *
+   * Bounded, no N+1, mirroring `listCompletedSessions`: (1) one bounded page
+   * of the caller's completed sessions (`DASHBOARD_HISTORY_LIMIT`, scoped by
+   * (tenantId, userId)); (2) one lookup of the latest ready plan (for the
+   * planned weekly count and the week-route focus labels). Only when at
+   * least one of those sessions falls inside the CURRENT UTC calendar week
+   * do we issue two further bounded `inArray` queries (session_exercises,
+   * set_records) to compute that week's per-day volume — an empty week
+   * short-circuits before any per-session data is fetched, so an inactive
+   * user costs exactly 2 queries, never 4.
+   */
+  async getDashboardSummary(
+    tenantId: string,
+    userId: string,
+    now: Date = new Date()
+  ): Promise<DashboardSummaryDTO> {
+    const completedRows = (await this.db
+      .select()
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.status, "completed")
+        )
+      )
+      .orderBy(desc(workoutSessions.completedAt))
+      .limit(DASHBOARD_HISTORY_LIMIT)) as WorkoutSessionRow[];
+
+    const planRows = (await this.db
+      .select()
+      .from(workoutPlans)
+      .where(
+        and(
+          eq(workoutPlans.tenantId, tenantId),
+          eq(workoutPlans.userId, userId),
+          eq(workoutPlans.status, "ready")
+        )
+      )
+      .orderBy(desc(workoutPlans.createdAt))
+      .limit(1)) as WorkoutPlanRow[];
+
+    const latestReadyPlan = planRows[0];
+    const completedAtDates = completedRows
+      .map((row) => row.completedAt?.toISOString())
+      .filter((iso): iso is string => iso !== undefined);
+
+    const plannedSessionsPerWeek = latestReadyPlan?.programJson?.weeklySessions.length ?? 0;
+    const { weeklyCompleted, weeklyPlanned } = computeAdherence(
+      { completedAtDates, plannedSessionsPerWeek },
+      now
+    );
+
+    const { start: weekStart, end: weekEnd } = utcWeekBounds(now);
+    const weeklyCompletedRows = completedRows.filter(
+      (row) => row.completedAt && row.completedAt >= weekStart && row.completedAt <= weekEnd
+    );
+
+    const weeklySessions =
+      weeklyCompletedRows.length === 0
+        ? []
+        : await this.buildWeeklyRollupSessions(weeklyCompletedRows);
+
+    const planDays =
+      latestReadyPlan?.programJson?.weeklySessions.map((session) => ({
+        dayIndex: session.day - 1,
+        focus: session.title,
+      })) ?? [];
+
+    return {
+      streak: computeStreak(completedAtDates, now),
+      recentDailyCompletion: recentDailyCompletion(completedAtDates, now),
+      weeklyCompleted,
+      weeklyPlanned,
+      weeklyRollup: computeWeeklyRollup({ planDays, sessions: weeklySessions }, now),
+    };
+  }
+
+  /**
+   * Computes `{ completedAt, volumeKg }` for a small set of already-fetched,
+   * current-week completed session rows — two bounded `inArray` queries
+   * (never per-session), reusing `computeSessionVolume`.
+   */
+  private async buildWeeklyRollupSessions(
+    weeklyCompletedRows: WorkoutSessionRow[]
+  ): Promise<Array<{ completedAt: string; volumeKg: number }>> {
+    const sessionIds = weeklyCompletedRows.map((row) => row.id);
+    const exerciseRows = (await this.db
+      .select()
+      .from(sessionExercises)
+      .where(inArray(sessionExercises.workoutSessionId, sessionIds))) as SessionExerciseRow[];
+
+    const exerciseIds = exerciseRows.map((exercise) => exercise.id);
+    const setRows =
+      exerciseIds.length === 0
+        ? []
+        : ((await this.db
+            .select()
+            .from(setRecords)
+            .where(inArray(setRecords.sessionExerciseId, exerciseIds))) as SetRecordRow[]);
+
+    const exercisesBySession = new Map<string, SessionExerciseRow[]>();
+    for (const exerciseRow of exerciseRows) {
+      const current = exercisesBySession.get(exerciseRow.workoutSessionId) ?? [];
+      current.push(exerciseRow);
+      exercisesBySession.set(exerciseRow.workoutSessionId, current);
+    }
+
+    const setsByExercise = new Map<string, SetRecordRow[]>();
+    for (const setRow of setRows) {
+      const current = setsByExercise.get(setRow.sessionExerciseId) ?? [];
+      current.push(setRow);
+      setsByExercise.set(setRow.sessionExerciseId, current);
+    }
+
+    return weeklyCompletedRows.map((sessionRow) => {
+      const ownExercises = exercisesBySession.get(sessionRow.id) ?? [];
+      const ownSets = ownExercises.flatMap((exercise) => setsByExercise.get(exercise.id) ?? []);
+      const session = mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets);
+      return {
+        completedAt: sessionRow.completedAt!.toISOString(),
+        volumeKg: computeSessionVolume(session),
       };
     });
   }

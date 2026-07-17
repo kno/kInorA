@@ -920,4 +920,152 @@ describe("WorkoutSessionRepository", () => {
       expect(limitMock).toHaveBeenCalledWith(21);
     });
   });
+
+  describe("getDashboardSummary", () => {
+    // Fixed "now" — Friday of the week 2026-07-13 (Mon) .. 2026-07-19 (Sun).
+    const NOW = new Date("2026-07-17T12:00:00.000Z");
+
+    const DASH_SESSION_TODAY = "aaaaaaaa-1111-0000-0000-000000000001";
+    const DASH_SESSION_MON = "aaaaaaaa-1111-0000-0000-000000000002";
+    const DASH_EXERCISE_MON = "bbbbbbbb-1111-0000-0000-000000000001";
+    const DASH_SET_MON = "cccccccc-1111-0000-0000-000000000001";
+
+    const dashProgram: WorkoutProgram = {
+      weeklySessions: [
+        { day: 1, title: "Tirón técnico", exercises: [{ name: "Row", sets: 1, reps: "10", restSeconds: 60 }] },
+        { day: 2, title: "Pierna ligera", exercises: [{ name: "Squat", sets: 1, reps: "10", restSeconds: 60 }] },
+      ],
+      limitationWarnings: [],
+    };
+
+    const dashReadyPlanRow = {
+      ...readyPlanRow,
+      programJson: dashProgram,
+    };
+
+    function buildDashSessionRow(id: string, completedAt: Date) {
+      return {
+        id,
+        tenantId: TENANT_A,
+        userId: USER_A,
+        workoutPlanId: PLAN_ID,
+        status: "completed" as const,
+        day: 1,
+        startedAt: new Date(completedAt.getTime() - 30 * 60 * 1000),
+        completedAt,
+      };
+    }
+
+    const dashSessionToday = buildDashSessionRow(DASH_SESSION_TODAY, new Date("2026-07-17T08:00:00Z"));
+    const dashSessionMon = buildDashSessionRow(DASH_SESSION_MON, new Date("2026-07-13T08:00:00Z"));
+
+    const dashExerciseMon = {
+      id: DASH_EXERCISE_MON,
+      workoutSessionId: DASH_SESSION_MON,
+      exerciseIndex: 0,
+      title: "Row",
+      restSeconds: 60,
+      notes: null,
+    };
+    const dashSetMon = {
+      id: DASH_SET_MON,
+      sessionExerciseId: DASH_EXERCISE_MON,
+      setIndex: 0,
+      targetReps: "10",
+      actualReps: 10,
+      weightKg: "50.00",
+      rpe: 7,
+      completed: true,
+      notes: null,
+    };
+
+    function createDashboardDb(input: {
+      sessionRows: unknown[];
+      planRows: unknown[];
+      exerciseRows?: unknown[];
+      setRows?: unknown[];
+    }) {
+      const sessionsWhere = vi.fn().mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(input.sessionRows) }),
+      });
+      const plansWhere = vi.fn().mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(input.planRows) }),
+      });
+      const exercisesWhere = vi.fn().mockResolvedValue(input.exerciseRows ?? []);
+      const setsWhere = vi.fn().mockResolvedValue(input.setRows ?? []);
+
+      const select = vi.fn().mockImplementation(() => ({
+        from: vi.fn().mockImplementation((table: object) => {
+          if (table === workoutSessions) return { where: sessionsWhere };
+          if (table === workoutPlans) return { where: plansWhere };
+          if (table === sessionExercises) return { where: exercisesWhere };
+          if (table === setRecords) return { where: setsWhere };
+          throw new Error(`Unexpected select table: ${String(table)}`);
+        }),
+      }));
+
+      return { select, sessionsWhere, plansWhere, exercisesWhere, setsWhere };
+    }
+
+    it("returns the empty-state DTO when there is no history and no ready plan", async () => {
+      const { select } = createDashboardDb({ sessionRows: [], planRows: [] });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const summary = await repo.getDashboardSummary(TENANT_A, USER_A, NOW);
+
+      expect(summary.streak).toBe(0);
+      expect(summary.weeklyCompleted).toBe(0);
+      expect(summary.weeklyPlanned).toBe(0);
+      expect(summary.weeklyRollup).toEqual([]);
+      expect(summary.recentDailyCompletion).toEqual([false, false, false, false, false, false, false]);
+    });
+
+    it("computes streak, weekly progress, and weekly rollup from bounded queries", async () => {
+      const { select, sessionsWhere, plansWhere } = createDashboardDb({
+        sessionRows: [dashSessionToday, dashSessionMon],
+        planRows: [dashReadyPlanRow],
+        exerciseRows: [dashExerciseMon],
+        setRows: [dashSetMon],
+      });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const summary = await repo.getDashboardSummary(TENANT_A, USER_A, NOW);
+
+      expect(summary.streak).toBe(1);
+      expect(summary.weeklyCompleted).toBe(2);
+      expect(summary.weeklyPlanned).toBe(2);
+      expect(summary.weeklyRollup).toEqual([
+        { dayIndex: 0, focus: "Tirón técnico", loadKg: 500, loadPercent: 100 },
+        { dayIndex: 1, focus: "Pierna ligera", loadKg: 0, loadPercent: 0 },
+      ]);
+      // Bounded: exactly two lookup queries (sessions, plans) issued once each.
+      expect(select).toHaveBeenCalledTimes(4);
+      expect(sessionsWhere).toHaveBeenCalledTimes(1);
+      expect(plansWhere).toHaveBeenCalledTimes(1);
+    });
+
+    it("skips the exercise/set follow-up queries when nothing completed this week", async () => {
+      const { select, exercisesWhere, setsWhere } = createDashboardDb({
+        sessionRows: [],
+        planRows: [dashReadyPlanRow],
+      });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      await repo.getDashboardSummary(TENANT_A, USER_A, NOW);
+
+      expect(exercisesWhere).not.toHaveBeenCalled();
+      expect(setsWhere).not.toHaveBeenCalled();
+      expect(select).toHaveBeenCalledTimes(2);
+    });
+
+    it("scopes both queries to (tenantId, userId) — a different tenant sees the empty state", async () => {
+      const { select } = createDashboardDb({ sessionRows: [], planRows: [] });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const summary = await repo.getDashboardSummary(TENANT_B, USER_A, NOW);
+
+      expect(summary.weeklyCompleted).toBe(0);
+      expect(summary.weeklyPlanned).toBe(0);
+    });
+  });
 });
