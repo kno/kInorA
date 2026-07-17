@@ -63,7 +63,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import type { ConnectivityMonitor, WorkoutSessionRecord } from "@kinora/contracts";
-import { collapseQueue } from "@kinora/domain";
+import { collapseQueue } from "@kinora/domain/offline";
 
 import { colors, spacing } from "../theme/tokens";
 import {
