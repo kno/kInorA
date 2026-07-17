@@ -394,3 +394,104 @@ export interface WorkoutHistoryQuery {
   limit?: number;
   offset?: number;
 }
+
+// ---------------------------------------------------------------------------
+// Progress dashboard, statistics & weekly overview types — 09c-v1.
+// DTOs for the three read-only progress surfaces (dashboard, statistics,
+// weekly plan board) plus exercise-detail history. No Drizzle imports.
+// ---------------------------------------------------------------------------
+
+/** The 10 primary muscle-group buckets (design.md "Muscle-group taxonomy"); mirrors the OpenDesign muscle library manifest. Composite/regional slugs are `MuscleRegion` below, never a distribution bucket. */
+export const MUSCLE_GROUPS = [
+  "chest",
+  "back",
+  "shoulders",
+  "biceps",
+  "triceps",
+  "core",
+  "glutes",
+  "quads",
+  "hamstrings",
+  "calves",
+] as const;
+
+export type MuscleGroup = (typeof MUSCLE_GROUPS)[number];
+
+/** Composite/regional muscle slugs used for plan-focus grouping (e.g. a week-route day's "focus"). Distinct from `MuscleGroup` — never a statistics distribution bucket. */
+export type MuscleRegion =
+  | "upper-body"
+  | "lower-body"
+  | "full-body"
+  | "push"
+  | "pull"
+  | "leg"
+  | "posterior-chain"
+  | "core-shoulders"
+  | "chest-back"
+  | "glutes-core"
+  | "legs-core"
+  | "shoulders-arms";
+
+/** A single estimated-1RM personal record (Epley formula), keyed by normalized exercise title (design.md "Personal records"). */
+export interface PersonalRecord {
+  exerciseTitle: string;
+  /** Estimated one-rep max in kg, computed via the Epley formula. */
+  estimated1RM: number;
+  /** ISO date the estimated 1RM was achieved. */
+  achievedAt: string;
+  /** Recent 1RM series (oldest → newest) plus a signed delta, for the sparkline. */
+  trend?: { series: number[]; delta: number };
+}
+
+/** A KPI value paired with its delta vs. the previous period. `deltaVsPreviousPeriod` is `null` when the previous period has no data — never `Infinity`/`NaN` (design.md "KPI deltas"). */
+export interface KpiWithDelta {
+  value: number;
+  deltaVsPreviousPeriod: number | null;
+}
+
+/** Dashboard summary DTO. Weekly progress is always measured in sessions, never any other unit (design.md "Dashboard"). */
+export interface DashboardSummaryDTO {
+  /** Consecutive calendar days (UTC) with at least one completed session. */
+  streak: number;
+  /** Recent per-day completion series backing the streak sparkline. */
+  recentDailyCompletion: boolean[];
+  /** Completed sessions in the current calendar week (UTC). */
+  weeklyCompleted: number;
+  /** Planned sessions for the current calendar week (UTC). */
+  weeklyPlanned: number;
+}
+
+/** Statistics summary DTO. Deliberately carries no adherence KPI (design.md "Adherence lives on the Dashboard, not Statistics"). */
+export interface StatsSummaryDTO {
+  range: "week" | "month" | "year";
+  totalVolumeKg: KpiWithDelta;
+  sessionCount: KpiWithDelta;
+  totalDurationMin: KpiWithDelta;
+  prCount: KpiWithDelta;
+  /** Volume trend series for the current period vs. the previous period. */
+  volumeTrend: { current: number[]; previous: number[] };
+  /** Set count + volume per primary muscle group (10-group granularity). */
+  muscleGroupDistribution: Array<{ muscleGroup: MuscleGroup; setCount: number; volumeKg: number }>;
+  personalRecords: PersonalRecord[];
+}
+
+/** Exhaustive per-day status for the weekly plan board (no "missed" state). */
+export type WeeklyDayStatus = "done" | "active" | "rest" | "soon";
+
+/** Weekly overview DTO — the Monday–Sunday plan board with prev/next week navigation (design.md "The week model"). */
+export interface WeeklyOverviewDTO {
+  /** ISO date (Monday) of the displayed calendar week. */
+  weekStart: string;
+  /** Human-facing week label (e.g. "8–14 jun"). */
+  weekLabel: string;
+  days: Array<{ date: string; status: WeeklyDayStatus; focus?: string }>;
+  /** ISO date (Monday) of the previous/next week, for navigation. */
+  previousWeekStart: string;
+  nextWeekStart: string;
+}
+
+/** Exercise detail DTO — read-only recent-history reference. Omitted entirely (design.md "Exercise detail") when no history exists. */
+export interface ExerciseDetailDTO {
+  exerciseTitle: string;
+  recentSets: Array<{ completedAt: string; weightKg?: number; actualReps?: number; rpe?: number }>;
+}
