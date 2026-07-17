@@ -52,7 +52,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkoutSessionRecord } from "@kinora/contracts";
-import { collapseQueue } from "@kinora/domain";
+import { collapseQueue } from "@kinora/domain/offline";
 import {
   completeWorkoutSessionAction,
   recordWorkoutSetAction,
