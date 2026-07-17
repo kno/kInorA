@@ -28,9 +28,12 @@ rules:
     - Follow existing code patterns where they exist
     tdd: true                # strict TDD: RED → GREEN → Triangle (edge cases)
     test_command: "pnpm --filter <workspace> test"
+    build_command: "pnpm build"        # pre-commit/pre-PR gate per slice: `next build` catches
+                                       # bundling errors (e.g. node:crypto in client code) that
+                                       # test/type-check/architecture do NOT. MUST pass before commit.
   verify:
     test_command: "pnpm --filter <workspace> test"
-    build_command: "pnpm build"
+    build_command: "pnpm build"        # MUST run and pass before merge (not just declared)
     coverage_threshold: 80
   archive:
     - Warn before merging destructive deltas
