@@ -133,4 +133,43 @@ describe("classifyExerciseMuscleGroup (09c-v1 progress domain, Slice 1a)", () =>
       expect(classifyExerciseMuscleGroup(title)).toBe(expected);
     });
   });
+
+  describe("adversarial — Round-2 Judgment Day: unguarded substring matching produces wrong-bucket false positives (both blind judges confirmed)", () => {
+    it.each([
+      // Bare "row" (back) must NOT match inside unrelated words containing
+      // "row" as a substring: throw, narrow, crow.
+      ["Medicine Ball Throw", null],
+      ["Sled Throw", null],
+      ["Crow Pose", null],
+      // "Narrow Grip Push-up" must not match bare "row" inside "Narrow" —
+      // AND must now correctly classify as chest via the new push-up keyword.
+      ["Narrow Grip Push-up", "chest"],
+      // Bare "rdl" (hamstrings) must NOT match inside "hurdle"/"girdle".
+      ["Hurdle Jump", null],
+      ["Hurdle Hops", null],
+      // Bare "remo" (back, ES) must NOT match inside "extremo".
+      ["Press Extremo", null],
+      // Bare "core" must NOT match inside "scorecard".
+      ["Scorecard", null],
+      // Bare "fly" (chest) must NOT match inside "butterfly" (one word) —
+      // degrading to null here is the correct, documented trade-off.
+      ["Butterfly Stretch", null],
+    ])('maps "%s" to %s', (title, expected) => {
+      expect(classifyExerciseMuscleGroup(title)).toBe(expected);
+    });
+  });
+
+  describe("push-up coverage (Judgment Day: most common bodyweight chest exercise, previously null)", () => {
+    it.each([
+      ["Push-up", "chest"],
+      ["Push up", "chest"],
+      ["Pushup", "chest"],
+      ["Press-up", "chest"],
+      ["Lagartija", "chest"],
+      ["Lagartijas", "chest"],
+      ["Narrow Grip Push-up", "chest"],
+    ])('maps "%s" to %s', (title, expected) => {
+      expect(classifyExerciseMuscleGroup(title)).toBe(expected);
+    });
+  });
 });

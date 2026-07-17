@@ -48,6 +48,34 @@ import { normalizeTitle } from "./normalize.js";
  *     containment, so those get an explicit plural keyword alongside the
  *     singular.
  *
+ * Word-boundary matching (Round-2 Judgment Day fix): keywords are matched
+ * against the normalized title using a `\b`-anchored regular expression, not
+ * raw substring containment. Plain `.includes()` let short bare keywords
+ * match INSIDE unrelated words — e.g. bare "row" (back) is a substring of
+ * "throw", "narrow", "arrow", "crow"; bare "rdl" (hamstrings) is a substring
+ * of "hurdle"/"girdle"; bare ES "remo" (back) is a substring of "extremo";
+ * bare "core" is a substring of "scorecard" — all producing a confidently
+ * WRONG bucket, worse than degrading to `null`. Word-boundary anchoring
+ * eliminates this entire class of false positive at the matching primitive,
+ * rather than patching each offending keyword individually.
+ *
+ * Because `normalizeTitle` already replaces hyphens with spaces (see
+ * normalize.ts), keywords never need a hyphenated form — "push up" matches
+ * "Push-up", "Push up", and "Pushup"-adjacent phrases (e.g. "Narrow Grip
+ * Push-up") uniformly once normalized.
+ *
+ * Spanish plural suffix: the compiled regex also allows an optional
+ * trailing "s" or "es" (`(?:e?s)?`) after the keyword, still anchored by the
+ * closing `\b`. This preserves the plural matches documented above
+ * ("sentadilla" -> "sentadillas", "dominada" -> "dominadas", "flexion" ->
+ * "flexiones") which relied on plain substring/prefix containment before
+ * this fix and would otherwise regress under strict `\b` anchoring (a
+ * trailing "s"/"es" is itself a word character, so it sits on the wrong side
+ * of a strict end boundary). The suffix is a fixed literal alternative, not
+ * a wildcard, so it does not reintroduce the substring bug: the *start*
+ * boundary check (which is what rejects "extremo", "hurdle", etc.) is
+ * unaffected by this change.
+ *
  * Unmapped titles degrade to `null` — intentional, never thrown.
  *
  * Pure — no I/O.
@@ -138,6 +166,10 @@ const KEYWORD_GROUPS: readonly KeywordGroup[] = [
       "fly",
       "flexion",
       "pecho",
+      "push up",
+      "pushup",
+      "press up",
+      "lagartija",
     ],
   },
   {
@@ -208,17 +240,47 @@ const KEYWORD_GROUPS: readonly KeywordGroup[] = [
   },
 ];
 
+/** Escapes regex metacharacters so a keyword can be embedded as a literal. */
+function escapeRegex(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Compiled `\b`-anchored keyword regexes, cached per unique keyword string
+ * (keywords repeat across the specific/bare passes and across calls, so this
+ * avoids recompiling the same pattern). Each pattern is a literal, escaped
+ * keyword anchored at both ends, with an optional trailing Spanish plural
+ * suffix ("s" or "es") before the closing boundary — see the module-level
+ * doc comment ("Spanish plural suffix") for why the suffix is needed and why
+ * it is safe.
+ */
+const keywordRegexCache = new Map<string, RegExp>();
+
+function keywordRegex(keyword: string): RegExp {
+  const cached = keywordRegexCache.get(keyword);
+  if (cached) {
+    return cached;
+  }
+  const compiled = new RegExp(`\\b${escapeRegex(keyword)}(?:e?s)?\\b`);
+  keywordRegexCache.set(keyword, compiled);
+  return compiled;
+}
+
+function keywordMatches(normalizedTitle: string, keyword: string): boolean {
+  return keywordRegex(keyword).test(normalizedTitle);
+}
+
 export function classifyExerciseMuscleGroup(title: string): MuscleGroup | null {
   const normalized = normalizeTitle(title);
 
   for (const { group, specific } of KEYWORD_GROUPS) {
-    if (specific.some((keyword) => normalized.includes(keyword))) {
+    if (specific.some((keyword) => keywordMatches(normalized, keyword))) {
       return group;
     }
   }
 
   for (const { group, bare } of KEYWORD_GROUPS) {
-    if (bare.some((keyword) => normalized.includes(keyword))) {
+    if (bare.some((keyword) => keywordMatches(normalized, keyword))) {
       return group;
     }
   }
