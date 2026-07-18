@@ -302,4 +302,13 @@ describe("PlanWeekView — interactive day grid + start CTA (#93 Slice 3)", () =
       expect(screen.getByRole("button", { name: `Day ${day}` })).toBeDefined();
     }
   });
+
+  it("spec-fidelity fix: renders a full 7-tile Monday-Sunday board, not just one card per training day (2-session program)", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
+    renderWithIntl(<>{view}</>);
+
+    expect(screen.getAllByTestId("week-tile")).toHaveLength(7);
+    // 2 interactive training-day tiles + 5 non-interactive rest tiles.
+    expect(screen.getAllByRole("button", { name: /^Day \d+$/ })).toHaveLength(2);
+  });
 });

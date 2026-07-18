@@ -209,6 +209,19 @@
   box-shadow: inset 0 0 0 1px var(--accent-dim, oklch(89% 0.2 128 / 0.18));
 }
 
+/* Rest tile (spec-fidelity fix — the 7-tile grid's non-training-day slot,
+   matches web-plan.html `.day-card.rest`). Non-interactive: no cursor,
+   no hover transform. */
+.dayCardRest {
+  opacity: 0.72;
+  cursor: default;
+}
+
+.dayCardRest:hover {
+  transform: none;
+  border-color: var(--border);
+}
+
 .dayTop {
   display: flex;
   align-items: center;
