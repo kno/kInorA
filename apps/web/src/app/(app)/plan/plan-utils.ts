@@ -44,3 +44,30 @@ export function estimateSessionMinutes(
 export function restDays(weeklySessions: Pick<WorkoutSession, "day">[]): number {
   return Math.max(0, 7 - weeklySessions.length);
 }
+
+/**
+ * Derive presentational mini bar-stack heights (0-100) for a day card's
+ * load visualization (Slice 4a — web-plan.html `.mini-stack`, closes #128).
+ *
+ * Purely derived from the session's OWN exercises — no cross-session
+ * analytics, no new domain function, no persisted data. Each bar height is
+ * the exercise's estimated load (sets × (restSeconds + overhead)) relative
+ * to the session's own max load, rounded to the nearest integer percent.
+ * Always returns exactly `barCount` values (padded with 0 when there are
+ * fewer exercises, truncated when there are more) so every day card renders
+ * a uniform bar-stack regardless of exercise count.
+ */
+export function sessionLoadBars(
+  exercises: WorkoutSession["exercises"],
+  barCount = 4,
+): number[] {
+  const loads = exercises.map(
+    (e) => e.sets * (e.restSeconds + EXECUTION_OVERHEAD_SECONDS),
+  );
+  const max = Math.max(0, ...loads);
+  const bars = loads
+    .slice(0, barCount)
+    .map((load) => (max > 0 ? Math.round((load / max) * 100) : 0));
+  while (bars.length < barCount) bars.push(0);
+  return bars;
+}

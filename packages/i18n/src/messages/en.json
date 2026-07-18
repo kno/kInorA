@@ -282,6 +282,14 @@
       "reps": "Reps",
       "rest": "Rest"
     },
+    "week": {
+      "eyebrow": "Weekly route",
+      "title": "Training map",
+      "navLabel": "Change week",
+      "prev": "Previous week",
+      "next": "Next week",
+      "label": "This week"
+    },
     "start": {
       "conflict": "You have an active session for {plan} · Day {n}. Resume or finish it before starting another.",
       "conflict_no_day": "You have an active session for {plan}. Resume or finish it before starting another.",

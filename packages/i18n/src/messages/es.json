@@ -282,6 +282,14 @@
       "reps": "Reps",
       "rest": "Descanso"
     },
+    "week": {
+      "eyebrow": "Ruta semanal",
+      "title": "Mapa de entrenamiento",
+      "navLabel": "Cambiar semana",
+      "prev": "Semana anterior",
+      "next": "Semana siguiente",
+      "label": "Esta semana"
+    },
     "start": {
       "conflict": "Tienes una sesión activa para {plan} · Día {n}. Retómala o termínala antes de empezar otra.",
       "conflict_no_day": "Tienes una sesión activa para {plan}. Retómala o termínala antes de empezar otra.",
