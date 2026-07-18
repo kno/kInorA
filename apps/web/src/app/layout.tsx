@@ -52,11 +52,11 @@ export default async function RootLayout({
 
   return (
     <html lang={locale}>
-      {/* Progressive enhancement: ensure reveal blocks are visible when JS is disabled */}
-      <noscript>
-        <style>{`.kin-landing-reveal{opacity:1;transform:none}`}</style>
-      </noscript>
       <body>
+        {/* Progressive enhancement: ensure reveal blocks are visible when JS is disabled */}
+        <noscript>
+          <style>{`.kin-landing-reveal{opacity:1;transform:none}`}</style>
+        </noscript>
         <NextIntlClientProvider locale={locale} messages={messages}>
           {serviceWorkerEnabled ? (
             <SerwistProvider swUrl="/sw.js">{children}</SerwistProvider>
