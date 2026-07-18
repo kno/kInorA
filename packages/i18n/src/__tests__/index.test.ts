@@ -53,8 +53,12 @@ describe("@kinora/i18n package assembly", () => {
     // the full web-dashboard.html mockup (topbar, hero session copy + stats,
     // readiness ring, streak chip, Coach AI card, next-session card, and the
     // "Bloque de hoy" exercise list — presentational modules included).
+    // + 68 `plan.*` keys added when the web plan page was realigned to the
+    // full web-plan.html mockup (25 `plan.hero.*` topbar/hero cockpit copy +
+    // metrics/body-map, 11 `plan.readiness.*`, 22 `plan.today.*` side-rail
+    // exercise blocks, 10 `plan.coach.*` — the side rail is presentational).
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(474);
+    expect(Object.keys(flat)).toHaveLength(542);
   });
 
   it("the mobileTracker namespace is present with EN+ES parity (9.3.3)", () => {

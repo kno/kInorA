@@ -29,6 +29,7 @@
 import * as React from "react";
 import { useTranslations } from "next-intl";
 import type { WeeklyOverviewDTO, WorkoutProgram } from "@kinora/contracts";
+import styles from "./plan-week-view.module.css";
 import { DayDetailPanel } from "./DayDetailPanel";
 import { TrackerPanel } from "./[id]/TrackerPanel";
 import { useWorkoutSession } from "./use-workout-session";
@@ -50,6 +51,17 @@ export interface PlanTrackerClientProps {
    * `DayDetailPanel`, which owns all further week navigation locally.
    */
   weeklyOverview?: WeeklyOverviewDTO;
+  /**
+   * Full-width topbar (plan name header + lead + presentational actions),
+   * rendered above the cockpit grid. Hidden while a session is active (the
+   * tracker's identity header takes over). Optional — legacy callers omit it.
+   */
+  topbar?: React.ReactNode;
+  /**
+   * Presentational side rail (readiness ring, today's blocks, Coach AI) shown
+   * in the cockpit's right column. Hidden while a session is active. Optional.
+   */
+  sideRail?: React.ReactNode;
 }
 
 /**
@@ -77,6 +89,8 @@ export function PlanTrackerClient({
   planName,
   children,
   weeklyOverview,
+  topbar,
+  sideRail,
 }: PlanTrackerClientProps) {
   const {
     activeSession,
@@ -140,21 +154,33 @@ export function PlanTrackerClient({
     );
   }
 
+  // Non-active: the cockpit layout (web-plan.html). Topbar spans full width;
+  // the two-column grid holds the main column (children = hero + metrics +
+  // limitation banner, then the DATA-WIRED week board) and the presentational
+  // side rail.
   return (
-    <div>
-      {children}
+    <div className={styles.frame}>
+      {topbar}
       {syncNoticeBanner}
       {errorKey && (
         <p role="alert" data-testid="tracker-error">
           {t(errorKey)}
         </p>
       )}
-      <DayDetailPanel
-        sessions={program.weeklySessions}
-        onStartWorkout={(day) => handleStartWorkout(planId, day)}
-        conflict={conflict}
-        weeklyOverview={weeklyOverview}
-      />
+      <div className={styles.cockpit}>
+        <div className={styles.cockpitMain}>
+          {children}
+          <section className={`${styles.panel} ${styles.weekBoard}`} aria-label={t("plan.week.title")}>
+            <DayDetailPanel
+              sessions={program.weeklySessions}
+              onStartWorkout={(day) => handleStartWorkout(planId, day)}
+              conflict={conflict}
+              weeklyOverview={weeklyOverview}
+            />
+          </section>
+        </div>
+        {sideRail}
+      </div>
     </div>
   );
 }
