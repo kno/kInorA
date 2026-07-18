@@ -1704,3 +1704,101 @@ a {
 .stats-trend-series[data-variant="previous"] .stats-trend-bar {
   background: var(--border);
 }
+
+/* -------------------------------------------------------------------------
+ * Statistics — muscle-group distribution + PRs (Slice 3b), built to the
+ * `.bar-chart` / `.pr-table` primitives in screens/web-stats.html.
+ * ------------------------------------------------------------------------- */
+
+.stats-bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: var(--sp-2);
+}
+
+.stats-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stats-bar-label {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  width: 72px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.stats-bar-track {
+  flex: 1;
+  height: 10px;
+  background: var(--surface-2);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+.stats-bar-fill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+}
+
+.stats-bar-val {
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  width: 28px;
+  text-align: right;
+}
+
+.stats-pr-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--sp-2);
+}
+
+.stats-pr-table th {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.stats-pr-table td {
+  padding: 10px 12px;
+  font-size: var(--fs-sm);
+  border-top: 1px solid var(--border);
+}
+
+.stats-pr-exercise {
+  font-weight: 500;
+}
+
+.stats-pr-date {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.stats-pr-trend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stats-trend-arrow-up {
+  color: var(--success);
+}
+
+.stats-trend-arrow-down {
+  color: var(--danger);
+}
+
+.stats-trend-arrow-flat {
+  color: var(--muted);
+}

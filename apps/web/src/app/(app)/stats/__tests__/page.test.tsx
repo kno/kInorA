@@ -40,8 +40,24 @@ const populatedSummary: StatsSummaryDTO = {
   totalDurationMin: { value: 1180, deltaVsPreviousPeriod: null },
   prCount: { value: 3, deltaVsPreviousPeriod: 1 },
   volumeTrend: { current: [980, 1240, 1080], previous: [740, 920, 860] },
-  muscleGroupDistribution: [],
-  personalRecords: [],
+  muscleGroupDistribution: [
+    { muscleGroup: "back", setCount: 44, volumeKg: 2200 },
+    { muscleGroup: "quads", setCount: 30, volumeKg: 3000 },
+    { muscleGroup: "hamstrings", setCount: 10, volumeKg: 900 },
+  ],
+  personalRecords: [
+    {
+      exerciseTitle: "Sentadilla con barra",
+      estimated1RM: 112.5,
+      achievedAt: "2026-06-14",
+      trend: { series: [105, 112.5], delta: 7.5 },
+    },
+    {
+      exerciseTitle: "Press militar",
+      estimated1RM: 64,
+      achievedAt: "2026-06-05",
+    },
+  ],
 };
 
 async function renderPage(searchParams: { range?: string } = {}) {
@@ -133,13 +149,55 @@ describe("StatsPage", () => {
     expect(text).toContain("Not enough data yet");
   });
 
-  it("renders clearly-marked placeholders for distribution and PRs (Slice 3b)", async () => {
+  it("renders the muscle-group distribution collapsed into coarse buckets (Slice 3b)", async () => {
     vi.mocked(getStatsAction).mockResolvedValueOnce({ kind: "ok", summary: populatedSummary });
 
     const page = await renderPage();
     const text = textOf(page);
 
-    expect(text).toContain("coming soon");
+    // back (44) stays 1:1; quads (30) + hamstrings (10) merge into "Legs" (40).
+    expect(text).toContain("Back");
+    expect(text).toContain("44");
+    expect(text).toContain("Legs");
+    expect(text).toContain("40");
+  });
+
+  it("renders the personal-records table with exercise, 1RM, date, and trend", async () => {
+    vi.mocked(getStatsAction).mockResolvedValueOnce({ kind: "ok", summary: populatedSummary });
+
+    const page = await renderPage();
+    const text = textOf(page);
+
+    expect(text).toContain("Sentadilla con barra");
+    expect(text).toContain("112.5 kg");
+    expect(text).toContain("2026-06-14");
+    expect(text).toContain("+7.5 kg");
+    // A PR with no trend (single data point) shows a flat dash, not a crash.
+    expect(text).toContain("Press militar");
+    expect(text).toContain("—");
+  });
+
+  it("renders an empty-state message for distribution and PRs when there is no data", async () => {
+    vi.mocked(getStatsAction).mockResolvedValueOnce({ kind: "ok", summary: emptySummary });
+
+    const page = await renderPage();
+    const text = textOf(page);
+
+    expect(text).toContain("No mapped exercises yet");
+    expect(text).toContain("No personal records yet");
+  });
+
+  it("still renders the distribution gracefully when a distribution row exists without a matching PR (unmapped-exercise degrade already applied server-side)", async () => {
+    vi.mocked(getStatsAction).mockResolvedValueOnce({
+      kind: "ok",
+      summary: { ...populatedSummary, personalRecords: [] },
+    });
+
+    const page = await renderPage();
+    const text = textOf(page);
+
+    expect(text).toContain("Back");
+    expect(text).toContain("No personal records yet");
   });
 
   it("shows a fallback message when the fetch fails", async () => {
@@ -160,6 +218,21 @@ describe("StatsPage", () => {
     expect(text).toContain("Estadísticas");
     expect(text).toContain("Volumen total");
     expect(text).toContain("Volumen de entrenamiento");
+    // Coarse muscle-group labels + PR table copy also come from the ES catalog.
+    expect(text).toContain("Espalda");
+    expect(text).toContain("Pierna");
+    expect(text).toContain("Sentadilla con barra");
+  });
+
+  it("renders real Spanish empty-state copy for distribution and PRs", async () => {
+    vi.mocked(getTranslations).mockResolvedValueOnce(createServerTranslator("es"));
+    vi.mocked(getStatsAction).mockResolvedValueOnce({ kind: "ok", summary: emptySummary });
+
+    const page = await renderPage();
+    const text = textOf(page);
+
+    expect(text).toContain("Todavía no hay ejercicios clasificados");
+    expect(text).toContain("Todavía no hay récords personales");
   });
 });
 

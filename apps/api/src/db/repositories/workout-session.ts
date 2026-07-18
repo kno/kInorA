@@ -1,10 +1,20 @@
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { computeAverageRpe, computeSessionVolume, computeVolumeTrend, defaultPlanName } from "@kinora/domain";
 import { classifyExerciseMuscleGroup } from "../muscle-classifier.js";
-import { computeAdherence, computeStreak, computeWeeklyRollup, delta } from "../progress-domain.js";
+import {
+  computeAdherence,
+  computeMuscleGroupDistribution,
+  computePersonalRecords,
+  computeStreak,
+  computeWeeklyRollup,
+  delta,
+  type MuscleGroupDistributionExercise,
+  type PersonalRecordSetInput,
+} from "../progress-domain.js";
 import type {
   DashboardSummaryDTO,
   KpiWithDelta,
+  MuscleGroup,
   SessionExerciseRecord,
   SetRecordDTO,
   StartSessionOutcome,
@@ -47,10 +57,10 @@ interface SessionExerciseRow {
   /**
    * Derived muscle-group classification (09c-v1 Slice 1b). Populated at
    * write time via `classifyExerciseMuscleGroup`; `null` when the title is
-   * unmapped. Not yet surfaced on `SessionExerciseRecord` — that DTO wiring
-   * belongs to a later slice (3b) that reads this column.
+   * unmapped. Read directly by `getStatsRange` (Slice 3b) for the
+   * muscle-group distribution — not surfaced on `SessionExerciseRecord`.
    */
-  muscleGroup: string | null;
+  muscleGroup: string | null | undefined;
 }
 
 interface SetRecordRow {
@@ -636,18 +646,18 @@ export class WorkoutSessionRepository {
   }
 
   /**
-   * Statistics summary (09c-v1-progress-dashboard-stats, Slice 3a) — KPIs
-   * (volume, session count, duration, PR count) each with a delta vs. the
-   * previous period, plus the volume-trend series. `prCount` /
-   * `muscleGroupDistribution` / `personalRecords` are placeholders here
-   * (TODO(3b): wire `computeMuscleGroupDistribution` + `computePersonalRecords`
-   * once the `muscle_group` column backfill — Slice 1b — is queryable from
-   * this surface); the DTO shape stays contract-correct in the meantime.
+   * Statistics summary (09c-v1-progress-dashboard-stats, Slices 3a+3b) —
+   * KPIs (volume, session count, duration, PR count) each with a delta vs.
+   * the previous period, the volume-trend series, the muscle-group
+   * distribution (`computeMuscleGroupDistribution`), and personal records
+   * (`computePersonalRecords`, Epley estimated 1RM). Distribution and PRs
+   * are scoped to the CURRENT period only.
    *
    * Bounded, no N+1: (1) one date-ranged query over the caller's completed
    * sessions spanning `previousStart..currentEnd` in a single WHERE, scoped
    * by (tenantId, userId); (2)+(3) two bounded `inArray` follow-ups
-   * (session_exercises, set_records) to compute per-session volume — skipped
+   * (session_exercises, set_records) reused both for per-session volume and
+   * for the distribution/PR aggregation — no additional queries — skipped
    * entirely when no session falls in range, mirroring
    * `getDashboardSummary`'s empty-state short circuit.
    */
@@ -713,6 +723,7 @@ export class WorkoutSessionRepository {
     }
     const currentEntries: StatsBucketEntry[] = [];
     const previousEntries: StatsBucketEntry[] = [];
+    const currentSessionCompletedAt = new Map<string, Date>();
 
     for (const sessionRow of sessionRows) {
       const completedAt = sessionRow.completedAt!;
@@ -725,10 +736,50 @@ export class WorkoutSessionRepository {
 
       if (completedAt >= currentStart && completedAt <= currentEnd) {
         currentEntries.push(entry);
+        currentSessionCompletedAt.set(sessionRow.id, completedAt);
       } else if (completedAt >= previousStart && completedAt <= previousEnd) {
         previousEntries.push(entry);
       }
     }
+
+    // Muscle-group distribution + personal records (Slice 3b) are scoped to
+    // the CURRENT period only, reusing the same exercise/set rows already
+    // fetched above — no extra queries.
+    const distributionInputs: MuscleGroupDistributionExercise[] = [];
+    const prSetInputs: PersonalRecordSetInput[] = [];
+
+    for (const exerciseRow of exerciseRows) {
+      const sessionCompletedAt = currentSessionCompletedAt.get(exerciseRow.workoutSessionId);
+      if (!sessionCompletedAt) {
+        continue;
+      }
+
+      const ownSets = setsByExercise.get(exerciseRow.id) ?? [];
+      const completedSets = ownSets.filter((set) => set.completed);
+      const setVolumeKg = completedSets.reduce(
+        (sum, set) => sum + (toOptionalNumber(set.weightKg) ?? 0) * (set.actualReps ?? 0),
+        0
+      );
+
+      distributionInputs.push({
+        muscleGroup: (exerciseRow.muscleGroup ?? null) as MuscleGroup | null,
+        setCount: completedSets.length,
+        volumeKg: setVolumeKg,
+      });
+
+      for (const set of ownSets) {
+        prSetInputs.push({
+          exerciseTitle: exerciseRow.title,
+          completed: set.completed,
+          weightKg: toOptionalNumber(set.weightKg),
+          actualReps: set.actualReps,
+          achievedAt: sessionCompletedAt.toISOString(),
+        });
+      }
+    }
+
+    const muscleGroupDistribution = computeMuscleGroupDistribution(distributionInputs);
+    const personalRecords = computePersonalRecords(prSetInputs);
 
     const sum = (entries: StatsBucketEntry[], pick: (entry: StatsBucketEntry) => number): number =>
       entries.reduce((total, entry) => total + pick(entry), 0);
@@ -751,12 +802,13 @@ export class WorkoutSessionRepository {
       totalVolumeKg: { value: currentVolume, deltaVsPreviousPeriod: delta(currentVolume, previousVolume) },
       sessionCount: { value: currentCount, deltaVsPreviousPeriod: delta(currentCount, previousCount) },
       totalDurationMin: { value: currentDuration, deltaVsPreviousPeriod: delta(currentDuration, previousDuration) },
-      // TODO(3b): compute real PR count via `computePersonalRecords`.
-      prCount: zeroKpi(),
+      // `prCount` has no meaningful previous-period comparison (design.md
+      // "KPI deltas" only defines deltas for volume/sessions/duration) —
+      // deliberately null, never a fabricated delta.
+      prCount: { value: personalRecords.length, deltaVsPreviousPeriod: null },
       volumeTrend: { current: ascendingByDate(currentEntries), previous: ascendingByDate(previousEntries) },
-      // TODO(3b): wire `computeMuscleGroupDistribution` + `computePersonalRecords`.
-      muscleGroupDistribution: [],
-      personalRecords: [],
+      muscleGroupDistribution,
+      personalRecords,
     };
   }
 

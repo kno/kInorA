@@ -17,3 +17,7 @@ export type { ComputeAdherenceInput, AdherenceResult } from "./adherence.js";
 export { computeWeeklyRollup } from "./weekly-rollup.js";
 export type { WeeklyRollupPlanDay, WeeklyRollupSession, WeeklyRollupRow } from "./weekly-rollup.js";
 export { delta } from "./delta.js";
+export { computeMuscleGroupDistribution } from "./distribution.js";
+export type { MuscleGroupDistributionExercise, MuscleGroupDistributionRow } from "./distribution.js";
+export { computePersonalRecords } from "./personal-records.js";
+export type { PersonalRecordSetInput } from "./personal-records.js";

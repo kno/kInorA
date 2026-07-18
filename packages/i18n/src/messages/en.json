@@ -577,8 +577,30 @@
     "volumeTrendEmpty": "Not enough data yet to show a trend.",
     "distributionTitle": "Sets per muscle group",
     "distributionComingSoon": "Muscle-group distribution is coming soon.",
+    "distributionEmpty": "No mapped exercises yet — log a workout to see this chart.",
     "prTitle": "Personal records",
-    "prComingSoon": "Personal records are coming soon."
+    "prComingSoon": "Personal records are coming soon.",
+    "prEmpty": "No personal records yet.",
+    "prExerciseHeader": "Exercise",
+    "prEstimatedHeader": "Estimated 1RM",
+    "prDateHeader": "Date",
+    "prTrendHeader": "Trend"
+  },
+  "progress": {
+    "muscle": {
+      "chest": "Chest",
+      "back": "Back",
+      "shoulders": "Shoulders",
+      "biceps": "Biceps",
+      "triceps": "Triceps",
+      "core": "Core",
+      "glutes": "Glutes",
+      "quads": "Quads",
+      "hamstrings": "Hamstrings",
+      "calves": "Calves",
+      "legs": "Legs",
+      "arms": "Arms"
+    }
   },
   "history": {
     "title": "History",
