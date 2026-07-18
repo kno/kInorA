@@ -1,4 +1,8 @@
-import { and, asc, eq, gt, isNull, type SQL } from "drizzle-orm";
+import { config } from "dotenv";
+import { and, asc, gt, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { createDbClient } from "./client.js";
 import type { Database } from "./client.js";
 import { sessionExercises } from "./schema.js";
 import { classifyExerciseMuscleGroup } from "./muscle-classifier.js";
@@ -81,14 +85,21 @@ export async function backfillMuscleGroups(
     }
     batches += 1;
 
-    for (const row of rows) {
-      const muscleGroup = classifyExerciseMuscleGroup(row.title);
-      await db
-        .update(sessionExercises)
-        .set({ muscleGroup })
-        .where(eq(sessionExercises.id, row.id));
-      updated += 1;
-    }
+    const classified = rows.map((row) => ({
+      id: row.id,
+      muscleGroup: classifyExerciseMuscleGroup(row.title),
+    }));
+
+    await db
+      .update(sessionExercises)
+      .set({ muscleGroup: buildMuscleGroupCase(classified) })
+      .where(
+        inArray(
+          sessionExercises.id,
+          classified.map((row) => row.id),
+        ),
+      );
+    updated += classified.length;
 
     processed += rows.length;
     cursor = rows[rows.length - 1]!.id;
@@ -99,6 +110,50 @@ export async function backfillMuscleGroups(
   }
 
   return { processed, updated, batches };
+}
+
+/**
+ * Builds a single `CASE id WHEN ... THEN ... END` SQL expression covering an
+ * entire batch, so each batch is written with ONE bulk `UPDATE ... WHERE id
+ * IN (...)` round-trip instead of one `UPDATE` per row.
+ */
+export function buildMuscleGroupCase(
+  rows: Array<{ id: string; muscleGroup: string | null }>,
+): SQL {
+  const clauses = rows.map((row) => sql`WHEN ${row.id} THEN ${row.muscleGroup}`);
+  return sql`CASE ${sessionExercises.id} ${sql.join(clauses, sql` `)} ELSE ${sessionExercises.muscleGroup} END`;
+}
+
+/**
+ * CLI entrypoint — `pnpm --filter api db:backfill-muscle-group [--reclassify]`.
+ * Only runs when this file is executed directly (not when imported, e.g. by
+ * tests). Creates its own DB client from `DATABASE_URL` (loaded from the
+ * project root `.env`, mirroring `src/index.ts`), runs the backfill, logs a
+ * summary, and exits non-zero on failure so operators/CI notice.
+ */
+async function runCli(): Promise<void> {
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const envPath = resolve(__dirname, "../../../../.env");
+  config({ path: envPath });
+
+  const mode: BackfillMode = process.argv.includes("--reclassify") ? "reclassify" : "fill";
+
+  const { db, pool } = createDbClient();
+  try {
+    const result = await backfillMuscleGroups(db, { mode });
+    console.log(
+      `[backfill-muscle-group] mode=${mode} batches=${result.batches} processed=${result.processed} updated=${result.updated}`,
+    );
+  } finally {
+    await pool.end();
+  }
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  runCli().catch((err) => {
+    console.error("[backfill-muscle-group] failed:", err);
+    process.exitCode = 1;
+  });
 }
 
 function scanCondition(mode: BackfillMode, cursor: string | undefined): SQL | undefined {

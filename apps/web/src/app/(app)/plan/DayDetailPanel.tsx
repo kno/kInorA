@@ -18,7 +18,7 @@
  * falls back to the Slice-4a inert/session-only rendering unchanged.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { WeeklyDayStatus, WeeklyOverviewDTO, WorkoutSession } from "@kinora/contracts";
 import styles from "./plan-week-view.module.css";
@@ -70,6 +70,15 @@ export function DayDetailPanel({
 }: DayDetailPanelProps) {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [overview, setOverview] = useState(weeklyOverview);
+
+  // Resync local `overview` state whenever the `weeklyOverview` PROP changes
+  // identity (e.g. the parent server component re-fetches after
+  // `router.refresh()` / revisiting `/plan`). Without this, `overview` stays
+  // pinned to whatever value it had at mount time, since `useState`'s
+  // initializer only runs once.
+  useEffect(() => {
+    setOverview(weeklyOverview);
+  }, [weeklyOverview]);
 
   const t = useTranslations();
 
