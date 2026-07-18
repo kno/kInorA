@@ -49,8 +49,12 @@ describe("@kinora/i18n package assembly", () => {
     // + 4 `plan.dayState.*` keys and 5 `exercises.history.*` keys authored
     // in Slice 4b for the real done/active/rest/soon day-state labels and
     // the read-only exercise-history section.
+    // + 44 `dashboard.*` keys added when the web dashboard was realigned to
+    // the full web-dashboard.html mockup (topbar, hero session copy + stats,
+    // readiness ring, streak chip, Coach AI card, next-session card, and the
+    // "Bloque de hoy" exercise list — presentational modules included).
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(430);
+    expect(Object.keys(flat)).toHaveLength(474);
   });
 
   it("the mobileTracker namespace is present with EN+ES parity (9.3.3)", () => {
