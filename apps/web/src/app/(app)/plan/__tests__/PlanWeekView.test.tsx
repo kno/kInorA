@@ -16,6 +16,11 @@ vi.mock("../[id]/actions", () => ({
   recordWorkoutSetAction: vi.fn(),
   completeWorkoutSessionAction: vi.fn(),
 }));
+// `PlanWeekView` fetches the weekly overview server-side (Slice 4b) via a
+// "use server" action — mocked here (no real cookies()/fetch in jsdom).
+vi.mock("../actions", () => ({
+  getWeeklyOverviewAction: vi.fn().mockResolvedValue({ kind: "error", message: "no_session" }),
+}));
 // PlanWeekView is a server component (`getTranslations`) — see
 // `server-translator.ts` for why this is mocked rather than run for real.
 vi.mock("next-intl/server", () => ({

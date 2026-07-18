@@ -1317,4 +1317,206 @@ describe("WorkoutSessionRepository", () => {
       expect(summary.sessionCount).toEqual({ value: 0, deltaVsPreviousPeriod: null });
     });
   });
+
+  describe("getWeeklyOverview", () => {
+    // Monday 2026-07-13 .. Sunday 2026-07-19 (UTC).
+    const WEEK_START = new Date("2026-07-13T00:00:00.000Z");
+    const NOW = new Date("2026-07-16T12:00:00.000Z"); // Thursday
+
+    const weekProgram: WorkoutProgram = {
+      weeklySessions: [
+        { day: 1, title: "Tirón técnico", exercises: [{ name: "Row", sets: 1, reps: "10", restSeconds: 60 }] },
+        { day: 2, title: "Pierna ligera", exercises: [{ name: "Squat", sets: 1, reps: "10", restSeconds: 60 }] },
+      ],
+      limitationWarnings: [],
+    };
+    const weekReadyPlanRow = { ...readyPlanRow, programJson: weekProgram };
+
+    function buildWeekSessionRow(id: string, completedAt: Date) {
+      return {
+        id,
+        tenantId: TENANT_A,
+        userId: USER_A,
+        workoutPlanId: PLAN_ID,
+        status: "completed" as const,
+        day: 1,
+        startedAt: new Date(completedAt.getTime() - 30 * 60 * 1000),
+        completedAt,
+      };
+    }
+
+    function createWeekDb(input: { sessionRows: unknown[]; planRows: unknown[] }) {
+      const sessionsWhere = vi.fn().mockReturnValue({
+        orderBy: vi.fn().mockResolvedValue(input.sessionRows),
+      });
+      const plansWhere = vi.fn().mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(input.planRows) }),
+      });
+
+      const select = vi.fn().mockImplementation(() => ({
+        from: vi.fn().mockImplementation((table: object) => {
+          if (table === workoutSessions) return { where: sessionsWhere };
+          if (table === workoutPlans) return { where: plansWhere };
+          throw new Error(`Unexpected select table: ${String(table)}`);
+        }),
+      }));
+
+      return { select, sessionsWhere, plansWhere };
+    }
+
+    it("returns the Monday-first week with the planned overlay and real done days (bounded, 2 queries)", async () => {
+      const doneSession = buildWeekSessionRow("aaaaaaaa-3333-0000-0000-000000000001", new Date("2026-07-14T08:00:00Z"));
+      const { select, sessionsWhere, plansWhere } = createWeekDb({
+        sessionRows: [doneSession],
+        planRows: [weekReadyPlanRow],
+      });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const overview = await repo.getWeeklyOverview(TENANT_A, USER_A, WEEK_START, NOW);
+
+      expect(overview.weekStart).toBe("2026-07-13");
+      expect(overview.days).toHaveLength(7);
+      expect(overview.days[0]!.status).toBe("rest"); // Monday: past planned training day, not completed
+      expect(overview.days[1]!.status).toBe("done"); // Tuesday: real completed session
+      expect(overview.days[3]!.status).toBe("active"); // Thursday: today, no completion
+      expect(overview.previousWeekStart).toBe("2026-07-06");
+      expect(overview.nextWeekStart).toBe("2026-07-20");
+      expect(select).toHaveBeenCalledTimes(2);
+      expect(sessionsWhere).toHaveBeenCalledTimes(1);
+      expect(plansWhere).toHaveBeenCalledTimes(1);
+    });
+
+    it("renders an all-rest week for a week predating the plan/account, with no error", async () => {
+      const { select } = createWeekDb({ sessionRows: [], planRows: [] });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const pastWeekStart = new Date("2020-01-06T00:00:00.000Z");
+      const overview = await repo.getWeeklyOverview(TENANT_A, USER_A, pastWeekStart, NOW);
+
+      expect(overview.days.every((day) => day.status === "rest")).toBe(true);
+    });
+
+    it("counts done regardless of plan version — completion is never filtered by plan id", async () => {
+      const otherPlanSession = {
+        ...buildWeekSessionRow("aaaaaaaa-3333-0000-0000-000000000002", new Date("2026-07-13T08:00:00Z")),
+        workoutPlanId: "ffffffff-9999-0000-0000-000000000001",
+      };
+      const { select } = createWeekDb({ sessionRows: [otherPlanSession], planRows: [weekReadyPlanRow] });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const overview = await repo.getWeeklyOverview(TENANT_A, USER_A, WEEK_START, NOW);
+
+      expect(overview.days[0]!.status).toBe("done");
+    });
+
+    it("scopes the query to (tenantId, userId) — a different tenant sees the empty/all-rest board", async () => {
+      const { select } = createWeekDb({ sessionRows: [], planRows: [] });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const overview = await repo.getWeeklyOverview(TENANT_B, USER_A, WEEK_START, NOW);
+
+      expect(overview.days.every((day) => day.status === "rest" || day.status === "active")).toBe(true);
+    });
+  });
+
+  describe("getExerciseDetail", () => {
+    const HISTORY_SESSION_A = "aaaaaaaa-4444-0000-0000-000000000001";
+    const HISTORY_EXERCISE_A = "bbbbbbbb-4444-0000-0000-000000000001";
+    const HISTORY_SET_A = "cccccccc-4444-0000-0000-000000000001";
+
+    const historySessionA = {
+      id: HISTORY_SESSION_A,
+      tenantId: TENANT_A,
+      userId: USER_A,
+      workoutPlanId: PLAN_ID,
+      status: "completed" as const,
+      day: 1,
+      startedAt: new Date("2026-07-10T08:00:00Z"),
+      completedAt: new Date("2026-07-10T09:00:00Z"),
+    };
+
+    const historyExerciseA = {
+      id: HISTORY_EXERCISE_A,
+      workoutSessionId: HISTORY_SESSION_A,
+      exerciseIndex: 0,
+      title: "Bench Press",
+      restSeconds: 90,
+      notes: null,
+    };
+
+    const historySetA = {
+      id: HISTORY_SET_A,
+      sessionExerciseId: HISTORY_EXERCISE_A,
+      setIndex: 0,
+      targetReps: "8-10",
+      actualReps: 8,
+      weightKg: "80.00",
+      rpe: 8,
+      completed: true,
+      notes: null,
+    };
+
+    function createExerciseDetailDb(input: {
+      sessionRows: unknown[];
+      exerciseRows?: unknown[];
+      setRows?: unknown[];
+    }) {
+      const sessionsWhere = vi.fn().mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(input.sessionRows) }),
+      });
+      const exercisesWhere = vi.fn().mockResolvedValue(input.exerciseRows ?? []);
+      const setsWhere = vi.fn().mockResolvedValue(input.setRows ?? []);
+
+      const select = vi.fn().mockImplementation(() => ({
+        from: vi.fn().mockImplementation((table: object) => {
+          if (table === workoutSessions) return { where: sessionsWhere };
+          if (table === sessionExercises) return { where: exercisesWhere };
+          if (table === setRecords) return { where: setsWhere };
+          throw new Error(`Unexpected select table: ${String(table)}`);
+        }),
+      }));
+
+      return { select, sessionsWhere, exercisesWhere, setsWhere };
+    }
+
+    it("returns recent sets for the matched exercise title, scoped to (tenantId, userId)", async () => {
+      const { select } = createExerciseDetailDb({
+        sessionRows: [historySessionA],
+        exerciseRows: [historyExerciseA],
+        setRows: [historySetA],
+      });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const detail = await repo.getExerciseDetail(TENANT_A, USER_A, "Bench Press");
+
+      expect(detail.exerciseTitle).toBe("Bench Press");
+      expect(detail.recentSets).toEqual([
+        { completedAt: historySessionA.completedAt.toISOString(), weightKg: 80, actualReps: 8, rpe: 8 },
+      ]);
+    });
+
+    it("returns an empty recentSets array (no error) when the exercise has no history", async () => {
+      const { select } = createExerciseDetailDb({ sessionRows: [historySessionA], exerciseRows: [], setRows: [] });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const detail = await repo.getExerciseDetail(TENANT_A, USER_A, "Never Performed");
+
+      expect(detail.recentSets).toEqual([]);
+    });
+
+    it("is IDOR-safe: a crafted title cannot read another user's rows", async () => {
+      // The session-scan query is scoped to (TENANT_A, USER_B) and returns
+      // none of USER_A's sessions, so even though "Bench Press" matches
+      // historyExerciseA's title, it can never surface USER_A's data for
+      // a USER_B-scoped call — the title filter only narrows an ALREADY
+      // (tenantId, userId)-scoped set, it can never widen it.
+      const { select, exercisesWhere } = createExerciseDetailDb({ sessionRows: [] });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const detail = await repo.getExerciseDetail(TENANT_A, USER_B, "Bench Press");
+
+      expect(detail.recentSets).toEqual([]);
+      expect(exercisesWhere).not.toHaveBeenCalled();
+    });
+  });
 });

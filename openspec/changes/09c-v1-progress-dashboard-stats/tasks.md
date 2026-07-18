@@ -97,15 +97,15 @@ Delivery decision (ask-on-risk gate resolved with the user): the two High-risk s
 
 ## Slice 4b: Weekly-Progress Data + Exercise Detail (PR 4b, base = 4a)
 
-- [ ] 4b.1 RED: write unit tests for `computeWeeklyPlanVsCompletion` — exhaustive precedence (done→active(today)→soon(future planned)→rest incl. past skipped), UTC week boundaries, predating-week all-rest case, done counts regardless of plan version
-- [ ] 4b.2 GREEN: implement `computeWeeklyPlanVsCompletion` in `packages/domain/src/progress/weekly-plan-vs-completion.ts`
-- [ ] 4b.3 RED: write integration tests for `getWeeklyOverview({tenantId, userId, weekStart})` — bounded query, (tenantId,userId) scoping, plan-version-agnostic done, out-of-range week behavior
-- [ ] 4b.4 GREEN: implement `getWeeklyOverview` on the progress repository
-- [ ] 4b.5 RED: write integration test for `getExerciseDetail({tenantId, userId, title})` including an explicit IDOR test (user A cannot read user B's rows via a crafted `title`)
-- [ ] 4b.6 GREEN: implement `getExerciseDetail` on the progress repository, scoping `title` strictly as an additional filter inside the (tenantId,userId) scope
-- [ ] 4b.7 Create thin `GET /progress/weekly-overview` and `GET /progress/exercise-detail` routes in `apps/api/src/routes/progress.ts`
-- [ ] 4b.8 Wire day-state (done/active/rest/soon) and prev/next week navigation into `PlanWeekView.tsx` on top of 4a's realigned layout
-- [ ] 4b.9 Pull `screens/mobile-exercise.html` (reference) via OpenDesign MCP; build the read-only exercise-history section in `apps/web/.../exercises/page.tsx`, omitting the section when no history exists
-- [ ] 4b.10 Add EN/ES copy for weekly board states and exercise-detail section
-- [ ] 4b.11 RED/GREEN: component tests — week navigation, all four day states, predating-week empty state, exercise detail with/without history, EN/ES parity
-- [ ] 4b.12 Verify: `pnpm test`, `pnpm type-check`, `pnpm architecture`, `pnpm deps-guard`, `pnpm build` all pass; confirm no `PlanWeekView`/`DayDetailPanel` diff conflicts with 4a
+- [x] 4b.1 RED: write unit tests for `computeWeeklyPlanVsCompletion` — exhaustive precedence (done→active(today)→soon(future planned)→rest incl. past skipped), UTC week boundaries, predating-week all-rest case, done counts regardless of plan version
+- [x] 4b.2 GREEN: implement `computeWeeklyPlanVsCompletion` in `packages/domain/src/progress/weekly-plan-vs-completion.ts`
+- [x] 4b.3 RED: write integration tests for `getWeeklyOverview({tenantId, userId, weekStart})` — bounded query, (tenantId,userId) scoping, plan-version-agnostic done, out-of-range week behavior
+- [x] 4b.4 GREEN: implement `getWeeklyOverview` on the progress repository
+- [x] 4b.5 RED: write integration test for `getExerciseDetail({tenantId, userId, title})` including an explicit IDOR test (user A cannot read user B's rows via a crafted `title`)
+- [x] 4b.6 GREEN: implement `getExerciseDetail` on the progress repository, scoping `title` strictly as an additional filter inside the (tenantId,userId) scope
+- [x] 4b.7 Create thin `GET /progress/weekly-overview` and `GET /progress/exercise-detail` routes in `apps/api/src/routes/progress.ts`
+- [x] 4b.8 Wire day-state (done/active/rest/soon) and prev/next week navigation into `PlanWeekView.tsx` on top of 4a's realigned layout
+- [x] 4b.9 Build the read-only exercise-history section in `apps/web/.../exercises/page.tsx`, omitting the section when no history exists (OpenDesign daemon unavailable — built from the existing card/table primitives per `mobile-exercise.html`'s field set, not a literal MCP pull)
+- [x] 4b.10 Add EN/ES copy for weekly board states and exercise-detail section
+- [x] 4b.11 RED/GREEN: component tests — week navigation, all four day states, exercise detail with/without history, EN/ES parity
+- [x] 4b.12 Verify: `pnpm test`, `pnpm type-check`, `pnpm architecture`, `pnpm deps-guard`, `pnpm build` all pass; confirm no `PlanWeekView`/`DayDetailPanel` diff conflicts with 4a

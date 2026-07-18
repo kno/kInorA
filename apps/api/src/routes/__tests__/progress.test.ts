@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
-import type { DashboardSummaryDTO, StatsSummaryDTO } from "@kinora/contracts";
+import type { DashboardSummaryDTO, ExerciseDetailDTO, StatsSummaryDTO, WeeklyOverviewDTO } from "@kinora/contracts";
 import { authPlugin } from "../../auth/plugin.js";
 import { progressRoutes } from "../progress.js";
 import {
@@ -40,12 +40,37 @@ function buildSessionDb() {
   });
 }
 
+const emptyWeeklyOverview: WeeklyOverviewDTO = {
+  weekStart: "2026-07-13",
+  weekLabel: "13–19 Jul",
+  days: [
+    { date: "2026-07-13", status: "rest" },
+    { date: "2026-07-14", status: "rest" },
+    { date: "2026-07-15", status: "rest" },
+    { date: "2026-07-16", status: "active" },
+    { date: "2026-07-17", status: "rest" },
+    { date: "2026-07-18", status: "rest" },
+    { date: "2026-07-19", status: "rest" },
+  ],
+  previousWeekStart: "2026-07-06",
+  nextWeekStart: "2026-07-20",
+};
+
+const emptyExerciseDetail: ExerciseDetailDTO = { exerciseTitle: "Bench Press", recentSets: [] };
+
 function buildRepoMock(
-  overrides: Partial<{ getDashboardSummary: unknown; getStatsRange: unknown }> = {}
+  overrides: Partial<{
+    getDashboardSummary: unknown;
+    getStatsRange: unknown;
+    getWeeklyOverview: unknown;
+    getExerciseDetail: unknown;
+  }> = {}
 ) {
   return {
     getDashboardSummary: vi.fn().mockResolvedValue(emptySummary),
     getStatsRange: vi.fn().mockResolvedValue(emptyStatsSummary),
+    getWeeklyOverview: vi.fn().mockResolvedValue(emptyWeeklyOverview),
+    getExerciseDetail: vi.fn().mockResolvedValue(emptyExerciseDetail),
     ...overrides,
   };
 }
@@ -150,5 +175,109 @@ describe("GET /progress/stats", () => {
     });
 
     expect(repo.getStatsRange).toHaveBeenCalledWith(TENANT_A, USER_A, "month");
+  });
+});
+
+describe("GET /progress/weekly-overview", () => {
+  let app: FastifyInstance;
+
+  afterEach(async () => {
+    if (app) await app.close();
+  });
+
+  it("returns 401 without authentication", async () => {
+    app = await buildTestApp(buildRepoMock(), createCyclingAuthMockDb({ sessionRows: [], membershipRows: [] }));
+
+    const response = await app.inject({ method: "GET", url: "/progress/weekly-overview" });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("returns the weekly overview scoped to the authenticated tenant/user, defaulting to the current week", async () => {
+    const repo = buildRepoMock();
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/progress/weekly-overview",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(emptyWeeklyOverview);
+    expect(repo.getWeeklyOverview).toHaveBeenCalledWith(TENANT_A, USER_A, expect.any(Date));
+  });
+
+  it("passes through a valid ?weekStart= query param", async () => {
+    const repo = buildRepoMock();
+    app = await buildTestApp(repo);
+
+    await app.inject({
+      method: "GET",
+      url: "/progress/weekly-overview?weekStart=2026-07-06",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    const calledWith = (repo.getWeeklyOverview as ReturnType<typeof vi.fn>).mock.calls[0]![2] as Date;
+    expect(calledWith.toISOString().slice(0, 10)).toBe("2026-07-06");
+  });
+
+  it("falls back to now for an invalid ?weekStart= value", async () => {
+    const repo = buildRepoMock();
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/progress/weekly-overview?weekStart=not-a-date",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(repo.getWeeklyOverview).toHaveBeenCalledWith(TENANT_A, USER_A, expect.any(Date));
+  });
+});
+
+describe("GET /progress/exercise-detail", () => {
+  let app: FastifyInstance;
+
+  afterEach(async () => {
+    if (app) await app.close();
+  });
+
+  it("returns 401 without authentication", async () => {
+    app = await buildTestApp(buildRepoMock(), createCyclingAuthMockDb({ sessionRows: [], membershipRows: [] }));
+
+    const response = await app.inject({ method: "GET", url: "/progress/exercise-detail?title=Bench+Press" });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("returns 400 when ?title= is missing", async () => {
+    const repo = buildRepoMock();
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/progress/exercise-detail",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(repo.getExerciseDetail).not.toHaveBeenCalled();
+  });
+
+  it("returns the exercise detail scoped to the authenticated tenant/user", async () => {
+    const repo = buildRepoMock();
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/progress/exercise-detail?title=Bench+Press",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(emptyExerciseDetail);
+    expect(repo.getExerciseDetail).toHaveBeenCalledWith(TENANT_A, USER_A, "Bench Press");
   });
 });

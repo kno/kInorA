@@ -28,7 +28,7 @@
 
 import * as React from "react";
 import { useTranslations } from "next-intl";
-import type { WorkoutProgram } from "@kinora/contracts";
+import type { WeeklyOverviewDTO, WorkoutProgram } from "@kinora/contracts";
 import { DayDetailPanel } from "./DayDetailPanel";
 import { TrackerPanel } from "./[id]/TrackerPanel";
 import { useWorkoutSession } from "./use-workout-session";
@@ -44,6 +44,12 @@ export interface PlanTrackerClientProps {
    * replaces the whole view, and the identity header re-supplies plan name + day.
    */
   children?: React.ReactNode;
+  /**
+   * Initial weekly-progress overlay (09c-v1-progress-dashboard-stats, Slice
+   * 4b), server-fetched by `PlanWeekView`. Threaded through to
+   * `DayDetailPanel`, which owns all further week navigation locally.
+   */
+  weeklyOverview?: WeeklyOverviewDTO;
 }
 
 /**
@@ -70,6 +76,7 @@ export function PlanTrackerClient({
   planId,
   planName,
   children,
+  weeklyOverview,
 }: PlanTrackerClientProps) {
   const {
     activeSession,
@@ -146,6 +153,7 @@ export function PlanTrackerClient({
         sessions={program.weeklySessions}
         onStartWorkout={(day) => handleStartWorkout(planId, day)}
         conflict={conflict}
+        weeklyOverview={weeklyOverview}
       />
     </div>
   );

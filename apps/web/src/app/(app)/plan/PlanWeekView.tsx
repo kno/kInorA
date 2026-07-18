@@ -19,6 +19,7 @@ import type { WorkoutProgram } from "@kinora/contracts";
 import styles from "./plan-week-view.module.css";
 import { PlanTrackerClient } from "./PlanTrackerClient";
 import { estimateSessionMinutes, restDays } from "./plan-utils";
+import { getWeeklyOverviewAction } from "./actions";
 
 export interface PlanWeekViewProps {
   program: WorkoutProgram;
@@ -33,10 +34,22 @@ export interface PlanWeekViewProps {
    * Start CTA can call `startWorkoutSessionAction(planId, day)` inline.
    */
   planId: string;
+  /**
+   * Requested displayed week (ISO `YYYY-MM-DD` Monday), from the `?weekStart=`
+   * search param (09c-v1-progress-dashboard-stats, Slice 4b). `undefined`
+   * defaults to the current week.
+   */
+  weekStart?: string;
 }
 
-export async function PlanWeekView({ program, planName, planId }: PlanWeekViewProps) {
+export async function PlanWeekView({ program, planName, planId, weekStart }: PlanWeekViewProps) {
   const t = await getTranslations();
+
+  // Fail-open: an unreachable/erroring overview fetch leaves `weeklyOverview`
+  // undefined, and `DayDetailPanel` falls back to its Slice-4a rendering
+  // (inert nav, no per-day state) rather than breaking the whole page.
+  const overviewResult = await getWeeklyOverviewAction(weekStart);
+  const weeklyOverview = overviewResult.kind === "ok" ? overviewResult.overview : undefined;
 
   const sessions = program.weeklySessions;
   const sessionCount = sessions.length;
@@ -50,7 +63,12 @@ export async function PlanWeekView({ program, planName, planId }: PlanWeekViewPr
     program.limitationWarnings.length > 0;
 
   return (
-    <PlanTrackerClient program={program} planId={planId} planName={planName}>
+    <PlanTrackerClient
+      program={program}
+      planId={planId}
+      planName={planName}
+      weeklyOverview={weeklyOverview}
+    >
       {/* Plan name header (#93) — server-resolved label, rendered verbatim. */}
       {planName && <h1 className={styles.planName}>{planName}</h1>}
 

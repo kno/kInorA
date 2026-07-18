@@ -290,6 +290,12 @@
       "next": "Semana siguiente",
       "label": "Esta semana"
     },
+    "dayState": {
+      "done": "Completado",
+      "active": "Hoy",
+      "rest": "Descanso",
+      "soon": "Próximamente"
+    },
     "start": {
       "conflict": "Tienes una sesión activa para {plan} · Día {n}. Retómala o termínala antes de empezar otra.",
       "conflict_no_day": "Tienes una sesión activa para {plan}. Retómala o termínala antes de empezar otra.",
@@ -565,7 +571,14 @@
   },
   "exercises": {
     "title": "Ejercicios",
-    "description": "Explora y busca en la biblioteca de ejercicios para tus entrenamientos."
+    "description": "Explora y busca en la biblioteca de ejercicios para tus entrenamientos.",
+    "history": {
+      "title": "Historial reciente",
+      "date": "Fecha",
+      "weight": "Peso",
+      "reps": "Reps",
+      "rpe": "RPE"
+    }
   },
   "stats": {
     "title": "Estadísticas",

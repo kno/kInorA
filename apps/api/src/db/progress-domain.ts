@@ -16,6 +16,9 @@ export {
   delta,
   computeMuscleGroupDistribution,
   computePersonalRecords,
+  computeWeeklyPlanVsCompletion,
+  utcWeekBounds,
+  addUtcDays,
 } from "@kinora/domain/progress";
 export type {
   MuscleGroupDistributionExercise,
