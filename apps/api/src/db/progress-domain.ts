@@ -9,4 +9,15 @@
  * these imports through this dedicated module keeps `workout-session.ts`
  * clean of the subpath specifier — mirrors `muscle-classifier.ts` (Slice 1b).
  */
-export { computeStreak, computeAdherence, computeWeeklyRollup, delta } from "@kinora/domain/progress";
+export {
+  computeStreak,
+  computeAdherence,
+  computeWeeklyRollup,
+  delta,
+  computeMuscleGroupDistribution,
+  computePersonalRecords,
+} from "@kinora/domain/progress";
+export type {
+  MuscleGroupDistributionExercise,
+  PersonalRecordSetInput,
+} from "@kinora/domain/progress";

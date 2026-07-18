@@ -1212,6 +1212,84 @@ describe("WorkoutSessionRepository", () => {
       expect(setsWhere).toHaveBeenCalledTimes(1);
     });
 
+    it("computes the muscle-group distribution + personal records from the CURRENT period only (Slice 3b)", async () => {
+      const { select } = createStatsDb({
+        sessionRows: [statsSessionCurrent, statsSessionPrevious],
+        exerciseRows: [
+          { ...statsExerciseCurrent, muscleGroup: "back" },
+          { ...statsExercisePrevious, muscleGroup: "quads" },
+        ],
+        setRows: [statsSetCurrent, statsSetPrevious],
+      });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const summary = await repo.getStatsRange(TENANT_A, USER_A, "month", NOW);
+
+      // Only the current-period ("Row" -> back) exercise contributes; the
+      // previous-period ("Squat" -> quads) exercise is out of scope.
+      expect(summary.muscleGroupDistribution).toEqual([{ muscleGroup: "back", setCount: 1, volumeKg: 500 }]);
+
+      // Epley: 50 * (1 + 10/30) = 66.666...
+      expect(summary.personalRecords).toHaveLength(1);
+      expect(summary.personalRecords[0]!.exerciseTitle).toBe("Row");
+      expect(summary.personalRecords[0]!.estimated1RM).toBeCloseTo(66.6667, 3);
+      expect(summary.personalRecords[0]!.achievedAt).toBe(statsSessionCurrent.completedAt.toISOString());
+      expect(summary.prCount).toEqual({ value: 1, deltaVsPreviousPeriod: null });
+    });
+
+    it("excludes an unmapped exercise from the distribution without breaking the rest of the summary (Slice 3b)", async () => {
+      const unmappedExercise = {
+        ...statsExerciseCurrent,
+        id: "bbbbbbbb-2222-0000-0000-000000000099",
+        title: "Zumba combo freestyle",
+        muscleGroup: null,
+      };
+      const unmappedSet = {
+        ...statsSetCurrent,
+        id: "cccccccc-2222-0000-0000-000000000099",
+        sessionExerciseId: unmappedExercise.id,
+      };
+      const { select } = createStatsDb({
+        sessionRows: [statsSessionCurrent],
+        exerciseRows: [unmappedExercise],
+        setRows: [unmappedSet],
+      });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const summary = await repo.getStatsRange(TENANT_A, USER_A, "month", NOW);
+
+      expect(summary.muscleGroupDistribution).toEqual([]);
+      // Still contributes to volume/PRs — only the distribution excludes it.
+      expect(summary.totalVolumeKg.value).toBe(500);
+      expect(summary.personalRecords).toHaveLength(1);
+    });
+
+    it("omits a bodyweight-only exercise from PRs (no eligible set) without erroring (Slice 3b)", async () => {
+      const bodyweightExercise = {
+        ...statsExerciseCurrent,
+        id: "bbbbbbbb-2222-0000-0000-000000000098",
+        title: "Pull-up",
+        muscleGroup: "back",
+      };
+      const bodyweightSet = {
+        ...statsSetCurrent,
+        id: "cccccccc-2222-0000-0000-000000000098",
+        sessionExerciseId: bodyweightExercise.id,
+        weightKg: "0",
+      };
+      const { select } = createStatsDb({
+        sessionRows: [statsSessionCurrent],
+        exerciseRows: [bodyweightExercise],
+        setRows: [bodyweightSet],
+      });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const summary = await repo.getStatsRange(TENANT_A, USER_A, "month", NOW);
+
+      expect(summary.personalRecords).toEqual([]);
+      expect(summary.prCount).toEqual({ value: 0, deltaVsPreviousPeriod: null });
+    });
+
     it("returns a null delta when the previous period has zero data (never Infinity/NaN)", async () => {
       const { select } = createStatsDb({
         sessionRows: [statsSessionCurrent],

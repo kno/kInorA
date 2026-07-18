@@ -78,14 +78,14 @@ Delivery decision (ask-on-risk gate resolved with the user): the two High-risk s
 
 ## Slice 3b: Statistics — muscle-group distribution + PRs (PR 3b, base = 3a; needs 1b's `muscle_group` column)
 
-- [ ] 3b.1 RED: write unit tests for `computeMuscleGroupDistribution` (10 primary groups, unmapped exercises excluded gracefully, set-count + volume per group)
-- [ ] 3b.2 GREEN: implement `computeMuscleGroupDistribution` in `packages/domain/src/progress/distribution.ts`
-- [ ] 3b.3 RED: write unit tests for `computePersonalRecords` (Epley estimated 1RM; eligible-set guard completed+weightKg>0+actualReps>0; bodyweight/no-weight/null-reps excluded and omitted not zeroed; grouped by normalized title; trend + signed delta)
-- [ ] 3b.4 GREEN: implement `computePersonalRecords` in `packages/domain/src/progress/personal-records.ts`
-- [ ] 3b.5 GREEN: extend `getStatsRange` to include `muscleGroupDistribution` + `personalRecords` in `StatsSummaryDTO` (still one bounded query)
-- [ ] 3b.6 Wire the horizontal-bar muscle distribution (10→coarse UI mapping) and the PR table into `stats/page.tsx`; add `progress.muscle.<slug>` labels to i18n — exclude the workout-type donut (out of scope)
-- [ ] 3b.7 RED/GREEN: component tests — distribution with an unmapped exercise, PR table, EN/ES parity
-- [ ] 3b.8 Verify: `pnpm test`, `pnpm type-check`, `pnpm architecture`, `pnpm deps-guard`, `pnpm build` all pass
+- [x] 3b.1 RED: write unit tests for `computeMuscleGroupDistribution` (10 primary groups, unmapped exercises excluded gracefully, set-count + volume per group)
+- [x] 3b.2 GREEN: implement `computeMuscleGroupDistribution` in `packages/domain/src/progress/distribution.ts`
+- [x] 3b.3 RED: write unit tests for `computePersonalRecords` (Epley estimated 1RM; eligible-set guard completed+weightKg>0+actualReps>0; bodyweight/no-weight/null-reps excluded and omitted not zeroed; grouped by normalized title; trend + signed delta)
+- [x] 3b.4 GREEN: implement `computePersonalRecords` in `packages/domain/src/progress/personal-records.ts`
+- [x] 3b.5 GREEN: extend `getStatsRange` to include `muscleGroupDistribution` + `personalRecords` in `StatsSummaryDTO` (still one bounded query)
+- [x] 3b.6 Wire the horizontal-bar muscle distribution (10→coarse UI mapping) and the PR table into `stats/page.tsx`; add `progress.muscle.<slug>` labels to i18n — exclude the workout-type donut (out of scope)
+- [x] 3b.7 RED/GREEN: component tests — distribution with an unmapped exercise, PR table, EN/ES parity
+- [x] 3b.8 Verify: `pnpm test`, `pnpm type-check`, `pnpm architecture`, `pnpm deps-guard`, `pnpm build` all pass
 
 ## Slice 4a: Weekly Board Visual Realignment (PR 4a, base = 3b; closes #128)
 

@@ -577,8 +577,30 @@
     "volumeTrendEmpty": "Todavía no hay datos suficientes para mostrar una tendencia.",
     "distributionTitle": "Series por grupo muscular",
     "distributionComingSoon": "La distribución por grupo muscular estará disponible pronto.",
+    "distributionEmpty": "Todavía no hay ejercicios clasificados — registra un entrenamiento para ver este gráfico.",
     "prTitle": "Récords personales",
-    "prComingSoon": "Los récords personales estarán disponibles pronto."
+    "prComingSoon": "Los récords personales estarán disponibles pronto.",
+    "prEmpty": "Todavía no hay récords personales.",
+    "prExerciseHeader": "Ejercicio",
+    "prEstimatedHeader": "1RM estimado",
+    "prDateHeader": "Fecha",
+    "prTrendHeader": "Tendencia"
+  },
+  "progress": {
+    "muscle": {
+      "chest": "Pecho",
+      "back": "Espalda",
+      "shoulders": "Hombros",
+      "biceps": "Bíceps",
+      "triceps": "Tríceps",
+      "core": "Core",
+      "glutes": "Glúteos",
+      "quads": "Cuádriceps",
+      "hamstrings": "Isquiosurales",
+      "calves": "Gemelos",
+      "legs": "Pierna",
+      "arms": "Brazo"
+    }
   },
   "history": {
     "title": "Historial",

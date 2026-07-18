@@ -25,7 +25,7 @@ describe("@kinora/i18n package assembly", () => {
     expect(result.valid).toBe(true);
   });
 
-  it("the full catalog carries all 397 migrated leaf keys per locale", () => {
+  it("the full catalog carries all 415 migrated leaf keys per locale", () => {
     // 329 web-migrated keys + 23 `mobileTracker.*` keys authored in slice 9
     // for the mobile-unique tracker copy that has no EN/web equivalent (see
     // 9.3.1 enumeration in tasks.md) + 10 `history.*` keys authored in 09b
@@ -38,9 +38,13 @@ describe("@kinora/i18n package assembly", () => {
     // Slice 2 for the data-backed dashboard (hero, streak, weekly progress,
     // week-route strip, empty state) + 17 `stats.*` keys authored in
     // 09c-v1-progress-dashboard-stats Slice 3a for the KPI cards, period
-    // toggle, volume trend, and the Slice-3b "coming soon" placeholders.
+    // toggle, volume trend, and the Slice-3b "coming soon" placeholders
+    // + 6 `stats.*` keys authored in Slice 3b for the real distribution/PR
+    // empty states and PR table headers + 12 `progress.muscle.<slug>` keys
+    // authored in Slice 3b (10 primary `MuscleGroup` labels + 2 composite
+    // "legs"/"arms" presentation labels for the web-only coarse collapse).
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(397);
+    expect(Object.keys(flat)).toHaveLength(415);
   });
 
   it("the mobileTracker namespace is present with EN+ES parity (9.3.3)", () => {

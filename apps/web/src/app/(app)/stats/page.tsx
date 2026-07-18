@@ -1,7 +1,8 @@
 import { getTranslations } from "next-intl/server";
-import type { KpiWithDelta, StatsSummaryDTO } from "@kinora/contracts";
+import type { KpiWithDelta, PersonalRecord, StatsSummaryDTO } from "@kinora/contracts";
 import { getStatsAction } from "./actions";
 import type { StatsRange } from "./stats-client";
+import { toCoarseMuscleGroupBars } from "./muscle-group-display";
 
 /**
  * Statistics — protected page only accessible with a valid session
@@ -12,11 +13,15 @@ import type { StatsRange } from "./stats-client";
  * neutral "new" state, never a percentage/arrow — design.md "KPI deltas"),
  * and the volume-trend series (current vs. previous period).
  *
- * The muscle-group distribution bar chart and the PR table are Slice 3b
- * (`3b.1`-`3b.8`) — they render as clearly-marked "coming soon"
- * placeholders here so the page shell matches the design without
- * implementing that data. The workout-type donut is permanently out of
- * scope (design.md "Statistics" — workout type is not tracked).
+ * The muscle-group distribution bar chart and the PR table (Slice 3b) are
+ * data-backed here: the distribution collapses the DTO's 10 primary
+ * `MuscleGroup` buckets into 6 coarse display buckets
+ * (`toCoarseMuscleGroupBars`, web-layer-only — design.md "Muscle-group
+ * distribution") and the PR table renders `personalRecords[]` (estimated
+ * 1RM, date, trend sparkline + signed delta). Both sections independently
+ * show an empty state when there is no data, never erroring. The
+ * workout-type donut is permanently out of scope (design.md "Statistics" —
+ * workout type is not tracked).
  *
  * The proxy (`proxy.ts`) gates this route: no `kinora_session` cookie ->
  * redirect to `/login`. Renders inside the AppShell (sidebar/topbar chrome
@@ -86,19 +91,105 @@ function StatsBody({ summary, t }: StatsBodyProps) {
       </article>
 
       <div className="stats-placeholder-row">
-        <article className="stats-card stats-placeholder">
+        <article className="stats-card">
           <h2 className="kin-title">{t("stats.distributionTitle")}</h2>
-          {/* TODO(Slice 3b): computeMuscleGroupDistribution horizontal bar chart. */}
-          <p className="kin-text kin-muted">{t("stats.distributionComingSoon")}</p>
+          {MuscleGroupDistribution({ distribution: summary.muscleGroupDistribution, t })}
         </article>
-        <article className="stats-card stats-placeholder">
+        <article className="stats-card">
           <h2 className="kin-title">{t("stats.prTitle")}</h2>
-          {/* TODO(Slice 3b): computePersonalRecords table (Epley 1RM + trend). */}
-          <p className="kin-text kin-muted">{t("stats.prComingSoon")}</p>
+          {PersonalRecordsTable({ personalRecords: summary.personalRecords, t })}
         </article>
       </div>
     </>
   );
+}
+
+interface MuscleGroupDistributionProps {
+  distribution: StatsSummaryDTO["muscleGroupDistribution"];
+  t: Awaited<ReturnType<typeof getTranslations>>;
+}
+
+function MuscleGroupDistribution({ distribution, t }: MuscleGroupDistributionProps) {
+  const bars = toCoarseMuscleGroupBars(distribution);
+
+  if (bars.length === 0) {
+    return <p className="kin-text kin-muted">{t("stats.distributionEmpty")}</p>;
+  }
+
+  return (
+    <div className="stats-bar-chart">
+      {bars.map((bar) => (
+        <div className="stats-bar-row" key={bar.group}>
+          <div className="stats-bar-label">{t(`progress.muscle.${bar.group}`)}</div>
+          <div className="stats-bar-track">
+            <div className="stats-bar-fill" style={{ width: `${Math.max(4, bar.percentOfMax)}%` }} />
+          </div>
+          <div className="stats-bar-val num">{bar.setCount}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface PersonalRecordsTableProps {
+  personalRecords: PersonalRecord[];
+  t: Awaited<ReturnType<typeof getTranslations>>;
+}
+
+function PersonalRecordsTable({ personalRecords, t }: PersonalRecordsTableProps) {
+  if (personalRecords.length === 0) {
+    return <p className="kin-text kin-muted">{t("stats.prEmpty")}</p>;
+  }
+
+  return (
+    <table className="stats-pr-table">
+      <thead>
+        <tr>
+          <th>{t("stats.prExerciseHeader")}</th>
+          <th>{t("stats.prEstimatedHeader")}</th>
+          <th>{t("stats.prDateHeader")}</th>
+          <th>{t("stats.prTrendHeader")}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {personalRecords.map((record) => (
+          <tr key={record.exerciseTitle}>
+            <td className="stats-pr-exercise">{record.exerciseTitle}</td>
+            <td className="num">{formatEstimated1RM(record.estimated1RM)}</td>
+            <td className="stats-pr-date">{formatPrDate(record.achievedAt)}</td>
+            <td>{PrTrend({ trend: record.trend })}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+interface PrTrendProps {
+  trend: PersonalRecord["trend"];
+}
+
+function PrTrend({ trend }: PrTrendProps) {
+  if (!trend) {
+    return <span className="stats-pr-trend stats-trend-arrow-flat">—</span>;
+  }
+
+  const arrowClass = trend.delta > 0 ? "stats-trend-arrow-up" : trend.delta < 0 ? "stats-trend-arrow-down" : "stats-trend-arrow-flat";
+  const sign = trend.delta > 0 ? "+" : "";
+
+  return (
+    <span className={`stats-pr-trend ${arrowClass}`}>
+      {`${sign}${Math.round(trend.delta * 10) / 10} kg`}
+    </span>
+  );
+}
+
+function formatEstimated1RM(valueKg: number): string {
+  return `${Math.round(valueKg * 10) / 10} kg`;
+}
+
+function formatPrDate(achievedAt: string): string {
+  return achievedAt.slice(0, 10);
 }
 
 interface KpiCardProps {
