@@ -17,6 +17,30 @@ import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import styles from "./plan-week-view.module.css";
 
+/**
+ * Runtime bridge for the hero's primary "start session" CTA.
+ *
+ * `PlanHero` is composed server-side (inside `PlanWeekView`) and handed to the
+ * client `PlanTrackerClient` as part of its `children` slot, so it cannot
+ * receive the session-start handler as an ordinary prop. `PlanTrackerClient`
+ * publishes the real handler through this context; when it is present, the hero
+ * CTA invokes it (actually starting the recommended session) INSTEAD of raising
+ * the presentational toast. When absent (PlanHero used without a start
+ * capability), the CTA keeps its original toast-only fallback.
+ */
+const HeroStartContext = React.createContext<(() => void) | undefined>(undefined);
+
+/** Provider published by `PlanTrackerClient` so a descendant `PlanHero` CTA can start the session. */
+export function PlanHeroStartProvider({
+  onStart,
+  children,
+}: {
+  onStart?: () => void;
+  children?: React.ReactNode;
+}) {
+  return <HeroStartContext.Provider value={onStart}>{children}</HeroStartContext.Provider>;
+}
+
 /** Shared ephemeral-toast hook — mirrors the dashboard presentational cards. */
 function useToast(): [string | null, (message: string) => void] {
   const [toast, setToast] = useState<string | null>(null);
@@ -63,6 +87,9 @@ export function PlanToolbar() {
 export function PlanHero({ children }: { children?: React.ReactNode }) {
   const t = useTranslations("plan.hero");
   const [toast, flash] = useToast();
+  // Real start handler published by PlanTrackerClient (see HeroStartContext).
+  // Present on the wired `/plan` cockpit; absent for any presentational-only use.
+  const onStart = React.useContext(HeroStartContext);
 
   return (
     <section className={`${styles.panel} ${styles.hero}`} aria-labelledby="plan-hero-title">
@@ -84,7 +111,7 @@ export function PlanHero({ children }: { children?: React.ReactNode }) {
           <button
             type="button"
             className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={() => flash(t("startToast"))}
+            onClick={onStart ?? (() => flash(t("startToast")))}
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true">
               <polygon points="7 4 20 12 7 20" />

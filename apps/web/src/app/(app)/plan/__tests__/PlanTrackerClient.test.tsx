@@ -37,7 +37,9 @@ vi.mock("../use-workout-session", async () => {
 });
 
 import { PlanTrackerClient } from "../PlanTrackerClient";
+import { PlanHero } from "../plan-presentational";
 import * as useWorkoutSessionModule from "../use-workout-session";
+import type { WeeklyOverviewDTO } from "@kinora/contracts";
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -370,6 +372,70 @@ describe("PlanTrackerClient — plan/day identity in the active tracker (CRITICA
     const identity = screen.getByTestId("tracker-identity");
     expect(identity.textContent).toContain("Summer Cut");
     expect(identity.textContent).toContain("Day 1");
+  });
+});
+
+describe("PlanTrackerClient — hero primary CTA starts the recommended session", () => {
+  // The hero is composed server-side (PlanWeekView) and passed via `children`;
+  // PlanTrackerClient publishes the real start handler through context so the
+  // hero's "Start session" CTA actually starts a session instead of toasting.
+  it("clicking the hero CTA starts the session (not a toast) and swaps to the tracker", async () => {
+    startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: fakeSession });
+
+    renderWithIntl(
+      <PlanTrackerClient program={program} planId="plan-a">
+        <PlanHero />
+      </PlanTrackerClient>,
+    );
+
+    // Only the hero's Start CTA is present (no day detail open) → unambiguous.
+    fireEvent.click(screen.getByRole("button", { name: "Start session" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "Live workout" })).toBeDefined();
+    });
+    // No weekly overview → recommended day is the first planned session (day 1).
+    expect(startWorkoutSessionAction).toHaveBeenCalledWith("plan-a", 1);
+    // The presentational toast must NOT fire when a real handler is wired.
+    expect(
+      screen.queryByText("Session started. Focus on clean reps."),
+    ).toBeNull();
+  });
+
+  it("skips already-completed days: recommends the first non-done planned day", async () => {
+    startWorkoutSessionAction.mockResolvedValue({
+      kind: "ok",
+      session: { ...fakeSession, day: 2 },
+    });
+
+    // Monday-first 7-day overview: day 1 (index 0) done, day 2 (index 1) soon.
+    const weeklyOverview: WeeklyOverviewDTO = {
+      weekStart: "2026-07-13",
+      weekLabel: "13–19 Jul",
+      previousWeekStart: "2026-07-06",
+      nextWeekStart: "2026-07-20",
+      days: [
+        { date: "2026-07-13", status: "done" },
+        { date: "2026-07-14", status: "soon" },
+        { date: "2026-07-15", status: "rest" },
+        { date: "2026-07-16", status: "rest" },
+        { date: "2026-07-17", status: "rest" },
+        { date: "2026-07-18", status: "rest" },
+        { date: "2026-07-19", status: "rest" },
+      ],
+    };
+
+    renderWithIntl(
+      <PlanTrackerClient program={program} planId="plan-a" weeklyOverview={weeklyOverview}>
+        <PlanHero />
+      </PlanTrackerClient>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Start session" }));
+
+    await waitFor(() => {
+      expect(startWorkoutSessionAction).toHaveBeenCalledWith("plan-a", 2);
+    });
   });
 });
 

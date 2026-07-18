@@ -32,6 +32,7 @@ import type { WeeklyOverviewDTO, WorkoutProgram } from "@kinora/contracts";
 import styles from "./plan-week-view.module.css";
 import { DayDetailPanel } from "./DayDetailPanel";
 import { TrackerPanel } from "./[id]/TrackerPanel";
+import { PlanHeroStartProvider } from "./plan-presentational";
 import { useWorkoutSession } from "./use-workout-session";
 
 export interface PlanTrackerClientProps {
@@ -106,6 +107,15 @@ export function PlanTrackerClient({
   const t = useTranslations();
   const errorKey = error ? ERROR_KEYS[error] ?? GENERIC_ERROR_KEY : undefined;
 
+  // recommendedDay: the first planned training day this week NOT yet completed
+  // (weeklyOverview.days is Monday-first, so day N maps to index N-1); falls
+  // back to the first planned session when every planned day is done or no
+  // weekly overview is available.
+  const recommendedDay =
+    program.weeklySessions.find(
+      (s) => weeklyOverview?.days[s.day - 1]?.status !== "done",
+    )?.day ?? program.weeklySessions[0]?.day;
+
   // Session active → the tracker takes over the whole view (no navigation).
   // The identity header re-supplies the plan name + day, since `children`
   // (the server-rendered plan name) is hidden in this branch.
@@ -169,7 +179,18 @@ export function PlanTrackerClient({
       )}
       <div className={styles.cockpit}>
         <div className={styles.cockpitMain}>
-          {children}
+          {/* Publish the real start handler to the hero CTA composed inside
+              `children` (server-rendered PlanHero); its primary "Empezar
+              sesión" button starts the recommended day instead of toasting. */}
+          <PlanHeroStartProvider
+            onStart={
+              recommendedDay != null
+                ? () => handleStartWorkout(planId, recommendedDay)
+                : undefined
+            }
+          >
+            {children}
+          </PlanHeroStartProvider>
           <section className={`${styles.panel} ${styles.weekBoard}`} aria-label={t("plan.week.title")}>
             <DayDetailPanel
               sessions={program.weeklySessions}
