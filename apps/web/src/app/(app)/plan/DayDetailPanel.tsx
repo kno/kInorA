@@ -22,7 +22,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import type { WeeklyDayStatus, WeeklyOverviewDTO, WorkoutSession } from "@kinora/contracts";
 import styles from "./plan-week-view.module.css";
-import { estimateSessionMinutes, sessionLoadBars } from "./plan-utils";
+import { buildWeekTiles, estimateSessionMinutes, sessionLoadBars } from "./plan-utils";
 import { getWeeklyOverviewAction } from "./actions";
 
 /** Stable id for the detail panel element — used for aria-controls. */
@@ -106,14 +106,12 @@ export function DayDetailPanel({
 
   const selectedSession = sessions.find((s) => s.day === selectedDay) ?? null;
 
-  // Monday-first status per plan-day index (design.md "Planned-day →
-  // weekday mapping"). `undefined` (no `weeklyOverview`) preserves the
-  // Slice-4a fallback: every glyph renders identically, matching the
-  // existing session-only tests unchanged.
-  const statusByDay = new Map<number, WeeklyDayStatus>();
-  if (overview) {
-    overview.days.forEach((day, index) => statusByDay.set(index + 1, day.status));
-  }
+  // Fixed 7-tile Monday-Sunday board (spec-fidelity fix, 09c-v1-progress-
+  // dashboard-stats): every calendar day gets a tile, not just training
+  // days. `overview.days` (when present) carries the real per-day status;
+  // absent, every tile's `status` is `undefined` and rendering falls back
+  // to session-presence-only (Slice-4a-equivalent) glyphs.
+  const tiles = buildWeekTiles(sessions, overview?.days);
 
   return (
     <div>
@@ -158,22 +156,56 @@ export function DayDetailPanel({
         </div>
       </div>
 
-      {/* Day card grid */}
+      {/* Fixed 7-tile Monday-Sunday day grid (spec-fidelity fix): every
+          calendar day is a tile, not just training days. Training-day tiles
+          (a matching `session` exists) are interactive and match the
+          Slice-4a anatomy unchanged; non-training days render as
+          non-interactive rest tiles (web-plan.html `.day-card.rest`). */}
       <div className={styles.dayGrid}>
-        {sessions.map((session) => {
+        {tiles.map((tile) => {
+          const { session, status, dayNumber } = tile;
+          const dayLabel = t("plan.day.label", { n: dayNumber });
+          const restLabel = t("plan.dayState.rest");
+
+          if (!session) {
+            // Real rest tile — no training session planned on this day.
+            // Still shows the real status glyph when a `weeklyOverview` is
+            // present (e.g. a "done" day outside the current plan's
+            // training days), otherwise the neutral rest glyph.
+            const glyph = status ? STATE_GLYPHS[status] : "–";
+            return (
+              <div
+                key={dayNumber}
+                data-testid="week-tile"
+                className={`${styles.dayCard} ${styles.dayCardRest}`}
+              >
+                <div className={styles.dayTop}>
+                  <div className={styles.dcDayLabel}>{dayLabel}</div>
+                  <div
+                    className={styles.dcStateGlyph}
+                    data-testid="day-card-state"
+                    aria-label={status ? t(`plan.dayState.${status}`) : restLabel}
+                  >
+                    {glyph}
+                  </div>
+                </div>
+                <div className={styles.dcFocus}>{restLabel}</div>
+              </div>
+            );
+          }
+
           const isActive = session.day === selectedDay;
           const estMin = estimateSessionMinutes(session.exercises);
-          const dayLabel = t("plan.day.label", { n: session.day });
           const exercisesLabel = `${session.exercises.length} ${t("plan.exercises.count")}`;
           const durationLabel = t("plan.est_duration", { n: estMin });
           const loadBars = sessionLoadBars(session.exercises);
-          const status = statusByDay.get(session.day);
           const glyph = status ? STATE_GLYPHS[status] : "•";
           const stateLabel = status ? t(`plan.dayState.${status}`) : undefined;
 
           return (
             <div
-              key={session.day}
+              key={dayNumber}
+              data-testid="week-tile"
               role="button"
               tabIndex={0}
               aria-expanded={isActive}
@@ -187,7 +219,10 @@ export function DayDetailPanel({
                 <div className={styles.dcDayLabel}>{dayLabel}</div>
                 {/* Status glyph slot. Real done/active/rest/soon state
                     (Slice 4b) when `weeklyOverview` is provided; otherwise
-                    every card renders the same neutral glyph (Slice 4a). */}
+                    every training-day tile renders the same neutral glyph
+                    (Slice 4a). A "rest" status here means a past-skipped
+                    planned training day — NOT a "missed" state; the tile
+                    stays fully interactive and shows the real session data. */}
                 <div
                   className={styles.dcStateGlyph}
                   data-testid="day-card-state"

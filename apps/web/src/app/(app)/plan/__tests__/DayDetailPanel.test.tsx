@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { renderWithIntl } from "@/test-utils/render-with-intl";
 import type { WeeklyOverviewDTO, WorkoutSession } from "@kinora/contracts";
 
@@ -57,12 +57,27 @@ const sessions: WorkoutSession[] = [
 // --- Tests ---
 
 describe("DayDetailPanel — day card grid (SC-06, SC-07, SC-08)", () => {
-  it("SC-06: renders the correct number of day cards (3 sessions → 3 cards with role=button)", () => {
+  it("renders exactly 7 tiles (full Monday-Sunday board), not one per training day", () => {
     renderWithIntl(<DayDetailPanel sessions={sessions} />);
-    // Each session card has role="button" with an aria-label matching "Day N"
-    const buttons = screen.getAllByRole("button");
-    // Should have at least 3 cards (one per session)
-    expect(buttons.length).toBeGreaterThanOrEqual(3);
+    expect(screen.getAllByTestId("week-tile")).toHaveLength(7);
+  });
+
+  it("SC-06: renders one interactive (role=button) tile per training day (3 sessions → 3 clickable tiles)", () => {
+    renderWithIntl(<DayDetailPanel sessions={sessions} />);
+    // Each training-day tile has role="button" with an aria-label matching "Day N".
+    const dayButtons = screen.getAllByRole("button", { name: /^Day \d+$/ });
+    expect(dayButtons).toHaveLength(3);
+  });
+
+  it("non-training days render as non-interactive rest tiles (no role=button)", () => {
+    renderWithIntl(<DayDetailPanel sessions={sessions} />);
+    // Days 4-7 have no session → rest tiles, not buttons.
+    expect(screen.queryByRole("button", { name: "Day 4" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Day 7" })).toBeNull();
+    // But the day label and rest text are still present in the tree.
+    expect(screen.getByText("Day 4")).toBeDefined();
+    expect(screen.getByText("Day 7")).toBeDefined();
+    expect(screen.getAllByText("Rest").length).toBeGreaterThanOrEqual(4);
   });
 
   it("SC-07: each card shows the day label with session number", () => {
@@ -100,12 +115,11 @@ describe("DayDetailPanel — day card grid (SC-06, SC-07, SC-08)", () => {
     expect(meta).toBeDefined();
   });
 
-  it("SC-08: day cards have role='button' and tabIndex=0", () => {
+  it("SC-08: training-day tiles have role='button' and tabIndex=0", () => {
     renderWithIntl(<DayDetailPanel sessions={sessions} />);
-    const dayCards = document.querySelectorAll('[role="button"]');
-    // At least 3 cards (one per session)
-    expect(dayCards.length).toBeGreaterThanOrEqual(3);
-    // Every card must have tabindex="0"
+    const dayCards = screen.getAllByRole("button", { name: /^Day \d+$/ });
+    expect(dayCards).toHaveLength(3);
+    // Every training-day tile must have tabindex="0"
     dayCards.forEach((card) => {
       expect(card.getAttribute("tabindex")).toBe("0");
     });
@@ -175,11 +189,14 @@ describe("DayDetailPanel — detail panel exercise table (SC-12, SC-13, SC-23)",
     renderWithIntl(<DayDetailPanel sessions={sessions} />);
     fireEvent.click(screen.getByText("Push Day"));
 
-    // All 4 column headers must be present
+    // All 4 column headers must be present. Scoped to the table: "Rest" is
+    // also the rest-tile focus text (7-tile grid), so an unscoped query would
+    // match multiple elements.
+    const table = screen.getByRole("table");
     expect(screen.getByText("Exercise")).toBeDefined();
     expect(screen.getByText("Sets")).toBeDefined();
     expect(screen.getByText("Reps")).toBeDefined();
-    expect(screen.getByText("Rest")).toBeDefined();
+    expect(within(table).getByText("Rest")).toBeDefined();
   });
 
   it("SC-23: Peso column heading is NOT in the DOM", () => {
@@ -233,8 +250,8 @@ describe("DayDetailPanel — guardrail: no API reference (SC-22)", () => {
     // If this renders without needing any mock fetch/API, the component is clean
     renderWithIntl(<DayDetailPanel sessions={sessions} />);
     // The day cards are rendered from pure props
-    const buttons = screen.getAllByRole("button");
-    expect(buttons.length).toBeGreaterThanOrEqual(3);
+    const buttons = screen.getAllByRole("button", { name: /^Day \d+$/ });
+    expect(buttons).toHaveLength(3);
   });
 });
 
@@ -273,13 +290,16 @@ describe("DayDetailPanel — aria-controls (Fix 3 / SC-08)", () => {
 });
 
 describe("DayDetailPanel — 2-session variant (triangulation for SC-06)", () => {
-  it("renders exactly 2 day cards for a 2-session program", () => {
+  it("renders exactly 2 clickable day cards for a 2-session program, plus 7 tiles total", () => {
     const twoSessions: WorkoutSession[] = sessions.slice(0, 2);
     renderWithIntl(<DayDetailPanel sessions={twoSessions} />);
     // Scoped to day cards (aria-label "Day N") — the week-board header (Slice
     // 4a) also renders inert prev/next buttons, which are not day cards.
     const dayCards = screen.getAllByRole("button", { name: /^Day \d+$/ });
     expect(dayCards.length).toBe(2);
+    // The board is still a full 7-tile Monday-Sunday grid — 5 rest tiles fill
+    // the remaining days, not just 2 cards.
+    expect(screen.getAllByTestId("week-tile")).toHaveLength(7);
   });
 });
 
@@ -379,17 +399,19 @@ describe("DayDetailPanel — day-card visual anatomy (Slice 4a, closes #128)", (
     expect(screen.getByText("This week")).toBeDefined();
   });
 
-  it("each day card renders a status glyph slot", () => {
+  it("every one of the 7 tiles renders a status glyph slot", () => {
     renderWithIntl(<DayDetailPanel sessions={sessions} />);
     const glyphs = screen.getAllByTestId("day-card-state");
-    expect(glyphs.length).toBe(sessions.length);
+    expect(glyphs.length).toBe(7);
   });
 
-  it("every glyph renders identically — no per-day state distinction yet (Slice 4b wires done/active/rest/soon)", () => {
+  it("without a weeklyOverview, training-day tiles share one neutral glyph and rest tiles share a distinct rest glyph (no real state data yet)", () => {
     renderWithIntl(<DayDetailPanel sessions={sessions} />);
-    const glyphs = screen.getAllByTestId("day-card-state");
-    const texts = glyphs.map((g) => g.textContent);
-    expect(new Set(texts).size).toBe(1);
+    const glyphs = screen.getAllByTestId("day-card-state").map((g) => g.textContent);
+    // 3 training-day tiles (neutral "•") + 4 rest tiles ("–").
+    expect(glyphs.filter((g) => g === "•")).toHaveLength(3);
+    expect(glyphs.filter((g) => g === "–")).toHaveLength(4);
+    expect(new Set(glyphs).size).toBe(2);
   });
 
   it("each day card renders a mini load-bar stack with 4 bars", () => {
@@ -459,14 +481,20 @@ describe("DayDetailPanel — conflict banner (#93 Slice 3)", () => {
   });
 });
 
-describe("DayDetailPanel — real weekly day-state + navigation (09c-v1 Slice 4b)", () => {
+describe("DayDetailPanel — real weekly day-state + navigation (09c-v1 Slice 4b, 7-tile fix)", () => {
+  // Full 7-entry, Monday-first overview: sessions cover days 1-3 (Push/Pull/Leg);
+  // days 4-7 have no training session and are real rest-day tiles.
   const weeklyOverview: WeeklyOverviewDTO = {
     weekStart: "2026-07-13",
     weekLabel: "13–19 Jul",
     days: [
       { date: "2026-07-13", status: "done" },
       { date: "2026-07-14", status: "active" },
-      { date: "2026-07-15", status: "rest" },
+      { date: "2026-07-15", status: "soon" },
+      { date: "2026-07-16", status: "rest" },
+      { date: "2026-07-17", status: "rest" },
+      { date: "2026-07-18", status: "rest" },
+      { date: "2026-07-19", status: "rest" },
     ],
     previousWeekStart: "2026-07-06",
     nextWeekStart: "2026-07-20",
@@ -479,13 +507,39 @@ describe("DayDetailPanel — real weekly day-state + navigation (09c-v1 Slice 4b
     expect((screen.getByRole("button", { name: "Next week" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("reflects the real per-day status glyphs (done/active/rest) instead of a uniform neutral glyph", () => {
+  it("renders exactly 7 tiles reflecting the real per-day status glyphs (done/active/soon/rest×4)", () => {
     renderWithIntl(<DayDetailPanel sessions={sessions} weeklyOverview={weeklyOverview} />);
+    expect(screen.getAllByTestId("week-tile")).toHaveLength(7);
     const glyphs = screen.getAllByTestId("day-card-state").map((g) => g.textContent);
-    expect(glyphs).toEqual(["✓", "▶", "–"]);
+    expect(glyphs).toEqual(["✓", "▶", "•", "–", "–", "–", "–"]);
   });
 
-  it("clicking next week calls getWeeklyOverviewAction with the DTO's nextWeekStart and re-renders with the new week", async () => {
+  it("a real rest-day tile (day 4, no session) is not interactive", () => {
+    renderWithIntl(<DayDetailPanel sessions={sessions} weeklyOverview={weeklyOverview} />);
+    expect(screen.queryByRole("button", { name: "Day 4" })).toBeNull();
+    expect(screen.getByText("Day 4")).toBeDefined();
+  });
+
+  it("a past-skipped training day (day 1 status='rest' despite having a session) still renders as an interactive tile with the rest glyph", () => {
+    const skippedOverview: WeeklyOverviewDTO = {
+      ...weeklyOverview,
+      days: [
+        { date: "2026-07-13", status: "rest" },
+        ...weeklyOverview.days.slice(1),
+      ],
+    };
+    renderWithIntl(<DayDetailPanel sessions={sessions} weeklyOverview={skippedOverview} />);
+    const day1Card = screen.getByRole("button", { name: "Day 1" });
+    expect(day1Card).toBeDefined();
+    const glyphs = screen.getAllByTestId("day-card-state").map((g) => g.textContent);
+    expect(glyphs[0]).toBe("–");
+    // Still opens its real detail panel — the session data is unaffected by
+    // the "rest" (skipped) status; there is no "missed" state that hides it.
+    fireEvent.click(day1Card);
+    expect(screen.getByText("Bench Press")).toBeDefined();
+  });
+
+  it("clicking next week calls getWeeklyOverviewAction with the DTO's nextWeekStart and re-renders with the new (all-rest/soon) week", async () => {
     getWeeklyOverviewAction.mockResolvedValue({
       kind: "ok",
       overview: {
@@ -495,6 +549,10 @@ describe("DayDetailPanel — real weekly day-state + navigation (09c-v1 Slice 4b
           { date: "2026-07-20", status: "soon" },
           { date: "2026-07-21", status: "soon" },
           { date: "2026-07-22", status: "soon" },
+          { date: "2026-07-23", status: "rest" },
+          { date: "2026-07-24", status: "rest" },
+          { date: "2026-07-25", status: "rest" },
+          { date: "2026-07-26", status: "rest" },
         ],
         previousWeekStart: "2026-07-13",
         nextWeekStart: "2026-07-27",
@@ -506,8 +564,9 @@ describe("DayDetailPanel — real weekly day-state + navigation (09c-v1 Slice 4b
 
     await waitFor(() => expect(screen.getByText("20–26 Jul")).toBeDefined());
     expect(getWeeklyOverviewAction).toHaveBeenCalledWith("2026-07-20");
+    expect(screen.getAllByTestId("week-tile")).toHaveLength(7);
     const glyphs = screen.getAllByTestId("day-card-state").map((g) => g.textContent);
-    expect(glyphs).toEqual(["•", "•", "•"]);
+    expect(glyphs).toEqual(["•", "•", "•", "–", "–", "–", "–"]);
   });
 
   it("clicking previous week calls getWeeklyOverviewAction with the DTO's previousWeekStart", () => {
@@ -519,10 +578,12 @@ describe("DayDetailPanel — real weekly day-state + navigation (09c-v1 Slice 4b
     expect(getWeeklyOverviewAction).toHaveBeenCalledWith("2026-07-06");
   });
 
-  it("falls back to the Slice-4a inert nav + uniform glyph when weeklyOverview is absent", () => {
+  it("falls back to the Slice-4a inert nav when weeklyOverview is absent, still rendering all 7 tiles", () => {
     renderWithIntl(<DayDetailPanel sessions={sessions} />);
     expect((screen.getByRole("button", { name: "Previous week" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getAllByTestId("week-tile")).toHaveLength(7);
     const glyphs = screen.getAllByTestId("day-card-state").map((g) => g.textContent);
-    expect(new Set(glyphs).size).toBe(1);
+    // 3 training tiles share the neutral glyph, 4 rest tiles share the rest glyph.
+    expect(new Set(glyphs).size).toBe(2);
   });
 });

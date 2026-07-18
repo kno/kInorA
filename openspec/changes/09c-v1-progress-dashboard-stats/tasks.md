@@ -109,3 +109,4 @@ Delivery decision (ask-on-risk gate resolved with the user): the two High-risk s
 - [x] 4b.10 Add EN/ES copy for weekly board states and exercise-detail section
 - [x] 4b.11 RED/GREEN: component tests — week navigation, all four day states, exercise detail with/without history, EN/ES parity
 - [x] 4b.12 Verify: `pnpm test`, `pnpm type-check`, `pnpm architecture`, `pnpm deps-guard`, `pnpm build` all pass; confirm no `PlanWeekView`/`DayDetailPanel` diff conflicts with 4a
+- [x] 4b.13 SPEC-FIDELITY FIX (post-4b): rebuild the weekly board as a fixed 7-tile Monday–Sunday grid (`buildWeekTiles` in `plan-utils.ts`) instead of one card per training day — every calendar day now renders exactly one status (done/active/rest/soon), non-training days as non-interactive rest tiles; re-expressed all ~10 Slice-4a one-card-per-session assertions for the 7-tile model; no DTO change needed (`WeeklyOverviewDTO.days` was already a 7-entry array)
