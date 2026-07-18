@@ -4,30 +4,37 @@
  * DayDetailPanel — client island.
  *
  * Renders a week-board header, a responsive day-card grid, and an expandable
- * detail panel for the selected session. All data is received as props; this
- * component NEVER calls fetch, API_BASE_URL, or any server action — it
- * manages only local UI state (selectedDay: number | null).
+ * detail panel for the selected session. Data is received as props; the only
+ * server call this component makes is `getWeeklyOverviewAction` (a Server
+ * Action), and only when `weeklyOverview` is provided and the user clicks
+ * prev/next — it never calls `fetch` or `API_BASE_URL` directly.
  *
  * Visual anatomy realigned to `screens/web-plan.html`'s week board (Slice 4a,
- * 09c-v1-progress-dashboard-stats — closes #128): board eyebrow/title, an
- * inert (disabled) prev/next week-nav with a static week label, and per-card
- * status-glyph slot + mini load-bar stack. This is a PURE VISUAL realignment:
- * the week-nav is not wired (no real calendar week exists yet) and every
- * status glyph renders identically — Slice 4b wires the real done/active/
- * rest/soon day-state and week navigation on top of this layout.
- *
- * Deferred to 09b/4b: weight column, completion check-marks, "today"
- * highlighting, day-state computation, real week navigation.
+ * 09c-v1-progress-dashboard-stats — closes #128). Slice 4b wires the real
+ * data on top of that layout: when `weeklyOverview` is provided, the 7-day
+ * Monday–Sunday board renders with real done/active/rest/soon day states and
+ * functional prev/next navigation (via the Server Action, no page reload).
+ * When `weeklyOverview` is absent (legacy `/plan/[id]` callers), the board
+ * falls back to the Slice-4a inert/session-only rendering unchanged.
  */
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import type { WorkoutSession } from "@kinora/contracts";
+import type { WeeklyDayStatus, WeeklyOverviewDTO, WorkoutSession } from "@kinora/contracts";
 import styles from "./plan-week-view.module.css";
 import { estimateSessionMinutes, sessionLoadBars } from "./plan-utils";
+import { getWeeklyOverviewAction } from "./actions";
 
 /** Stable id for the detail panel element — used for aria-controls. */
 const DETAIL_PANEL_ID = "day-detail-panel";
+
+/** Status glyph per `WeeklyDayStatus` (design.md "The week model"). */
+const STATE_GLYPHS: Record<WeeklyDayStatus, string> = {
+  done: "✓",
+  active: "▶",
+  rest: "–",
+  soon: "•",
+};
 
 export interface DayDetailPanelProps {
   sessions: WorkoutSession[];
@@ -45,16 +52,33 @@ export interface DayDetailPanelProps {
    * invariant is enforced server-side; this only surfaces it.
    */
   conflict?: { activePlanName?: string; activeDay: number | null };
+  /**
+   * Real weekly-progress overlay (09c-v1-progress-dashboard-stats, Slice
+   * 4b) — the current calendar week's day states + prev/next week bounds,
+   * server-fetched via `getWeeklyOverviewAction`. When absent, the board
+   * falls back to the Slice-4a session-only rendering (inert nav, no
+   * per-day state distinction) for backward compatibility.
+   */
+  weeklyOverview?: WeeklyOverviewDTO;
 }
 
 export function DayDetailPanel({
   sessions,
   onStartWorkout,
   conflict,
+  weeklyOverview,
 }: DayDetailPanelProps) {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [overview, setOverview] = useState(weeklyOverview);
 
   const t = useTranslations();
+
+  async function navigateWeek(targetWeekStart: string): Promise<void> {
+    const result = await getWeeklyOverviewAction(targetWeekStart);
+    if (result.kind === "ok") {
+      setOverview(result.overview);
+    }
+  }
 
   // Derived localized conflict message (readability: no per-render fn, no
   // side effects). Empty string when there is no conflict.
@@ -82,6 +106,15 @@ export function DayDetailPanel({
 
   const selectedSession = sessions.find((s) => s.day === selectedDay) ?? null;
 
+  // Monday-first status per plan-day index (design.md "Planned-day →
+  // weekday mapping"). `undefined` (no `weeklyOverview`) preserves the
+  // Slice-4a fallback: every glyph renders identically, matching the
+  // existing session-only tests unchanged.
+  const statusByDay = new Map<number, WeeklyDayStatus>();
+  if (overview) {
+    overview.days.forEach((day, index) => statusByDay.set(index + 1, day.status));
+  }
+
   return (
     <div>
       {/* Active-session conflict banner (#93 Slice 3) — localized, names the
@@ -92,10 +125,11 @@ export function DayDetailPanel({
         </div>
       )}
 
-      {/* Week board header — eyebrow/title + an inert (disabled) week-nav.
-          No real calendar week exists yet, so the label is static and the
-          prev/next buttons are disabled rather than dead no-op controls
-          (Slice 4b wires real navigation on top of this layout). */}
+      {/* Week board header — eyebrow/title + week-nav. Functional (Slice 4b)
+          when `overview` is present: the label reflects the real displayed
+          week and prev/next call the Server Action to fetch the adjacent
+          week — no page reload. Falls back to the Slice-4a inert/static
+          rendering when there is no overview (legacy callers). */}
       <div className={styles.boardHead}>
         <div>
           <div className={styles.boardEyebrow}>{t("plan.week.eyebrow")}</div>
@@ -105,17 +139,19 @@ export function DayDetailPanel({
           <button
             type="button"
             className={styles.weekNavBtn}
-            disabled
+            disabled={!overview}
             aria-label={t("plan.week.prev")}
+            onClick={overview ? () => void navigateWeek(overview.previousWeekStart) : undefined}
           >
             ‹
           </button>
-          <span className={styles.weekLabel}>{t("plan.week.label")}</span>
+          <span className={styles.weekLabel}>{overview ? overview.weekLabel : t("plan.week.label")}</span>
           <button
             type="button"
             className={styles.weekNavBtn}
-            disabled
+            disabled={!overview}
             aria-label={t("plan.week.next")}
+            onClick={overview ? () => void navigateWeek(overview.nextWeekStart) : undefined}
           >
             ›
           </button>
@@ -131,6 +167,9 @@ export function DayDetailPanel({
           const exercisesLabel = `${session.exercises.length} ${t("plan.exercises.count")}`;
           const durationLabel = t("plan.est_duration", { n: estMin });
           const loadBars = sessionLoadBars(session.exercises);
+          const status = statusByDay.get(session.day);
+          const glyph = status ? STATE_GLYPHS[status] : "•";
+          const stateLabel = status ? t(`plan.dayState.${status}`) : undefined;
 
           return (
             <div
@@ -146,15 +185,16 @@ export function DayDetailPanel({
             >
               <div className={styles.dayTop}>
                 <div className={styles.dcDayLabel}>{dayLabel}</div>
-                {/* Status glyph slot — Slice 4a ships the slot/styling only;
-                    every card renders the same neutral glyph until Slice 4b
-                    wires the real done/active/rest/soon day-state. */}
+                {/* Status glyph slot. Real done/active/rest/soon state
+                    (Slice 4b) when `weeklyOverview` is provided; otherwise
+                    every card renders the same neutral glyph (Slice 4a). */}
                 <div
                   className={styles.dcStateGlyph}
                   data-testid="day-card-state"
-                  aria-hidden="true"
+                  aria-label={stateLabel}
+                  aria-hidden={stateLabel ? undefined : "true"}
                 >
-                  •
+                  {glyph}
                 </div>
               </div>
               <div className={styles.dcFocus}>{session.title}</div>

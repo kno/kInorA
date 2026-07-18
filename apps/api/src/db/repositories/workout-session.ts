@@ -2,23 +2,28 @@ import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { computeAverageRpe, computeSessionVolume, computeVolumeTrend, defaultPlanName } from "@kinora/domain";
 import { classifyExerciseMuscleGroup } from "../muscle-classifier.js";
 import {
+  addUtcDays as domainAddUtcDays,
   computeAdherence,
   computeMuscleGroupDistribution,
   computePersonalRecords,
   computeStreak,
+  computeWeeklyPlanVsCompletion,
   computeWeeklyRollup,
   delta,
+  utcWeekBounds as domainUtcWeekBounds,
   type MuscleGroupDistributionExercise,
   type PersonalRecordSetInput,
 } from "../progress-domain.js";
 import type {
   DashboardSummaryDTO,
+  ExerciseDetailDTO,
   KpiWithDelta,
   MuscleGroup,
   SessionExerciseRecord,
   SetRecordDTO,
   StartSessionOutcome,
   StatsSummaryDTO,
+  WeeklyOverviewDTO,
   WorkoutExercise,
   WorkoutHistoryEntry,
   WorkoutHistoryQuery,
@@ -87,6 +92,15 @@ const DEFAULT_HISTORY_LIMIT = 20;
  */
 const DASHBOARD_HISTORY_LIMIT = 60;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Bounded lookback window for `getExerciseDetail` (Slice 4b) — how many of
+ * the caller's most-recent completed sessions are scanned for a title match,
+ * and how many recent sets are surfaced. Mirrors `DASHBOARD_HISTORY_LIMIT`'s
+ * bounded-page approach.
+ */
+const EXERCISE_DETAIL_SESSION_SCAN_LIMIT = 60;
+const EXERCISE_DETAIL_RECENT_SETS_LIMIT = 10;
 
 function startOfUtcDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -180,6 +194,17 @@ function emptyStatsSummary(range: "week" | "month" | "year"): StatsSummaryDTO {
     muscleGroupDistribution: [],
     personalRecords: [],
   };
+}
+
+/**
+ * Locale-neutral "8–14 Jul" style week label for `WeeklyOverviewDTO`
+ * (Slice 4b). Deliberately neutral (not localized) — the API layer has no
+ * user-locale context; the web layer may re-derive a localized label from
+ * `weekStart`/`weekLabel` if a future change wants full i18n parity here.
+ */
+function formatWeekLabel(start: Date, end: Date): string {
+  const month = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(start);
+  return `${start.getUTCDate()}–${end.getUTCDate()} ${month}`;
 }
 
 function recentDailyCompletion(completedAtDates: string[], now: Date, days = 7): boolean[] {
@@ -810,6 +835,171 @@ export class WorkoutSessionRepository {
       muscleGroupDistribution,
       personalRecords,
     };
+  }
+
+  /**
+   * Weekly plan board (09c-v1-progress-dashboard-stats, Slice 4b) — the
+   * Monday–Sunday day-state array (done/active/rest/soon) plus prev/next
+   * navigation, for the calendar week containing `weekStart`.
+   *
+   * Bounded, no N+1: (1) one date-ranged query over the caller's completed
+   * sessions inside the displayed week, scoped by (tenantId, userId); (2)
+   * one lookup of the latest ready plan (for the planned-training-day
+   * overlay). Completion counts as "done" regardless of which plan version
+   * produced the session — `computeWeeklyPlanVsCompletion` has no notion of
+   * plan version, only dates. A week predating the plan/account resolves to
+   * an all-rest board (+ any real done day) because `plannedTrainingDays`
+   * naturally falls back to 0 when there is no ready plan, with no error.
+   */
+  async getWeeklyOverview(
+    tenantId: string,
+    userId: string,
+    weekStart: Date,
+    now: Date = new Date()
+  ): Promise<WeeklyOverviewDTO> {
+    const { start, end } = domainUtcWeekBounds(weekStart);
+
+    const sessionRows = (await this.db
+      .select()
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.status, "completed"),
+          gte(workoutSessions.completedAt, start),
+          lte(workoutSessions.completedAt, end)
+        )
+      )
+      .orderBy(desc(workoutSessions.completedAt))) as WorkoutSessionRow[];
+
+    const planRows = (await this.db
+      .select()
+      .from(workoutPlans)
+      .where(
+        and(
+          eq(workoutPlans.tenantId, tenantId),
+          eq(workoutPlans.userId, userId),
+          eq(workoutPlans.status, "ready")
+        )
+      )
+      .orderBy(desc(workoutPlans.createdAt))
+      .limit(1)) as WorkoutPlanRow[];
+
+    const latestReadyPlan = planRows[0];
+    const plannedSessions = latestReadyPlan?.programJson?.weeklySessions ?? [];
+    const plannedTrainingDays = plannedSessions.length;
+
+    const completedAtDates = sessionRows
+      .map((row) => row.completedAt?.toISOString())
+      .filter((iso): iso is string => iso !== undefined);
+
+    const statuses = computeWeeklyPlanVsCompletion({ weekStart: start, completedAtDates, plannedTrainingDays }, now);
+
+    const focusByDayIndex = new Map(plannedSessions.map((session) => [session.day - 1, session.title]));
+
+    const days = statuses.map((status, index) => {
+      const date = domainAddUtcDays(start, index);
+      return {
+        date: date.toISOString().slice(0, 10),
+        status,
+        focus: index < plannedTrainingDays ? focusByDayIndex.get(index) : undefined,
+      };
+    });
+
+    return {
+      weekStart: start.toISOString().slice(0, 10),
+      weekLabel: formatWeekLabel(start, end),
+      days,
+      previousWeekStart: domainAddUtcDays(start, -7).toISOString().slice(0, 10),
+      nextWeekStart: domainAddUtcDays(start, 7).toISOString().slice(0, 10),
+    };
+  }
+
+  /**
+   * Read-only exercise-history reference (09c-v1-progress-dashboard-stats,
+   * Slice 4b). `title` is free-text supplied by the caller — it is used only
+   * as an ADDITIONAL filter inside the already-(tenantId, userId)-scoped set
+   * of the caller's own completed sessions (design.md "Read model boundary:
+   * one bounded query per surface"). This is what makes it IDOR-safe: step
+   * (1) below never sees another user's session ids, so no crafted `title`
+   * in step (2) can ever surface another user's rows.
+   *
+   * Bounded, no N+1: (1) one bounded page of the caller's completed sessions
+   * (`EXERCISE_DETAIL_SESSION_SCAN_LIMIT`); (2) one `inArray` query for
+   * `session_exercises` scoped to those session ids AND matching `title`
+   * exactly; (3) one `inArray` query for `set_records` on the matched
+   * exercise ids. Returns an empty `recentSets` array (never an error) when
+   * the exercise has no history — the web layer omits the section entirely
+   * in that case (design.md "Exercise detail").
+   */
+  async getExerciseDetail(tenantId: string, userId: string, title: string): Promise<ExerciseDetailDTO> {
+    const sessionRows = (await this.db
+      .select()
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.status, "completed")
+        )
+      )
+      .orderBy(desc(workoutSessions.completedAt))
+      .limit(EXERCISE_DETAIL_SESSION_SCAN_LIMIT)) as WorkoutSessionRow[];
+
+    if (sessionRows.length === 0) {
+      return { exerciseTitle: title, recentSets: [] };
+    }
+
+    const sessionIds = sessionRows.map((row) => row.id);
+    const exerciseRows = (await this.db
+      .select()
+      .from(sessionExercises)
+      .where(and(inArray(sessionExercises.workoutSessionId, sessionIds), eq(sessionExercises.title, title)))) as SessionExerciseRow[];
+
+    if (exerciseRows.length === 0) {
+      return { exerciseTitle: title, recentSets: [] };
+    }
+
+    const completedAtBySessionId = new Map(
+      sessionRows.map((row) => [row.id, row.completedAt!.toISOString()])
+    );
+
+    const exerciseIds = exerciseRows.map((exercise) => exercise.id);
+    const setRows = (await this.db
+      .select()
+      .from(setRecords)
+      .where(inArray(setRecords.sessionExerciseId, exerciseIds))) as SetRecordRow[];
+
+    const completedAtByExerciseId = new Map(
+      exerciseRows.map((exercise) => [exercise.id, completedAtBySessionId.get(exercise.workoutSessionId)])
+    );
+
+    interface RecentSetEntry {
+      completedAt: string;
+      weightKg?: number;
+      actualReps?: number;
+      rpe?: number;
+    }
+
+    const recentSets: RecentSetEntry[] = [];
+    for (const set of setRows) {
+      const completedAt = completedAtByExerciseId.get(set.sessionExerciseId);
+      if (completedAt === undefined) {
+        continue;
+      }
+      recentSets.push({
+        completedAt,
+        weightKg: toOptionalNumber(set.weightKg),
+        actualReps: set.actualReps ?? undefined,
+        rpe: set.rpe ?? undefined,
+      });
+    }
+
+    recentSets.sort((left, right) => new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime());
+    recentSets.splice(EXERCISE_DETAIL_RECENT_SETS_LIMIT);
+
+    return { exerciseTitle: title, recentSets };
   }
 
   private async findLatestActiveSession(

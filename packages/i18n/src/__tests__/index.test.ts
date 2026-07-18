@@ -25,7 +25,7 @@ describe("@kinora/i18n package assembly", () => {
     expect(result.valid).toBe(true);
   });
 
-  it("the full catalog carries all 415 migrated leaf keys per locale", () => {
+  it("the full catalog carries all 430 migrated leaf keys per locale", () => {
     // 329 web-migrated keys + 23 `mobileTracker.*` keys authored in slice 9
     // for the mobile-unique tracker copy that has no EN/web equivalent (see
     // 9.3.1 enumeration in tasks.md) + 10 `history.*` keys authored in 09b
@@ -45,9 +45,12 @@ describe("@kinora/i18n package assembly", () => {
     // "legs"/"arms" presentation labels for the web-only coarse collapse)
     // + 6 `plan.week.*` keys authored in Slice 4a (weekly board visual
     // realignment, closes #128) for the board header eyebrow/title and the
-    // inert (disabled) week-nav's aria-labels + static week label.
+    // inert (disabled) week-nav's aria-labels + static week label
+    // + 4 `plan.dayState.*` keys and 5 `exercises.history.*` keys authored
+    // in Slice 4b for the real done/active/rest/soon day-state labels and
+    // the read-only exercise-history section.
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(421);
+    expect(Object.keys(flat)).toHaveLength(430);
   });
 
   it("the mobileTracker namespace is present with EN+ES parity (9.3.3)", () => {

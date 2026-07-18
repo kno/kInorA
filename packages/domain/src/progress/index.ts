@@ -21,3 +21,6 @@ export { computeMuscleGroupDistribution } from "./distribution.js";
 export type { MuscleGroupDistributionExercise, MuscleGroupDistributionRow } from "./distribution.js";
 export { computePersonalRecords } from "./personal-records.js";
 export type { PersonalRecordSetInput } from "./personal-records.js";
+export { computeWeeklyPlanVsCompletion } from "./weekly-plan-vs-completion.js";
+export type { WeeklyPlanVsCompletionInput } from "./weekly-plan-vs-completion.js";
+export { utcWeekBounds, utcDayKey, startOfUtcDay, addUtcDays, utcWeekdayIndex } from "./utc-week.js";

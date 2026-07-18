@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { screen, fireEvent } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { renderWithIntl } from "@/test-utils/render-with-intl";
-import type { WorkoutSession } from "@kinora/contracts";
+import type { WeeklyOverviewDTO, WorkoutSession } from "@kinora/contracts";
 
 // Mock plan-week-view.module.css to avoid CSS module transform errors
 vi.mock("../plan-week-view.module.css", () => ({
   default: new Proxy({}, { get: (_t, k) => String(k) }),
+}));
+
+const getWeeklyOverviewAction = vi.fn();
+vi.mock("../actions", () => ({
+  getWeeklyOverviewAction: (...args: unknown[]) => getWeeklyOverviewAction(...args),
 }));
 
 import { DayDetailPanel } from "../DayDetailPanel";
@@ -451,5 +456,73 @@ describe("DayDetailPanel — conflict banner (#93 Slice 3)", () => {
   it("renders no conflict banner when conflict is undefined", () => {
     renderWithIntl(<DayDetailPanel sessions={sessions} onStartWorkout={vi.fn()} />);
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("DayDetailPanel — real weekly day-state + navigation (09c-v1 Slice 4b)", () => {
+  const weeklyOverview: WeeklyOverviewDTO = {
+    weekStart: "2026-07-13",
+    weekLabel: "13–19 Jul",
+    days: [
+      { date: "2026-07-13", status: "done" },
+      { date: "2026-07-14", status: "active" },
+      { date: "2026-07-15", status: "rest" },
+    ],
+    previousWeekStart: "2026-07-06",
+    nextWeekStart: "2026-07-20",
+  };
+
+  it("renders the real week label and enables the nav buttons", () => {
+    renderWithIntl(<DayDetailPanel sessions={sessions} weeklyOverview={weeklyOverview} />);
+    expect(screen.getByText("13–19 Jul")).toBeDefined();
+    expect((screen.getByRole("button", { name: "Previous week" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Next week" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("reflects the real per-day status glyphs (done/active/rest) instead of a uniform neutral glyph", () => {
+    renderWithIntl(<DayDetailPanel sessions={sessions} weeklyOverview={weeklyOverview} />);
+    const glyphs = screen.getAllByTestId("day-card-state").map((g) => g.textContent);
+    expect(glyphs).toEqual(["✓", "▶", "–"]);
+  });
+
+  it("clicking next week calls getWeeklyOverviewAction with the DTO's nextWeekStart and re-renders with the new week", async () => {
+    getWeeklyOverviewAction.mockResolvedValue({
+      kind: "ok",
+      overview: {
+        weekStart: "2026-07-20",
+        weekLabel: "20–26 Jul",
+        days: [
+          { date: "2026-07-20", status: "soon" },
+          { date: "2026-07-21", status: "soon" },
+          { date: "2026-07-22", status: "soon" },
+        ],
+        previousWeekStart: "2026-07-13",
+        nextWeekStart: "2026-07-27",
+      },
+    });
+
+    renderWithIntl(<DayDetailPanel sessions={sessions} weeklyOverview={weeklyOverview} />);
+    fireEvent.click(screen.getByRole("button", { name: "Next week" }));
+
+    await waitFor(() => expect(screen.getByText("20–26 Jul")).toBeDefined());
+    expect(getWeeklyOverviewAction).toHaveBeenCalledWith("2026-07-20");
+    const glyphs = screen.getAllByTestId("day-card-state").map((g) => g.textContent);
+    expect(glyphs).toEqual(["•", "•", "•"]);
+  });
+
+  it("clicking previous week calls getWeeklyOverviewAction with the DTO's previousWeekStart", () => {
+    getWeeklyOverviewAction.mockResolvedValue({ kind: "ok", overview: weeklyOverview });
+    renderWithIntl(<DayDetailPanel sessions={sessions} weeklyOverview={weeklyOverview} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Previous week" }));
+
+    expect(getWeeklyOverviewAction).toHaveBeenCalledWith("2026-07-06");
+  });
+
+  it("falls back to the Slice-4a inert nav + uniform glyph when weeklyOverview is absent", () => {
+    renderWithIntl(<DayDetailPanel sessions={sessions} />);
+    expect((screen.getByRole("button", { name: "Previous week" }) as HTMLButtonElement).disabled).toBe(true);
+    const glyphs = screen.getAllByTestId("day-card-state").map((g) => g.textContent);
+    expect(new Set(glyphs).size).toBe(1);
   });
 });

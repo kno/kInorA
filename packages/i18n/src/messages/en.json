@@ -290,6 +290,12 @@
       "next": "Next week",
       "label": "This week"
     },
+    "dayState": {
+      "done": "Done",
+      "active": "Today",
+      "rest": "Rest",
+      "soon": "Upcoming"
+    },
     "start": {
       "conflict": "You have an active session for {plan} · Day {n}. Resume or finish it before starting another.",
       "conflict_no_day": "You have an active session for {plan}. Resume or finish it before starting another.",
@@ -565,7 +571,14 @@
   },
   "exercises": {
     "title": "Exercises",
-    "description": "Browse and search the exercise library for your workouts."
+    "description": "Browse and search the exercise library for your workouts.",
+    "history": {
+      "title": "Recent history",
+      "date": "Date",
+      "weight": "Weight",
+      "reps": "Reps",
+      "rpe": "RPE"
+    }
   },
   "stats": {
     "title": "Statistics",
