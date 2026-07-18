@@ -42,9 +42,12 @@ describe("@kinora/i18n package assembly", () => {
     // + 6 `stats.*` keys authored in Slice 3b for the real distribution/PR
     // empty states and PR table headers + 12 `progress.muscle.<slug>` keys
     // authored in Slice 3b (10 primary `MuscleGroup` labels + 2 composite
-    // "legs"/"arms" presentation labels for the web-only coarse collapse).
+    // "legs"/"arms" presentation labels for the web-only coarse collapse)
+    // + 6 `plan.week.*` keys authored in Slice 4a (weekly board visual
+    // realignment, closes #128) for the board header eyebrow/title and the
+    // inert (disabled) week-nav's aria-labels + static week label.
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(415);
+    expect(Object.keys(flat)).toHaveLength(421);
   });
 
   it("the mobileTracker namespace is present with EN+ES parity (9.3.3)", () => {

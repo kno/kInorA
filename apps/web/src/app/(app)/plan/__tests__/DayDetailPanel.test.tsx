@@ -271,8 +271,10 @@ describe("DayDetailPanel — 2-session variant (triangulation for SC-06)", () =>
   it("renders exactly 2 day cards for a 2-session program", () => {
     const twoSessions: WorkoutSession[] = sessions.slice(0, 2);
     renderWithIntl(<DayDetailPanel sessions={twoSessions} />);
-    const buttons = screen.getAllByRole("button");
-    expect(buttons.length).toBe(2);
+    // Scoped to day cards (aria-label "Day N") — the week-board header (Slice
+    // 4a) also renders inert prev/next buttons, which are not day cards.
+    const dayCards = screen.getAllByRole("button", { name: /^Day \d+$/ });
+    expect(dayCards.length).toBe(2);
   });
 });
 
@@ -353,6 +355,55 @@ describe("DayDetailPanel — per-day Start CTA (#93 Slice 3)", () => {
     renderWithIntl(<DayDetailPanel sessions={sessions} />);
     fireEvent.click(screen.getByText("Push Day"));
     expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+  });
+});
+
+describe("DayDetailPanel — day-card visual anatomy (Slice 4a, closes #128)", () => {
+  it("renders the week board header (eyebrow + title) above the day grid", () => {
+    renderWithIntl(<DayDetailPanel sessions={sessions} />);
+    expect(screen.getByText("Weekly route")).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Training map" })).toBeDefined();
+  });
+
+  it("renders an inert (disabled) week-nav with a static week label", () => {
+    renderWithIntl(<DayDetailPanel sessions={sessions} />);
+    const prevBtn = screen.getByRole("button", { name: "Previous week" }) as HTMLButtonElement;
+    const nextBtn = screen.getByRole("button", { name: "Next week" }) as HTMLButtonElement;
+    expect(prevBtn.disabled).toBe(true);
+    expect(nextBtn.disabled).toBe(true);
+    expect(screen.getByText("This week")).toBeDefined();
+  });
+
+  it("each day card renders a status glyph slot", () => {
+    renderWithIntl(<DayDetailPanel sessions={sessions} />);
+    const glyphs = screen.getAllByTestId("day-card-state");
+    expect(glyphs.length).toBe(sessions.length);
+  });
+
+  it("every glyph renders identically — no per-day state distinction yet (Slice 4b wires done/active/rest/soon)", () => {
+    renderWithIntl(<DayDetailPanel sessions={sessions} />);
+    const glyphs = screen.getAllByTestId("day-card-state");
+    const texts = glyphs.map((g) => g.textContent);
+    expect(new Set(texts).size).toBe(1);
+  });
+
+  it("each day card renders a mini load-bar stack with 4 bars", () => {
+    renderWithIntl(<DayDetailPanel sessions={sessions} />);
+    const stacks = screen.getAllByTestId("day-card-bars");
+    expect(stacks.length).toBe(sessions.length);
+    for (const stack of stacks) {
+      expect(stack.children.length).toBe(4);
+    }
+  });
+
+  it("mini bar-stack heights reflect relative exercise load (Push Day: Bench Press 480s max, Overhead Press 270s)", () => {
+    renderWithIntl(<DayDetailPanel sessions={sessions} />);
+    const [firstStack] = screen.getAllByTestId("day-card-bars");
+    expect(firstStack).toBeDefined();
+    const heights = Array.from(firstStack!.children).map(
+      (bar) => (bar as HTMLElement).style.height,
+    );
+    expect(heights).toEqual(["100%", "56%", "0%", "0%"]);
   });
 });
 

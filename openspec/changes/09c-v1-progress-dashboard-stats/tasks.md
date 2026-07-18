@@ -89,11 +89,11 @@ Delivery decision (ask-on-risk gate resolved with the user): the two High-risk s
 
 ## Slice 4a: Weekly Board Visual Realignment (PR 4a, base = 3b; closes #128)
 
-- [ ] 4a.1 Pull `screens/web-plan.html` via OpenDesign MCP; diff against current `PlanWeekView.tsx` / `DayDetailPanel.tsx`
-- [ ] 4a.2 RED: write/update component snapshot or structural tests asserting the realigned layout, tokens, and component structure — no new data props
-- [ ] 4a.3 GREEN: realign `apps/web/.../plan/PlanWeekView.tsx` and `DayDetailPanel.tsx` to `web-plan.html` (layout, spacing, tokens only — no day-status/nav wiring changes)
-- [ ] 4a.4 REFACTOR: extract shared card/list primitives reused by dashboard/stats if applicable
-- [ ] 4a.5 Verify: `pnpm test`, `pnpm type-check`, `pnpm build` pass; confirm issue #128 acceptance criteria met
+- [x] 4a.1 Pull `screens/web-plan.html` via OpenDesign MCP; diff against current `PlanWeekView.tsx` / `DayDetailPanel.tsx`
+- [x] 4a.2 RED: write/update component snapshot or structural tests asserting the realigned layout, tokens, and component structure — no new data props
+- [x] 4a.3 GREEN: realign `apps/web/.../plan/PlanWeekView.tsx` and `DayDetailPanel.tsx` to `web-plan.html` (layout, spacing, tokens only — no day-status/nav wiring changes)
+- [x] 4a.4 REFACTOR: extract shared card/list primitives reused by dashboard/stats if applicable
+- [x] 4a.5 Verify: `pnpm test`, `pnpm type-check`, `pnpm build` pass; confirm issue #128 acceptance criteria met
 
 ## Slice 4b: Weekly-Progress Data + Exercise Detail (PR 4b, base = 4a)
 

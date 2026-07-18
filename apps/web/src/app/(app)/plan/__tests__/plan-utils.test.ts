@@ -7,6 +7,7 @@ import {
   EXECUTION_OVERHEAD_SECONDS,
   estimateSessionMinutes,
   restDays,
+  sessionLoadBars,
 } from "../plan-utils";
 
 describe("plan-utils — EXECUTION_OVERHEAD_SECONDS", () => {
@@ -86,5 +87,41 @@ describe("plan-utils — restDays", () => {
 
   it("returns 7 for 0 sessions (empty array)", () => {
     expect(restDays([])).toBe(7);
+  });
+});
+
+describe("plan-utils — sessionLoadBars (Slice 4a: day-card mini bar-stack, closes #128)", () => {
+  it("returns 4 bars by default", () => {
+    const exercises = [{ name: "Squat", sets: 4, reps: "5", restSeconds: 90 }];
+    expect(sessionLoadBars(exercises)).toHaveLength(4);
+  });
+
+  it("returns all zeros for an empty exercises array", () => {
+    expect(sessionLoadBars([])).toEqual([0, 0, 0, 0]);
+  });
+
+  it("normalizes bar heights (0-100) relative to the session's own max load", () => {
+    // Bench Press: 4 × (90 + 30) = 480s (max)
+    // Overhead Press: 3 × (60 + 30) = 270s → round(270/480 × 100) = 56
+    const exercises = [
+      { name: "Bench Press", sets: 4, reps: "8-10", restSeconds: 90 },
+      { name: "Overhead Press", sets: 3, reps: "10", restSeconds: 60 },
+    ];
+    expect(sessionLoadBars(exercises)).toEqual([100, 56, 0, 0]);
+  });
+
+  it("caps at barCount exercises (5th+ exercise ignored, not overflowed)", () => {
+    const exercises = Array.from({ length: 6 }, (_, i) => ({
+      name: `Ex${i}`,
+      sets: i + 1,
+      reps: "10",
+      restSeconds: 30,
+    }));
+    expect(sessionLoadBars(exercises)).toHaveLength(4);
+  });
+
+  it("the single most-loaded exercise always renders at 100%", () => {
+    const exercises = [{ name: "Solo", sets: 2, reps: "10", restSeconds: 30 }];
+    expect(sessionLoadBars(exercises)[0]).toBe(100);
   });
 });

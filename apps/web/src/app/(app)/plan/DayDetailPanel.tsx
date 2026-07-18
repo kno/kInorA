@@ -3,20 +3,28 @@
 /**
  * DayDetailPanel — client island.
  *
- * Renders a responsive day-card grid plus an expandable detail panel
- * for the selected session. All data is received as props; this component
- * NEVER calls fetch, API_BASE_URL, or any server action — it manages only
- * local UI state (selectedDay: number | null).
+ * Renders a week-board header, a responsive day-card grid, and an expandable
+ * detail panel for the selected session. All data is received as props; this
+ * component NEVER calls fetch, API_BASE_URL, or any server action — it
+ * manages only local UI state (selectedDay: number | null).
  *
- * Deferred to 09a: weight column, completion check-marks, "today" highlighting,
- * "Empezar sesión" CTA, week navigation.
+ * Visual anatomy realigned to `screens/web-plan.html`'s week board (Slice 4a,
+ * 09c-v1-progress-dashboard-stats — closes #128): board eyebrow/title, an
+ * inert (disabled) prev/next week-nav with a static week label, and per-card
+ * status-glyph slot + mini load-bar stack. This is a PURE VISUAL realignment:
+ * the week-nav is not wired (no real calendar week exists yet) and every
+ * status glyph renders identically — Slice 4b wires the real done/active/
+ * rest/soon day-state and week navigation on top of this layout.
+ *
+ * Deferred to 09b/4b: weight column, completion check-marks, "today"
+ * highlighting, day-state computation, real week navigation.
  */
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import type { WorkoutSession } from "@kinora/contracts";
 import styles from "./plan-week-view.module.css";
-import { estimateSessionMinutes } from "./plan-utils";
+import { estimateSessionMinutes, sessionLoadBars } from "./plan-utils";
 
 /** Stable id for the detail panel element — used for aria-controls. */
 const DETAIL_PANEL_ID = "day-detail-panel";
@@ -84,6 +92,36 @@ export function DayDetailPanel({
         </div>
       )}
 
+      {/* Week board header — eyebrow/title + an inert (disabled) week-nav.
+          No real calendar week exists yet, so the label is static and the
+          prev/next buttons are disabled rather than dead no-op controls
+          (Slice 4b wires real navigation on top of this layout). */}
+      <div className={styles.boardHead}>
+        <div>
+          <div className={styles.boardEyebrow}>{t("plan.week.eyebrow")}</div>
+          <h2 className={styles.boardTitle}>{t("plan.week.title")}</h2>
+        </div>
+        <div className={styles.weekNav} aria-label={t("plan.week.navLabel")}>
+          <button
+            type="button"
+            className={styles.weekNavBtn}
+            disabled
+            aria-label={t("plan.week.prev")}
+          >
+            ‹
+          </button>
+          <span className={styles.weekLabel}>{t("plan.week.label")}</span>
+          <button
+            type="button"
+            className={styles.weekNavBtn}
+            disabled
+            aria-label={t("plan.week.next")}
+          >
+            ›
+          </button>
+        </div>
+      </div>
+
       {/* Day card grid */}
       <div className={styles.dayGrid}>
         {sessions.map((session) => {
@@ -92,6 +130,7 @@ export function DayDetailPanel({
           const dayLabel = t("plan.day.label", { n: session.day });
           const exercisesLabel = `${session.exercises.length} ${t("plan.exercises.count")}`;
           const durationLabel = t("plan.est_duration", { n: estMin });
+          const loadBars = sessionLoadBars(session.exercises);
 
           return (
             <div
@@ -105,8 +144,33 @@ export function DayDetailPanel({
               onClick={() => handleCardClick(session.day)}
               onKeyDown={(e) => handleKeyDown(e, session.day)}
             >
-              <div className={styles.dcDayLabel}>{dayLabel}</div>
+              <div className={styles.dayTop}>
+                <div className={styles.dcDayLabel}>{dayLabel}</div>
+                {/* Status glyph slot — Slice 4a ships the slot/styling only;
+                    every card renders the same neutral glyph until Slice 4b
+                    wires the real done/active/rest/soon day-state. */}
+                <div
+                  className={styles.dcStateGlyph}
+                  data-testid="day-card-state"
+                  aria-hidden="true"
+                >
+                  •
+                </div>
+              </div>
               <div className={styles.dcFocus}>{session.title}</div>
+              <div
+                className={styles.dcMiniStack}
+                data-testid="day-card-bars"
+                aria-hidden="true"
+              >
+                {loadBars.map((height, idx) => (
+                  <span
+                    key={idx}
+                    className={styles.dcBar}
+                    style={{ height: `${height}%` }}
+                  />
+                ))}
+              </div>
               <div className={styles.dcMeta}>
                 {exercisesLabel} · {durationLabel}
               </div>
