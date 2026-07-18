@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
-import { screen, fireEvent } from "@testing-library/react";
+import { screen, fireEvent, within } from "@testing-library/react";
 import { renderWithIntl } from "@/test-utils/render-with-intl";
 import { createServerTranslator } from "@/test-utils/server-translator";
 import type { ReactElement, ReactNode } from "react";
@@ -132,15 +132,17 @@ const fiveSessionProgram: WorkoutProgram = {
 // --- Tests ---
 
 describe("PlanWeekView — plan name header (#93)", () => {
-  it("renders the plan name in a heading when planName is provided", async () => {
+  // The plan name is the page's only level-1 heading (the cockpit hero, side
+  // rail and week board use h2s), so we assert against role=heading level 1.
+  it("renders the plan name as the page's level-1 heading when planName is provided", async () => {
     const view = await PlanWeekView({
       program: twoSessionProgram,
       planName: "Summer Cut",
       planId: "plan-x",
     });
-    const heading = findFirst(view, (el) => el.type === "h1" || el.type === "h2");
-    expect(heading).toBeDefined();
-    expect(textOf(heading)).toContain("Summer Cut");
+    renderWithIntl(<>{view}</>);
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.textContent).toContain("Summer Cut");
   });
 
   it("renders a different plan name (triangulate)", async () => {
@@ -149,13 +151,15 @@ describe("PlanWeekView — plan name header (#93)", () => {
       planName: "Winter Bulk",
       planId: "plan-x",
     });
-    expect(textOf(view)).toContain("Winter Bulk");
+    renderWithIntl(<>{view}</>);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("Winter Bulk");
   });
 
-  it("omits the name heading when planName is absent", async () => {
+  it("omits the level-1 name heading when planName is absent", async () => {
     const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
-    const heading = findFirst(view, (el) => el.type === "h1" || el.type === "h2");
-    expect(heading).toBeUndefined();
+    renderWithIntl(<>{view}</>);
+    // Presentational h2s still exist, but no plan-name h1.
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
   });
 });
 
@@ -288,10 +292,14 @@ describe("PlanWeekView — interactive day grid + start CTA (#93 Slice 3)", () =
     expect(screen.getByRole("button", { name: "Day 2" })).toBeDefined();
 
     // The per-day Start CTA is wired (proves PlanTrackerClient passed
-    // onStartWorkout down); it appears once a day is opened.
-    expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+    // onStartWorkout down); it appears inside the detail panel once a day is
+    // opened. Scoped to the panel because the presentational hero renders its
+    // own (unrelated) Start button.
+    expect(document.getElementById("day-detail-panel")).toBeNull();
     fireEvent.click(screen.getByText("Push Day"));
-    expect(screen.getByRole("button", { name: "Start session" })).toBeDefined();
+    const panel = document.getElementById("day-detail-panel");
+    expect(panel).not.toBeNull();
+    expect(within(panel!).getByRole("button", { name: "Start session" })).toBeDefined();
   });
 
   it("SC-06 triangulation: renders one day card per session for a 5-session program", async () => {
