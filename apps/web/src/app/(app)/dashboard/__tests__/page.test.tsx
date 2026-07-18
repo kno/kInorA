@@ -67,12 +67,31 @@ describe("DashboardPage", () => {
     const text = textOf(page);
 
     expect(text).toContain("Active streak");
-    expect(text).toContain("3 consecutive training days");
+    expect(text).toContain("3 consecutive days training");
     expect(text).toContain("Weekly progress");
     expect(text).toContain("2");
     expect(text).toContain("/5");
     expect(text).toContain("Load route");
     expect(text).toContain("Tirón técnico");
+  });
+
+  it("renders the topbar heading regardless of data state", async () => {
+    vi.mocked(getDashboardAction).mockResolvedValueOnce({ kind: "ok", summary: emptySummary });
+
+    const page = await DashboardPage();
+
+    expect(textOf(page)).toContain("Your training hub");
+  });
+
+  it("renders the hero session copy and readiness ring (presentational)", async () => {
+    vi.mocked(getDashboardAction).mockResolvedValueOnce({ kind: "ok", summary: populatedSummary });
+
+    const page = await DashboardPage();
+    const text = textOf(page);
+
+    expect(text).toContain("Upper body with controlled push");
+    expect(text).toContain("High readiness");
+    expect(text).toContain("82");
   });
 
   it("renders a logout button inside a form", async () => {
