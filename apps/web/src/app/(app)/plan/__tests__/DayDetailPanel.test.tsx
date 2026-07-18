@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import { catalogs } from "@kinora/i18n";
 import { renderWithIntl } from "@/test-utils/render-with-intl";
 import type { WeeklyOverviewDTO, WorkoutSession } from "@kinora/contracts";
 
@@ -576,6 +578,41 @@ describe("DayDetailPanel — real weekly day-state + navigation (09c-v1 Slice 4b
     fireEvent.click(screen.getByRole("button", { name: "Previous week" }));
 
     expect(getWeeklyOverviewAction).toHaveBeenCalledWith("2026-07-06");
+  });
+
+  it("resyncs the rendered week when the weeklyOverview PROP changes (e.g. after router.refresh() on revisiting /plan) instead of staying stuck on the mount-time value", () => {
+    const { rerender } = renderWithIntl(
+      <DayDetailPanel sessions={sessions} weeklyOverview={weeklyOverview} />,
+    );
+    expect(screen.getByText("13–19 Jul")).toBeDefined();
+
+    const refreshedOverview: WeeklyOverviewDTO = {
+      weekStart: "2026-07-20",
+      weekLabel: "20–26 Jul",
+      days: [
+        { date: "2026-07-20", status: "soon" },
+        { date: "2026-07-21", status: "soon" },
+        { date: "2026-07-22", status: "soon" },
+        { date: "2026-07-23", status: "rest" },
+        { date: "2026-07-24", status: "rest" },
+        { date: "2026-07-25", status: "rest" },
+        { date: "2026-07-26", status: "rest" },
+      ],
+      previousWeekStart: "2026-07-13",
+      nextWeekStart: "2026-07-27",
+    };
+
+    // rerender replaces the ui root — re-wrap in the provider so the
+    // component's useTranslations() call still resolves the real catalog.
+    rerender(
+      <NextIntlClientProvider locale="en" messages={catalogs.en} timeZone="UTC">
+        <DayDetailPanel sessions={sessions} weeklyOverview={refreshedOverview} />
+      </NextIntlClientProvider>,
+    );
+
+    expect(screen.getByText("20–26 Jul")).toBeDefined();
+    const glyphs = screen.getAllByTestId("day-card-state").map((g) => g.textContent);
+    expect(glyphs).toEqual(["•", "•", "•", "–", "–", "–", "–"]);
   });
 
   it("falls back to the Slice-4a inert nav when weeklyOverview is absent, still rendering all 7 tiles", () => {
