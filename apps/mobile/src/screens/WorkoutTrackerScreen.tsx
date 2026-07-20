@@ -418,6 +418,12 @@ export default function WorkoutTrackerScreen({
       return;
     }
 
+    // Bail if the component unmounted (e.g. the test env tore down while this
+    // fire-and-forget load was still in flight) or the request resolved without
+    // a result. Reading `result.kind` on an undefined value would otherwise
+    // surface as a post-teardown unhandled rejection and fail the run.
+    if (!mountedRef.current || !result) return;
+
     if (result.kind === "error" && result.message === "no_session") {
       await handleUnauthenticatedSession();
       return;

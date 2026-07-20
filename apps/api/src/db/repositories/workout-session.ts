@@ -1,9 +1,29 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { computeAverageRpe, computeSessionVolume, computeVolumeTrend, defaultPlanName } from "@kinora/domain";
+import { classifyExerciseMuscleGroup } from "../muscle-classifier.js";
+import {
+  addUtcDays as domainAddUtcDays,
+  computeAdherence,
+  computeMuscleGroupDistribution,
+  computePersonalRecords,
+  computeStreak,
+  computeWeeklyPlanVsCompletion,
+  computeWeeklyRollup,
+  delta,
+  utcWeekBounds as domainUtcWeekBounds,
+  type MuscleGroupDistributionExercise,
+  type PersonalRecordSetInput,
+} from "../progress-domain.js";
 import type {
+  DashboardSummaryDTO,
+  ExerciseDetailDTO,
+  KpiWithDelta,
+  MuscleGroup,
   SessionExerciseRecord,
   SetRecordDTO,
   StartSessionOutcome,
+  StatsSummaryDTO,
+  WeeklyOverviewDTO,
   WorkoutExercise,
   WorkoutHistoryEntry,
   WorkoutHistoryQuery,
@@ -39,6 +59,13 @@ interface SessionExerciseRow {
   title: string;
   restSeconds: number;
   notes: string | null;
+  /**
+   * Derived muscle-group classification (09c-v1 Slice 1b). Populated at
+   * write time via `classifyExerciseMuscleGroup`; `null` when the title is
+   * unmapped. Read directly by `getStatsRange` (Slice 3b) for the
+   * muscle-group distribution — not surfaced on `SessionExerciseRecord`.
+   */
+  muscleGroup: string | null | undefined;
 }
 
 interface SetRecordRow {
@@ -56,6 +83,139 @@ interface SetRecordRow {
 type StartTx = Pick<Database, "insert">;
 
 const DEFAULT_HISTORY_LIMIT = 20;
+
+/**
+ * Bounded lookback window for `getDashboardSummary` (09c-v1
+ * progress-dashboard-stats, Slice 2). Wide enough to cover any realistic
+ * streak/weekly-progress calculation while staying a single bounded query,
+ * mirroring `listCompletedSessions`'s bounded-page approach.
+ */
+const DASHBOARD_HISTORY_LIMIT = 60;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Bounded lookback window for `getExerciseDetail` (Slice 4b) — how many of
+ * the caller's most-recent completed sessions are scanned for a title match,
+ * and how many recent sets are surfaced. Mirrors `DASHBOARD_HISTORY_LIMIT`'s
+ * bounded-page approach.
+ */
+const EXERCISE_DETAIL_SESSION_SCAN_LIMIT = 60;
+const EXERCISE_DETAIL_RECENT_SETS_LIMIT = 10;
+
+function startOfUtcDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function addUtcDays(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * MS_PER_DAY);
+}
+
+/** Monday 00:00:00.000 UTC .. Sunday 23:59:59.999 UTC bounds of `reference`'s week. */
+function utcWeekBounds(reference: Date): { start: Date; end: Date } {
+  const day = startOfUtcDay(reference);
+  const mondayOffset = (day.getUTCDay() + 6) % 7;
+  const start = addUtcDays(day, -mondayOffset);
+  const end = new Date(addUtcDays(start, 7).getTime() - 1);
+  return { start, end };
+}
+
+/** First-of-month 00:00:00.000 UTC .. last-of-month 23:59:59.999 UTC bounds of `reference`'s month. */
+function utcMonthBounds(reference: Date): { start: Date; end: Date } {
+  const start = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth() + 1, 1) - 1);
+  return { start, end };
+}
+
+/** Jan 1 00:00:00.000 UTC .. Dec 31 23:59:59.999 UTC bounds of `reference`'s year. */
+function utcYearBounds(reference: Date): { start: Date; end: Date } {
+  const start = new Date(Date.UTC(reference.getUTCFullYear(), 0, 1));
+  const end = new Date(Date.UTC(reference.getUTCFullYear() + 1, 0, 1) - 1);
+  return { start, end };
+}
+
+interface StatsRangeBounds {
+  currentStart: Date;
+  currentEnd: Date;
+  previousStart: Date;
+  previousEnd: Date;
+}
+
+/**
+ * Resolves the current/previous UTC period bounds for `getStatsRange`
+ * (09c-v1-progress-dashboard-stats, Slice 3a). `previousStart..currentEnd`
+ * is one contiguous span, so the repository can fetch both periods with a
+ * single bounded date-range query (design.md "Timezone: fixed UTC reference").
+ */
+function statsRangeBounds(range: "week" | "month" | "year", now: Date): StatsRangeBounds {
+  if (range === "week") {
+    const current = utcWeekBounds(now);
+    const previous = utcWeekBounds(addUtcDays(current.start, -1));
+    return {
+      currentStart: current.start,
+      currentEnd: current.end,
+      previousStart: previous.start,
+      previousEnd: previous.end,
+    };
+  }
+
+  if (range === "year") {
+    const current = utcYearBounds(now);
+    const previous = utcYearBounds(new Date(current.start.getTime() - 1));
+    return {
+      currentStart: current.start,
+      currentEnd: current.end,
+      previousStart: previous.start,
+      previousEnd: previous.end,
+    };
+  }
+
+  const current = utcMonthBounds(now);
+  const previous = utcMonthBounds(new Date(current.start.getTime() - 1));
+  return {
+    currentStart: current.start,
+    currentEnd: current.end,
+    previousStart: previous.start,
+    previousEnd: previous.end,
+  };
+}
+
+function zeroKpi(): KpiWithDelta {
+  return { value: 0, deltaVsPreviousPeriod: null };
+}
+
+function emptyStatsSummary(range: "week" | "month" | "year"): StatsSummaryDTO {
+  return {
+    range,
+    totalVolumeKg: zeroKpi(),
+    sessionCount: zeroKpi(),
+    totalDurationMin: zeroKpi(),
+    prCount: zeroKpi(),
+    volumeTrend: { current: [], previous: [] },
+    muscleGroupDistribution: [],
+    personalRecords: [],
+  };
+}
+
+/**
+ * Locale-neutral "8–14 Jul" style week label for `WeeklyOverviewDTO`
+ * (Slice 4b). Deliberately neutral (not localized) — the API layer has no
+ * user-locale context; the web layer may re-derive a localized label from
+ * `weekStart`/`weekLabel` if a future change wants full i18n parity here.
+ */
+function formatWeekLabel(start: Date, end: Date): string {
+  const month = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(start);
+  return `${start.getUTCDate()}–${end.getUTCDate()} ${month}`;
+}
+
+function recentDailyCompletion(completedAtDates: string[], now: Date, days = 7): boolean[] {
+  const dayKeys = new Set(completedAtDates.map((iso) => iso.slice(0, 10)));
+  const result: boolean[] = [];
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const day = addUtcDays(startOfUtcDay(now), -offset);
+    result.push(dayKeys.has(day.toISOString().slice(0, 10)));
+  }
+  return result;
+}
 
 export interface UpdateSetRecordInput {
   actualReps?: number;
@@ -381,6 +541,467 @@ export class WorkoutSessionRepository {
     });
   }
 
+  /**
+   * Dashboard summary (09c-v1-progress-dashboard-stats, Slice 2) — streak,
+   * weekly progress (X/Y), and the "Ruta de carga" per-day rollup.
+   *
+   * Bounded, no N+1, mirroring `listCompletedSessions`: (1) one bounded page
+   * of the caller's completed sessions (`DASHBOARD_HISTORY_LIMIT`, scoped by
+   * (tenantId, userId)); (2) one lookup of the latest ready plan (for the
+   * planned weekly count and the week-route focus labels). Only when at
+   * least one of those sessions falls inside the CURRENT UTC calendar week
+   * do we issue two further bounded `inArray` queries (session_exercises,
+   * set_records) to compute that week's per-day volume — an empty week
+   * short-circuits before any per-session data is fetched, so an inactive
+   * user costs exactly 2 queries, never 4.
+   */
+  async getDashboardSummary(
+    tenantId: string,
+    userId: string,
+    now: Date = new Date()
+  ): Promise<DashboardSummaryDTO> {
+    const completedRows = (await this.db
+      .select()
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.status, "completed")
+        )
+      )
+      .orderBy(desc(workoutSessions.completedAt))
+      .limit(DASHBOARD_HISTORY_LIMIT)) as WorkoutSessionRow[];
+
+    const planRows = (await this.db
+      .select()
+      .from(workoutPlans)
+      .where(
+        and(
+          eq(workoutPlans.tenantId, tenantId),
+          eq(workoutPlans.userId, userId),
+          eq(workoutPlans.status, "ready")
+        )
+      )
+      .orderBy(desc(workoutPlans.createdAt))
+      .limit(1)) as WorkoutPlanRow[];
+
+    const latestReadyPlan = planRows[0];
+    const completedAtDates = completedRows
+      .map((row) => row.completedAt?.toISOString())
+      .filter((iso): iso is string => iso !== undefined);
+
+    const plannedSessionsPerWeek = latestReadyPlan?.programJson?.weeklySessions.length ?? 0;
+    const { weeklyCompleted, weeklyPlanned } = computeAdherence(
+      { completedAtDates, plannedSessionsPerWeek },
+      now
+    );
+
+    const { start: weekStart, end: weekEnd } = utcWeekBounds(now);
+    const weeklyCompletedRows = completedRows.filter(
+      (row) => row.completedAt && row.completedAt >= weekStart && row.completedAt <= weekEnd
+    );
+
+    const weeklySessions =
+      weeklyCompletedRows.length === 0
+        ? []
+        : await this.buildWeeklyRollupSessions(weeklyCompletedRows);
+
+    const planDays =
+      latestReadyPlan?.programJson?.weeklySessions.map((session) => ({
+        dayIndex: session.day - 1,
+        focus: session.title,
+      })) ?? [];
+
+    return {
+      streak: computeStreak(completedAtDates, now),
+      recentDailyCompletion: recentDailyCompletion(completedAtDates, now),
+      weeklyCompleted,
+      weeklyPlanned,
+      weeklyRollup: computeWeeklyRollup({ planDays, sessions: weeklySessions }, now),
+    };
+  }
+
+  /**
+   * Computes `{ completedAt, volumeKg }` for a small set of already-fetched,
+   * current-week completed session rows — two bounded `inArray` queries
+   * (never per-session), reusing `computeSessionVolume`.
+   */
+  private async buildWeeklyRollupSessions(
+    weeklyCompletedRows: WorkoutSessionRow[]
+  ): Promise<Array<{ completedAt: string; volumeKg: number }>> {
+    const sessionIds = weeklyCompletedRows.map((row) => row.id);
+    const exerciseRows = (await this.db
+      .select()
+      .from(sessionExercises)
+      .where(inArray(sessionExercises.workoutSessionId, sessionIds))) as SessionExerciseRow[];
+
+    const exerciseIds = exerciseRows.map((exercise) => exercise.id);
+    const setRows =
+      exerciseIds.length === 0
+        ? []
+        : ((await this.db
+            .select()
+            .from(setRecords)
+            .where(inArray(setRecords.sessionExerciseId, exerciseIds))) as SetRecordRow[]);
+
+    const exercisesBySession = new Map<string, SessionExerciseRow[]>();
+    for (const exerciseRow of exerciseRows) {
+      const current = exercisesBySession.get(exerciseRow.workoutSessionId) ?? [];
+      current.push(exerciseRow);
+      exercisesBySession.set(exerciseRow.workoutSessionId, current);
+    }
+
+    const setsByExercise = new Map<string, SetRecordRow[]>();
+    for (const setRow of setRows) {
+      const current = setsByExercise.get(setRow.sessionExerciseId) ?? [];
+      current.push(setRow);
+      setsByExercise.set(setRow.sessionExerciseId, current);
+    }
+
+    return weeklyCompletedRows.map((sessionRow) => {
+      const ownExercises = exercisesBySession.get(sessionRow.id) ?? [];
+      const ownSets = ownExercises.flatMap((exercise) => setsByExercise.get(exercise.id) ?? []);
+      const session = mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets);
+      return {
+        completedAt: sessionRow.completedAt!.toISOString(),
+        volumeKg: computeSessionVolume(session),
+      };
+    });
+  }
+
+  /**
+   * Statistics summary (09c-v1-progress-dashboard-stats, Slices 3a+3b) —
+   * KPIs (volume, session count, duration, PR count) each with a delta vs.
+   * the previous period, the volume-trend series, the muscle-group
+   * distribution (`computeMuscleGroupDistribution`), and personal records
+   * (`computePersonalRecords`, Epley estimated 1RM). Distribution and PRs
+   * are scoped to the CURRENT period only.
+   *
+   * Bounded, no N+1: (1) one date-ranged query over the caller's completed
+   * sessions spanning `previousStart..currentEnd` in a single WHERE, scoped
+   * by (tenantId, userId); (2)+(3) two bounded `inArray` follow-ups
+   * (session_exercises, set_records) reused both for per-session volume and
+   * for the distribution/PR aggregation — no additional queries — skipped
+   * entirely when no session falls in range, mirroring
+   * `getDashboardSummary`'s empty-state short circuit.
+   */
+  async getStatsRange(
+    tenantId: string,
+    userId: string,
+    range: "week" | "month" | "year",
+    now: Date = new Date()
+  ): Promise<StatsSummaryDTO> {
+    const { currentStart, currentEnd, previousStart, previousEnd } = statsRangeBounds(range, now);
+
+    const sessionRows = (await this.db
+      .select()
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.status, "completed"),
+          gte(workoutSessions.completedAt, previousStart),
+          lte(workoutSessions.completedAt, currentEnd)
+        )
+      )
+      .orderBy(desc(workoutSessions.completedAt))) as WorkoutSessionRow[];
+
+    if (sessionRows.length === 0) {
+      return emptyStatsSummary(range);
+    }
+
+    const sessionIds = sessionRows.map((row) => row.id);
+    const exerciseRows = (await this.db
+      .select()
+      .from(sessionExercises)
+      .where(inArray(sessionExercises.workoutSessionId, sessionIds))) as SessionExerciseRow[];
+
+    const exerciseIds = exerciseRows.map((exercise) => exercise.id);
+    const setRows =
+      exerciseIds.length === 0
+        ? []
+        : ((await this.db
+            .select()
+            .from(setRecords)
+            .where(inArray(setRecords.sessionExerciseId, exerciseIds))) as SetRecordRow[]);
+
+    const exercisesBySession = new Map<string, SessionExerciseRow[]>();
+    for (const exerciseRow of exerciseRows) {
+      const current = exercisesBySession.get(exerciseRow.workoutSessionId) ?? [];
+      current.push(exerciseRow);
+      exercisesBySession.set(exerciseRow.workoutSessionId, current);
+    }
+
+    const setsByExercise = new Map<string, SetRecordRow[]>();
+    for (const setRow of setRows) {
+      const current = setsByExercise.get(setRow.sessionExerciseId) ?? [];
+      current.push(setRow);
+      setsByExercise.set(setRow.sessionExerciseId, current);
+    }
+
+    interface StatsBucketEntry {
+      completedAt: Date;
+      volumeKg: number;
+      durationMin: number;
+    }
+    const currentEntries: StatsBucketEntry[] = [];
+    const previousEntries: StatsBucketEntry[] = [];
+    const currentSessionCompletedAt = new Map<string, Date>();
+
+    for (const sessionRow of sessionRows) {
+      const completedAt = sessionRow.completedAt!;
+      const ownExercises = exercisesBySession.get(sessionRow.id) ?? [];
+      const ownSets = ownExercises.flatMap((exercise) => setsByExercise.get(exercise.id) ?? []);
+      const session = mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets);
+      const volumeKg = computeSessionVolume(session);
+      const durationMin = Math.max(0, Math.round((completedAt.getTime() - sessionRow.startedAt.getTime()) / 60000));
+      const entry: StatsBucketEntry = { completedAt, volumeKg, durationMin };
+
+      if (completedAt >= currentStart && completedAt <= currentEnd) {
+        currentEntries.push(entry);
+        currentSessionCompletedAt.set(sessionRow.id, completedAt);
+      } else if (completedAt >= previousStart && completedAt <= previousEnd) {
+        previousEntries.push(entry);
+      }
+    }
+
+    // Muscle-group distribution + personal records (Slice 3b) are scoped to
+    // the CURRENT period only, reusing the same exercise/set rows already
+    // fetched above — no extra queries.
+    const distributionInputs: MuscleGroupDistributionExercise[] = [];
+    const prSetInputs: PersonalRecordSetInput[] = [];
+
+    for (const exerciseRow of exerciseRows) {
+      const sessionCompletedAt = currentSessionCompletedAt.get(exerciseRow.workoutSessionId);
+      if (!sessionCompletedAt) {
+        continue;
+      }
+
+      const ownSets = setsByExercise.get(exerciseRow.id) ?? [];
+      const completedSets = ownSets.filter((set) => set.completed);
+      const setVolumeKg = completedSets.reduce(
+        (sum, set) => sum + (toOptionalNumber(set.weightKg) ?? 0) * (set.actualReps ?? 0),
+        0
+      );
+
+      distributionInputs.push({
+        muscleGroup: (exerciseRow.muscleGroup ?? null) as MuscleGroup | null,
+        setCount: completedSets.length,
+        volumeKg: setVolumeKg,
+      });
+
+      for (const set of ownSets) {
+        prSetInputs.push({
+          exerciseTitle: exerciseRow.title,
+          completed: set.completed,
+          weightKg: toOptionalNumber(set.weightKg),
+          actualReps: set.actualReps,
+          achievedAt: sessionCompletedAt.toISOString(),
+        });
+      }
+    }
+
+    const muscleGroupDistribution = computeMuscleGroupDistribution(distributionInputs);
+    const personalRecords = computePersonalRecords(prSetInputs);
+
+    const sum = (entries: StatsBucketEntry[], pick: (entry: StatsBucketEntry) => number): number =>
+      entries.reduce((total, entry) => total + pick(entry), 0);
+
+    const ascendingByDate = (entries: StatsBucketEntry[]): number[] =>
+      entries
+        .slice()
+        .sort((left, right) => left.completedAt.getTime() - right.completedAt.getTime())
+        .map((entry) => entry.volumeKg);
+
+    const currentVolume = sum(currentEntries, (entry) => entry.volumeKg);
+    const previousVolume = sum(previousEntries, (entry) => entry.volumeKg);
+    const currentDuration = sum(currentEntries, (entry) => entry.durationMin);
+    const previousDuration = sum(previousEntries, (entry) => entry.durationMin);
+    const currentCount = currentEntries.length;
+    const previousCount = previousEntries.length;
+
+    return {
+      range,
+      totalVolumeKg: { value: currentVolume, deltaVsPreviousPeriod: delta(currentVolume, previousVolume) },
+      sessionCount: { value: currentCount, deltaVsPreviousPeriod: delta(currentCount, previousCount) },
+      totalDurationMin: { value: currentDuration, deltaVsPreviousPeriod: delta(currentDuration, previousDuration) },
+      // `prCount` has no meaningful previous-period comparison (design.md
+      // "KPI deltas" only defines deltas for volume/sessions/duration) —
+      // deliberately null, never a fabricated delta.
+      prCount: { value: personalRecords.length, deltaVsPreviousPeriod: null },
+      volumeTrend: { current: ascendingByDate(currentEntries), previous: ascendingByDate(previousEntries) },
+      muscleGroupDistribution,
+      personalRecords,
+    };
+  }
+
+  /**
+   * Weekly plan board (09c-v1-progress-dashboard-stats, Slice 4b) — the
+   * Monday–Sunday day-state array (done/active/rest/soon) plus prev/next
+   * navigation, for the calendar week containing `weekStart`.
+   *
+   * Bounded, no N+1: (1) one date-ranged query over the caller's completed
+   * sessions inside the displayed week, scoped by (tenantId, userId); (2)
+   * one lookup of the latest ready plan (for the planned-training-day
+   * overlay). Completion counts as "done" regardless of which plan version
+   * produced the session — `computeWeeklyPlanVsCompletion` has no notion of
+   * plan version, only dates. A week predating the plan/account resolves to
+   * an all-rest board (+ any real done day) because `plannedTrainingDays`
+   * naturally falls back to 0 when there is no ready plan, with no error.
+   */
+  async getWeeklyOverview(
+    tenantId: string,
+    userId: string,
+    weekStart: Date,
+    now: Date = new Date()
+  ): Promise<WeeklyOverviewDTO> {
+    const { start, end } = domainUtcWeekBounds(weekStart);
+
+    const sessionRows = (await this.db
+      .select()
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.status, "completed"),
+          gte(workoutSessions.completedAt, start),
+          lte(workoutSessions.completedAt, end)
+        )
+      )
+      .orderBy(desc(workoutSessions.completedAt))) as WorkoutSessionRow[];
+
+    const planRows = (await this.db
+      .select()
+      .from(workoutPlans)
+      .where(
+        and(
+          eq(workoutPlans.tenantId, tenantId),
+          eq(workoutPlans.userId, userId),
+          eq(workoutPlans.status, "ready")
+        )
+      )
+      .orderBy(desc(workoutPlans.createdAt))
+      .limit(1)) as WorkoutPlanRow[];
+
+    const latestReadyPlan = planRows[0];
+    const plannedSessions = latestReadyPlan?.programJson?.weeklySessions ?? [];
+    const plannedTrainingDays = plannedSessions.length;
+
+    const completedAtDates = sessionRows
+      .map((row) => row.completedAt?.toISOString())
+      .filter((iso): iso is string => iso !== undefined);
+
+    const statuses = computeWeeklyPlanVsCompletion({ weekStart: start, completedAtDates, plannedTrainingDays }, now);
+
+    const focusByDayIndex = new Map(plannedSessions.map((session) => [session.day - 1, session.title]));
+
+    const days = statuses.map((status, index) => {
+      const date = domainAddUtcDays(start, index);
+      return {
+        date: date.toISOString().slice(0, 10),
+        status,
+        focus: index < plannedTrainingDays ? focusByDayIndex.get(index) : undefined,
+      };
+    });
+
+    return {
+      weekStart: start.toISOString().slice(0, 10),
+      weekLabel: formatWeekLabel(start, end),
+      days,
+      previousWeekStart: domainAddUtcDays(start, -7).toISOString().slice(0, 10),
+      nextWeekStart: domainAddUtcDays(start, 7).toISOString().slice(0, 10),
+    };
+  }
+
+  /**
+   * Read-only exercise-history reference (09c-v1-progress-dashboard-stats,
+   * Slice 4b). `title` is free-text supplied by the caller — it is used only
+   * as an ADDITIONAL filter inside the already-(tenantId, userId)-scoped set
+   * of the caller's own completed sessions (design.md "Read model boundary:
+   * one bounded query per surface"). This is what makes it IDOR-safe: step
+   * (1) below never sees another user's session ids, so no crafted `title`
+   * in step (2) can ever surface another user's rows.
+   *
+   * Bounded, no N+1: (1) one bounded page of the caller's completed sessions
+   * (`EXERCISE_DETAIL_SESSION_SCAN_LIMIT`); (2) one `inArray` query for
+   * `session_exercises` scoped to those session ids AND matching `title`
+   * exactly; (3) one `inArray` query for `set_records` on the matched
+   * exercise ids. Returns an empty `recentSets` array (never an error) when
+   * the exercise has no history — the web layer omits the section entirely
+   * in that case (design.md "Exercise detail").
+   */
+  async getExerciseDetail(tenantId: string, userId: string, title: string): Promise<ExerciseDetailDTO> {
+    const sessionRows = (await this.db
+      .select()
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.status, "completed")
+        )
+      )
+      .orderBy(desc(workoutSessions.completedAt))
+      .limit(EXERCISE_DETAIL_SESSION_SCAN_LIMIT)) as WorkoutSessionRow[];
+
+    if (sessionRows.length === 0) {
+      return { exerciseTitle: title, recentSets: [] };
+    }
+
+    const sessionIds = sessionRows.map((row) => row.id);
+    const exerciseRows = (await this.db
+      .select()
+      .from(sessionExercises)
+      .where(and(inArray(sessionExercises.workoutSessionId, sessionIds), eq(sessionExercises.title, title)))) as SessionExerciseRow[];
+
+    if (exerciseRows.length === 0) {
+      return { exerciseTitle: title, recentSets: [] };
+    }
+
+    const completedAtBySessionId = new Map(
+      sessionRows.map((row) => [row.id, row.completedAt!.toISOString()])
+    );
+
+    const exerciseIds = exerciseRows.map((exercise) => exercise.id);
+    const setRows = (await this.db
+      .select()
+      .from(setRecords)
+      .where(inArray(setRecords.sessionExerciseId, exerciseIds))) as SetRecordRow[];
+
+    const completedAtByExerciseId = new Map(
+      exerciseRows.map((exercise) => [exercise.id, completedAtBySessionId.get(exercise.workoutSessionId)])
+    );
+
+    interface RecentSetEntry {
+      completedAt: string;
+      weightKg?: number;
+      actualReps?: number;
+      rpe?: number;
+    }
+
+    const recentSets: RecentSetEntry[] = [];
+    for (const set of setRows) {
+      const completedAt = completedAtByExerciseId.get(set.sessionExerciseId);
+      if (completedAt === undefined) {
+        continue;
+      }
+      recentSets.push({
+        completedAt,
+        weightKg: toOptionalNumber(set.weightKg),
+        actualReps: set.actualReps ?? undefined,
+        rpe: set.rpe ?? undefined,
+      });
+    }
+
+    recentSets.sort((left, right) => new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime());
+    recentSets.splice(EXERCISE_DETAIL_RECENT_SETS_LIMIT);
+
+    return { exerciseTitle: title, recentSets };
+  }
+
   private async findLatestActiveSession(
     tenantId: string,
     userId: string
@@ -471,6 +1092,7 @@ export class WorkoutSessionRepository {
           title: exercise.name,
           restSeconds: exercise.restSeconds,
           notes: combineExerciseNotes(exercise),
+          muscleGroup: classifyExerciseMuscleGroup(exercise.name),
         }))
       )
       .returning();

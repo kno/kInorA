@@ -10,6 +10,7 @@ import { healthRoute } from "./routes/health.js";
 import { socialRoutes } from "./routes/social.js";
 import { planRoutes } from "./routes/plan.js";
 import { workoutSessionRoutes } from "./routes/workout-session.js";
+import { progressRoutes } from "./routes/progress.js";
 import { wsRoutes } from "./routes/ws.js";
 import { WorkoutPlanRepository } from "./db/repositories/workout-plan.js";
 import { PlanSpecRepository } from "./db/repositories/plan-spec.js";
@@ -181,6 +182,13 @@ export async function buildApp(
   });
 
   await app.register(workoutSessionRoutes, {
+    repo: workoutSessionRepo,
+  });
+
+  // Dashboard progress summary (09c-v1-progress-dashboard-stats, Slice 2).
+  // Reuses the same WorkoutSessionRepository instance (getDashboardSummary
+  // is one more bounded read method alongside listCompletedSessions).
+  await app.register(progressRoutes, {
     repo: workoutSessionRepo,
   });
 

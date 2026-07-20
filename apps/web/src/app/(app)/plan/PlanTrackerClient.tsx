@@ -28,9 +28,11 @@
 
 import * as React from "react";
 import { useTranslations } from "next-intl";
-import type { WorkoutProgram } from "@kinora/contracts";
+import type { WeeklyOverviewDTO, WorkoutProgram } from "@kinora/contracts";
+import styles from "./plan-week-view.module.css";
 import { DayDetailPanel } from "./DayDetailPanel";
 import { TrackerPanel } from "./[id]/TrackerPanel";
+import { PlanHeroStartProvider } from "./plan-presentational";
 import { useWorkoutSession } from "./use-workout-session";
 
 export interface PlanTrackerClientProps {
@@ -44,6 +46,23 @@ export interface PlanTrackerClientProps {
    * replaces the whole view, and the identity header re-supplies plan name + day.
    */
   children?: React.ReactNode;
+  /**
+   * Initial weekly-progress overlay (09c-v1-progress-dashboard-stats, Slice
+   * 4b), server-fetched by `PlanWeekView`. Threaded through to
+   * `DayDetailPanel`, which owns all further week navigation locally.
+   */
+  weeklyOverview?: WeeklyOverviewDTO;
+  /**
+   * Full-width topbar (plan name header + lead + presentational actions),
+   * rendered above the cockpit grid. Hidden while a session is active (the
+   * tracker's identity header takes over). Optional — legacy callers omit it.
+   */
+  topbar?: React.ReactNode;
+  /**
+   * Presentational side rail (readiness ring, today's blocks, Coach AI) shown
+   * in the cockpit's right column. Hidden while a session is active. Optional.
+   */
+  sideRail?: React.ReactNode;
 }
 
 /**
@@ -70,6 +89,9 @@ export function PlanTrackerClient({
   planId,
   planName,
   children,
+  weeklyOverview,
+  topbar,
+  sideRail,
 }: PlanTrackerClientProps) {
   const {
     activeSession,
@@ -84,6 +106,15 @@ export function PlanTrackerClient({
 
   const t = useTranslations();
   const errorKey = error ? ERROR_KEYS[error] ?? GENERIC_ERROR_KEY : undefined;
+
+  // recommendedDay: the first planned training day this week NOT yet completed
+  // (weeklyOverview.days is Monday-first, so day N maps to index N-1); falls
+  // back to the first planned session when every planned day is done or no
+  // weekly overview is available.
+  const recommendedDay =
+    program.weeklySessions.find(
+      (s) => weeklyOverview?.days[s.day - 1]?.status !== "done",
+    )?.day ?? program.weeklySessions[0]?.day;
 
   // Session active → the tracker takes over the whole view (no navigation).
   // The identity header re-supplies the plan name + day, since `children`
@@ -133,20 +164,44 @@ export function PlanTrackerClient({
     );
   }
 
+  // Non-active: the cockpit layout (web-plan.html). Topbar spans full width;
+  // the two-column grid holds the main column (children = hero + metrics +
+  // limitation banner, then the DATA-WIRED week board) and the presentational
+  // side rail.
   return (
-    <div>
-      {children}
+    <div className={styles.frame}>
+      {topbar}
       {syncNoticeBanner}
       {errorKey && (
         <p role="alert" data-testid="tracker-error">
           {t(errorKey)}
         </p>
       )}
-      <DayDetailPanel
-        sessions={program.weeklySessions}
-        onStartWorkout={(day) => handleStartWorkout(planId, day)}
-        conflict={conflict}
-      />
+      <div className={styles.cockpit}>
+        <div className={styles.cockpitMain}>
+          {/* Publish the real start handler to the hero CTA composed inside
+              `children` (server-rendered PlanHero); its primary "Empezar
+              sesión" button starts the recommended day instead of toasting. */}
+          <PlanHeroStartProvider
+            onStart={
+              recommendedDay != null
+                ? () => handleStartWorkout(planId, recommendedDay)
+                : undefined
+            }
+          >
+            {children}
+          </PlanHeroStartProvider>
+          <section className={`${styles.panel} ${styles.weekBoard}`} aria-label={t("plan.week.title")}>
+            <DayDetailPanel
+              sessions={program.weeklySessions}
+              onStartWorkout={(day) => handleStartWorkout(planId, day)}
+              conflict={conflict}
+              weeklyOverview={weeklyOverview}
+            />
+          </section>
+        </div>
+        {sideRail}
+      </div>
     </div>
   );
 }
