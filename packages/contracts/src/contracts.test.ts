@@ -26,11 +26,13 @@ import type {
 } from "./index";
 
 describe("shared contracts boundary", () => {
-  it("exports only the declared runtime values (Zod schemas)", () => {
+  it("exports only the declared runtime values (Zod schemas + settled consts)", () => {
     // Before 08-v1-ai-plan-generation this package was type-only.
     // WorkoutProgramSchema is the first runtime export — required for
     // .withStructuredOutput(WorkoutProgramSchema) in the OpenRouter adapter.
-    expect(Object.keys(contracts)).toEqual(["WorkoutProgramSchema"]);
+    // MUSCLE_GROUPS (09c-v1-progress-dashboard-stats) is the settled 10-group
+    // taxonomy const — see design.md "Muscle-group taxonomy".
+    expect(Object.keys(contracts)).toEqual(["WorkoutProgramSchema", "MUSCLE_GROUPS"]);
   });
 
   it("defines the health response contract", () => {

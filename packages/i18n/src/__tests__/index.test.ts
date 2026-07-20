@@ -25,7 +25,7 @@ describe("@kinora/i18n package assembly", () => {
     expect(result.valid).toBe(true);
   });
 
-  it("the full catalog carries all 365 migrated leaf keys per locale", () => {
+  it("the full catalog carries all 430 migrated leaf keys per locale", () => {
     // 329 web-migrated keys + 23 `mobileTracker.*` keys authored in slice 9
     // for the mobile-unique tracker copy that has no EN/web equivalent (see
     // 9.3.1 enumeration in tasks.md) + 10 `history.*` keys authored in 09b
@@ -33,9 +33,32 @@ describe("@kinora/i18n package assembly", () => {
     // `tracker.sync.*` keys authored in 09b Phase 4 (Web Offline) for the
     // stale-Server-Action "reload to sync" prompt (`reload_required`), the
     // Judgment Day PR4 fixes' session-expired-mid-flush prompt
-    // (`auth_required`), and the poison-drop-must-surface prompt (`dropped`).
+    // (`auth_required`), and the poison-drop-must-surface prompt (`dropped`)
+    // + 15 `dashboard.*` keys authored in 09c-v1-progress-dashboard-stats
+    // Slice 2 for the data-backed dashboard (hero, streak, weekly progress,
+    // week-route strip, empty state) + 17 `stats.*` keys authored in
+    // 09c-v1-progress-dashboard-stats Slice 3a for the KPI cards, period
+    // toggle, volume trend, and the Slice-3b "coming soon" placeholders
+    // + 6 `stats.*` keys authored in Slice 3b for the real distribution/PR
+    // empty states and PR table headers + 12 `progress.muscle.<slug>` keys
+    // authored in Slice 3b (10 primary `MuscleGroup` labels + 2 composite
+    // "legs"/"arms" presentation labels for the web-only coarse collapse)
+    // + 6 `plan.week.*` keys authored in Slice 4a (weekly board visual
+    // realignment, closes #128) for the board header eyebrow/title and the
+    // inert (disabled) week-nav's aria-labels + static week label
+    // + 4 `plan.dayState.*` keys and 5 `exercises.history.*` keys authored
+    // in Slice 4b for the real done/active/rest/soon day-state labels and
+    // the read-only exercise-history section.
+    // + 44 `dashboard.*` keys added when the web dashboard was realigned to
+    // the full web-dashboard.html mockup (topbar, hero session copy + stats,
+    // readiness ring, streak chip, Coach AI card, next-session card, and the
+    // "Bloque de hoy" exercise list — presentational modules included).
+    // + 68 `plan.*` keys added when the web plan page was realigned to the
+    // full web-plan.html mockup (25 `plan.hero.*` topbar/hero cockpit copy +
+    // metrics/body-map, 11 `plan.readiness.*`, 22 `plan.today.*` side-rail
+    // exercise blocks, 10 `plan.coach.*` — the side rail is presentational).
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(365);
+    expect(Object.keys(flat)).toHaveLength(542);
   });
 
   it("the mobileTracker namespace is present with EN+ES parity (9.3.3)", () => {

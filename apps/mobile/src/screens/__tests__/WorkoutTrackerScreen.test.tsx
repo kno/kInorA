@@ -167,6 +167,18 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
     expect(renderedText(es)).toContain("Cargando sesión…");
   });
 
+  it("bails without crashing when the session request resolves undefined (post-teardown guard)", async () => {
+    getWorkoutSession.mockResolvedValue(undefined);
+    const en = renderScreen("en");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // The `!result` guard prevents reading `result.kind` on undefined — which
+    // otherwise surfaced as a post-teardown unhandled rejection under CI load.
+    // The screen simply stays in its loading state instead of throwing.
+    expect(renderedText(en)).toContain("Loading session…");
+  });
+
   it("renders the active-session state's tracker copy via useIntl(), in EN and ES", async () => {
     getWorkoutSession.mockResolvedValue({ kind: "ok", session: activeSession });
 

@@ -22,6 +22,11 @@ const planNavMigrationSql = readFileSync(
   "utf8",
 );
 
+const muscleGroupMigrationSql = readFileSync(
+  fileURLToPath(new URL("../../../drizzle/0007_first_namora.sql", import.meta.url)),
+  "utf8",
+);
+
 describe("workout_session_status enum", () => {
   it("exposes the active and completed values", () => {
     expect(workoutSessionStatusEnum.enumValues).toEqual(["active", "completed"]);
@@ -78,6 +83,13 @@ describe("session_exercises schema shape", () => {
     expect(cols.title.columnType).toBe("PgText");
     expect(cols.restSeconds.columnType).toBe("PgInteger");
     expect(cols.notes.columnType).toBe("PgText");
+  });
+
+  it("has a nullable, additive muscle_group classification column (09c-v1 Slice 1b)", () => {
+    const cols = getTableColumns(sessionExercises);
+    expect(cols.muscleGroup).toBeDefined();
+    expect(cols.muscleGroup.columnType).toBe("PgVarchar");
+    expect(cols.muscleGroup.notNull).toBe(false);
   });
 });
 
@@ -136,5 +148,19 @@ describe("plan navigation migration (#93)", () => {
     expect(planNavMigrationSql).not.toContain(
       "workout_sessions_single_active_per_user_unique",
     );
+  });
+});
+
+describe("muscle_group column migration (09c-v1 Slice 1b)", () => {
+  it("adds the session_exercises.muscle_group column", () => {
+    expect(muscleGroupMigrationSql).toContain(
+      'ALTER TABLE "session_exercises" ADD COLUMN "muscle_group" varchar',
+    );
+  });
+
+  it("is purely additive — no DROP, no data backfill in the migration itself", () => {
+    expect(muscleGroupMigrationSql).not.toMatch(/DROP\s/i);
+    expect(muscleGroupMigrationSql).not.toMatch(/UPDATE\s/i);
+    expect(muscleGroupMigrationSql).not.toMatch(/INSERT\s/i);
   });
 });
