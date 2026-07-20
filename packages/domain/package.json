@@ -20,6 +20,11 @@
       "source": "./src/offline/index.ts",
       "types": "./src/offline/index.ts",
       "default": "./dist/offline/index.js"
+    },
+    "./progress": {
+      "source": "./src/progress/index.ts",
+      "types": "./src/progress/index.ts",
+      "default": "./dist/progress/index.js"
     }
   },
   "scripts": {

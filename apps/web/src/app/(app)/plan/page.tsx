@@ -24,7 +24,7 @@ import { PlanWeekView } from "./PlanWeekView";
 import type { WorkoutProgram } from "@kinora/contracts";
 
 interface PlanPageProps {
-  searchParams: Promise<{ planId?: string }>;
+  searchParams: Promise<{ planId?: string; weekStart?: string }>;
 }
 
 export default async function PlanPage({ searchParams }: PlanPageProps) {
@@ -111,6 +111,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
         program={plan.program as WorkoutProgram}
         planName={plan.name}
         planId={resolvedId}
+        weekStart={params.weekStart}
       />
     </main>
   );
