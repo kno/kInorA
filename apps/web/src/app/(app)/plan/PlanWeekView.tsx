@@ -1,24 +1,33 @@
 /**
  * PlanWeekView — server component.
  *
- * Renders the plan "ready" state: a 4-tile summary strip, an optional
- * limitation warning banner, and the DayDetailPanel client island.
+ * Renders the plan "ready" state as the cockpit layout from
+ * `screens/web-plan.html`: a topbar (plan name + lead + actions), a two-column
+ * cockpit whose main column holds the hero (session copy + DATA-WIRED metrics
+ * + muscle body-map) and the week board, and a presentational side rail
+ * (readiness ring, today's blocks, Coach AI).
  *
- * All data is derived from the WorkoutProgram prop — no API calls.
- * No "use client" directive: this is a pure server component.
+ * DATA-WIRED (derived from the WorkoutProgram / WeeklyOverviewDTO props):
+ *   - the 4 metric tiles (sessions / rest / est. duration / volume placeholder)
+ *   - the limitation-warning banner
+ *   - the 7-tile Mon–Sun board with real day states + week navigation
+ *     (rendered by PlanTrackerClient → DayDetailPanel)
  *
- * Deferred to 09a:
- *   - Volumen objetivo real value (tile shows "—" placeholder)
- *   - Completion check-marks and "today" highlighting (need execution tracking)
- *   - "Empezar sesión" CTA (in DayDetailPanel)
- *   - Week navigation prev/next buttons
+ * PRESENTATIONAL ONLY (no data model yet — see plan-presentational.tsx):
+ *   - the topbar actions, the hero session copy + body-map, and the side rail.
+ *
+ * No "use client" directive: this is a pure server component. The only server
+ * call is `getWeeklyOverviewAction` (a Server Action); the browser never sees
+ * API_BASE_URL.
  */
 
 import { getTranslations } from "next-intl/server";
 import type { WorkoutProgram } from "@kinora/contracts";
 import styles from "./plan-week-view.module.css";
 import { PlanTrackerClient } from "./PlanTrackerClient";
+import { PlanHero, PlanSideRail, PlanToolbar } from "./plan-presentational";
 import { estimateSessionMinutes, restDays } from "./plan-utils";
+import { getWeeklyOverviewAction } from "./actions";
 
 export interface PlanWeekViewProps {
   program: WorkoutProgram;
@@ -33,10 +42,22 @@ export interface PlanWeekViewProps {
    * Start CTA can call `startWorkoutSessionAction(planId, day)` inline.
    */
   planId: string;
+  /**
+   * Requested displayed week (ISO `YYYY-MM-DD` Monday), from the `?weekStart=`
+   * search param (09c-v1-progress-dashboard-stats, Slice 4b). `undefined`
+   * defaults to the current week.
+   */
+  weekStart?: string;
 }
 
-export async function PlanWeekView({ program, planName, planId }: PlanWeekViewProps) {
+export async function PlanWeekView({ program, planName, planId, weekStart }: PlanWeekViewProps) {
   const t = await getTranslations();
+
+  // Fail-open: an unreachable/erroring overview fetch leaves `weeklyOverview`
+  // undefined, and `DayDetailPanel` falls back to its Slice-4a rendering
+  // (inert nav, no per-day state) rather than breaking the whole page.
+  const overviewResult = await getWeeklyOverviewAction(weekStart);
+  const weeklyOverview = overviewResult.kind === "ok" ? overviewResult.overview : undefined;
 
   const sessions = program.weeklySessions;
   const sessionCount = sessions.length;
@@ -49,43 +70,62 @@ export async function PlanWeekView({ program, planName, planId }: PlanWeekViewPr
     Array.isArray(program.limitationWarnings) &&
     program.limitationWarnings.length > 0;
 
-  return (
-    <PlanTrackerClient program={program} planId={planId} planName={planName}>
-      {/* Plan name header (#93) — server-resolved label, rendered verbatim. */}
-      {planName && <h1 className={styles.planName}>{planName}</h1>}
-
-      {/* 4-tile summary strip */}
-      <div className={styles.summaryStrip}>
-        {/* Sesiones planificadas */}
-        <div className={styles.summaryItem}>
-          <div className={styles.summaryEyebrow}>{t("plan.summary.sessions")}</div>
-          <div className={styles.summaryVal}>{sessionCount}</div>
-          <div className={styles.summarySub}>{t("plan.summary.sessionsSub")}</div>
-        </div>
-
-        {/* Días de descanso — derived, no API change */}
-        <div className={styles.summaryItem}>
-          <div className={styles.summaryEyebrow}>{t("plan.summary.rest")}</div>
-          <div className={styles.summaryVal}>{restDayCount}</div>
-          <div className={styles.summarySub}>{t("plan.summary.restSub")}</div>
-        </div>
-
-        {/* Duración estimada — best-effort derivation with overhead constant */}
-        <div className={styles.summaryItem}>
-          <div className={styles.summaryEyebrow}>{t("plan.summary.duration")}</div>
-          <div className={styles.summaryVal}>{totalDurationMin}</div>
-          <div className={styles.summarySub}>{t("plan.summary.durationSub")}</div>
-        </div>
-
-        {/* Volumen objetivo — inert placeholder, deferred to 09a */}
-        <div className={styles.summaryItem}>
-          <div className={styles.summaryEyebrow}>{t("plan.summary.volume")}</div>
-          <div className={styles.summaryVal}>{t("plan.summary.volumePlaceholder")}</div>
-          <div className={styles.summarySub}>{t("plan.summary.volumeSub")}</div>
-        </div>
+  // DATA-WIRED metrics grid — kept as literal server JSX so the values stay
+  // server-derived. Passed into the (presentational) hero panel via children.
+  const metrics = (
+    <div className={styles.metrics} aria-label={t("plan.hero.focusLabel")}>
+      <div className={styles.metric}>
+        <div className={styles.metricEyebrow}>{t("plan.summary.sessions")}</div>
+        <div className={styles.metricValue}>{sessionCount}</div>
+        <div className={styles.metricSub}>{t("plan.summary.sessionsSub")}</div>
       </div>
+      <div className={styles.metric}>
+        <div className={styles.metricEyebrow}>{t("plan.summary.rest")}</div>
+        <div className={styles.metricValue}>{restDayCount}</div>
+        <div className={styles.metricSub}>{t("plan.summary.restSub")}</div>
+      </div>
+      <div className={styles.metric}>
+        <div className={styles.metricEyebrow}>{t("plan.summary.duration")}</div>
+        <div className={styles.metricValue}>{totalDurationMin}</div>
+        <div className={styles.metricSub}>{t("plan.summary.durationSub")}</div>
+      </div>
+      <div className={styles.metric}>
+        <div className={styles.metricEyebrow}>{t("plan.summary.volume")}</div>
+        <div className={styles.metricValue}>{t("plan.summary.volumePlaceholder")}</div>
+        <div className={styles.metricSub}>{t("plan.summary.volumeSub")}</div>
+      </div>
+    </div>
+  );
 
-      {/* Limitation warning banner — shown above grid when warnings present */}
+  // Topbar — eyebrow + plan name header (#93, server-resolved label) + lead +
+  // presentational actions. Rendered full-width above the cockpit grid. The
+  // plan-name <h1> stays conditional so an absent label renders no level-1
+  // heading (the only other headings on the page are h2s).
+  const topbar = (
+    <header className={styles.topbar}>
+      <div className={styles.topbarCopy}>
+        <div className={styles.eyebrow}>{t("plan.hero.eyebrow")}</div>
+        {planName && <h1 className={styles.pageTitle}>{planName}</h1>}
+        <p className={styles.lead}>{t("plan.hero.lead")}</p>
+      </div>
+      {/* presentational only — no data model yet (topbar actions) */}
+      <PlanToolbar />
+    </header>
+  );
+
+  return (
+    <PlanTrackerClient
+      program={program}
+      planId={planId}
+      planName={planName}
+      weeklyOverview={weeklyOverview}
+      topbar={topbar}
+      sideRail={<PlanSideRail />}
+    >
+      {/* Hero panel (presentational) wrapping the DATA-WIRED metrics grid. */}
+      <PlanHero>{metrics}</PlanHero>
+
+      {/* Limitation warning banner — shown above the board when warnings present */}
       {hasWarnings && (
         <div className={styles.limitationBanner} role="alert">
           <div className={styles.limitationBannerTitle}>
@@ -101,9 +141,9 @@ export async function PlanWeekView({ program, planName, planId }: PlanWeekViewPr
         </div>
       )}
 
-      {/* Day-card grid + detail panel + per-day Start CTA are rendered by
-          PlanTrackerClient (the surrounding client wrapper), which owns the
-          inline session/conflict state-swap (#93 Slice 3). */}
+      {/* The week board (7-tile grid + detail panel + per-day Start CTA) is
+          rendered by PlanTrackerClient, which owns the inline session/conflict
+          state-swap (#93 Slice 3). */}
     </PlanTrackerClient>
   );
 }

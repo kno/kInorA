@@ -287,7 +287,16 @@ export const workoutSessions = pgTable(
 );
 
 /**
- * Session exercises — immutable exercise snapshot rows copied from the workout plan.
+ * Session exercises — immutable except the derived `muscle_group`
+ * classification column. The exercise snapshot rows (title, order, rest,
+ * notes) are copied from the workout plan and never mutated afterward; that
+ * is the true immutable *what-happened* record. `muscle_group` is different:
+ * it is a computed label *about* the row — a deterministic function of
+ * `title` produced by `classifyExerciseMuscleGroup` (09c-v1
+ * progress-dashboard-stats, Slice 1b) — carries no user-logged information,
+ * and can be recomputed at any time. Populating it at write time or via the
+ * idempotent backfill therefore does not violate the snapshot invariant. See
+ * design.md "Immutable-table carve-out".
  */
 export const sessionExercises = pgTable(
   "session_exercises",
@@ -300,6 +309,14 @@ export const sessionExercises = pgTable(
     title: text("title").notNull(),
     restSeconds: integer("rest_seconds").notNull(),
     notes: text("notes"),
+    /**
+     * Derived muscle-group classification (09c-v1 Slice 1b). Additive and
+     * nullable: legacy rows and unclassifiable titles stay NULL, and
+     * rolling this column back is just dropping it with no data loss.
+     * Populated at write time in `insertSessionExercises` and by the
+     * idempotent backfill script (`apps/api/src/db/backfill-muscle-group.ts`).
+     */
+    muscleGroup: varchar("muscle_group"),
   },
   (table) => ({
     workoutSessionIdx: index("session_exercises_workout_session_idx").on(table.workoutSessionId),
