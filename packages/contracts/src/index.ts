@@ -93,6 +93,21 @@ export type StartSessionOutcome =
     };
 
 /**
+ * Discriminated result of `deleteSession` (10c-workout-session-delete).
+ *
+ * `deleted` — a completed session owned by the caller was removed (cascading
+ * FKs atomically drop its session_exercises + set_records). `not_found` — no
+ * session matched the scoped (tenantId, userId, id) predicate; the caller
+ * learns nothing about sessions they do not own. `active_conflict` — the
+ * session exists and is in-progress; R3 requires the user to complete or
+ * cancel it before deletion, surfaced as 409.
+ */
+export type DeleteSessionOutcome =
+  | { kind: "deleted" }
+  | { kind: "not_found" }
+  | { kind: "active_conflict" };
+
+/**
  * Shared plan list DTO (#93) — one source of truth for web and future mobile.
  * `name` is resolved server-side via `defaultPlanName(row.name, row.createdAt)`
  * before it reaches the contract, so clients receive a non-empty label.

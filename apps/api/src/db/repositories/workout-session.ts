@@ -17,6 +17,7 @@ import {
 } from "../progress-domain.js";
 import type {
   DashboardSummaryDTO,
+  DeleteSessionOutcome,
   ExerciseDetailDTO,
   KpiWithDelta,
   MuscleGroup,
@@ -436,6 +437,63 @@ export class WorkoutSessionRepository {
     }
 
     return undefined;
+  }
+
+  /**
+   * Deletes a single workout session owned by the caller (10c-workout-session-delete).
+   *
+   * Two-phase, scoped write — same IDOR discipline as `recordSet` /
+   * `completeSession`:
+   *
+   * 1. `DELETE ... WHERE (tenantId, userId, id) AND status='completed'`. The
+   *    `status='completed'` guard is R3's active-session protection at the
+   *    storage layer: an in-progress session is physically excluded from the
+   *    delete so it can never be silently removed. Cascading FKs
+   *    (`onDelete: "cascade"` on `session_exercises` → `workout_sessions` and
+   *    `set_records` → `session_exercises`) atomically drop the child rows.
+   * 2. On a 0-row delete, disambiguate with a SCOPED re-read — NEVER an
+   *    unscoped `WHERE id = :id` (that would let a caller learn another
+   *    tenant's/user's session exists). The re-read resolves one of:
+   *      - row with `status='active'` → `active_conflict` (route: 409)
+   *      - no row → `not_found` (route: 404), covering nonexistent, another
+   *        user's session, and another tenant's session indistinguishably.
+   */
+  async deleteById(
+    tenantId: string,
+    userId: string,
+    id: string
+  ): Promise<DeleteSessionOutcome> {
+    const deleted = await this.db
+      .delete(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.id, id),
+          eq(workoutSessions.status, "completed")
+        )
+      )
+      .returning({ id: workoutSessions.id });
+
+    if (deleted.length > 0) {
+      return { kind: "deleted" };
+    }
+
+    const rows = await this.db
+      .select({ status: workoutSessions.status })
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.id, id)
+        )
+      );
+    const row = rows[0] as { status: string } | undefined;
+    if (row && row.status === "active") {
+      return { kind: "active_conflict" };
+    }
+    return { kind: "not_found" };
   }
 
   /**
