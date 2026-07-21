@@ -46,6 +46,8 @@ export interface BackfillResult {
   updated: number;
   /** Number of batches executed. */
   batches: number;
+  /** Last processed row id (useful as `--start-after-id` for resuming). Undefined when zero rows were processed. */
+  lastId?: string;
 }
 
 interface ScannedRow {
@@ -109,7 +111,7 @@ export async function backfillMuscleGroups(
     }
   }
 
-  return { processed, updated, batches };
+  return { processed, updated, batches, lastId: cursor };
 }
 
 /**
@@ -125,7 +127,7 @@ export function buildMuscleGroupCase(
 }
 
 /**
- * CLI entrypoint — `pnpm --filter api db:backfill-muscle-group [--reclassify]`.
+ * CLI entrypoint — `pnpm --filter api db:backfill-muscle-group [--reclassify] [--start-after-id <uuid>]`.
  * Only runs when this file is executed directly (not when imported, e.g. by
  * tests). Creates its own DB client from `DATABASE_URL` (loaded from the
  * project root `.env`, mirroring `src/index.ts`), runs the backfill, logs a
@@ -138,12 +140,23 @@ async function runCli(): Promise<void> {
 
   const mode: BackfillMode = process.argv.includes("--reclassify") ? "reclassify" : "fill";
 
+  const startAfterIdx = process.argv.indexOf("--start-after-id");
+  const startAfterId = startAfterIdx !== -1 ? process.argv[startAfterIdx + 1] : undefined;
+
+  if (startAfterId && mode !== "reclassify") {
+    console.warn("[backfill-muscle-group] --start-after-id is ignored in fill mode (fill is naturally resumable)");
+  }
+
   const { db, pool } = createDbClient();
   try {
-    const result = await backfillMuscleGroups(db, { mode });
+    const result = await backfillMuscleGroups(db, { mode, startAfterId });
     console.log(
       `[backfill-muscle-group] mode=${mode} batches=${result.batches} processed=${result.processed} updated=${result.updated}`,
     );
+    if (result.lastId) {
+      console.log(`[backfill-muscle-group] last-processed id: ${result.lastId}`);
+      console.log(`[backfill-muscle-group] to resume: --start-after-id ${result.lastId}`);
+    }
   } finally {
     await pool.end();
   }
