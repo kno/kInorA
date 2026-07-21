@@ -6,7 +6,6 @@ import {
   MembershipRepository,
   TenantLookupRepository,
 } from "../db/repositories/auth-context.js";
-import type { UserId } from "@kinora/contracts";
 import { SessionRepository } from "../db/repositories/session.js";
 import {
   validatePasswordPolicy,
