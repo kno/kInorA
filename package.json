@@ -12,6 +12,7 @@
     "test": "pnpm -r test",
     "test:coverage": "pnpm -r --if-present test:coverage",
     "test:e2e": "node scripts/e2e-with-stack.mjs",
+    "test:e2e:pwa": "E2E_PWA_PRODUCTION=true pnpm test:e2e --project=pwa-production tests/e2e/pwa.spec.ts",
     "deps-guard": "node scripts/deps-guard.mjs",
     "architecture": "depcruise --config .dependency-cruiser.cjs packages/domain/src packages/contracts/src apps/api/src && node scripts/architecture-negative-test.mjs",
     "prepare": "git rev-parse --git-dir > /dev/null 2>&1 && git config core.hooksPath .githooks || true"
