@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { SidebarNav } from "./SidebarNav";
+import { SidebarNav, type SidebarUser } from "./SidebarNav";
 import { MobileNav } from "./MobileNav";
 import styles from "./AppShell.module.css";
 
@@ -11,10 +11,18 @@ import styles from "./AppShell.module.css";
  *
  * On first render (SSR) the mobile nav is shown. Once the client
  * hydrates, the `useEffect` reads `window.matchMedia` and sets the
- * correct layout. The CSS also applies `padding-left: 248px` on the
- * main content area at ≥768px to prevent layout shift on hydration.
+ * correct layout.
+ *
+ * The optional `user` prop carries authenticated identity data so the
+ * sidebar can display real user info instead of a placeholder fallback.
  */
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  user,
+}: {
+  children: React.ReactNode;
+  user?: SidebarUser;
+}) {
   const [isDesktop, setIsDesktop] = useState(false);
 
   useEffect(() => {
@@ -28,7 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={styles.shell}>
-      {isDesktop ? <SidebarNav /> : null}
+      {isDesktop ? <SidebarNav user={user} /> : null}
       <main className={styles.main}>{children}</main>
       {!isDesktop ? <MobileNav /> : null}
     </div>

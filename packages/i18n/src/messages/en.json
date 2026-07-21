@@ -810,5 +810,10 @@
       "generic": "You already have an active session. Finish it before starting another."
     },
     "retry": "Retry"
+  },
+  "sidebar": {
+    "logout": "Log out",
+    "logoutLabel": "Log out",
+    "userAreaAria": "User menu"
   }
 }
