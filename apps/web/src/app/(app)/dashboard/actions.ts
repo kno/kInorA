@@ -8,13 +8,28 @@ import { fetchDashboardSummary, type FetchDashboardSummaryResult } from "./dashb
 /**
  * Logout Server Action.
  *
- * Clears the `kinora_session` cookie and redirects to the login page.
- * The session in the DB will expire naturally (30-day TTL). A proper
- * API-backed logout that also invalidates the DB session can be added
- * when the `POST /auth/logout` endpoint is wired to the web app.
+ * Calls the API to invalidate the DB session, then clears the
+ * httpOnly session cookie and redirects to the login page.
+ * The API call is best-effort — if it fails, the cookie is still
+ * cleared so the local session is destroyed regardless.
  */
 export async function logoutAction(): Promise<void> {
   const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+
+  // Best-effort API call to invalidate the DB session.
+  if (token) {
+    const base = process.env.API_BASE_URL ?? "http://localhost:4000";
+    try {
+      await fetch(`${base}/auth/logout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      // API unreachable — local cookie clear is sufficient.
+    }
+  }
+
   jar.set(SESSION_COOKIE, "", { maxAge: 0, path: "/" });
   redirect("/login");
 }

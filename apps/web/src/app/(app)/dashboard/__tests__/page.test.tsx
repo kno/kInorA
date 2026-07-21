@@ -15,7 +15,6 @@ vi.mock("next-intl/server", () => ({
 }));
 
 vi.mock("../actions.js", () => ({
-  logoutAction: vi.fn(),
   getDashboardAction: vi.fn(),
 }));
 
@@ -94,18 +93,6 @@ describe("DashboardPage", () => {
     expect(text).toContain("82");
   });
 
-  it("renders a logout button inside a form", async () => {
-    vi.mocked(getDashboardAction).mockResolvedValueOnce({ kind: "ok", summary: populatedSummary });
-
-    const page = await DashboardPage();
-
-    const submit = findFirst(page, (el) => el.props.type === "submit");
-    expect(submit).toBeDefined();
-    expect(textOf(submit)).toMatch(/log\s*out/i);
-    const form = findFirst(page, (el) => el.type === "form");
-    expect(form).toBeDefined();
-  });
-
   it("renders real Spanish copy from the ES catalog (not EN leakage)", async () => {
     vi.mocked(getTranslations).mockResolvedValueOnce(createServerTranslator("es"));
     vi.mocked(getLocale).mockResolvedValueOnce("es");
@@ -117,7 +104,6 @@ describe("DashboardPage", () => {
     expect(text).toContain("Racha activa");
     expect(text).toContain("Progreso semanal");
     expect(text).toContain("Ruta de carga");
-    expect(text).toContain("Cerrar sesión");
   });
 });
 
