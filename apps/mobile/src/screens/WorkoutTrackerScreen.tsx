@@ -34,8 +34,9 @@
  *  - Flush is strictly sequential (`runSequentialFlush`) with a
  *    reentrancy guard (`isFlushingRef`/`flushAgainRef`), mirroring the
  *    Judgment-Day-hardened web invariants.
- *  - `AUTH` (401/403) and poison-dropped (`VALIDATION`/`NOT_FOUND`)
- *    failures are surfaced via `syncNotice` — never silently lost.
+ *  - `AUTH` (401/403), poison-dropped (`VALIDATION`/`NOT_FOUND`), and local
+ *    snapshot persistence failures are surfaced via `syncNotice` — never
+ *    silently lost.
  *  - The store/queue/snapshot are scoped by an identity key derived from
  *    `GET /auth/identity` (mobile has the Bearer token, so — unlike web —
  *    it resolves identity directly, no Server-Action indirection needed).
@@ -163,9 +164,29 @@ const REST_LOW_THRESHOLD = 15;
 
 type ConflictState = { activePlanName?: string; activeDay: number | null };
 
+type SyncNotice = "auth_required" | "dropped" | "reload_required" | undefined;
+type IdentityRevalidation = "same" | "unreachable" | "different";
+
 interface OfflineContext {
   store: OfflineStore;
   identityKey: string;
+}
+
+function representedRawMutations(
+  raw: Parameters<typeof collapseQueue>[0],
+  acknowledged: Parameters<typeof collapseQueue>[0],
+) {
+  return raw.filter((candidate) =>
+    acknowledged.some((group) => {
+      if (candidate.kind !== group.kind || candidate.sessionId !== group.sessionId) {
+        return false;
+      }
+      if (candidate.kind === "set" && group.kind === "set") {
+        return candidate.setId === group.setId && candidate.clientSeq <= group.clientSeq;
+      }
+      return candidate.kind === "complete" && group.kind === "complete" && candidate.clientSeq <= group.clientSeq;
+    }),
+  );
 }
 
 export default function WorkoutTrackerScreen({
@@ -217,7 +238,7 @@ export default function WorkoutTrackerScreen({
     };
   }, []);
 
-  const [syncNotice, setSyncNotice] = useState<"auth_required" | "dropped" | undefined>();
+  const [syncNotice, setSyncNotice] = useState<SyncNotice>();
 
   const offlineDeps = offline ?? defaultOfflineDeps;
   const offlineRef = useRef<OfflineContext | undefined>(undefined);
@@ -271,6 +292,22 @@ export default function WorkoutTrackerScreen({
     const monitor = connectivityRef.current;
     if (monitor && !monitor.isOnline()) return;
 
+    // The screen can remain mounted across an account switch. Re-resolve the
+    // identity immediately before dispatching queued mutations so the queue
+    // cannot be sent with a different account's token. A failed or undefined
+    // lookup is not proof of a switch; leave the queue intact for a later
+    // valid trigger, matching the web flush semantics.
+    if (!mountedRef.current) return;
+    let currentIdentityKey: string | undefined;
+    try {
+      currentIdentityKey = await offlineDeps.getIdentityKey();
+    } catch {
+      return;
+    }
+    if (currentIdentityKey === undefined || currentIdentityKey !== ctx.identityKey) {
+      return;
+    }
+
     const queued = await getQueuedMutations(ctx.store, ctx.identityKey);
     if (queued.length === 0) {
       // A clean empty-queue pass means every previously-queued mutation is
@@ -300,18 +337,20 @@ export default function WorkoutTrackerScreen({
       }
     });
 
-    for (const mutation of [...summary.synced, ...summary.dropped]) {
+    for (const mutation of representedRawMutations(queued, [...summary.synced, ...summary.dropped])) {
       await removeMutation(ctx.store, ctx.identityKey, mutation.clientSeq);
     }
 
-    if (summary.lastAckedSession) {
-      const acked = summary.lastAckedSession;
+    for (const acked of summary.ackedSessions) {
       await writeSnapshot(ctx.store, ctx.identityKey, acked.id, acked);
       if (mountedRef.current) {
         setSession((prev) => (prev?.id === acked.id ? acked : prev));
       }
 
-      if (acked.status === "completed" && summary.remaining.length === 0) {
+      const hasRemainingForSession = summary.remaining.some(
+        (mutation) => mutation.sessionId === acked.id,
+      );
+      if (acked.status === "completed" && !hasRemainingForSession) {
         await clearSnapshot(ctx.store, ctx.identityKey, acked.id);
         await clearActiveSessionPointer(ctx.store, ctx.identityKey);
       }
@@ -356,6 +395,16 @@ export default function WorkoutTrackerScreen({
     }
   }, [runFlushPass]);
 
+  const revalidateOfflineIdentity = useCallback(async (identityKey: string): Promise<IdentityRevalidation> => {
+    try {
+      const currentIdentityKey = await offlineDeps.getIdentityKey();
+      if (currentIdentityKey === undefined) return "unreachable";
+      return currentIdentityKey === identityKey ? "same" : "different";
+    } catch {
+      return "unreachable";
+    }
+  }, [offlineDeps]);
+
   const loadSession = useCallback(async () => {
     setLoading(true);
     setErrorKey(undefined);
@@ -373,10 +422,15 @@ export default function WorkoutTrackerScreen({
           offlineRef.current = { store, identityKey };
 
           const monitor = await offlineDeps.createConnectivityMonitor();
-          connectivityRef.current = monitor;
-          connectivityUnsubscribeRef.current = monitor.subscribe((online) => {
+          const unsubscribe = monitor.subscribe((online) => {
             if (online) void flush();
           });
+          if (!mountedRef.current) {
+            unsubscribe();
+            return;
+          }
+          connectivityRef.current = monitor;
+          connectivityUnsubscribeRef.current = unsubscribe;
 
           // Offline restart hydration: if we're offline right now and a
           // cached snapshot exists for the target session, render directly
@@ -391,11 +445,22 @@ export default function WorkoutTrackerScreen({
                 const queued = await getQueuedMutations(store, identityKey);
                 const collapsed = collapseQueue(queued);
                 const hydrated = collapsed.reduce(applyPendingMutation, snapshot.session);
-                if (mountedRef.current) {
+                let hydrationIdentity: string | undefined;
+                try {
+                  hydrationIdentity = await offlineDeps.getIdentityKey();
+                } catch {
+                  hydrationIdentity = undefined;
+                }
+                if (hydrationIdentity !== identityKey) {
+                  connectivityUnsubscribeRef.current?.();
+                  connectivityUnsubscribeRef.current = undefined;
+                  connectivityRef.current = undefined;
+                  offlineRef.current = undefined;
+                } else if (mountedRef.current) {
                   setSession(hydrated);
                   setLoading(false);
+                  return;
                 }
-                return;
               }
             }
           }
@@ -616,7 +681,9 @@ export default function WorkoutTrackerScreen({
         // a crash before the snapshot write is self-healing via replay), then
         // optimistically apply the mutation to local UI + the cached
         // snapshot, then attempt an immediate flush (no-ops while offline).
+        let enqueued = false;
         try {
+          if ((await revalidateOfflineIdentity(ctx.identityKey)) === "different") return;
           const mutation = await enqueueMutation(ctx.store, ctx.identityKey, {
             kind: "set",
             sessionId,
@@ -624,6 +691,7 @@ export default function WorkoutTrackerScreen({
             input,
             queuedAt: Date.now(),
           });
+          enqueued = true;
 
           if (mountedRef.current) {
             setSession((prev) => (prev && prev.id === sessionId ? applyPendingMutation(prev, mutation) : prev));
@@ -640,7 +708,11 @@ export default function WorkoutTrackerScreen({
           void flush();
           return;
         } catch {
-          // Offline module unavailable — degrade to the direct-call path below.
+          if (enqueued) {
+            if (mountedRef.current) setSyncNotice("reload_required");
+            return;
+          }
+          // Offline module unavailable before durable enqueue — degrade to the direct-call path.
         }
       }
 
@@ -663,7 +735,7 @@ export default function WorkoutTrackerScreen({
       submittingRef.current = false;
       if (mountedRef.current) setSubmitting(false);
     }
-  }, [session, view, submitting, weight, reps, paused, handleUnauthenticatedSession, flush]);
+  }, [session, view, submitting, weight, reps, paused, handleUnauthenticatedSession, flush, revalidateOfflineIdentity]);
 
   const handleAddRestTime = useCallback(() => {
     if (restEndsAtRef.current == null) return;
@@ -702,7 +774,9 @@ export default function WorkoutTrackerScreen({
     try {
       const ctx = offlineRef.current;
       if (ctx) {
+        let enqueued = false;
         try {
+          if ((await revalidateOfflineIdentity(ctx.identityKey)) === "different") return;
           // Enqueue-first (durable), then optimistically flip the cached
           // snapshot's session.status to "completed" — so an offline restart
           // before ack still renders as completed.
@@ -711,6 +785,7 @@ export default function WorkoutTrackerScreen({
             sessionId,
             queuedAt: Date.now(),
           });
+          enqueued = true;
 
           const snapshot = await readSnapshot(ctx.store, ctx.identityKey, sessionId);
           if (snapshot) {
@@ -729,7 +804,11 @@ export default function WorkoutTrackerScreen({
           void flush();
           return;
         } catch {
-          // Offline module unavailable — degrade to the direct-call path below.
+          if (enqueued) {
+            if (mountedRef.current) setSyncNotice("reload_required");
+            return;
+          }
+          // Offline module unavailable before durable enqueue — degrade to the direct-call path.
         }
       }
 
@@ -751,7 +830,7 @@ export default function WorkoutTrackerScreen({
       submittingRef.current = false;
       if (mountedRef.current) setSubmitting(false);
     }
-  }, [session, submitting, handleUnauthenticatedSession, flush]);
+  }, [session, submitting, handleUnauthenticatedSession, flush, revalidateOfflineIdentity]);
 
   const goHome = useCallback(() => navigation.goBack(), [navigation]);
 
@@ -937,7 +1016,11 @@ export default function WorkoutTrackerScreen({
             testID="tracker-sync-notice"
           >
             <FormattedMessage
-              {...(syncNotice === "auth_required" ? M.syncAuthRequired : M.syncDropped)}
+              {...(syncNotice === "auth_required"
+                ? M.syncAuthRequired
+                : syncNotice === "reload_required"
+                  ? M.syncReloadRequired
+                  : M.syncDropped)}
             />
           </Text>
         )}

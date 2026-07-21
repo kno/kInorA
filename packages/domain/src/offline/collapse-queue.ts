@@ -8,15 +8,18 @@ import type { PendingMutation } from "@kinora/contracts";
  *   "latest" is decided by `clientSeq` (the monotonic, collision-free
  *   client-assigned counter), never `queuedAt` (wall-clock, can tie under
  *   rapid taps).
- * - Any `"complete"` mutation is always ordered last, so the sequential
- *   flush loop applies every set mutation before completing the session.
+ * - For `"complete"` mutations, only the latest entry per `sessionId` survives.
+ *   All surviving completes are ordered after sets, by `clientSeq`.
  * - The surviving `"set"` mutations are ordered ascending by `clientSeq`.
  *
  * Pure — no I/O, no mutation of the input array.
  */
 export function collapseQueue(mutations: PendingMutation[]): PendingMutation[] {
   const latestBySetId = new Map<string, PendingMutation & { kind: "set" }>();
-  let latestComplete: (PendingMutation & { kind: "complete" }) | undefined;
+  const latestCompleteBySessionId = new Map<
+    string,
+    PendingMutation & { kind: "complete" }
+  >();
 
   for (const mutation of mutations) {
     if (mutation.kind === "set") {
@@ -27,14 +30,18 @@ export function collapseQueue(mutations: PendingMutation[]): PendingMutation[] {
       continue;
     }
 
-    if (!latestComplete || mutation.clientSeq > latestComplete.clientSeq) {
-      latestComplete = mutation;
+    const existing = latestCompleteBySessionId.get(mutation.sessionId);
+    if (!existing || mutation.clientSeq > existing.clientSeq) {
+      latestCompleteBySessionId.set(mutation.sessionId, mutation);
     }
   }
 
   const collapsedSets = [...latestBySetId.values()].sort(
-    (a, b) => a.clientSeq - b.clientSeq,
+    (a, b) => a.clientSeq - b.clientSeq || a.setId.localeCompare(b.setId),
+  );
+  const collapsedCompletes = [...latestCompleteBySessionId.values()].sort(
+    (a, b) => a.clientSeq - b.clientSeq || a.sessionId.localeCompare(b.sessionId),
   );
 
-  return latestComplete ? [...collapsedSets, latestComplete] : collapsedSets;
+  return [...collapsedSets, ...collapsedCompletes];
 }

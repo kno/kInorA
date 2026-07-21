@@ -85,4 +85,17 @@ describe("createConnectivityMonitor (NetInfo, mobile)", () => {
     internalListener?.({ isConnected: false });
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("releases the NetInfo subscription when the last monitor listener unsubscribes", async () => {
+    const netInfoUnsubscribe = vi.fn();
+    addEventListener.mockReturnValue(netInfoUnsubscribe);
+
+    const { createConnectivityMonitor } = await import("../connectivity");
+    const monitor = createConnectivityMonitor();
+    const unsubscribe = monitor.subscribe(() => {});
+
+    unsubscribe();
+
+    expect(netInfoUnsubscribe).toHaveBeenCalledTimes(1);
+  });
 });

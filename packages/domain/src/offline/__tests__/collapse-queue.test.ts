@@ -18,8 +18,12 @@ function setMutation(
   };
 }
 
-function completeMutation(clientSeq: number, queuedAt = clientSeq): PendingMutation {
-  return { kind: "complete", sessionId: "session-1", queuedAt, clientSeq };
+function completeMutation(
+  clientSeq: number,
+  queuedAt = clientSeq,
+  sessionId = "session-1",
+): PendingMutation {
+  return { kind: "complete", sessionId, queuedAt, clientSeq };
 }
 
 describe("collapseQueue (09b-v1 offline domain)", () => {
@@ -71,5 +75,24 @@ describe("collapseQueue (09b-v1 offline domain)", () => {
     const result = collapseQueue([setB, complete, setA]);
 
     expect(result).toEqual([setA, setB, complete]);
+  });
+
+  it("keeps the latest complete for every session and orders all completes deterministically after sets", () => {
+    const setA = setMutation("set-1", 1, { sessionId: "session-1" });
+    const setB = setMutation("set-2", 3, { sessionId: "session-2" });
+    const completeA = completeMutation(2, 2, "session-1");
+    const completeB = completeMutation(4, 4, "session-2");
+    const newerCompleteA = completeMutation(5, 5, "session-1");
+
+    const result = collapseQueue([completeB, setB, completeA, setA, newerCompleteA]);
+
+    expect(result).toEqual([setA, setB, completeB, newerCompleteA]);
+  });
+
+  it("uses clientSeq for last-write-wins when a session has multiple completes", () => {
+    const older = completeMutation(2, 0, "session-1");
+    const newer = completeMutation(7, 100, "session-1");
+
+    expect(collapseQueue([newer, older])).toEqual([newer]);
   });
 });
