@@ -177,4 +177,18 @@ export class AuthService {
   async logout(sessionId: string): Promise<void> {
     await this.sessionRepo.delete(sessionId);
   }
+
+  /**
+   * Get the user's profile for sidebar display.
+   * Returns `null` when the user is not found.
+   */
+  async getProfile(
+    userId: string,
+  ): Promise<{ email: string; initials: string } | null> {
+    const user = await this.userRepo.findById(userId);
+    if (!user) return null;
+    const emailLocal = user.email.split("@")[0] ?? "";
+    const initials = emailLocal.charAt(0).toUpperCase();
+    return { email: user.email, initials };
+  }
 }

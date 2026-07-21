@@ -8,6 +8,12 @@ vi.mock("next/navigation", () => ({
   usePathname: vi.fn(),
 }));
 
+// Mock the server action import — client components that import "use server"
+// actions need the module to resolve in test environments.
+vi.mock("@/app/(app)/dashboard/actions", () => ({
+  logoutAction: vi.fn(),
+}));
+
 const mockedUsePathname = vi.mocked(usePathname);
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
@@ -57,11 +63,10 @@ describe("SidebarNav", () => {
     expect(iconCount).toBe(6);
   });
 
-  it("renders a user area with initials placeholder when no user prop is given", () => {
+  it("renders a user area with placeholder initials when no user prop is given", () => {
     const el = SidebarNav();
-    expect(textOf(el)).toContain("JD");
-    expect(textOf(el)).toContain("User");
-    expect(textOf(el)).toContain("Free");
+    expect(textOf(el)).toContain("?");
+    expect(textOf(el)).toContain("Guest");
   });
 
   it("renders the provided user identity when the user prop is supplied", () => {
@@ -70,8 +75,16 @@ describe("SidebarNav", () => {
     expect(text).toContain("AR");
     expect(text).toContain("Ada Rivera");
     expect(text).toContain("Pro");
-    // Fallback placeholders must NOT leak through when a user is provided.
-    expect(text).not.toContain("JD");
+    // Fallback must NOT leak through when a user is provided.
+    expect(text).not.toContain("?");
+    expect(text).not.toContain("Guest");
+  });
+
+  it("renders a logout button in the user area", () => {
+    const html = renderToString(SidebarNav());
+    expect(html).toContain("Log out");
+    // The logout icon SVG should be present.
+    expect(html).toContain('<svg viewBox="0 0 24 24"');
   });
 
   it("highlights a different nav item when pathname changes", () => {
