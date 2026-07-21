@@ -44,16 +44,16 @@ Chain strategy: stacked-to-main
 
 ## Slice 3: DELETE Sessions + Registration Integration (~220 LoC)
 
-- [ ] 3.1 [RED] Test: `deleteById` deletes owned completed session, returns 404 for nonexistent, 404 for other user's session, 409 for active
-- [ ] 3.1 [GREEN] Add `deleteById(tenantId, userId, id)` to `WorkoutSessionRepository` with active guard
+- [x] 3.1 [RED] Test: `deleteById` deletes owned completed session, returns 404 for nonexistent, 404 for other user's session, 409 for active
+- [x] 3.1 [GREEN] Add `deleteById(tenantId, userId, id)` to `WorkoutSessionRepository` with active guard
 - [ ] 3.2 [RED] Test: `deleteAllByUser` deletes all completed sessions, returns count, returns 0 when none, 409 when active exists, cascade removes exercises+sets
 - [ ] 3.2 [GREEN] Add `deleteAllByUser(tenantId, userId)` to `WorkoutSessionRepository` with active guard
-- [ ] 3.3 [RED] Test route: `DELETE /workout-sessions/:id` — 204 on success, 404/409 as above
-- [ ] 3.3 [GREEN] Add `DELETE /workout-sessions/:id` to workout-session routes
+- [x] 3.3 [RED] Test route: `DELETE /workout-sessions/:id` — 204 on success, 404/409 as above
+- [x] 3.3 [GREEN] Add `DELETE /workout-sessions/:id` to workout-session routes
 - [ ] 3.4 [RED] Test route: `DELETE /workout-sessions` — 200 + `{ deletedCount }`, 409 on active, 200 + `{ deletedCount: 0 }` when empty
 - [ ] 3.4 [GREEN] Add `DELETE /workout-sessions` to workout-session routes
-- [ ] 3.5 [RED] Test: `provisionTenantForUser` inserts default profile row inside transaction
-- [ ] 3.5 [GREEN] Add `userProfiles` insert to `provisionTenantForUser` inside existing transaction
+- [x] 3.5 [RED] Test: `provisionTenantForUser` inserts default profile row inside transaction
+- [x] 3.5 [GREEN] Add `userProfiles` insert to `provisionTenantForUser` inside existing transaction
 - [ ] 3.6 Modify `AuthService.getProfile` to return `name` from `userProfiles` with email-derived initials fallback
 
 ## Slice 4: Profile Page UI + Navigation (~280 LoC)

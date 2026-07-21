@@ -746,6 +746,92 @@ describe("WorkoutSessionRepository", () => {
     });
   });
 
+  describe("deleteById", () => {
+    /**
+     * Build a mock db exposing a `delete` chain (`delete(t).where(...).returning(...)`)
+     * alongside the shared queued-select harness for the scoped re-read.
+     *
+     * `deleteReturning` is the rows the `.returning()` resolves to.
+     * `reReadRows` is queued on `workoutSessions` for the disambiguation
+     * select that fires only when the delete matches 0 rows.
+     */
+    function buildDeleteDb(opts: {
+      deleteReturning: unknown[];
+      reReadRows?: unknown[][];
+    }) {
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, opts.reReadRows ?? [[]]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const returning = vi.fn().mockResolvedValue(opts.deleteReturning);
+      const where = vi.fn().mockReturnValue({ returning });
+      const del = vi.fn().mockReturnValue({ where });
+      return { db: { select, delete: del } as never, del, returning };
+    }
+
+    it("deletes the caller's own completed session and returns {kind:'deleted'} (cascades via FK onDelete)", async () => {
+      const { db, del } = buildDeleteDb({ deleteReturning: [{ id: SESSION_ID }] });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteById(TENANT_A, USER_A, SESSION_ID);
+
+      expect(result).toEqual({ kind: "deleted" });
+      expect(del).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns {kind:'not_found'} for a nonexistent session id — delete matches 0 rows and the scoped re-read finds nothing", async () => {
+      const { db, del } = buildDeleteDb({
+        deleteReturning: [],
+        reReadRows: [[]], // scoped re-read returns nothing
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteById(TENANT_A, USER_A, "no-such-session");
+
+      expect(result).toEqual({ kind: "not_found" });
+      expect(del).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns {kind:'not_found'} for another user's session — the scoped delete AND scoped re-read never surface the other owner's row (no IDOR)", async () => {
+      // USER_B asks for USER_A's session. The delete WHERE is scoped to
+      // (tenantId, USER_B, id) → 0 rows. The recovery re-read is scoped
+      // identically → 0 rows. USER_B learns nothing about USER_A's session.
+      const { db } = buildDeleteDb({
+        deleteReturning: [],
+        reReadRows: [[]],
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteById(TENANT_A, USER_B, SESSION_ID);
+
+      expect(result).toEqual({ kind: "not_found" });
+    });
+
+    it("returns {kind:'active_conflict'} for an in-progress session — the status='completed' guard skips it and the scoped re-read surfaces 'active' (R3)", async () => {
+      const { db } = buildDeleteDb({
+        deleteReturning: [], // status='completed' guard excludes the active row
+        reReadRows: [[{ status: "active" }]],
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteById(TENANT_A, USER_A, SESSION_ID);
+
+      expect(result).toEqual({ kind: "active_conflict" });
+    });
+
+    it("NEGATIVE CONTROL — a cross-tenant delete for another tenant's session returns {kind:'not_found'} (scoped re-read finds nothing for TENANT_B)", async () => {
+      const { db } = buildDeleteDb({
+        deleteReturning: [],
+        reReadRows: [[]],
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteById(TENANT_B, USER_A, SESSION_ID);
+
+      expect(result).toEqual({ kind: "not_found" });
+    });
+  });
+
   describe("listCompletedSessions", () => {
     const SESSION_A_ID = "dddddddd-0000-0000-0000-0000000000a1";
     const SESSION_B_ID = "dddddddd-0000-0000-0000-0000000000b2";
