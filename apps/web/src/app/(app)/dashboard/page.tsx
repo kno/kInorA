@@ -1,6 +1,6 @@
 import { getLocale, getTranslations } from "next-intl/server";
 import type { DashboardSummaryDTO } from "@kinora/contracts";
-import { getDashboardAction, logoutAction } from "./actions";
+import { getDashboardAction } from "./actions";
 import { DashboardCoachCard } from "./DashboardCoachCard";
 import { DashboardTodayBlock } from "./DashboardTodayBlock";
 
@@ -176,11 +176,6 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      <form action={logoutAction}>
-        <button type="submit" className="kin-btn kin-btn--danger">
-          {t("dashboard.logout")}
-        </button>
-      </form>
     </main>
   );
 }

@@ -810,5 +810,10 @@
       "generic": "Ya tenés una sesión activa. Terminala antes de empezar otra."
     },
     "retry": "Reintentar"
+  },
+  "sidebar": {
+    "logout": "Cerrar sesión",
+    "logoutLabel": "Cerrar sesión",
+    "userAreaAria": "Menú de usuario"
   }
 }
