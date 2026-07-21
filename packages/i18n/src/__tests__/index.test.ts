@@ -59,9 +59,11 @@ describe("@kinora/i18n package assembly", () => {
     // exercise blocks, 10 `plan.coach.*` — the side rail is presentational).
     // + 15 `profile.*` keys authored in 10a Slice 4 for the /profile form
     // (12 `profile.form.*` heading/labels/placeholders/feedback + 3
-    // `profile.experience.*` level labels; goal select reuses wizard.goal.*).
+    // `profile.experience.*` level labels; goal select reuses wizard.goal.*)
+    // + 5 `wizard.preferences.*` keys authored in 10a Slice 5 for the
+    // defaults step title/labels and preferences-save error feedback.
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(561);
+    expect(Object.keys(flat)).toHaveLength(566);
   });
 
   it("the mobileTracker namespace is present with EN+ES parity (9.3.3)", () => {

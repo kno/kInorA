@@ -77,11 +77,11 @@ Chain strategy: stacked-to-main
 
 ## Slice 5: Wizard Pre-fill + New Preferences Step (~190 LoC)
 
-- [ ] 5.1 Create wizard preferences step component (defaultLocation, defaultDuration, defaultEquipment selects/inputs)
-- [ ] 5.2 Add pre-fill hook: fetch `GET /user-preferences` on wizard mount, pre-fill step state, no-op on 204/404
-- [ ] 5.3 Wire new step into wizard step sequence (between existing equipment and limitations steps)
-- [ ] 5.4 [RED] Test: wizard pre-fills from preferences when row exists, shows null/empty defaults when missing
-- [ ] 5.4 [GREEN] Verify pre-fill integration
+- [x] 5.1 Create wizard preferences step component (defaultLocation, defaultDuration, defaultEquipment selects/inputs)
+- [x] 5.2 Add pre-fill hook: fetch `GET /user-preferences` on wizard mount, pre-fill step state, no-op on 204/404
+- [x] 5.3 Wire new step into wizard step sequence (between existing equipment and limitations steps)
+- [x] 5.4 [RED] Test: wizard pre-fills from preferences when row exists, shows null/empty defaults when missing
+- [x] 5.4 [GREEN] Verify pre-fill integration
 
 ## Slice 6: i18n Keys (~30 LoC)
 
