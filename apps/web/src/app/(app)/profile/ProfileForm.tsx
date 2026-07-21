@@ -93,6 +93,7 @@ export function ProfileForm({ initialProfile, initialError }: ProfileFormProps) 
           id="profile-name"
           type="text"
           value={name}
+          placeholder={t("profile.form.namePlaceholder")}
           onChange={(e) => {
             setName(e.target.value);
             setStatus("idle");
