@@ -694,6 +694,7 @@
     "description": "Explora y busca en la biblioteca de ejercicios para tus entrenamientos.",
     "history": {
       "title": "Historial reciente",
+      "exerciseHeading": "Historial de {exerciseTitle}",
       "date": "Fecha",
       "weight": "Peso",
       "reps": "Reps",

@@ -58,7 +58,7 @@ describe("@kinora/i18n package assembly", () => {
     // metrics/body-map, 11 `plan.readiness.*`, 22 `plan.today.*` side-rail
     // exercise blocks, 10 `plan.coach.*` — the side rail is presentational).
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(545);
+    expect(Object.keys(flat)).toHaveLength(546);
   });
 
   it("the mobileTracker namespace is present with EN+ES parity (9.3.3)", () => {

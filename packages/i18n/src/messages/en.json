@@ -694,6 +694,7 @@
     "description": "Browse and search the exercise library for your workouts.",
     "history": {
       "title": "Recent history",
+      "exerciseHeading": "History for {exerciseTitle}",
       "date": "Date",
       "weight": "Weight",
       "reps": "Reps",
