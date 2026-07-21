@@ -147,20 +147,32 @@ describe("PlanSelector", () => {
     expect(screen.getByText(/Ready/)).toBeDefined();
   });
 
-  it("formats the date via useFormatter().dateTime, not Date#toLocaleDateString (Gap 1)", () => {
-    // A raw `.toLocaleDateString()` call would produce a different shape than
-    // next-intl's `dateTime` formatter for the same Date under the "en" locale
-    // used by renderWithIntl — assert the ACTUAL formatter output is present,
-    // not a manually-reconstructed string.
+  it("formats the date as date-only via useFormatter().dateTime with date preset (#108)", () => {
+    // #108: format.dateTime() without a preset renders date+time (Intl default).
+    // The date-only preset { year: "numeric", month: "short", day: "numeric" }
+    // renders as "Jun 29, 2026" in en-US — no time component.
     const noName: PlanSummaryItem[] = [
       { id: "p1", status: "ready", createdAt: "2026-06-29T10:00:00.000Z" },
     ];
     renderWithIntl(<PlanSelector summaries={noName} selectedId="p1" />);
     const option = screen.getByRole("option") as HTMLOptionElement;
-    // next-intl's default `dateTime()` (no format name/options) renders
-    // Intl.DateTimeFormat("en").format(date) — for 2026-06-29 that's "6/29/2026".
-    expect(option.textContent).toContain("6/29/2026");
+    // Date-only format: "Jun 29, 2026" — must NOT include the time "10:00"
+    expect(option.textContent).toContain("Jun 29, 2026");
+    expect(option.textContent).not.toContain("10:00");
     expect(option.textContent).toContain("Ready");
+  });
+
+  it("does not render time in the unnamed-plan fallback label (#108 regression)", () => {
+    // #108 regression guard: ensure no time component leaks into the label
+    // even with UTC-normalized timestamps.
+    const noName: PlanSummaryItem[] = [
+      { id: "p1", status: "ready", createdAt: "2026-12-31T23:59:00.000Z" },
+    ];
+    renderWithIntl(<PlanSelector summaries={noName} selectedId="p1" />);
+    const option = screen.getByRole("option") as HTMLOptionElement;
+    // Must contain date-only format "Dec 31, 2026" and no time "23:59"
+    expect(option.textContent).toContain("Dec 31, 2026");
+    expect(option.textContent).not.toContain("23:59");
   });
 
   it("renders option values matching plan ids", () => {

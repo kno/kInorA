@@ -67,7 +67,11 @@ export function PlanSelector({ summaries, selectedId }: PlanSelectorProps) {
           // label. The server normally resolves it via defaultPlanName, but the
           // field is optional, so fall back to the date/status template for any
           // legacy/undefined summary served without a name (no crash).
-          const date = format.dateTime(new Date(plan.createdAt));
+          const date = format.dateTime(new Date(plan.createdAt), {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          });
           const statusLabel = t("plan.selector.option", { status: plan.status });
           const optionLabel = plan.name ? plan.name : `${date} (${statusLabel})`;
           return (
