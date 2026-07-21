@@ -768,6 +768,11 @@
   "profile": {
     "title": "Perfil",
     "description": "Gestiona los ajustes y las preferencias de tu cuenta.",
+    "loading": {
+      "title": "Cargando tu perfil…",
+      "description": "Estamos obteniendo los detalles más recientes de tu perfil.",
+      "progressAria": "Cargando perfil"
+    },
     "form": {
       "heading": "Tu perfil",
       "name": "Nombre",

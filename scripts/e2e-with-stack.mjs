@@ -44,6 +44,9 @@ const READY_POLL_MS = 1_000;
 // Forced-kill grace period before SIGKILLing a survivor Playwright child during
 // teardown (signal or startup-failure paths). Matches the spec's 5-second bound.
 const FORCE_KILL_TIMEOUT_MS = 5_000;
+// Overall Playwright runtime bound. Override with E2E_TIMEOUT_MS when a suite
+// needs more time, but never allow an invalid value to remove the safety bound.
+const DEFAULT_E2E_TIMEOUT_MS = 15 * 60 * 1_000;
 // Default V8 heap cap (MB) for the Playwright webServers, mirrored from
 // playwright.config.ts so the run-start log can print the effective value
 // without importing the TS config.
@@ -143,6 +146,15 @@ export function nodeMemoryCap(raw = process.env.E2E_NODE_MEMORY) {
   return Math.floor(parsed);
 }
 
+/** Resolve the bounded overall Playwright timeout in milliseconds. */
+export function e2eTimeoutMs(raw = process.env.E2E_TIMEOUT_MS) {
+  const parsed = raw === undefined ? DEFAULT_E2E_TIMEOUT_MS : Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0 || Math.floor(parsed) < 1) {
+    return DEFAULT_E2E_TIMEOUT_MS;
+  }
+  return Math.floor(parsed);
+}
+
 /**
  * Detect an available container runtime. Prefers a real `docker` binary, then
  * falls back to `podman`. Probes by running `<cmd> --version` so a shell alias
@@ -216,6 +228,8 @@ export function createLifecycle(deps) {
   let child = null;
   let childExit = null;
   let receivedSignal = null;
+  let terminationSignal = null;
+  let timedOut = false;
   let signalExitCode = null;
   let startupFailureCode = null;
   let normalExitCode = null;
@@ -237,15 +251,16 @@ export function createLifecycle(deps) {
   const selectPrimaryExitCode = () => {
     if (receivedSignal === "SIGINT") return 130;
     if (receivedSignal === "SIGTERM") return 143;
+    if (timedOut) return 124;
     if (startupFailureCode !== null) return startupFailureCode;
     return normalExitCode ?? 1;
   };
 
   const waitAndForceKillChild = async () => {
     if (!child) return;
-    if (receivedSignal) {
+    if (terminationSignal) {
       await guardedStage("signal-forwarding", () =>
-        deps.forwardSignal(child, receivedSignal),
+        deps.forwardSignal(child, terminationSignal),
       );
     }
     await guardedStage("child-exit-wait", () =>
@@ -318,9 +333,17 @@ export function createLifecycle(deps) {
     },
     recordSignal(signal) {
       receivedSignal = signal;
+      terminationSignal = signal;
       signalExitCode = signal === "SIGINT" ? 130 : 143;
       abortController.abort();
       signalReceived.resolve(signal);
+    },
+    recordTimeout() {
+      if (timedOut || receivedSignal) return;
+      timedOut = true;
+      terminationSignal = "SIGTERM";
+      abortController.abort();
+      signalReceived.resolve(terminationSignal);
     },
     selectPrimaryExitCode,
     teardownOnce,
@@ -584,6 +607,7 @@ async function main() {
   const env = stackEnv();
   let childExit = null;
   let playwrightChild = null;
+  let playwrightTimeout = null;
   const lifecycle = createLifecycle({
     waitChildExit: waitForChildExit,
     isChildExited: childExited,
@@ -656,11 +680,19 @@ async function main() {
     await tracked.started;
     requireStarting();
     lifecycle.markRunning();
+    const timeoutMs = e2eTimeoutMs();
+    console.log(`[e2e] Playwright timeout: ${timeoutMs}ms`);
+    playwrightTimeout = setTimeout(() => {
+      console.error(`[e2e] Playwright exceeded ${timeoutMs}ms; terminating process group.`);
+      lifecycle.recordTimeout();
+      void lifecycle.teardownOnce();
+    }, timeoutMs);
     return await lifecycle.teardownOnce();
   } catch (err) {
     console.error(`[e2e] ${err instanceof Error ? err.message : String(err)}`);
     return await lifecycle.failDuringStartup(err);
   } finally {
+    if (playwrightTimeout) clearTimeout(playwrightTimeout);
     await lifecycle.teardownOnce();
     process.removeListener("SIGINT", onSigint);
     process.removeListener("SIGTERM", onSigterm);
