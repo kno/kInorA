@@ -19,6 +19,7 @@ export {
   computeWeeklyPlanVsCompletion,
   utcWeekBounds,
   addUtcDays,
+  normalizeTitle,
 } from "@kinora/domain/progress";
 export type {
   MuscleGroupDistributionExercise,

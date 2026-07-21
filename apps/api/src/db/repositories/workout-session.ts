@@ -10,6 +10,7 @@ import {
   computeWeeklyPlanVsCompletion,
   computeWeeklyRollup,
   delta,
+  normalizeTitle,
   utcWeekBounds as domainUtcWeekBounds,
   type MuscleGroupDistributionExercise,
   type PersonalRecordSetInput,
@@ -952,10 +953,19 @@ export class WorkoutSessionRepository {
     }
 
     const sessionIds = sessionRows.map((row) => row.id);
-    const exerciseRows = (await this.db
+    // #140: Fetch all exercises for the matched sessions and filter by
+    // normalized title in JS (consistent with classifyExerciseMuscleGroup
+    // and computePersonalRecords). This makes exercise-detail history
+    // complete regardless of casing, spacing, or diacritics.
+    const allExerciseRows = (await this.db
       .select()
       .from(sessionExercises)
-      .where(and(inArray(sessionExercises.workoutSessionId, sessionIds), eq(sessionExercises.title, title)))) as SessionExerciseRow[];
+      .where(inArray(sessionExercises.workoutSessionId, sessionIds))) as SessionExerciseRow[];
+
+    const normalizedTarget = normalizeTitle(title);
+    const exerciseRows = allExerciseRows.filter(
+      (exercise) => normalizeTitle(exercise.title) === normalizedTarget
+    );
 
     if (exerciseRows.length === 0) {
       return { exerciseTitle: title, recentSets: [] };
