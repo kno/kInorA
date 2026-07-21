@@ -771,6 +771,7 @@
     "form": {
       "heading": "Your profile",
       "name": "Name",
+      "namePlaceholder": "Your name",
       "goal": "Goal",
       "experience": "Experience level",
       "goalPlaceholder": "Select a goal",

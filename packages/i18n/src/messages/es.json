@@ -771,6 +771,7 @@
     "form": {
       "heading": "Tu perfil",
       "name": "Nombre",
+      "namePlaceholder": "Tu nombre",
       "goal": "Objetivo",
       "experience": "Nivel de experiencia",
       "goalPlaceholder": "Selecciona un objetivo",

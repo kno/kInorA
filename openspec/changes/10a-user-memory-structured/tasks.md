@@ -85,9 +85,9 @@ Chain strategy: stacked-to-main
 
 ## Slice 6: i18n Keys (~30 LoC)
 
-- [ ] 6.1 Add profile form i18n keys to `packages/i18n/src/messages/en.json`
-- [ ] 6.2 Add profile form i18n keys to `packages/i18n/src/messages/es.json` (neutral Spanish)
-- [ ] 6.3 Verify `catalog-parity` test passes
+- [x] 6.1 Add profile form i18n keys to `packages/i18n/src/messages/en.json`
+- [x] 6.2 Add profile form i18n keys to `packages/i18n/src/messages/es.json` (neutral Spanish)
+- [x] 6.3 Verify `catalog-parity` test passes
 
 ## Implementation Order
 

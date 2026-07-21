@@ -428,6 +428,7 @@ describe("StepperShell", () => {
     );
 
     expect(screen.getByText(/default location/i)).toBeTruthy();
+    expect(screen.getByText("What defaults should we remember?")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Continue/i })).toBeTruthy();
   });
 

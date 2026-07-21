@@ -2,6 +2,39 @@ import { describe, expect, it } from "vitest";
 import { catalogs, flattenMessages, mergeWithBase, validateCatalogParity } from "../index.js";
 import type { MessageKey } from "../index.js";
 
+const PROFILE_AND_PREFERENCES_KEYS = [
+  "profile.title",
+  "profile.description",
+  "profile.form.heading",
+  "profile.form.name",
+  "profile.form.namePlaceholder",
+  "profile.form.goal",
+  "profile.form.experience",
+  "profile.form.goalPlaceholder",
+  "profile.form.experiencePlaceholder",
+  "profile.form.save",
+  "profile.form.saving",
+  "profile.form.saved",
+  "profile.form.error",
+  "profile.form.loadError",
+  "profile.form.nameRequired",
+  "profile.experience.beginner",
+  "profile.experience.intermediate",
+  "profile.experience.advanced",
+  "wizard.step.preferencesTitle",
+  "wizard.preferences.locationLabel",
+  "wizard.preferences.durationLabel",
+  "wizard.preferences.equipmentLabel",
+  "wizard.preferences.saveError",
+] as const satisfies readonly MessageKey[];
+
+function extractPlaceholders(message: string): string[] {
+  return [...message.matchAll(/\{\s*([\w]+)[^}]*\}/g)]
+    .map(([, name]) => name)
+    .filter((name): name is string => Boolean(name))
+    .sort();
+}
+
 // Type-level: `MessageKey` must derive from the REAL shipped catalog shape
 // (329 leaf keys — 325 migrated + 3 `plan.error.*` keys promoted in slice 5
 // from PlanStatusView's inline WS-lost "error"-state fallback strings, + 1
@@ -63,7 +96,26 @@ describe("@kinora/i18n package assembly", () => {
     // + 5 `wizard.preferences.*` keys authored in 10a Slice 5 for the
     // defaults step title/labels and preferences-save error feedback.
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(566);
+    expect(Object.keys(flat)).toHaveLength(567);
+  });
+
+  it("ships the accepted profile + wizard preference keys in both catalogs", () => {
+    const en = flattenMessages(catalogs.en);
+    const es = flattenMessages(catalogs.es);
+
+    for (const key of PROFILE_AND_PREFERENCES_KEYS) {
+      expect(en[key]).toBeTypeOf("string");
+      expect(es[key]).toBeTypeOf("string");
+    }
+  });
+
+  it("keeps placeholder parity for the accepted profile + wizard preference keys", () => {
+    const en = flattenMessages(catalogs.en);
+    const es = flattenMessages(catalogs.es);
+
+    for (const key of PROFILE_AND_PREFERENCES_KEYS) {
+      expect(extractPlaceholders(en[key]!)).toEqual(extractPlaceholders(es[key]!));
+    }
   });
 
   it("the mobileTracker namespace is present with EN+ES parity (9.3.3)", () => {

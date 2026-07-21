@@ -39,6 +39,7 @@ describe("ProfileForm", () => {
 
     const nameInput = screen.getByLabelText("Name") as HTMLInputElement;
     expect(nameInput.value).toBe("Ada Rivera");
+    expect(nameInput.placeholder).toBe("Your name");
 
     const goalSelect = screen.getByLabelText("Goal") as HTMLSelectElement;
     expect(goalSelect.value).toBe("strength");
@@ -144,5 +145,13 @@ describe("ProfileForm", () => {
   it("renders a save button labelled with the catalog action label", () => {
     renderWithIntl(<ProfileForm initialProfile={PROFILE_FULL} />);
     expect(screen.getByRole("button", { name: "Save" })).toBeDefined();
+  });
+
+  it("renders the profile page copy from the catalog for the name field", () => {
+    renderWithIntl(<ProfileForm initialProfile={PROFILE_FULL} />);
+
+    expect(screen.getByPlaceholderText("Your name")).toBeDefined();
+    expect(screen.getByRole("option", { name: "Select a goal" })).toBeDefined();
+    expect(screen.getByRole("option", { name: "Select a level" })).toBeDefined();
   });
 });
