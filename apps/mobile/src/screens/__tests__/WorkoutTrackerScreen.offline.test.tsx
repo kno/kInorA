@@ -99,20 +99,29 @@ function makeSession(overrides: Partial<WorkoutSessionRecord> = {}): WorkoutSess
 
 function fakeConnectivityMonitor(initialOnline: boolean): ConnectivityMonitor & {
   setOnline: (online: boolean) => void;
+  subscribeCalls: number;
+  unsubscribeCalls: number;
 } {
   let online = initialOnline;
   const listeners = new Set<(online: boolean) => void>();
-  return {
+  const monitor = {
+    subscribeCalls: 0,
+    unsubscribeCalls: 0,
     isOnline: () => online,
-    subscribe: (cb) => {
+    subscribe: (cb: (online: boolean) => void) => {
+      monitor.subscribeCalls += 1;
       listeners.add(cb);
-      return () => listeners.delete(cb);
+      return () => {
+        monitor.unsubscribeCalls += 1;
+        listeners.delete(cb);
+      };
     },
     setOnline(next: boolean) {
       online = next;
       for (const cb of listeners) cb(next);
     },
   };
+  return monitor;
 }
 
 function renderScreen(
@@ -207,6 +216,47 @@ describe("WorkoutTrackerScreen offline wiring (Phase 5, 09b-v1)", () => {
     expect(renderedText(renderer)).toContain("Active session");
   });
 
+  it("refuses a cached snapshot when the account changes during hydration", async () => {
+    const baseStore = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    const cachedSession = makeSession({
+      exercises: [{ ...makeSession().exercises[0]!, title: "Cached account" }],
+    });
+    const networkSession = makeSession({
+      exercises: [{ ...makeSession().exercises[0]!, title: "Current account" }],
+    });
+    const { writeSnapshot, writeActiveSessionPointer } = await import("../../offline/snapshot");
+    await writeSnapshot(baseStore, "id-1", "s1", cachedSession);
+    await writeActiveSessionPointer(baseStore, "id-1", "s1");
+    let releaseSnapshot!: () => void;
+    const snapshotReady = new Promise<void>((resolve) => {
+      releaseSnapshot = resolve;
+    });
+    const get = async <T,>(storeName: "mutations" | "snapshots" | "meta", key: string): Promise<T | undefined> => {
+      if (storeName === "snapshots") await snapshotReady;
+      return baseStore.get<T>(storeName, key);
+    };
+    const store = { ...baseStore, get };
+    let identityCalls = 0;
+    getWorkoutSession.mockResolvedValue({ kind: "ok", session: networkSession });
+
+    const renderer = renderScreen(
+      { sessionId: "s1" },
+      {
+        getIdentityKey: async () => (identityCalls++ === 0 ? "id-1" : "id-2"),
+        openStore: async () => store,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await Promise.resolve();
+    releaseSnapshot();
+    await flush();
+
+    expect(getWorkoutSession).toHaveBeenCalledWith("s1");
+    expect(renderedText(renderer)).toContain("Current account");
+    expect(renderedText(renderer)).not.toContain("Cached account");
+  });
+
   it("flushes the queue sequentially on reconnect, applying collapseQueue LWW ordering, and clears synced entries", async () => {
     const store = createInMemoryStore();
     const monitor = fakeConnectivityMonitor(false);
@@ -262,6 +312,434 @@ describe("WorkoutTrackerScreen offline wiring (Phase 5, 09b-v1)", () => {
     expect(recordWorkoutSet).toHaveBeenCalledTimes(1);
     expect(recordWorkoutSet).toHaveBeenCalledWith("s1", "set1", { completed: true, actualReps: 8, weightKg: 45 });
     expect(await getQueuedMutations(store, "id-1")).toHaveLength(0);
+  });
+
+  it("does not flush the mounted queue after the authenticated identity switches", async () => {
+    const store = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    const session = makeSession();
+    const { enqueueMutation, getQueuedMutations } = await import("../../offline/queue");
+    const { writeSnapshot, writeActiveSessionPointer } = await import("../../offline/snapshot");
+
+    await writeSnapshot(store, "id-1", "s1", session);
+    await writeActiveSessionPointer(store, "id-1", "s1");
+    await enqueueMutation(store, "id-1", {
+      kind: "set",
+      sessionId: "s1",
+      setId: "set1",
+      input: { completed: true },
+      queuedAt: 1000,
+    });
+
+    let identityCalls = 0;
+    recordWorkoutSet.mockResolvedValue({ kind: "ok", session });
+    renderScreen(
+      { sessionId: "s1" },
+      {
+        getIdentityKey: async () => {
+          identityCalls += 1;
+          return identityCalls <= 2 ? "id-1" : "id-2";
+        },
+        openStore: async () => store,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await flush();
+
+    await act(async () => {
+      monitor.setOnline(true);
+      await flush();
+    });
+
+    expect(recordWorkoutSet).not.toHaveBeenCalled();
+    expect(await getQueuedMutations(store, "id-1")).toHaveLength(1);
+  });
+
+  it("keeps the queue intact when mobile identity revalidation is unreachable", async () => {
+    const store = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    const session = makeSession();
+    const { enqueueMutation, getQueuedMutations } = await import("../../offline/queue");
+    const { writeSnapshot, writeActiveSessionPointer } = await import("../../offline/snapshot");
+
+    await writeSnapshot(store, "id-1", "s1", session);
+    await writeActiveSessionPointer(store, "id-1", "s1");
+    await enqueueMutation(store, "id-1", {
+      kind: "set",
+      sessionId: "s1",
+      setId: "set1",
+      input: { completed: true },
+      queuedAt: 1000,
+    });
+
+    let identityCalls = 0;
+    recordWorkoutSet.mockResolvedValue({ kind: "ok", session });
+    renderScreen(
+      { sessionId: "s1" },
+      {
+        getIdentityKey: async () => {
+          identityCalls += 1;
+          if (identityCalls === 1) return "id-1";
+          throw new Error("identity service unreachable");
+        },
+        openStore: async () => store,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await flush();
+
+    await act(async () => {
+      monitor.setOnline(true);
+      await flush();
+    });
+
+    expect(recordWorkoutSet).not.toHaveBeenCalled();
+    expect(await getQueuedMutations(store, "id-1")).toHaveLength(1);
+  });
+
+  it("does not enqueue a handler mutation after the authenticated identity switches", async () => {
+    const store = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    const session = makeSession();
+    const { getQueuedMutations } = await import("../../offline/queue");
+    getWorkoutSession.mockResolvedValue({ kind: "ok", session });
+
+    let identityCalls = 0;
+    const renderer = renderScreen(
+      { sessionId: "s1" },
+      {
+        getIdentityKey: async () => {
+          identityCalls += 1;
+          return identityCalls === 1 ? "id-1" : "id-2";
+        },
+        openStore: async () => store,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await flush();
+
+    const completeButton = renderer.root.find(
+      (n) =>
+        typeof n.props.accessibilityLabel === "string" &&
+        n.props.accessibilityLabel.startsWith("Complete set"),
+    );
+
+    await act(async () => {
+      await completeButton.props.onPress();
+    });
+    await flush();
+
+    expect(recordWorkoutSet).not.toHaveBeenCalled();
+    expect(await getQueuedMutations(store, "id-1")).toHaveLength(0);
+  });
+
+  it("preserves offline enqueue when handler identity revalidation is unavailable", async () => {
+    const store = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    const session = makeSession();
+    const { getQueuedMutations } = await import("../../offline/queue");
+    getWorkoutSession.mockResolvedValue({ kind: "ok", session });
+
+    let identityCalls = 0;
+    const renderer = renderScreen(
+      { sessionId: "s1" },
+      {
+        getIdentityKey: async () => {
+          identityCalls += 1;
+          if (identityCalls === 1) return "id-1";
+          return undefined;
+        },
+        openStore: async () => store,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await flush();
+
+    const completeButton = renderer.root.find(
+      (n) =>
+        typeof n.props.accessibilityLabel === "string" &&
+        n.props.accessibilityLabel.startsWith("Complete set"),
+    );
+
+    await act(async () => {
+      await completeButton.props.onPress();
+    });
+    await flush();
+
+    expect(recordWorkoutSet).not.toHaveBeenCalled();
+    expect(await getQueuedMutations(store, "id-1")).toHaveLength(1);
+  });
+
+  it("does not enqueue a complete mutation after the authenticated identity switches", async () => {
+    const store = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    const session = makeSession();
+    const { getQueuedMutations } = await import("../../offline/queue");
+    const { writeSnapshot } = await import("../../offline/snapshot");
+    await writeSnapshot(store, "id-1", "s1", session);
+    getWorkoutSession.mockResolvedValue({ kind: "ok", session });
+
+    let identityCalls = 0;
+    const renderer = renderScreen(
+      { sessionId: "s1" },
+      {
+        getIdentityKey: async () => {
+          identityCalls += 1;
+          return identityCalls <= 2 ? "id-1" : "id-2";
+        },
+        openStore: async () => store,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await flush();
+
+    const finishButton = renderer.root.find(
+      (n) =>
+        typeof n.props.accessibilityLabel === "string" &&
+        n.props.accessibilityLabel.startsWith("Finish workout"),
+    );
+    await act(async () => {
+      await finishButton.props.onPress();
+    });
+
+    expect(completeWorkoutSession).not.toHaveBeenCalled();
+    expect(await getQueuedMutations(store, "id-1")).toHaveLength(0);
+  });
+
+  it("preserves complete enqueue when identity revalidation is unavailable", async () => {
+    const store = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    const session = makeSession();
+    const { getQueuedMutations } = await import("../../offline/queue");
+    const { writeSnapshot } = await import("../../offline/snapshot");
+    await writeSnapshot(store, "id-1", "s1", session);
+    getWorkoutSession.mockResolvedValue({ kind: "ok", session });
+
+    let identityCalls = 0;
+    const renderer = renderScreen(
+      { sessionId: "s1" },
+      {
+        getIdentityKey: async () => {
+          identityCalls += 1;
+          if (identityCalls <= 2) return "id-1";
+          throw new Error("identity service unreachable");
+        },
+        openStore: async () => store,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await flush();
+
+    const finishButton = renderer.root.find(
+      (n) =>
+        typeof n.props.accessibilityLabel === "string" &&
+        n.props.accessibilityLabel.startsWith("Finish workout"),
+    );
+    await act(async () => {
+      await finishButton.props.onPress();
+    });
+
+    expect(completeWorkoutSession).not.toHaveBeenCalled();
+    expect(await getQueuedMutations(store, "id-1")).toHaveLength(1);
+  });
+
+  it("does not subscribe a connectivity monitor that resolves after unmount", async () => {
+    const store = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    let resolveMonitor!: (value: ConnectivityMonitor) => void;
+    const monitorPromise = new Promise<ConnectivityMonitor>((resolve) => {
+      resolveMonitor = resolve;
+    });
+    getWorkoutSession.mockResolvedValue({ kind: "ok", session: makeSession() });
+
+    const renderer = renderScreen(
+      { sessionId: "s1" },
+      {
+        getIdentityKey: async () => "id-1",
+        openStore: async () => store,
+        createConnectivityMonitor: () => monitorPromise,
+      },
+    );
+    await flush();
+    act(() => {
+      renderer.unmount();
+    });
+    await act(async () => {
+      resolveMonitor(monitor);
+      await flush();
+    });
+
+    expect(monitor.subscribeCalls).toBe(1);
+    expect(monitor.unsubscribeCalls).toBe(1);
+  });
+
+  it("removes every raw mutation represented by an acknowledged collapsed entry", async () => {
+    const store = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    const session = makeSession();
+    const { enqueueMutation, getQueuedMutations } = await import("../../offline/queue");
+    const { writeSnapshot, writeActiveSessionPointer } = await import("../../offline/snapshot");
+
+    await writeSnapshot(store, "id-1", "s1", session);
+    await writeActiveSessionPointer(store, "id-1", "s1");
+    await enqueueMutation(store, "id-1", {
+      kind: "set",
+      sessionId: "s1",
+      setId: "set1",
+      input: { completed: true, actualReps: 7 },
+      queuedAt: 1000,
+    });
+    await enqueueMutation(store, "id-1", {
+      kind: "set",
+      sessionId: "s1",
+      setId: "set1",
+      input: { completed: true, actualReps: 8 },
+      queuedAt: 2000,
+    });
+
+    recordWorkoutSet.mockResolvedValue({ kind: "ok", session });
+    renderScreen(
+      { sessionId: "s1" },
+      {
+        getIdentityKey: async () => "id-1",
+        openStore: async () => store,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await flush();
+    await act(async () => {
+      monitor.setOnline(true);
+      await flush();
+    });
+
+    expect(recordWorkoutSet).toHaveBeenCalledTimes(1);
+    expect(await getQueuedMutations(store, "id-1")).toEqual([]);
+  });
+
+  it("persists acknowledged snapshots for every session, not only the last ack", async () => {
+    const store = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    const sessionOne = makeSession({ id: "s1" });
+    const sessionTwo = makeSession({ id: "s2" });
+    const { enqueueMutation, getQueuedMutations } = await import("../../offline/queue");
+    const { writeSnapshot, readSnapshot, writeActiveSessionPointer } = await import("../../offline/snapshot");
+    await writeSnapshot(store, "id-1", "s1", sessionOne);
+    await writeSnapshot(store, "id-1", "s2", sessionTwo);
+    await writeActiveSessionPointer(store, "id-1", "s1");
+    await enqueueMutation(store, "id-1", {
+      kind: "set",
+      sessionId: "s1",
+      setId: "set1",
+      input: { completed: true },
+      queuedAt: 1000,
+    });
+    await enqueueMutation(store, "id-1", {
+      kind: "complete",
+      sessionId: "s2",
+      queuedAt: 2000,
+    });
+    const ackOne = makeSession({ id: "s1", status: "active" });
+    const ackTwo = makeSession({ id: "s2", status: "active" });
+    recordWorkoutSet.mockResolvedValue({ kind: "ok", session: ackOne });
+    completeWorkoutSession.mockResolvedValue({ kind: "ok", session: ackTwo });
+
+    renderScreen(
+      { sessionId: "s1" },
+      {
+        getIdentityKey: async () => "id-1",
+        openStore: async () => store,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await flush();
+    await act(async () => {
+      monitor.setOnline(true);
+      await flush();
+    });
+
+    expect(await getQueuedMutations(store, "id-1")).toEqual([]);
+    expect((await readSnapshot(store, "id-1", "s1"))?.session).toEqual(ackOne);
+    expect((await readSnapshot(store, "id-1", "s2"))?.session).toEqual(ackTwo);
+  });
+
+  it("keeps a successfully enqueued record queued when snapshot persistence fails", async () => {
+    const realStore = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    const session = makeSession();
+    const { getQueuedMutations } = await import("../../offline/queue");
+    getWorkoutSession.mockResolvedValue({ kind: "ok", session });
+    const flakyStore = {
+      ...realStore,
+      put: vi.fn(async (storeName, key, value) => {
+        if (storeName === "snapshots") throw new Error("snapshot unavailable");
+        return realStore.put(storeName, key, value);
+      }),
+    };
+
+    const renderer = renderScreen(
+      { sessionId: "s1" },
+      {
+        getIdentityKey: async () => "id-1",
+        openStore: async () => flakyStore,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await flush();
+    const completeButton = renderer.root.find(
+      (n) =>
+        typeof n.props.accessibilityLabel === "string" &&
+        n.props.accessibilityLabel.startsWith("Complete set"),
+    );
+
+    await act(async () => {
+      await completeButton.props.onPress();
+    });
+    await flush();
+
+    expect(recordWorkoutSet).not.toHaveBeenCalled();
+    expect(await getQueuedMutations(realStore, "id-1")).toHaveLength(1);
+    expect(renderedText(renderer)).toContain("reload the page");
+  });
+
+  it("keeps a successfully enqueued complete queued when snapshot persistence fails", async () => {
+    const realStore = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    const session = makeSession();
+    const { getQueuedMutations } = await import("../../offline/queue");
+    const { writeSnapshot } = await import("../../offline/snapshot");
+    await writeSnapshot(realStore, "id-1", "s1", session);
+    getWorkoutSession.mockResolvedValue({ kind: "ok", session });
+    const flakyStore = {
+      ...realStore,
+      put: vi.fn(async (storeName, key, value) => {
+        if (storeName === "snapshots") throw new Error("snapshot unavailable");
+        return realStore.put(storeName, key, value);
+      }),
+    };
+
+    const renderer = renderScreen(
+      { sessionId: "s1" },
+      {
+        getIdentityKey: async () => "id-1",
+        openStore: async () => flakyStore,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await flush();
+    const finishButton = renderer.root.find(
+      (n) =>
+        typeof n.props.accessibilityLabel === "string" &&
+        n.props.accessibilityLabel.startsWith("Finish workout"),
+    );
+
+    await act(async () => {
+      await finishButton.props.onPress();
+    });
+    await flush();
+
+    expect(completeWorkoutSession).not.toHaveBeenCalled();
+    expect(await getQueuedMutations(realStore, "id-1")).toHaveLength(1);
+    expect(renderedText(renderer)).toContain("reload the page");
   });
 
   it("logout (unauthenticated session detected) clears the identity-scoped mobile queue + snapshot", async () => {

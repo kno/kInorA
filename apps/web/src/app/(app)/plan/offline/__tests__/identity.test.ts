@@ -89,4 +89,34 @@ describe("ensureIdentityScope", () => {
 
     expect(await readActiveSessionPointer(store, "identity-a")).toBeUndefined();
   });
+
+  it("keeps two authenticated browser tabs from purging each other's queues", async () => {
+    await ensureIdentityScope(store, "identity-a", "tab-a");
+    await enqueueMutation(store, "identity-a", {
+      kind: "set",
+      sessionId: "session-1",
+      setId: "set-1",
+      input: { completed: true },
+      queuedAt: 1,
+    });
+
+    await ensureIdentityScope(store, "identity-b", "tab-b");
+
+    expect(await getQueuedMutations(store, "identity-a")).toHaveLength(1);
+  });
+
+  it("still purges an account switch within the same browser tab", async () => {
+    await ensureIdentityScope(store, "identity-a", "tab-a");
+    await enqueueMutation(store, "identity-a", {
+      kind: "set",
+      sessionId: "session-1",
+      setId: "set-1",
+      input: { completed: true },
+      queuedAt: 1,
+    });
+
+    await ensureIdentityScope(store, "identity-b", "tab-a");
+
+    expect(await getQueuedMutations(store, "identity-a")).toEqual([]);
+  });
 });

@@ -53,6 +53,8 @@ export interface FlushSummary {
   haltCode: FlushErrorCode | undefined;
   /** The session snapshot from the LAST successful ack, if any. */
   lastAckedSession: WorkoutSessionRecord | undefined;
+  /** Latest successful ack per session, ordered by first acknowledgement. */
+  ackedSessions: WorkoutSessionRecord[];
 }
 
 export async function runSequentialFlush(
@@ -64,6 +66,7 @@ export async function runSequentialFlush(
   const remaining: PendingMutation[] = [];
   let haltCode: FlushErrorCode | undefined;
   let lastAckedSession: WorkoutSessionRecord | undefined;
+  const ackedBySession = new Map<string, WorkoutSessionRecord>();
 
   for (let i = 0; i < mutations.length; i++) {
     const mutation = mutations[i]!;
@@ -73,6 +76,7 @@ export async function runSequentialFlush(
     if (outcome.kind === "ok") {
       synced.push(mutation);
       lastAckedSession = outcome.session;
+      ackedBySession.set(outcome.session.id, outcome.session);
       continue;
     }
 
@@ -91,5 +95,12 @@ export async function runSequentialFlush(
     break;
   }
 
-  return { synced, dropped, remaining, haltCode, lastAckedSession };
+  return {
+    synced,
+    dropped,
+    remaining,
+    haltCode,
+    lastAckedSession,
+    ackedSessions: [...ackedBySession.values()],
+  };
 }
