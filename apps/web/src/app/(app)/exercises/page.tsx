@@ -40,6 +40,7 @@ export default async function ExercisesPage({ searchParams }: ExercisesPageProps
 
       {recentSets.length > 0 && (
         <div className="kin-card" data-testid="exercise-history">
+          <h3 className="kin-title">{t("exercises.history.exerciseHeading", { exerciseTitle: detailResult!.detail.exerciseTitle })}</h3>
           <h2 className="kin-title">{t("exercises.history.title")}</h2>
           <table>
             <thead>
