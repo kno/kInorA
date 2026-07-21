@@ -57,8 +57,11 @@ describe("@kinora/i18n package assembly", () => {
     // full web-plan.html mockup (25 `plan.hero.*` topbar/hero cockpit copy +
     // metrics/body-map, 11 `plan.readiness.*`, 22 `plan.today.*` side-rail
     // exercise blocks, 10 `plan.coach.*` — the side rail is presentational).
+    // + 15 `profile.*` keys authored in 10a Slice 4 for the /profile form
+    // (12 `profile.form.*` heading/labels/placeholders/feedback + 3
+    // `profile.experience.*` level labels; goal select reuses wizard.goal.*).
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(546);
+    expect(Object.keys(flat)).toHaveLength(561);
   });
 
   it("the mobileTracker namespace is present with EN+ES parity (9.3.3)", () => {

@@ -760,7 +760,26 @@
   },
   "profile": {
     "title": "Perfil",
-    "description": "Gestiona los ajustes y las preferencias de tu cuenta."
+    "description": "Gestiona los ajustes y las preferencias de tu cuenta.",
+    "form": {
+      "heading": "Tu perfil",
+      "name": "Nombre",
+      "goal": "Objetivo",
+      "experience": "Nivel de experiencia",
+      "goalPlaceholder": "Selecciona un objetivo",
+      "experiencePlaceholder": "Selecciona un nivel",
+      "save": "Guardar",
+      "saving": "Guardando…",
+      "saved": "Perfil guardado.",
+      "error": "No se pudo guardar tu perfil. Inténtalo de nuevo.",
+      "loadError": "No se pudo cargar tu perfil. Recarga la página.",
+      "nameRequired": "El nombre es obligatorio."
+    },
+    "experience": {
+      "beginner": "Principiante",
+      "intermediate": "Intermedio",
+      "advanced": "Avanzado"
+    }
   },
   "offline": {
     "title": "Estás sin conexión",

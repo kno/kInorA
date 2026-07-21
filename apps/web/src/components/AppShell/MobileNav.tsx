@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, StatsIcon } from "@/components/icons";
+import { CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, StatsIcon, UserIcon } from "@/components/icons";
 import { isActivePath } from "./nav-utils";
 import { logoutAction } from "@/app/(app)/dashboard/actions";
 import styles from "./MobileNav.module.css";
@@ -10,7 +10,7 @@ import styles from "./MobileNav.module.css";
 interface TabItem {
   label: string;
   href: string;
-  icon: "home" | "plan" | "stats" | "history" | "exercises";
+  icon: "home" | "plan" | "stats" | "history" | "exercises" | "profile";
 }
 
 const TABS: TabItem[] = [
@@ -19,6 +19,7 @@ const TABS: TabItem[] = [
   { label: "Statistics", href: "/stats", icon: "stats" },
   { label: "History", href: "/history", icon: "history" },
   { label: "Exercises", href: "/exercises", icon: "exercises" },
+  { label: "Profile", href: "/profile", icon: "profile" },
 ];
 
 /**
@@ -36,8 +37,8 @@ export function MobileNav() {
       <span className={styles.spacer} aria-hidden="true" />
 
       <nav className={styles.bar} aria-label="Mobile navigation">
-        {/* Left tabs: Dashboard, Plan */}
-        {TABS.slice(0, 2).map((tab) => (
+        {/* Left tabs: Dashboard, Plan, Statistics */}
+        {TABS.slice(0, 3).map((tab) => (
           <MobileTab
             key={tab.href}
             tab={tab}
@@ -56,8 +57,8 @@ export function MobileNav() {
           </Link>
         </div>
 
-        {/* Right tabs: Statistics, History, Exercises */}
-        {TABS.slice(2, 5).map((tab) => (
+        {/* Right tabs: History, Exercises, Profile */}
+        {TABS.slice(3, 6).map((tab) => (
           <MobileTab
             key={tab.href}
             tab={tab}
@@ -115,5 +116,7 @@ function TabIcon({ name }: { name: TabItem["icon"] }) {
       return <HistoryIcon className={styles.icon} size={22} />;
     case "exercises":
       return <ExercisesIcon className={styles.icon} size={22} />;
+    case "profile":
+      return <UserIcon className={styles.icon} size={22} />;
   }
 }

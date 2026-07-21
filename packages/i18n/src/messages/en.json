@@ -760,7 +760,26 @@
   },
   "profile": {
     "title": "Profile",
-    "description": "Manage your account settings and preferences."
+    "description": "Manage your account settings and preferences.",
+    "form": {
+      "heading": "Your profile",
+      "name": "Name",
+      "goal": "Goal",
+      "experience": "Experience level",
+      "goalPlaceholder": "Select a goal",
+      "experiencePlaceholder": "Select a level",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Profile saved.",
+      "error": "Could not save your profile. Please try again.",
+      "loadError": "Could not load your profile. Please reload the page.",
+      "nameRequired": "Name is required."
+    },
+    "experience": {
+      "beginner": "Beginner",
+      "intermediate": "Intermediate",
+      "advanced": "Advanced"
+    }
   },
   "offline": {
     "title": "You're Offline",

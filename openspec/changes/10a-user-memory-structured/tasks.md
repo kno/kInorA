@@ -58,13 +58,22 @@ Chain strategy: stacked-to-main
 
 ## Slice 4: Profile Page UI + Navigation (~280 LoC)
 
-- [ ] 4.1 Create `apps/web/src/app/(app)/profile/ProfileForm.tsx` — client component fetching GET /user-profile and GET /user-preferences
-- [ ] 4.2 Render editable form: name (text), goal (select), experienceLevel (select), preferences section
-- [ ] 4.3 Save button: calls PUT /user-profile + PUT /user-preferences, success toast on save
-- [ ] 4.4 Loading skeleton during fetch, error state if API fails
-- [ ] 4.5 Convert `profile/page.tsx` from Server Component to Client Component rendering ProfileForm
-- [ ] 4.6 Make sidebar user area clickable: wrap avatar+name in a `<Link href="/profile">` so clicking navigates to profile page
-- [ ] 4.7 Add profile link to mobile nav (e.g. user menu or settings icon linking to /profile)
+> Scope resolved by the orchestrator: this slice delivers the **profile-only**
+> form (name / goal / experienceLevel) + navigation. The `user-preferences`
+> read/write and a `preferences section` on this page were moved to Slice 5
+> (wizard preferences step + pre-fill), so 4.1–4.3 cover `user-profile` only.
+> The page stays a Server Component that fetches server-side (the established
+> `admin/ai-config` pattern) rather than a client-component fetch-on-mount,
+> so 4.4 ships an error state (no client loading skeleton) and 4.5 keeps the
+> server-component shape while delegating interaction to the client form.
+
+- [x] 4.1 Create `apps/web/src/app/(app)/profile/ProfileForm.tsx` — client component; `page.tsx` fetches GET /user-profile server-side via `profile-form-client.ts` and seeds the form (GET /user-preferences deferred to Slice 5 wizard)
+- [x] 4.2 Render editable form: name (text), goal (select), experienceLevel (select) — preferences fields moved to the wizard preferences step (Slice 5)
+- [x] 4.3 Save button calls PUT /user-profile via `saveProfileAction` server action; success/error feedback shown (PUT /user-preferences moves to Slice 5)
+- [x] 4.4 Error state if the server-side GET fails (`initialError` load-error alert); no client loading skeleton (server-side fetch per AiConfigForm pattern)
+- [x] 4.5 `profile/page.tsx` stays a Server Component that reads the session cookie, fetches the profile, and renders the client `ProfileForm` (mirrors `admin/ai-config/page.tsx` + `AiConfigForm`)
+- [x] 4.6 Make sidebar user area clickable: avatar+name wrapped in `<Link href="/profile">`; logout form stays a sibling (`SidebarNav.module.css` adds `.userLink`)
+- [x] 4.7 Add profile tab to mobile bottom nav (user icon, links to /profile) — `UserIcon` export added to the icon registry
 
 ## Slice 5: Wizard Pre-fill + New Preferences Step (~190 LoC)
 
