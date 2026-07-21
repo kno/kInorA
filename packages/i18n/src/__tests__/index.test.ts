@@ -5,6 +5,9 @@ import type { MessageKey } from "../index.js";
 const PROFILE_AND_PREFERENCES_KEYS = [
   "profile.title",
   "profile.description",
+  "profile.loading.title",
+  "profile.loading.description",
+  "profile.loading.progressAria",
   "profile.form.heading",
   "profile.form.name",
   "profile.form.namePlaceholder",
@@ -90,13 +93,14 @@ describe("@kinora/i18n package assembly", () => {
     // full web-plan.html mockup (25 `plan.hero.*` topbar/hero cockpit copy +
     // metrics/body-map, 11 `plan.readiness.*`, 22 `plan.today.*` side-rail
     // exercise blocks, 10 `plan.coach.*` — the side rail is presentational).
-    // + 15 `profile.*` keys authored in 10a Slice 4 for the /profile form
-    // (12 `profile.form.*` heading/labels/placeholders/feedback + 3
-    // `profile.experience.*` level labels; goal select reuses wizard.goal.*)
+    // + 18 `profile.*` keys authored in 10a for the /profile experience
+    // (3 `profile.loading.*` loading-state keys + 12 `profile.form.*`
+    // heading/labels/placeholders/feedback + 3 `profile.experience.*`
+    // level labels; goal select reuses wizard.goal.*)
     // + 5 `wizard.preferences.*` keys authored in 10a Slice 5 for the
     // defaults step title/labels and preferences-save error feedback.
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(567);
+    expect(Object.keys(flat)).toHaveLength(570);
   });
 
   it("ships the accepted profile + wizard preference keys in both catalogs", () => {

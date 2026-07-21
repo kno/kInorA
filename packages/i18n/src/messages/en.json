@@ -768,6 +768,11 @@
   "profile": {
     "title": "Profile",
     "description": "Manage your account settings and preferences.",
+    "loading": {
+      "title": "Loading your profile…",
+      "description": "We are getting your latest profile details.",
+      "progressAria": "Loading profile"
+    },
     "form": {
       "heading": "Your profile",
       "name": "Name",
