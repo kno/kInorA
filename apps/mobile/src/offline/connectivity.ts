@@ -24,11 +24,12 @@ import type { ConnectivityMonitor } from "@kinora/contracts";
 export function createConnectivityMonitor(): ConnectivityMonitor {
   let online = true;
   const listeners = new Set<(online: boolean) => void>();
-
-  NetInfo.addEventListener((state: { isConnected: boolean | null }) => {
+  const unsubscribeNetInfo = NetInfo.addEventListener((state: { isConnected: boolean | null }) => {
     online = state.isConnected !== false;
     for (const cb of listeners) cb(online);
   });
+
+  let netInfoActive = true;
 
   return {
     isOnline(): boolean {
@@ -38,6 +39,10 @@ export function createConnectivityMonitor(): ConnectivityMonitor {
       listeners.add(cb);
       return () => {
         listeners.delete(cb);
+        if (listeners.size === 0 && netInfoActive) {
+          netInfoActive = false;
+          unsubscribeNetInfo();
+        }
       };
     },
   };

@@ -85,6 +85,33 @@ describe("clearIdentityScope", () => {
     expect(await getQueuedMutations(store, "id-2")).toHaveLength(1);
     expect(await readSnapshot(store, "id-2", "s1")).toBeDefined();
   });
+
+  it("also clears a matching mutation added while the first enumeration is being deleted", async () => {
+    const baseStore = createInMemoryStore();
+    await seedIdentity(baseStore, "id-1");
+    let injected = false;
+    const store = {
+      ...baseStore,
+      delete: vi.fn(async (storeName: "mutations" | "snapshots" | "meta", key: string) => {
+        await baseStore.delete(storeName, key);
+        if (!injected && storeName === "mutations") {
+          injected = true;
+          await baseStore.put("mutations", "id-1:99", {
+            kind: "set",
+            sessionId: "s1",
+            setId: "set99",
+            input: { completed: true },
+            queuedAt: 1999,
+            clientSeq: 99,
+          });
+        }
+      }),
+    };
+
+    await clearIdentityScope(store, "id-1");
+
+    expect(await getQueuedMutations(store, "id-1")).toEqual([]);
+  });
 });
 
 describe("resolveIdentityKey", () => {

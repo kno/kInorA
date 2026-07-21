@@ -68,6 +68,27 @@ describe("runSequentialFlush", () => {
     expect(summary.haltCode).toBeUndefined();
   });
 
+  it("returns the latest acknowledged snapshot for every session in deterministic order", async () => {
+    const secondSession = { ...session, id: "s2" };
+    const firstAck = { ...session, status: "active" as const };
+    const secondAck = { ...secondSession, status: "completed" as const };
+    const latestFirstAck = { ...session, status: "completed" as const };
+    const mutations: PendingMutation[] = [
+      setMutation(1),
+      { kind: "complete", sessionId: "s2", queuedAt: 2000, clientSeq: 2 },
+      { kind: "complete", sessionId: "s1", queuedAt: 3000, clientSeq: 3 },
+    ];
+
+    const summary = await runSequentialFlush(mutations, async (mutation) => {
+      if (mutation.clientSeq === 1) return { kind: "ok", session: firstAck };
+      if (mutation.clientSeq === 2) return { kind: "ok", session: secondAck };
+      return { kind: "ok", session: latestFirstAck };
+    });
+
+    expect(summary.ackedSessions).toEqual([latestFirstAck, secondAck]);
+    expect(summary.lastAckedSession).toBe(latestFirstAck);
+  });
+
   it("drops a VALIDATION/NOT_FOUND entry and continues to the next", async () => {
     const summary = await runSequentialFlush(
       [setMutation(1), setMutation(2)],
