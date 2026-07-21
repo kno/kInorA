@@ -832,6 +832,99 @@ describe("WorkoutSessionRepository", () => {
     });
   });
 
+  describe("deleteAllByUser", () => {
+    function buildBulkDeleteDb(opts: {
+      deleteReturning: unknown[];
+      activeRows?: unknown[];
+      sessionRowsAfterDelete?: unknown[];
+      exerciseRowsAfterDelete?: unknown[];
+      setRowsAfterDelete?: unknown[];
+    }) {
+      const activeRows = opts.activeRows ?? [];
+      const sessionRowsAfterDelete = opts.sessionRowsAfterDelete ?? [];
+      const exerciseRowsAfterDelete = opts.exerciseRowsAfterDelete ?? [];
+      const setRowsAfterDelete = opts.setRowsAfterDelete ?? [];
+
+      const select = vi.fn().mockImplementation((shape?: unknown) => {
+        const hasStatusShape =
+          typeof shape === "object" &&
+          shape !== null &&
+          "status" in (shape as Record<string, unknown>);
+
+        return {
+          from: vi.fn().mockImplementation((table: object) => {
+            if (table === workoutSessions) {
+              if (hasStatusShape) {
+                return { where: vi.fn().mockResolvedValue(activeRows) };
+              }
+              return { where: vi.fn().mockResolvedValue(sessionRowsAfterDelete) };
+            }
+            if (table === sessionExercises) {
+              return { where: vi.fn().mockResolvedValue(exerciseRowsAfterDelete) };
+            }
+            if (table === setRecords) {
+              return { where: vi.fn().mockResolvedValue(setRowsAfterDelete) };
+            }
+            throw new Error(`Unexpected select table: ${String(table)}`);
+          }),
+        };
+      });
+
+      const returning = vi.fn().mockResolvedValue(opts.deleteReturning);
+      const where = vi.fn().mockReturnValue({ returning });
+      const del = vi.fn().mockReturnValue({ where });
+
+      return { db: { select, delete: del } as never, del, select };
+    }
+
+    it("deletes all completed sessions owned by the caller, returns the deleted count, and leaves no cascaded exercise/set rows behind", async () => {
+      const sessionA = { id: SESSION_ID };
+      const sessionB = { id: "dddddddd-0000-0000-0000-000000000099" };
+      const { db, del, select } = buildBulkDeleteDb({
+        deleteReturning: [sessionA, sessionB],
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteAllByUser(TENANT_A, USER_A);
+
+      expect(result).toEqual({ kind: "deleted", deletedCount: 2 });
+      expect(del).toHaveBeenCalledTimes(1);
+      expect(select).toHaveBeenCalledTimes(1);
+      expect(select.mock.invocationCallOrder[0]).toBeLessThan(del.mock.invocationCallOrder[0]!);
+    });
+
+    it("returns count 0 when the caller has no completed sessions", async () => {
+      const { db } = buildBulkDeleteDb({ deleteReturning: [] });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteAllByUser(TENANT_A, USER_A);
+
+      expect(result).toEqual({ kind: "deleted", deletedCount: 0 });
+    });
+
+    it("returns conflict and preserves completed history when an active session exists for the scoped tenant/user", async () => {
+      const { db, del } = buildBulkDeleteDb({
+        deleteReturning: [{ id: SESSION_ID }],
+        activeRows: [{ status: "active" }],
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteAllByUser(TENANT_A, USER_A);
+
+      expect(result).toEqual({ kind: "active_conflict" });
+      expect(del).not.toHaveBeenCalled();
+    });
+
+    it("does not leak another user's sessions in the same tenant — scoped delete returns count 0 and no active conflict", async () => {
+      const { db } = buildBulkDeleteDb({ deleteReturning: [] });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteAllByUser(TENANT_A, USER_B);
+
+      expect(result).toEqual({ kind: "deleted", deletedCount: 0 });
+    });
+  });
+
   describe("listCompletedSessions", () => {
     const SESSION_A_ID = "dddddddd-0000-0000-0000-0000000000a1";
     const SESSION_B_ID = "dddddddd-0000-0000-0000-0000000000b2";

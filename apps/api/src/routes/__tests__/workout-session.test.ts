@@ -58,6 +58,7 @@ function buildRepoMock(overrides: Partial<Record<keyof ReturnType<typeof buildRe
     recordSet: vi.fn().mockResolvedValue(activeSession),
     completeSession: vi.fn().mockResolvedValue({ ...activeSession, status: "completed", completedAt: "2026-07-04T09:20:00.000Z" }),
     deleteById: vi.fn().mockResolvedValue({ kind: "deleted" }),
+    deleteAllByUser: vi.fn().mockResolvedValue({ kind: "deleted", deletedCount: 0 }),
     listCompletedSessions: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
@@ -434,6 +435,57 @@ describe("Workout session routes", () => {
 
       expect(response.statusCode).toBe(409);
       expect(response.json().error).toBe("active_session_conflict");
+    });
+  });
+
+  describe("DELETE /workout-sessions", () => {
+    it("returns 200 with { deletedCount } when the caller bulk-deletes completed sessions", async () => {
+      const repo = buildRepoMock({
+        deleteAllByUser: vi.fn().mockResolvedValue({ kind: "deleted", deletedCount: 3 }),
+      });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: "/workout-sessions",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ deletedCount: 3 });
+      expect(repo.deleteAllByUser).toHaveBeenCalledWith(TENANT_A, USER_A);
+    });
+
+    it("returns 200 with { deletedCount: 0 } when the caller has no sessions to delete", async () => {
+      const repo = buildRepoMock({
+        deleteAllByUser: vi.fn().mockResolvedValue({ kind: "deleted", deletedCount: 0 }),
+      });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: "/workout-sessions",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ deletedCount: 0 });
+    });
+
+    it("returns 409 when an active session blocks bulk deletion for the scoped tenant/user", async () => {
+      const repo = buildRepoMock({
+        deleteAllByUser: vi.fn().mockResolvedValue({ kind: "active_conflict" }),
+      });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: "/workout-sessions",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: "active_session_conflict" });
     });
   });
 

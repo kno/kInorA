@@ -69,6 +69,10 @@ export interface WorkoutSessionRouteRepo {
     userId: string,
     id: string
   ): Promise<DeleteSessionOutcome>;
+  deleteAllByUser(
+    tenantId: string,
+    userId: string
+  ): Promise<{ kind: "deleted"; deletedCount: number } | { kind: "active_conflict" }>;
   listCompletedSessions(
     tenantId: string,
     userId: string,
@@ -257,6 +261,26 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
         return reply.code(409).send({ error: "active_session_conflict" });
       }
       return reply.code(204).send();
+    }
+  );
+
+  // DELETE /workout-sessions (10c-workout-session-delete, R2 + R3).
+  // The repo keeps the same tenant/user scoping + active-session guard as the
+  // single-delete path. The route only translates outcomes:
+  //   deleted          → 200 + { deletedCount }
+  //   active_conflict  → 409
+  fastify.delete(
+    "/workout-sessions",
+    { preHandler: requireAuth() },
+    async (request, reply) => {
+      const { tenantId, userId } = request.authContext!;
+
+      const outcome = await repo.deleteAllByUser(tenantId, userId);
+      if (outcome.kind === "active_conflict") {
+        return reply.code(409).send({ error: "active_session_conflict" });
+      }
+
+      return reply.code(200).send({ deletedCount: outcome.deletedCount });
     }
   );
 };
