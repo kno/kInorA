@@ -103,7 +103,7 @@ describe("backfillMuscleGroups", () => {
 
     const result = await backfillMuscleGroups(db, { batchSize: 50 });
 
-    expect(result).toEqual({ processed: 2, updated: 2, batches: 1 });
+    expect(result).toEqual({ processed: 2, updated: 2, batches: 1, lastId: "2" });
     // One bulk `update` call for the whole batch, not one per row.
     expect(update).toHaveBeenCalledTimes(1);
     expect(updateCalls).toEqual([{ ids: ["1", "2"], groups: ["chest", "back"] }]);
@@ -150,7 +150,7 @@ describe("backfillMuscleGroups", () => {
 
     const result = await backfillMuscleGroups(db, { batchSize: 50 });
 
-    expect(result).toEqual({ processed: 1, updated: 1, batches: 1 });
+    expect(result).toEqual({ processed: 1, updated: 1, batches: 1, lastId: "3" });
     expect(updateCalls).toEqual([{ ids: ["3"], groups: ["quads"] }]);
   });
 
@@ -163,7 +163,7 @@ describe("backfillMuscleGroups", () => {
 
     const result = await backfillMuscleGroups(db, { batchSize: 50, mode: "reclassify" });
 
-    expect(result).toEqual({ processed: 2, updated: 2, batches: 1 });
+    expect(result).toEqual({ processed: 2, updated: 2, batches: 1, lastId: "2" });
     expect(update).toHaveBeenCalledTimes(1);
     expect(updateCalls).toEqual([{ ids: ["1", "2"], groups: ["chest", null] }]);
   });
@@ -176,8 +176,8 @@ describe("backfillMuscleGroups", () => {
     const second = createDb([rows]);
     const secondResult = await backfillMuscleGroups(second.db, { batchSize: 50, mode: "reclassify" });
 
-    expect(firstResult).toEqual({ processed: 1, updated: 1, batches: 1 });
-    expect(secondResult).toEqual({ processed: 1, updated: 1, batches: 1 });
+    expect(firstResult).toEqual({ processed: 1, updated: 1, batches: 1, lastId: "1" });
+    expect(secondResult).toEqual({ processed: 1, updated: 1, batches: 1, lastId: "1" });
   });
 
   it("defaults to fill mode and a sane default batch size when no options are given", async () => {
@@ -186,5 +186,32 @@ describe("backfillMuscleGroups", () => {
     const result = await backfillMuscleGroups(db);
 
     expect(result).toEqual({ processed: 0, updated: 0, batches: 0 });
+  });
+
+  it("resumes reclassify from startAfterId — skips rows before the cursor and returns lastId", async () => {
+    // Prior run processed rows 1-2 and crashed. Resume from after id "2".
+    const remaining: Row[] = [
+      { id: "3", title: "Squat" },
+      { id: "4", title: "Deadlift" },
+    ];
+    const { db, where, updateCalls } = createDb([remaining]);
+
+    const result = await backfillMuscleGroups(db, { mode: "reclassify", startAfterId: "2" });
+
+    expect(result).toEqual({ processed: 2, updated: 2, batches: 1, lastId: "4" });
+    // WHERE condition was set (gt cursor applied).
+    expect(where).toHaveBeenCalled();
+    expect(updateCalls).toEqual([{ ids: ["3", "4"], groups: ["quads", "hamstrings"] }]);
+  });
+
+  it("returns lastId across multiple batches", async () => {
+    const batchOne: Row[] = [{ id: "5", title: "Bench Press" }];
+    const batchTwo: Row[] = [{ id: "6", title: "Squat" }];
+    const { db } = createDb([batchOne, batchTwo]);
+
+    const result = await backfillMuscleGroups(db, { batchSize: 1, mode: "reclassify", startAfterId: "4" });
+
+    expect(result.lastId).toBe("6");
+    expect(result.batches).toBe(2);
   });
 });
