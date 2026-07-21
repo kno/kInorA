@@ -21,7 +21,7 @@ import { clearActiveSessionPointer } from "./snapshot";
  * Server Action (which would widen this slice's file-change footprint to
  * `dashboard/actions.ts`/`page.tsx`, outside the design's File Changes
  * list), `ensureIdentityScope` detects the identity change itself: it
- * persists a single, UN-scoped "last active identity" marker in the `meta`
+ * persists a browser-tab-scoped "last active identity" marker in the `meta`
  * store, and whenever the resolved identity differs from that marker, it
  * wipes the PREVIOUS identity's queue + snapshot before letting the new
  * identity's session load. Because `identityKey` is now stable per account,
@@ -34,7 +34,31 @@ import { clearActiveSessionPointer } from "./snapshot";
  * touched by this purge.
  */
 
-const LAST_IDENTITY_META_KEY = "__lastIdentityKey__";
+const TAB_SESSION_STORAGE_KEY = "kinora-offline-tab-session";
+const FALLBACK_TAB_SESSION_ID = `tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+function browserTabSessionId(): string {
+  if (typeof window === "undefined") return FALLBACK_TAB_SESSION_ID;
+
+  try {
+    const existing = window.sessionStorage.getItem(TAB_SESSION_STORAGE_KEY);
+    if (existing) return existing;
+
+    const generated =
+      typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    window.sessionStorage.setItem(TAB_SESSION_STORAGE_KEY, generated);
+    return generated;
+  } catch {
+    // Storage can be unavailable in privacy-restricted browser contexts.
+    return FALLBACK_TAB_SESSION_ID;
+  }
+}
+
+function lastIdentityMetaKey(tabSessionId: string): string {
+  return `__lastIdentityKey__:${tabSessionId}`;
+}
 
 export async function clearIdentityScope(
   store: OfflineStore,
@@ -63,12 +87,14 @@ export async function clearIdentityScope(
 export async function ensureIdentityScope(
   store: OfflineStore,
   identityKey: string,
+  tabSessionId = browserTabSessionId(),
 ): Promise<void> {
-  const lastIdentityKey = await store.get<string>("meta", LAST_IDENTITY_META_KEY);
+  const markerKey = lastIdentityMetaKey(tabSessionId);
+  const lastIdentityKey = await store.get<string>("meta", markerKey);
 
   if (lastIdentityKey !== undefined && lastIdentityKey !== identityKey) {
     await clearIdentityScope(store, lastIdentityKey);
   }
 
-  await store.put("meta", LAST_IDENTITY_META_KEY, identityKey);
+  await store.put("meta", markerKey, identityKey);
 }

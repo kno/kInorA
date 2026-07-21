@@ -51,7 +51,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { WorkoutSessionRecord } from "@kinora/contracts";
+import type { PendingMutation, WorkoutSessionRecord } from "@kinora/contracts";
 import { collapseQueue } from "@kinora/domain/offline";
 import {
   completeWorkoutSessionAction,
@@ -148,6 +148,21 @@ interface OfflineContext {
   identityKey: string;
 }
 
+function isRepresentedByAcknowledgement(
+  raw: PendingMutation,
+  acknowledgement: PendingMutation,
+): boolean {
+  if (raw.kind !== acknowledgement.kind || raw.sessionId !== acknowledgement.sessionId) {
+    return false;
+  }
+
+  if (raw.kind === "set" && acknowledgement.kind === "set") {
+    return raw.setId === acknowledgement.setId && raw.clientSeq <= acknowledgement.clientSeq;
+  }
+
+  return raw.clientSeq <= acknowledgement.clientSeq;
+}
+
 export function useWorkoutSession(
   options: UseWorkoutSessionOptions = {},
 ): UseWorkoutSessionResult {
@@ -164,6 +179,9 @@ export function useWorkoutSession(
   >();
 
   const offlineRef = useRef<OfflineContext | undefined>(undefined);
+  // Invalidates in-flight offline hydration when a newer start intent has
+  // already produced the authoritative active session.
+  const sessionIntentRef = useRef(0);
   // Flush reentrancy guard (Judgment Day fix #1): `flush` is invoked from 3
   // independent triggers (connectivity subscriber, end of handleRecordSet,
   // handleCompleteWorkout) with no coordination between them. Without a
@@ -182,12 +200,28 @@ export function useWorkoutSession(
   // snapshot and return without ever touching the network.
   const connectivityRef = useRef<ConnectivityMonitor | undefined>(undefined);
 
+  const validateOfflineIdentity = useCallback(
+    async (ctx: OfflineContext): Promise<boolean> => {
+      try {
+        const currentIdentityKey = await offlineDeps.getIdentityKey();
+        // An unreachable identity lookup cannot prove an account switch. Keep
+        // the established mounted context usable so offline writes remain
+        // durable; only a resolved different identity blocks the mutation.
+        return currentIdentityKey === undefined || currentIdentityKey === ctx.identityKey;
+      } catch {
+        return true;
+      }
+    },
+    [offlineDeps],
+  );
+
   // Resolve identity + open the store, scope-guard against a previous
   // identity's leftover data, and hydrate any in-progress session from its
   // cached snapshot (design: "read session snapshot → apply queued
   // PendingMutations on top → render", no network GET required).
   useEffect(() => {
     let cancelled = false;
+    const hydrationIntent = sessionIntentRef.current;
 
     (async () => {
       try {
@@ -209,7 +243,7 @@ export function useWorkoutSession(
         const collapsed = collapseQueue(queued);
         const hydrated = collapsed.reduce(applyPendingMutation, snapshot.session);
 
-        if (cancelled) return;
+        if (cancelled || hydrationIntent !== sessionIntentRef.current) return;
         setActiveSession(hydrated);
         setActiveDay(hydrated.day);
       } catch {
@@ -310,7 +344,12 @@ export function useWorkoutSession(
       }
     });
 
-    for (const mutation of [...summary.synced, ...summary.dropped]) {
+    const acknowledged = [...summary.synced, ...summary.dropped];
+    const acknowledgedRaw = queued.filter((raw) =>
+      acknowledged.some((mutation) => isRepresentedByAcknowledgement(raw, mutation)),
+    );
+
+    for (const mutation of acknowledgedRaw) {
       await removeMutation(ctx.store, ctx.identityKey, mutation.clientSeq);
     }
 
@@ -353,7 +392,22 @@ export function useWorkoutSession(
     try {
       do {
         flushAgainRef.current = false;
-        await runFlushPass();
+        try {
+          await runFlushPass();
+        } catch {
+          // Every caller invokes flush() fire-and-forget (void flush())
+          // from a synchronous event handler — a rejection here would
+          // surface as an unhandled promise rejection on the mainline
+          // offline write path (IndexedDB quota, Safari ITP eviction, DB
+          // corruption). Before removal completes, unacknowledged or
+          // not-successfully-removed mutations remain queued and may retry
+          // on a later valid trigger; a partial delete may leave the
+          // queue partially depleted. After removal completes, snapshot/
+          // cleanup failures are swallowed, acknowledged mutations are
+          // not retryable, and snapshot/pointer may be stale with no new
+          // recovery mechanism (09d-v1-offline-flush-hardening; mirrors
+          // mobile's flush() inner try/catch).
+        }
       } while (flushAgainRef.current);
     } finally {
       isFlushingRef.current = false;
@@ -375,6 +429,12 @@ export function useWorkoutSession(
   }, [flush]);
 
   const handleStartWorkout = useCallback(async (planId: string, day: number) => {
+    const ctx = offlineRef.current;
+    if (ctx && !(await validateOfflineIdentity(ctx))) {
+      setSyncNotice("auth_required");
+      return;
+    }
+
     try {
       const result = await startWorkoutSessionAction(planId, day);
       // A 409 conflict is a structural branch — set state, never throw/crash.
@@ -387,12 +447,12 @@ export function useWorkoutSession(
       }
       // Successful start clears any prior conflict/error so a retry on another
       // day starts clean.
+      sessionIntentRef.current += 1;
       setConflict(undefined);
       setError(undefined);
       setActiveDay(result.session.day ?? day);
       setActiveSession(result.session);
 
-      const ctx = offlineRef.current;
       if (ctx) {
         await writeSnapshot(ctx.store, ctx.identityKey, result.session.id, result.session);
         await writeActiveSessionPointer(ctx.store, ctx.identityKey, result.session.id);
@@ -402,7 +462,7 @@ export function useWorkoutSession(
       // Surface them inline instead of crashing the render.
       setError("tracker_error_start");
     }
-  }, []);
+  }, [validateOfflineIdentity]);
 
   const handleRecordSet = useCallback(
     async (setId: string, input: WorkoutSetUpdateInput) => {
@@ -411,6 +471,12 @@ export function useWorkoutSession(
       const ctx = offlineRef.current;
 
       if (ctx) {
+        if (!(await validateOfflineIdentity(ctx))) {
+          setSyncNotice("auth_required");
+          return;
+        }
+
+        let enqueueSucceeded = false;
         // Offline-safe path: durably ENQUEUE first (write-order invariant —
         // a crash before the snapshot write is self-healing via replay), then
         // optimistically apply the mutation to local UI + the cached
@@ -423,6 +489,7 @@ export function useWorkoutSession(
             input,
             queuedAt: Date.now(),
           });
+          enqueueSucceeded = true;
 
           setActiveSession((prev) => {
             if (!prev || prev.id !== sessionId) return prev;
@@ -440,8 +507,13 @@ export function useWorkoutSession(
           void flush();
           return;
         } catch {
-          // Offline module unavailable — degrade to the direct-call path
-          // below (pre-offline behavior).
+          if (enqueueSucceeded) {
+            // The mutation is durable; do not replay it through the direct
+            // action if snapshot persistence fails after enqueue.
+            setSyncNotice("reload_required");
+            return;
+          }
+          // Offline module unavailable before enqueue — use the direct path.
         }
       }
 
@@ -453,13 +525,19 @@ export function useWorkoutSession(
         setError("tracker_error_record");
       }
     },
-    [activeSession, flush],
+    [activeSession, flush, validateOfflineIdentity],
   );
 
   const handleCompleteWorkout = useCallback(async (sessionId: string) => {
     const ctx = offlineRef.current;
 
     if (ctx) {
+      if (!(await validateOfflineIdentity(ctx))) {
+        setSyncNotice("auth_required");
+        return;
+      }
+
+      let enqueueSucceeded = false;
       try {
         // Enqueue-first (durable), then optimistically flip the cached
         // snapshot's session.status to "completed" — design: "Complete-
@@ -470,6 +548,7 @@ export function useWorkoutSession(
           sessionId,
           queuedAt: Date.now(),
         });
+        enqueueSucceeded = true;
 
         const snapshot = await readSnapshot(ctx.store, ctx.identityKey, sessionId);
         if (snapshot) {
@@ -487,7 +566,11 @@ export function useWorkoutSession(
         void flush();
         return;
       } catch {
-        // Offline module unavailable — degrade to the direct-call path below.
+        if (enqueueSucceeded) {
+          setSyncNotice("reload_required");
+          return;
+        }
+        // Offline module unavailable before enqueue — use the direct path.
       }
     }
 
@@ -502,7 +585,7 @@ export function useWorkoutSession(
     } catch {
       setError("tracker_error_complete");
     }
-  }, [flush]);
+  }, [flush, validateOfflineIdentity]);
 
   return {
     activeSession,

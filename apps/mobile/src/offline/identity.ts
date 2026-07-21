@@ -38,9 +38,11 @@ export async function clearIdentityScope(
 ): Promise<void> {
   const prefix = `${identityKey}:`;
   for (const name of ["mutations", "snapshots"] as const) {
-    const all = await store.entries(name);
-    for (const { key } of all) {
-      if (key.startsWith(prefix)) {
+    while (true) {
+      const all = await store.entries(name);
+      const matching = all.filter(({ key }) => key.startsWith(prefix));
+      if (matching.length === 0) break;
+      for (const { key } of matching) {
         await store.delete(name, key);
       }
     }
