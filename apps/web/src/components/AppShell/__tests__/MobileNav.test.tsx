@@ -7,6 +7,10 @@ vi.mock("next/navigation", () => ({
   usePathname: vi.fn(),
 }));
 
+vi.mock("@/app/(app)/dashboard/actions", () => ({
+  logoutAction: vi.fn(),
+}));
+
 const mockedUsePathname = vi.mocked(usePathname);
 
 describe("MobileNav", () => {
@@ -41,7 +45,13 @@ describe("MobileNav", () => {
     const html = renderToString(MobileNav());
 
     const iconCount = (html.match(/focusable="false"/g) || []).length;
-    expect(iconCount).toBe(6);
+    expect(iconCount).toBe(7);
+  });
+
+  it("renders a logout button with aria-label=\"Log out\"", () => {
+    const html = renderToString(MobileNav());
+    expect(html).toContain('aria-label="Log out"');
+    expect(html).toContain('<svg viewBox="0 0 24 24"');
   });
 
   it("marks the active tab with aria-current=\"page\"", () => {
