@@ -30,6 +30,7 @@ export default async function ExercisesPage({ searchParams }: ExercisesPageProps
 
   const detailResult = title ? await getExerciseDetailAction(title) : undefined;
   const recentSets = detailResult?.kind === "ok" ? detailResult.detail.recentSets : [];
+  const exerciseTitle = detailResult?.kind === "ok" ? detailResult.detail.exerciseTitle : undefined;
 
   return (
     <main className="kin-page">
@@ -40,6 +41,7 @@ export default async function ExercisesPage({ searchParams }: ExercisesPageProps
 
       {recentSets.length > 0 && (
         <div className="kin-card" data-testid="exercise-history">
+          {exerciseTitle && <h3 className="kin-title">{t("exercises.history.exerciseHeading", { exerciseTitle })}</h3>}
           <h2 className="kin-title">{t("exercises.history.title")}</h2>
           <table>
             <thead>
