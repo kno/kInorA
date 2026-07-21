@@ -16,6 +16,30 @@ import {
 import { sql } from "drizzle-orm";
 
 /**
+ * Goal enum for the user profile (10a-user-profile).
+ * Mirrors the `PlanGoal` contract value set: strength / hypertrophy /
+ * fat_loss / general_fitness. Stored as a nullable column on `user_profiles`
+ * so legacy rows (no goal chosen) keep NULL — additive, never defaulted.
+ */
+export const goalEnum = pgEnum("goal", [
+  "strength",
+  "hypertrophy",
+  "fat_loss",
+  "general_fitness",
+]);
+
+/**
+ * Experience-level enum for the user profile (10a-user-profile).
+ * beginner / intermediate / advanced. Nullable on `user_profiles` for the
+ * same additive reason as `goal`.
+ */
+export const experienceLevelEnum = pgEnum("experience_level", [
+  "beginner",
+  "intermediate",
+  "advanced",
+]);
+
+/**
  * Membership role: owner is the tenant creator; member is an invited user.
  * Extensible for future roles (e.g., admin).
  */
@@ -396,3 +420,64 @@ export const aiProviderConfig = pgTable("ai_provider_config", {
   model: text("model").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * User Profiles — user-scoped structured memory (10a-user-profile).
+ * One row per user, enforced by a unique index on `userId`.
+ * `name` is NOT NULL (provisioned on registration from the email prefix);
+ * `goal` and `experienceLevel` are nullable/additive — a row may exist with
+ * NULL for either, leaving the user free to choose later. Inserted in the
+ * same transaction as tenant/user/membership creation (R3 auto-provision).
+ */
+export const userProfiles = pgTable(
+  "user_profiles",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    goal: goalEnum("goal"),
+    experienceLevel: experienceLevelEnum("experience_level"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    userIdUnique: uniqueIndex("user_profiles_user_id_unique").on(table.userId),
+  })
+);
+
+/**
+ * User Preferences — user-scoped training context defaults (10b-user-preferences).
+ * One row per user via unique `userId`.
+ * All three data columns are nullable; a row present with NULLs is a valid
+ * "I have visited the page but chosen no defaults" state. `defaultEquipment`
+ * is stored as JSONB so it can be an empty array `[]` (R1: "MAY be an empty
+ * array") distinct from NULL ("never answered"). Partial update semantics
+ * live in the repository, not the schema.
+ */
+export const userPreferences = pgTable(
+  "user_preferences",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    defaultLocation: text("default_location"),
+    defaultDuration: integer("default_duration"),
+    defaultEquipment: jsonb("default_equipment").$type<string[]>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    userIdUnique: uniqueIndex("user_preferences_user_id_unique").on(
+      table.userId
+    ),
+  })
+);
