@@ -1,13 +1,17 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { AuthService, AuthError } from "../auth/service.js";
 import { requireAuth } from "../auth/plugin.js";
+import { UserRepository } from "../db/repositories/auth-context.js";
+import type { Database } from "../db/client.js";
 import type { RegisterRequest, LoginRequest } from "@kinora/contracts";
 
 /**
- * Plugin options: the auth service instance to delegate register/login to.
+ * Plugin options: the auth service instance to delegate register/login to,
+ * and the database to resolve user profile data.
  */
 export interface AuthRoutesOptions {
   authService: AuthService;
+  db?: Database;
 }
 
 /**
@@ -53,7 +57,7 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
   fastify,
   options
 ) => {
-  const { authService } = options;
+  const { authService, db } = options;
 
   fastify.post(
     "/auth/register",
@@ -95,6 +99,55 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
     async (request: FastifyRequest) => {
       const { tenantId, userId } = request.authContext!;
       return { tenantId, userId };
+    }
+  );
+
+  /**
+   * POST /auth/logout — invalidate the caller's session.
+   *
+   * Requires authentication. Reads the session token from the Authorization
+   * header, resolves the session id (tokenHash), and deletes the session row.
+   * The caller (web Server Action) is expected to also clear the httpOnly
+   * cookie after the API call succeeds.
+   */
+  fastify.post(
+    "/auth/logout",
+    { preHandler: requireAuth() },
+    async (request: FastifyRequest) => {
+      const { sessionId } = request.authContext!;
+      await authService.logout(sessionId);
+      return { ok: true };
+    }
+  );
+
+  /**
+   * GET /auth/profile — returns minimal user profile for sidebar display.
+   *
+   * Requires authentication. Returns the user's email (from which the web
+   * app derives initials) and the tenant name. Until the users table has a
+   * dedicated `name` or `displayName` field, the email serves as both the
+   * display name and the source for initials (first character of the local
+   * part, uppercased). The plan badge defaults to "Free" until billing is
+   * implemented.
+   */
+  fastify.get(
+    "/auth/profile",
+    { preHandler: requireAuth() },
+    async (request: FastifyRequest) => {
+      const { userId } = request.authContext!;
+      if (!db) throw new Error("Database instance required for profile endpoint");
+      const repo = new UserRepository(db);
+      const user = await repo.findById(userId);
+      if (!user) {
+        throw new AuthError("User not found");
+      }
+      const emailLocal = user.email.split("@")[0] ?? "";
+      const initials = emailLocal.charAt(0).toUpperCase();
+      return {
+        email: user.email,
+        initials,
+        tenantName: request.authContext!.tenantId,
+      };
     }
   );
 };

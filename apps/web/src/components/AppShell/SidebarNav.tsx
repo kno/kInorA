@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, StatsIcon } from "@/components/icons";
 import { isActivePath } from "./nav-utils";
+import { logoutAction } from "@/app/(app)/dashboard/actions";
 import styles from "./SidebarNav.module.css";
 
 /** Navigation item descriptor: label, href, and icon name. */
@@ -20,10 +21,10 @@ export interface SidebarUser {
   plan: string;
 }
 
-/** Fallback identity shown until a real profile endpoint exists. */
+/** Fallback identity shown when no user prop is available. */
 const FALLBACK_USER: SidebarUser = {
-  initials: "JD",
-  name: "User",
+  initials: "?",
+  name: "Guest",
   plan: "Free",
 };
 
@@ -39,13 +40,10 @@ const NAV_ITEMS: NavItem[] = [
 /**
  * Desktop sidebar navigation — fixed 248px panel.
  *
- * Renders the kInorA wordmark, 5 nav items with SVG icons, and a user
- * area at the bottom. The user identity is supplied via the optional
- * `user` prop; when absent it falls back to a placeholder until a real
- * profile endpoint exists.
- *
- * Active route detection via `usePathname()`. Active items get a subtle
- * `--accent-dim` background with a 3px left accent indicator.
+ * Renders the kInorA wordmark, nav items, and a user area with a logout
+ * button at the bottom. The user identity is supplied via the optional
+ * `user` prop (resolved server-side in AppLayout); when absent it falls
+ * back to a placeholder.
  */
 export function SidebarNav({ user }: { user?: SidebarUser } = {}) {
   const pathname = usePathname();
@@ -77,7 +75,7 @@ export function SidebarNav({ user }: { user?: SidebarUser } = {}) {
         })}
       </nav>
 
-      {/* User area — uses the `user` prop, or a placeholder fallback. */}
+      {/* User area — real identity when available, or a placeholder. */}
       <div className={styles.userArea}>
         <div className={styles.avatar} aria-hidden="true">
           {identity.initials}
@@ -86,6 +84,15 @@ export function SidebarNav({ user }: { user?: SidebarUser } = {}) {
           <span className={styles.userName}>{identity.name}</span>
           <span className={styles.planBadge}>{identity.plan}</span>
         </div>
+        <form action={logoutAction} className={styles.logoutForm}>
+          <button type="submit" className={styles.logoutButton} aria-label="Log out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </button>
+        </form>
       </div>
     </aside>
   );
