@@ -302,3 +302,41 @@ describe("AuthService.logout", () => {
     expect((db as unknown as { delete: ReturnType<typeof vi.fn> }).delete).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("AuthService.getProfile", () => {
+  it("returns the persisted display name from user_profiles when a profile row exists", async () => {
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(selectChain([{ id: "user-1", email: "alex@example.com" }]))
+        .mockReturnValueOnce(selectChain([{ userId: "user-1", name: "Alex Rivera" }])),
+    } as unknown as Database;
+    const service = new AuthService(db);
+
+    const result = await service.getProfile("user-1");
+
+    expect(result).toEqual({
+      email: "alex@example.com",
+      initials: "A",
+      name: "Alex Rivera",
+    });
+  });
+
+  it("falls back to the email-local-part initial when no user_profiles row exists", async () => {
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(selectChain([{ id: "user-1", email: "bianca@example.com" }]))
+        .mockReturnValueOnce(selectChain([])),
+    } as unknown as Database;
+    const service = new AuthService(db);
+
+    const result = await service.getProfile("user-1");
+
+    expect(result).toEqual({
+      email: "bianca@example.com",
+      initials: "B",
+      name: "bianca@example.com",
+    });
+  });
+});

@@ -82,6 +82,10 @@ interface SetRecordRow {
   notes: string | null;
 }
 
+type DeleteAllSessionsOutcome =
+  | { kind: "deleted"; deletedCount: number }
+  | { kind: "active_conflict" };
+
 type StartTx = Pick<Database, "insert">;
 
 const DEFAULT_HISTORY_LIMIT = 20;
@@ -494,6 +498,51 @@ export class WorkoutSessionRepository {
       return { kind: "active_conflict" };
     }
     return { kind: "not_found" };
+  }
+
+  /**
+   * Deletes every completed workout session owned by the caller within the
+   * active tenant (10c-workout-session-delete, R2 + R3).
+   *
+   * The active-session guard runs before the write so a conflict never removes
+   * completed history. Both the read and write are scoped to `(tenantId,
+   * userId)`.
+   */
+  async deleteAllByUser(
+    tenantId: string,
+    userId: string
+  ): Promise<DeleteAllSessionsOutcome> {
+    const activeRows = await this.db
+      .select({ status: workoutSessions.status })
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.status, "active")
+        )
+      );
+
+    if (activeRows.length > 0) {
+      return { kind: "active_conflict" };
+    }
+
+    const deleted = await this.db
+      .delete(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.status, "completed")
+        )
+      )
+      .returning({ id: workoutSessions.id });
+
+    if (deleted.length > 0) {
+      return { kind: "deleted", deletedCount: deleted.length };
+    }
+
+    return { kind: "deleted", deletedCount: 0 };
   }
 
   /**
