@@ -1518,5 +1518,53 @@ describe("WorkoutSessionRepository", () => {
       expect(detail.recentSets).toEqual([]);
       expect(exercisesWhere).not.toHaveBeenCalled();
     });
+
+    it("matches exercise title case-insensitively via normalizeTitle (#140)", async () => {
+      // #140: "bench press" (lowercase) must match stored "Bench Press"
+      const { select } = createExerciseDetailDb({
+        sessionRows: [historySessionA],
+        exerciseRows: [historyExerciseA],  // title: "Bench Press"
+        setRows: [historySetA],
+      });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const detail = await repo.getExerciseDetail(TENANT_A, USER_A, "bench press");
+
+      expect(detail.exerciseTitle).toBe("bench press");
+      expect(detail.recentSets).toHaveLength(1);
+      expect(detail.recentSets[0]!.weightKg).toBe(80);
+    });
+
+    it("matches exercise title with extra whitespace via normalizeTitle (#140)", async () => {
+      // #140: "Bench  Press" (double space) must match stored "Bench Press"
+      const { select } = createExerciseDetailDb({
+        sessionRows: [historySessionA],
+        exerciseRows: [historyExerciseA],  // title: "Bench Press"
+        setRows: [historySetA],
+      });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const detail = await repo.getExerciseDetail(TENANT_A, USER_A, "Bench  Press");
+
+      expect(detail.exerciseTitle).toBe("Bench  Press");
+      expect(detail.recentSets).toHaveLength(1);
+    });
+
+    it("matches exercise title with diacritics via normalizeTitle (#140)", async () => {
+      // #140: "Sentadílla" (accented) must match stored "Sentadilla"
+      const exerciseWithAccent = { ...historyExerciseA, id: "exercise-accent", title: "Sentadilla" };
+      const setForAccent = { ...historySetA, id: "set-accent", sessionExerciseId: "exercise-accent" };
+      const { select } = createExerciseDetailDb({
+        sessionRows: [historySessionA],
+        exerciseRows: [exerciseWithAccent],
+        setRows: [setForAccent],
+      });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const detail = await repo.getExerciseDetail(TENANT_A, USER_A, "Sentadílla");
+
+      expect(detail.exerciseTitle).toBe("Sentadílla");
+      expect(detail.recentSets).toHaveLength(1);
+    });
   });
 });
