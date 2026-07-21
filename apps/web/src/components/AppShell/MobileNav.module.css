@@ -93,3 +93,39 @@
   display: block;
   height: 64px;
 }
+
+/* Logout button — compact icon at the right edge of the bar. */
+.logoutForm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  min-height: 44px;
+  padding: 0;
+  margin-left: auto;
+}
+
+.logoutButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  padding: 0;
+}
+
+.logoutButton:hover {
+  color: var(--danger);
+  background: var(--danger-dim);
+}
+
+.logoutButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

@@ -60,7 +60,7 @@ describe("SidebarNav", () => {
     const html = renderToString(SidebarNav());
 
     const iconCount = (html.match(/focusable="false"/g) || []).length;
-    expect(iconCount).toBe(6);
+    expect(iconCount).toBe(7);
   });
 
   it("renders a user area with placeholder initials when no user prop is given", () => {
