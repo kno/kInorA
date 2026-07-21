@@ -18,9 +18,9 @@ describe("MobileNav", () => {
     mockedUsePathname.mockReturnValue("/dashboard");
   });
 
-  it("renders all 5 tab items", () => {
+  it("renders all 6 tab items", () => {
     const html = renderToString(MobileNav());
-    const tabLabels = ["Dashboard", "Plan", "Statistics", "History", "Exercises"];
+    const tabLabels = ["Dashboard", "Plan", "Statistics", "History", "Exercises", "Profile"];
     for (const label of tabLabels) {
       expect(html).toContain(label);
     }
@@ -33,9 +33,9 @@ describe("MobileNav", () => {
     expect(html).toContain('href="/create-plan"');
   });
 
-  it("renders exactly 5 nav items as links with correct hrefs", () => {
+  it("renders exactly 6 nav items as links with correct hrefs", () => {
     const html = renderToString(MobileNav());
-    const hrefs = ["/dashboard", "/plan", "/stats", "/history", "/exercises"];
+    const hrefs = ["/dashboard", "/plan", "/stats", "/history", "/exercises", "/profile"];
     for (const href of hrefs) {
       expect(html).toContain(`href="${href}"`);
     }
@@ -44,8 +44,16 @@ describe("MobileNav", () => {
   it("uses shared icon accessibility defaults for tabs and the create action", () => {
     const html = renderToString(MobileNav());
 
+    // 6 tabs + FAB + logout inline SVG = 8 focusable icons.
     const iconCount = (html.match(/focusable="false"/g) || []).length;
-    expect(iconCount).toBe(7);
+    expect(iconCount).toBe(8);
+  });
+
+  it("renders a Profile tab linking to /profile", () => {
+    const html = renderToString(MobileNav());
+
+    expect(html).toContain('href="/profile"');
+    expect(html).toContain("Profile");
   });
 
   it("renders a logout button with aria-label=\"Log out\"", () => {

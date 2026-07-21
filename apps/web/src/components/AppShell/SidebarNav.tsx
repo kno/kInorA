@@ -75,15 +75,23 @@ export function SidebarNav({ user }: { user?: SidebarUser } = {}) {
         })}
       </nav>
 
-      {/* User area — real identity when available, or a placeholder. */}
+      {/* User area — real identity when available, or a placeholder.
+          The avatar + name surface links to the profile page; the logout
+          form stays a sibling (interactive elements must not nest in an <a>). */}
       <div className={styles.userArea}>
-        <div className={styles.avatar} aria-hidden="true">
-          {identity.initials}
-        </div>
-        <div className={styles.userInfo}>
-          <span className={styles.userName}>{identity.name}</span>
-          <span className={styles.planBadge}>{identity.plan}</span>
-        </div>
+        <Link
+          href="/profile"
+          className={styles.userLink}
+          aria-label={identity.name === "Guest" ? "View profile" : `View profile · ${identity.name}`}
+        >
+          <div className={styles.avatar} aria-hidden="true">
+            {identity.initials}
+          </div>
+          <div className={styles.userInfo}>
+            <span className={styles.userName}>{identity.name}</span>
+            <span className={styles.planBadge}>{identity.plan}</span>
+          </div>
+        </Link>
         <form action={logoutAction} className={styles.logoutForm}>
           <button type="submit" className={styles.logoutButton} aria-label="Log out">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true" focusable="false">

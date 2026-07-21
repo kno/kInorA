@@ -242,6 +242,7 @@ export const StatsIcon = (props: Omit<KinIconProps, "name">) => <KinIcon name="s
 export const CreateIcon = (props: Omit<KinIconProps, "name">) => <KinIcon name="create" {...props} />;
 export const ExercisesIcon = (props: Omit<KinIconProps, "name">) => <KinIcon name="exercises" {...props} />;
 export const HistoryIcon = (props: Omit<KinIconProps, "name">) => <KinIcon name="history" {...props} />;
+export const UserIcon = (props: Omit<KinIconProps, "name">) => <KinIcon name="user" {...props} />;
 export const OrbitLogoIcon = (props: Omit<KinIconProps, "name" | "size"> & { size?: 16 | 24 | 32 }) => (
   <KinIcon name="orbitLogo" size={props.size ?? 24} {...props} />
 );
