@@ -1,17 +1,13 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { AuthService, AuthError } from "../auth/service.js";
 import { requireAuth } from "../auth/plugin.js";
-import { UserRepository } from "../db/repositories/auth-context.js";
-import type { Database } from "../db/client.js";
 import type { RegisterRequest, LoginRequest } from "@kinora/contracts";
 
 /**
- * Plugin options: the auth service instance to delegate register/login to,
- * and the database to resolve user profile data.
+ * Plugin options: the auth service instance to delegate auth operations to.
  */
 export interface AuthRoutesOptions {
   authService: AuthService;
-  db?: Database;
 }
 
 /**
@@ -57,7 +53,7 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
   fastify,
   options
 ) => {
-  const { authService, db } = options;
+  const { authService } = options;
 
   fastify.post(
     "/auth/register",
@@ -135,19 +131,11 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
     { preHandler: requireAuth() },
     async (request: FastifyRequest) => {
       const { userId } = request.authContext!;
-      if (!db) throw new Error("Database instance required for profile endpoint");
-      const repo = new UserRepository(db);
-      const user = await repo.findById(userId);
-      if (!user) {
+      const profile = await authService.getProfile(userId);
+      if (!profile) {
         throw new AuthError("User not found");
       }
-      const emailLocal = user.email.split("@")[0] ?? "";
-      const initials = emailLocal.charAt(0).toUpperCase();
-      return {
-        email: user.email,
-        initials,
-        tenantName: request.authContext!.tenantId,
-      };
+      return profile;
     }
   );
 };

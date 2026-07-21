@@ -135,7 +135,7 @@ export async function buildApp(
   await app.register(healthRoute);
 
   // Auth routes (register + login + logout + profile)
-  await app.register(authRoutes, { authService: new AuthService(database), db: database });
+  await app.register(authRoutes, { authService: new AuthService(database) });
 
   // Social login routes (OIDC provider abstraction + Google)
   if (socialAuthService) {
