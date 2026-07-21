@@ -1,9 +1,15 @@
 import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
+import { fetchUserProfile } from "../profile/profile-form-client";
 import { StepperShell } from "./StepperShell";
 import { loadCurrentDraft } from "./plan-draft-client";
-import { saveDraftAction, confirmPlanSpecAction } from "./actions";
+import { fetchUserPreferences } from "./preferences-client";
+import {
+  saveDraftAction,
+  confirmPlanSpecAction,
+  saveUserPreferencesAction,
+} from "./actions";
 
 /**
  * Create Plan — protected server component.
@@ -22,12 +28,19 @@ export default async function CreatePlanPage() {
 
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
-  const draft = await loadCurrentDraft(token);
+  const [draft, profileResult, preferencesResult] = await Promise.all([
+    loadCurrentDraft(token),
+    fetchUserProfile(token),
+    fetchUserPreferences(token),
+  ]);
 
   return (
     <StepperShell
       initialDraft={draft ?? undefined}
+      initialProfile={profileResult.kind === "ok" ? profileResult.profile : null}
+      initialPreferences={preferencesResult.kind === "ok" ? preferencesResult.preferences : null}
       saveDraftAction={saveDraftAction}
+      saveUserPreferencesAction={saveUserPreferencesAction}
       confirmPlanSpecAction={confirmPlanSpecAction}
     />
   );

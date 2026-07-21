@@ -8,6 +8,8 @@ import type {
   PlanLimitation,
   PlanSpec,
   TrainingLocation,
+  UserPreferences,
+  UserProfile,
 } from "@kinora/contracts";
 import { OrbitProgress } from "@/components/orbit";
 import { GoalStep } from "@/components/wizard/GoalStep";
@@ -16,9 +18,17 @@ import { FrequencyStep } from "@/components/wizard/FrequencyStep";
 import { DurationStep } from "@/components/wizard/DurationStep";
 import { EquipmentStep } from "@/components/wizard/EquipmentStep";
 import { LimitationsStep } from "@/components/wizard/LimitationsStep";
+import {
+  PreferencesStep,
+  type PreferencesStepValue,
+} from "@/components/wizard/PreferencesStep";
 import styles from "./stepper-shell.module.css";
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
+
+function isTrainingLocation(value: string | null | undefined): value is TrainingLocation {
+  return value === "home" || value === "gym" || value === "outdoor";
+}
 
 /**
  * Wizard draft shape (#93). The plan `name` is NOT a `PlanSpec` field — it is
@@ -33,15 +43,83 @@ export interface InitialDraft {
   spec: DraftSpec;
 }
 
+function applyInitialPrefill(
+  spec: DraftSpec,
+  initialProfile?: UserProfile | null,
+  initialPreferences?: UserPreferences | null,
+): DraftSpec {
+  const next: DraftSpec = { ...spec };
+
+  if (next.goal == null && initialProfile?.goal != null) {
+    next.goal = initialProfile.goal;
+  }
+  if (next.location == null && isTrainingLocation(initialPreferences?.defaultLocation)) {
+    next.location = initialPreferences.defaultLocation;
+  }
+  if (
+    next.sessionDurationMinutes == null &&
+    initialPreferences?.defaultDuration != null
+  ) {
+    next.sessionDurationMinutes = initialPreferences.defaultDuration;
+  }
+  if (next.equipment == null && initialPreferences?.defaultEquipment != null) {
+    next.equipment = initialPreferences.defaultEquipment;
+  }
+
+  return next;
+}
+
+function initialPreferenceValues(
+  initialPreferences?: UserPreferences | null,
+): PreferencesStepValue {
+  return {
+    defaultLocation: isTrainingLocation(initialPreferences?.defaultLocation)
+      ? initialPreferences.defaultLocation
+      : null,
+    defaultDuration: initialPreferences?.defaultDuration ?? null,
+    defaultEquipment: initialPreferences?.defaultEquipment ?? null,
+  };
+}
+
+function buildPreferenceSaveInput(preferences: PreferencesStepValue) {
+  const input: {
+    defaultLocation?: TrainingLocation;
+    defaultDuration?: number;
+    defaultEquipment?: string[];
+  } = {};
+
+  if (preferences.defaultLocation != null) {
+    input.defaultLocation = preferences.defaultLocation;
+  }
+  if (preferences.defaultDuration != null) {
+    input.defaultDuration = preferences.defaultDuration;
+  }
+  if (preferences.defaultEquipment != null) {
+    input.defaultEquipment = preferences.defaultEquipment;
+  }
+
+  return input;
+}
+
 export interface StepperShellProps {
   /** Hydrated server draft (resume). Absent → fresh wizard at step 1. */
   initialDraft?: InitialDraft;
+  /** User profile fetched server-side on page load; used for goal pre-fill. */
+  initialProfile?: UserProfile | null;
+  /** User preferences fetched server-side on page load; used for wizard defaults. */
+  initialPreferences?: UserPreferences | null;
   /**
    * Persists the current step + spec to the server (POST /plan-specs/drafts).
    * Accepts a DraftSpec so the optional plan `name` (#93) rides along in the
    * draft JSON without changing the shared PlanSpec contract.
    */
   saveDraftAction: (step: number, spec: DraftSpec) => Promise<void>;
+  /** Persist reusable defaults before plan generation. */
+  saveUserPreferencesAction?: (input: {
+    defaultLocation?: string | null;
+    defaultDuration?: number | null;
+    defaultEquipment?: string[] | null;
+  }) => Promise<void>;
   /**
    * Promotes the draft to a confirmed PlanSpec and triggers AI generation.
    * Returns { planId, status } so the shell can navigate to /plan/[planId].
@@ -49,13 +127,14 @@ export interface StepperShellProps {
   confirmPlanSpecAction: () => Promise<{ planId: string; status: string }>;
 }
 
-/** Catalog keys for the six step titles, in step order. */
+/** Catalog keys for the seven step titles, in step order. */
 const STEP_QUESTION_KEYS: readonly string[] = [
   "wizard.step.goalTitle",
   "wizard.step.locationTitle",
   "wizard.step.equipmentTitle",
   "wizard.step.frequencyTitle",
   "wizard.step.durationTitle",
+  "wizard.step.preferencesTitle",
   "wizard.step.limitationsTitle",
 ] as const;
 
@@ -63,28 +142,38 @@ const STEP_QUESTION_KEYS: readonly string[] = [
  * Create-plan stepper shell.
  *
  * Holds `{ step, spec }`, renders one step at a time, and drives the Orbit
- * progress ring (`value = step - 1`, `max = TOTAL_STEPS - 1`, readout "N / 6").
+ * progress ring (`value = step - 1`, `max = TOTAL_STEPS - 1`, readout "N / 7").
  * Continue persists the draft server-side; Back is local and preserves prior
  * values; Finish (enabled only when every required input is present) promotes
  * the draft to a confirmed PlanSpec. No workout program is produced here.
  */
 export function StepperShell({
   initialDraft,
+  initialProfile,
+  initialPreferences,
   saveDraftAction,
+  saveUserPreferencesAction,
   confirmPlanSpecAction,
 }: StepperShellProps) {
   const t = useTranslations();
   const router = useRouter();
   const [step, setStep] = useState(initialDraft?.step ?? 1);
-  const [spec, setSpec] = useState<DraftSpec>(initialDraft?.spec ?? {});
+  const [spec, setSpec] = useState<DraftSpec>(
+    applyInitialPrefill(initialDraft?.spec ?? {}, initialProfile, initialPreferences),
+  );
+  const [preferences, setPreferences] = useState<PreferencesStepValue>(
+    initialPreferenceValues(initialPreferences),
+  );
   // #93: the plan name is held in its OWN state (not in `spec`) because it is not
   // a PlanSpec field and only merges into the submitted draft on finish — never
   // on step-advance, so typing it never triggers the auto-advance/save path.
   const [name, setName] = useState<string>(initialDraft?.spec.name ?? "");
   const [resumed, setResumed] = useState(Boolean(initialDraft));
   const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const update = (patch: Partial<PlanSpec>) => {
+    setSubmitError(null);
     setSpec((prev) => ({ ...prev, ...patch }));
   };
 
@@ -111,6 +200,8 @@ export function StepperShell({
       case 5:
         return spec.sessionDurationMinutes != null;
       case 6:
+        return true; // preference defaults are optional
+      case 7:
         return spec.limitations != null; // empty array is valid once visited
       default:
         return false;
@@ -137,7 +228,8 @@ export function StepperShell({
     // an empty default so "skip with empty" resolves to a valid array.
     const patched: Partial<PlanSpec> = { ...currentSpec };
     if (nextStep === 3 && patched.equipment == null) patched.equipment = [];
-    if (nextStep === 6 && patched.limitations == null) patched.limitations = [];
+    if (nextStep === 7 && patched.limitations == null) patched.limitations = [];
+    setSubmitError(null);
     setSpec(patched);
     setBusy(true);
     try {
@@ -154,7 +246,7 @@ export function StepperShell({
    * Steps that accept exactly one value auto-advance on selection (issue #52).
    * Goal (1), location (2) and frequency (4) auto-advance. The duration step
    * (5) auto-advances only for preset cards and valid custom confirms — typing
-   * never advances. Multi-choice steps (equipment 3, limitations 6) never
+   * never advances. Multi-choice steps (equipment 3, limitations 7) never
    * auto-advance.
    */
   const selectAndAdvance = (patch: Partial<PlanSpec>) => {
@@ -162,12 +254,25 @@ export function StepperShell({
   };
 
   const handleBack = () => {
+    setSubmitError(null);
     if (step > 1) setStep(step - 1);
   };
 
   const handleFinish = async () => {
     if (!isSpecComplete()) return;
     setBusy(true);
+    setSubmitError(null);
+
+    if (saveUserPreferencesAction) {
+      try {
+        await saveUserPreferencesAction(buildPreferenceSaveInput(preferences));
+      } catch {
+        setSubmitError(t("wizard.preferences.saveError"));
+        setBusy(false);
+        return;
+      }
+    }
+
     try {
       // Persist the final raw answers, then promote + confirm. The server
       // derives preferenceScores on promote (source of truth); the client
@@ -183,10 +288,12 @@ export function StepperShell({
   };
 
   const handleStartOver = () => {
-    setSpec({});
+    setSpec(applyInitialPrefill({}, initialProfile, initialPreferences));
+    setPreferences(initialPreferenceValues(initialPreferences));
     setName("");
     setStep(1);
     setResumed(false);
+    setSubmitError(null);
   };
 
   const renderStep = () => {
@@ -236,6 +343,16 @@ export function StepperShell({
         );
       case 6:
         return (
+          <PreferencesStep
+            value={preferences}
+            onChange={(next) => {
+              setSubmitError(null);
+              setPreferences(next);
+            }}
+          />
+        );
+      case 7:
+        return (
           <>
             <LimitationsStep
               value={spec.limitations ?? []}
@@ -254,7 +371,10 @@ export function StepperShell({
                 maxLength={120}
                 value={name}
                 placeholder={t("plan.name.placeholder")}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setSubmitError(null);
+                  setName(e.target.value);
+                }}
               />
             </div>
           </>
@@ -292,6 +412,12 @@ export function StepperShell({
       <section className={styles.body}>{renderStep()}</section>
 
       <footer className={styles.actions}>
+        {submitError ? (
+          <p role="alert" className="kin-text" style={{ color: "var(--danger, red)" }}>
+            {submitError}
+          </p>
+        ) : null}
+
         {step > 1 && (
           <button
             type="button"

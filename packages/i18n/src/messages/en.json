@@ -511,6 +511,7 @@
       "locationTitle": "Where will you train?",
       "frequencyTitle": "How many days per week?",
       "durationTitle": "How long is each session?",
+      "preferencesTitle": "What defaults should we remember?",
       "equipmentTitle": "What equipment do you have?",
       "limitationsTitle": "Any limitations to keep in mind?",
       "progressAria": "Step {step} of {total}"
@@ -623,6 +624,12 @@
     },
     "chip": {
       "removeAria": "Remove {name}"
+    },
+    "preferences": {
+      "locationLabel": "Default location",
+      "durationLabel": "Default session duration",
+      "equipmentLabel": "Default equipment",
+      "saveError": "Could not save your preferences. Please try again."
     }
   },
   "dashboard": {

@@ -511,6 +511,7 @@
       "locationTitle": "¿Dónde vas a entrenar?",
       "frequencyTitle": "¿Cuántos días por semana?",
       "durationTitle": "¿Cuánto dura cada sesión?",
+      "preferencesTitle": "¿Qué valores predeterminados debemos recordar?",
       "equipmentTitle": "¿Qué equipamiento tienes?",
       "limitationsTitle": "¿Alguna limitación a tener en cuenta?",
       "progressAria": "Paso {step} de {total}"
@@ -623,6 +624,12 @@
     },
     "chip": {
       "removeAria": "Eliminar {name}"
+    },
+    "preferences": {
+      "locationLabel": "Ubicación predeterminada",
+      "durationLabel": "Duración predeterminada de la sesión",
+      "equipmentLabel": "Equipamiento predeterminado",
+      "saveError": "No se pudieron guardar tus preferencias. Inténtalo de nuevo."
     }
   },
   "dashboard": {
