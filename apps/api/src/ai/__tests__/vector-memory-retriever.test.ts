@@ -172,6 +172,34 @@ describe("VectorMemoryWriteCoordinator", () => {
     expect(result).toEqual({ kind: "stored", record: memoryRow() });
   });
 
+  it.each(["I have sciatica", "I have high cholesterol"])(
+    "rejects %s before embedding or persistence",
+    async (summary) => {
+      const generator = buildGenerator(async () => EMBEDDING);
+      const repo = { create: vi.fn() };
+      const coordinator = new VectorMemoryWriteCoordinator(generator, repo as never);
+
+      const result = await coordinator.saveConfirmedMemory(
+        { tenantId: TENANT_ID, userId: USER_ID },
+        {
+          summary,
+          source: "user_confirmation",
+          status: "active",
+          eligibility: "eligible",
+          consentStatus: "granted",
+          consentedAt: new Date("2026-07-22T12:00:00Z"),
+          idempotencyKey: "idem-health",
+          fingerprint: "fingerprint-health",
+          schemaVersion: "1",
+        },
+      );
+
+      expect(result).toEqual({ kind: "rejected", reason: "sensitive_health" });
+      expect(generator.generate).not.toHaveBeenCalled();
+      expect(repo.create).not.toHaveBeenCalled();
+    },
+  );
+
   it("returns a bounded dimension_mismatch failure without touching persistence", async () => {
     const generator = buildGenerator(async () => [0.1, 0.2]);
     const repo = {
@@ -255,7 +283,7 @@ describe("VectorMemoryWriteCoordinator", () => {
   });
 
   it("fails with bounded timeout exhaustion and never logs the raw memory summary", async () => {
-    const sensitiveSummary = "Athlete disclosed secret recovery notes";
+    const sensitiveSummary = "Athlete disclosed recovery notes";
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
@@ -314,6 +342,7 @@ describe("VectorMemoryRetriever", () => {
 
     expect(repo.searchActiveCompatible).toHaveBeenCalledWith(
       { tenantId: TENANT_ID, userId: USER_ID },
+      EMBEDDING,
       expect.objectContaining({
         provider: "openai",
         model: "text-embedding-3-small",
@@ -323,6 +352,28 @@ describe("VectorMemoryRetriever", () => {
       3,
     );
     expect(result).toEqual([memoryRow()]);
+  });
+
+  it("passes the generated query embedding so the repository can rank by similarity", async () => {
+    const queryEmbedding = new Array(1536).fill(0.1);
+    queryEmbedding[0] = 0.9;
+    const generator = buildGenerator(async () => queryEmbedding);
+    const repo = {
+      searchActiveCompatible: vi.fn().mockResolvedValue([memoryRow({ id: "closest" })]),
+    };
+    const retriever = new VectorMemoryRetriever(generator, repo as never);
+
+    await retriever.retrieve(
+      { tenantId: TENANT_ID, userId: USER_ID },
+      { query: "morning workouts", limit: 1 },
+    );
+
+    expect(repo.searchActiveCompatible).toHaveBeenCalledWith(
+      { tenantId: TENANT_ID, userId: USER_ID },
+      queryEmbedding,
+      expect.anything(),
+      1,
+    );
   });
 
   it("returns [] for empty queries without touching the provider or repository", async () => {

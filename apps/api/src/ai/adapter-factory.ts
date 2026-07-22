@@ -1,19 +1,12 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { CallbackHandler } from "langfuse-langchain";
 import { WorkoutProgramSchema } from "@kinora/contracts";
 import type { PlanSpec, WorkoutProgram } from "@kinora/contracts";
 import type { PlanGenerator } from "./port.js";
 import { buildPlanPrompt } from "./prompt.js";
 import { mask } from "./mask.js";
 import type { AdapterFactoryMap } from "./dynamic-generator.js";
-
-type LangfuseHandlerWithFlush = CallbackHandler & {
-  flushAsync?: () => Promise<void>;
-  flush?: () => Promise<void>;
-  shutdownAsync?: () => Promise<void>;
-};
 
 interface InvokeChainMetadata {
   provider: string;
@@ -32,63 +25,32 @@ const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
  */
 const OPENCODE_GO_BASE_URL = "https://opencode.ai/zen/go/v1";
 
-function ensureLangfuseBaseUrlEnv(): void {
-  if (!process.env["LANGFUSE_BASEURL"] && process.env["LANGFUSE_HOST"]) {
-    process.env["LANGFUSE_BASEURL"] = process.env["LANGFUSE_HOST"];
-  }
-}
-
-async function flushLangfuseHandler(handler: LangfuseHandlerWithFlush): Promise<void> {
-  const flush = handler.flushAsync ?? handler.flush ?? handler.shutdownAsync;
-  if (flush) {
-    try {
-      await flush.call(handler);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn("[ai] Langfuse flush failed", { message });
-    }
-  }
-}
-
 /**
  * Shared invoke logic for all adapters.
- * Builds the prompt from the spec, masks health data (limitations),
- * and invokes the chain with the Langfuse callback handler.
+ * Builds the prompt from the spec and masks health data before provider delivery.
  *
- * All adapters MUST mask limitation text BEFORE sending to LangChain
- * to prevent health data from appearing in Langfuse traces (AGENTS.md §72).
+ * No callback is attached because callbacks receive raw structured model output
+ * before this boundary can validate or redact it. Safe run metadata remains in
+ * the invocation config for any caller-owned observability layer.
  */
 async function invokeChain(
   chain: { invoke(input: string, options: Record<string, unknown>): Promise<unknown> },
   spec: PlanSpec,
   metadata: InvokeChainMetadata
 ): Promise<WorkoutProgram> {
-  ensureLangfuseBaseUrlEnv();
-
   const traceMetadata = {
     feature: "plan-generation",
     provider: metadata.provider,
     model: metadata.model,
   };
-  const langfuseHandler = new CallbackHandler({
-    tags: ["plan-generation"],
-    metadata: traceMetadata,
-  }) as LangfuseHandlerWithFlush;
-
   const rawPrompt = buildPlanPrompt(spec);
   const limitationTerms = spec.limitations.map((l) => l.text);
   const maskedPrompt = mask(rawPrompt, limitationTerms);
 
-  let raw: unknown;
-  try {
-    raw = await chain.invoke(maskedPrompt, {
-      callbacks: [langfuseHandler],
-      runName: "plan-generation",
-      metadata: traceMetadata,
-    });
-  } finally {
-    await flushLangfuseHandler(langfuseHandler);
-  }
+  const raw = await chain.invoke(maskedPrompt, {
+    runName: "plan-generation",
+    metadata: traceMetadata,
+  });
 
   return WorkoutProgramSchema.parse(raw);
 }

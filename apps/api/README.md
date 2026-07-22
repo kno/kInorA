@@ -94,3 +94,14 @@ The local/CI runtime must provide `pgvector/pgvector:pg17` (or another
 Postgres 17 image with pgvector installed) before running
 `pnpm --filter api db:migrate`, because the 10b Slice 1 migration executes
 `CREATE EXTENSION vector;`.
+
+For 10b vector memory rollout, keep `VECTOR_MEMORY_EMBEDDING_MODEL` and
+`VECTOR_MEMORY_EMBEDDING_DIMENSION` aligned with the persisted embedding cohort
+(`text-embedding-3-small` / `1536` by default). If those values change without a
+coordinated re-embed, retrieval will intentionally exclude incompatible rows.
+
+Current rollback boundary: unset `OPENAI_API_KEY` (or otherwise leave the vector
+embedding runtime misconfigured) to make confirmed-memory writes/retrieval fail
+open while preserving the rest of the API. Do not remove `CREATE EXTENSION vector`
+from the migration or downgrade the checked-in runtime to a plain `postgres:*`
+image.

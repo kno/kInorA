@@ -19,9 +19,11 @@ import styles from "./AppShell.module.css";
 export function AppShell({
   children,
   user,
+  memoryNavLabel,
 }: {
   children: React.ReactNode;
   user?: SidebarUser;
+  memoryNavLabel?: string;
 }) {
   const [isDesktop, setIsDesktop] = useState(false);
 
@@ -36,9 +38,9 @@ export function AppShell({
 
   return (
     <div className={styles.shell}>
-      {isDesktop ? <SidebarNav user={user} /> : null}
+      {isDesktop ? <SidebarNav user={user} memoryNavLabel={memoryNavLabel} /> : null}
       <main className={styles.main}>{children}</main>
-      {!isDesktop ? <MobileNav /> : null}
+      {!isDesktop ? <MobileNav memoryNavLabel={memoryNavLabel} /> : null}
     </div>
   );
 }

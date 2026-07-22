@@ -17,17 +17,18 @@ export class PlanSpecRepository {
   constructor(private db: Database) {}
 
   /**
-   * Return a confirmed plan spec by id, scoped to the requesting tenant.
+   * Return a confirmed plan spec by id, scoped to the requesting tenant and user.
    * Returns undefined when:
    * - the spec does not exist
    * - the spec is a draft (confirmed === false)
-   * - the spec belongs to a different tenant (cross-tenant isolation)
+   * - the spec belongs to a different tenant or user (cross-owner isolation)
    *
    * Used by the generation service to verify the spec is ready before
    * starting LLM generation.
    */
   async findConfirmedById(
     tenantId: string,
+    userId: string,
     id: string
   ): Promise<
     | {
@@ -46,6 +47,7 @@ export class PlanSpecRepository {
       .where(
         and(
           eq(planSpecs.tenantId, tenantId),
+          eq(planSpecs.userId, userId),
           eq(planSpecs.id, id),
           eq(planSpecs.confirmed, true)
         )

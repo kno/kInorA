@@ -96,7 +96,7 @@ export class PlanGenerationService {
     planSpecId: string
   ): Promise<{ planId: string; status: "generating" }> {
     // Step 1: Load confirmed spec — throws 404 if missing or unconfirmed
-    const specRow = await this.specRepo.findConfirmedById(tenantId, planSpecId);
+    const specRow = await this.specRepo.findConfirmedById(tenantId, userId, planSpecId);
     if (!specRow) {
       throw new PlanSpecNotFoundError(planSpecId);
     }
