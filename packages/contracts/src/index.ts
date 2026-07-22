@@ -205,6 +205,86 @@ export interface UpdatePreferencesRequest {
   defaultEquipment?: string[];
 }
 
+/**
+ * Configurable default embedding metadata for 10b vector memory.
+ * Stored in contracts so API slices can share one default without pushing
+ * provider decisions into the domain package.
+ */
+export interface DefaultVectorMemoryEmbeddingConfig {
+  provider: string;
+  model: string;
+  version: string;
+  dimension: number;
+}
+
+export const DEFAULT_VECTOR_MEMORY_EMBEDDING_CONFIG: DefaultVectorMemoryEmbeddingConfig = {
+  provider: "openai",
+  model: "text-embedding-3-small",
+  // Provider-specific versioning is not separated yet, so the initial default
+  // uses the configured model identifier as the compatible-version marker.
+  version: "text-embedding-3-small",
+  dimension: 1536,
+};
+
+export type UserMemoryStatus =
+  | "candidate"
+  | "confirmed"
+  | "embedding_pending"
+  | "active"
+  | "rejected"
+  | "failed"
+  | "deleted";
+
+export type UserMemoryEligibility =
+  | "eligible"
+  | "secret"
+  | "raw_transcript"
+  | "full_plan"
+  | "sensitive_health"
+  | "other";
+
+export type UserMemoryConsentStatus = "granted" | "revoked";
+
+/**
+ * Shared DTO for user-controlled vector memory records.
+ * Timestamp fields are ISO strings at the contract boundary.
+ */
+export interface UserMemory {
+  id: string;
+  tenantId: TenantId;
+  userId: UserId;
+  summary: string;
+  source: string;
+  status: UserMemoryStatus;
+  eligibility: UserMemoryEligibility;
+  consentStatus: UserMemoryConsentStatus;
+  consentedAt: string;
+  revokedAt?: string | null;
+  disabledAt?: string | null;
+  deletedAt?: string | null;
+  idempotencyKey: string;
+  fingerprint: string;
+  schemaVersion: string;
+  embeddingProvider: string;
+  embeddingModel: string;
+  embeddingVersion: string;
+  embeddingDimension: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Shared DTO for tenant+user scoped memory enablement.
+ */
+export interface MemorySettings {
+  tenantId: TenantId;
+  userId: UserId;
+  enabled: boolean;
+  settingsVersion: number;
+  disabledAt?: string | null;
+  updatedAt: string;
+}
+
 export interface PlanLimitation {
   text: string;
   isWarning: boolean;

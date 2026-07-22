@@ -89,3 +89,8 @@ pnpm --filter api db:generate
 # Apply migrations
 pnpm --filter api db:migrate
 ```
+
+The local/CI runtime must provide `pgvector/pgvector:pg17` (or another
+Postgres 17 image with pgvector installed) before running
+`pnpm --filter api db:migrate`, because the 10b Slice 1 migration executes
+`CREATE EXTENSION vector;`.

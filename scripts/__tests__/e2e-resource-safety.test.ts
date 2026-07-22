@@ -412,7 +412,7 @@ describe("isUnsupportedResourceFlagsFailure", () => {
     expect(
       isUnsupportedResourceFlagsFailure({
         status: 125,
-        stderr: "Unable to find image 'postgres:17-alpine' locally",
+        stderr: "Unable to find image 'pgvector/pgvector:pg17' locally",
         stdout: "",
       }),
     ).toBe(false);
