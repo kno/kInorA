@@ -285,6 +285,29 @@ export interface MemorySettings {
   updatedAt: string;
 }
 
+export interface CreateUserMemoryRequest {
+  factText: string;
+  source: string;
+  idempotencyKey: string;
+}
+
+export interface CreateUserMemoryResponse {
+  memory: UserMemory;
+}
+
+export interface ListUserMemoriesResponse {
+  settings: MemorySettings;
+  memories: UserMemory[];
+}
+
+export interface UpdateMemorySettingsRequest {
+  enabled: boolean;
+}
+
+export interface DeleteUserMemoryResponse {
+  deleted: true;
+}
+
 export interface PlanLimitation {
   text: string;
   isWarning: boolean;

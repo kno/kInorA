@@ -22,7 +22,21 @@ import { DynamicPlanGenerator } from "./ai/dynamic-generator.js";
 import { buildAdapters } from "./ai/adapter-factory.js";
 import { adminAiConfigRoutes } from "./routes/admin-ai-config.js";
 import { userProfileRoutes } from "./routes/user-profile.js";
+import { userMemoryRoutes } from "./routes/user-memories.js";
 import { userPreferencesRoutes } from "./routes/user-preferences.js";
+import {
+  DEFAULT_EMBEDDING_RUNTIME_CONFIG,
+  createOpenAIEmbeddingGenerator,
+  type EmbeddingRuntimeConfig,
+} from "./ai/embedding-port.js";
+import {
+  VectorMemoryRetriever,
+  VectorMemoryWriteCoordinator,
+  type VectorMemorySearchPort,
+  type VectorMemoryWritePort,
+} from "./ai/memory-retriever.js";
+import type { PersistVectorMemoryResult } from "./ai/memory-retriever.js";
+import { VectorMemoryRepository } from "./db/repositories/vector-memory.js";
 import { UserProfileRepository } from "./db/repositories/user-profile.js";
 import { UserPreferencesRepository } from "./db/repositories/user-preferences.js";
 import { createPlanRouteRepo } from "./plan-route-repo.js";
@@ -34,6 +48,10 @@ import { SessionRepository } from "./db/repositories/session.js";
 import { MembershipRepository, UserRepository } from "./db/repositories/auth-context.js";
 import type { WsRouteRepo } from "./routes/ws.js";
 import type { AdminAiConfigRouteRepo } from "./routes/admin-ai-config.js";
+import {
+  UserMemoryLifecycleService,
+  consoleUserMemoryAuditPort,
+} from "./user-memory/service.js";
 
 export interface BuildAppOptions {
   db?: Database;
@@ -161,11 +179,20 @@ export async function buildApp(
   const workoutPlanRepo = new WorkoutPlanRepository(database);
   const workoutSessionRepo = new WorkoutSessionRepository(database);
   const planSpecRepo = new PlanSpecRepository(database);
+  const vectorMemoryRepo = new VectorMemoryRepository(database);
+  const { retriever: vectorMemoryRetriever, writer: vectorMemoryWriter } =
+    createOptionalVectorMemoryServices(vectorMemoryRepo, resolveEmbeddingRuntimeConfig());
   const planGenerationService = new PlanGenerationService(
     generator,
     planSpecRepo,
     workoutPlanRepo,
-    registry
+    registry,
+    vectorMemoryRetriever
+  );
+  const userMemoryService = new UserMemoryLifecycleService(
+    vectorMemoryRepo,
+    vectorMemoryWriter,
+    consoleUserMemoryAuditPort
   );
 
   // Plan wizard + generation routes (draft, promote, confirm, regenerate, fetch).
@@ -239,6 +266,7 @@ export async function buildApp(
   await app.register(userPreferencesRoutes, {
     repo: userPreferencesRouteRepo,
   });
+  await app.register(userMemoryRoutes, { service: userMemoryService });
 
   // WebSocket plugin + authenticated plan-status route.
   // WsRegistry is shared between this route and PlanGenerationService so
@@ -289,4 +317,55 @@ export function resolveWsAllowedOrigins(
   }
   const webOrigin = env.WEB_PUBLIC_ORIGIN;
   return webOrigin && webOrigin.trim() !== "" ? [webOrigin.trim()] : [];
+}
+
+export function resolveEmbeddingRuntimeConfig(
+  env: NodeJS.ProcessEnv = process.env
+): EmbeddingRuntimeConfig {
+  return {
+    provider: env.VECTOR_MEMORY_EMBEDDING_PROVIDER ?? DEFAULT_EMBEDDING_RUNTIME_CONFIG.provider,
+    model: env.VECTOR_MEMORY_EMBEDDING_MODEL ?? DEFAULT_EMBEDDING_RUNTIME_CONFIG.model,
+    version:
+      env.VECTOR_MEMORY_EMBEDDING_VERSION ??
+      env.VECTOR_MEMORY_EMBEDDING_MODEL ??
+      DEFAULT_EMBEDDING_RUNTIME_CONFIG.version,
+    dimension: Number(
+      env.VECTOR_MEMORY_EMBEDDING_DIMENSION ?? DEFAULT_EMBEDDING_RUNTIME_CONFIG.dimension
+    ),
+    timeoutMs: Number(
+      env.VECTOR_MEMORY_EMBEDDING_TIMEOUT_MS ?? DEFAULT_EMBEDDING_RUNTIME_CONFIG.timeoutMs
+    ),
+    maxAttempts: Number(
+      env.VECTOR_MEMORY_EMBEDDING_MAX_ATTEMPTS ?? DEFAULT_EMBEDDING_RUNTIME_CONFIG.maxAttempts
+    ),
+  };
+}
+
+export function createOptionalVectorMemoryServices(
+  repo: VectorMemorySearchPort & VectorMemoryWritePort,
+  runtimeConfig: EmbeddingRuntimeConfig,
+): {
+  retriever?: VectorMemoryRetriever;
+  writer: Pick<VectorMemoryWriteCoordinator, "saveConfirmedMemory">;
+} {
+  try {
+    const embeddingGenerator = createOpenAIEmbeddingGenerator(runtimeConfig);
+    return {
+      retriever: new VectorMemoryRetriever(embeddingGenerator, repo),
+      writer: new VectorMemoryWriteCoordinator(embeddingGenerator, repo),
+    };
+  } catch (error) {
+    // Embeddings are optional. Invalid provider configuration must not block the API.
+    console.warn("[app] vector memory disabled", {
+      reason: "misconfigured",
+      errorName: error instanceof Error ? error.name : "unknown",
+    });
+    return {
+      writer: {
+        async saveConfirmedMemory(): Promise<PersistVectorMemoryResult> {
+          return { kind: "failed", reason: "misconfigured" };
+        },
+      },
+    };
+  }
 }
