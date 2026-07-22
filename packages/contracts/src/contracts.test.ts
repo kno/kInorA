@@ -14,6 +14,7 @@ import type {
   SessionContext,
   SessionId,
   SessionResponse,
+  DeleteSessionOutcome,
   StartSessionOutcome,
   TenantId,
   TenantQueryContextDTO,
@@ -138,6 +139,21 @@ describe("shared contracts boundary", () => {
     // The started/resumed branch narrows to the session.
     if (started.kind === "started") {
       expectTypeOf(started.session).toEqualTypeOf<WorkoutSessionRecord>();
+    }
+  });
+
+  it("defines the DeleteSessionOutcome discriminated union (10c-workout-session-delete)", () => {
+    const deleted: DeleteSessionOutcome = { kind: "deleted" };
+    const notFound: DeleteSessionOutcome = { kind: "not_found" };
+    const activeConflict: DeleteSessionOutcome = { kind: "active_conflict" };
+
+    expect(deleted.kind).toBe("deleted");
+    expect(notFound.kind).toBe("not_found");
+    expect(activeConflict.kind).toBe("active_conflict");
+
+    // Narrowing: each variant carries no extra payload.
+    if (activeConflict.kind === "active_conflict") {
+      expectTypeOf<keyof typeof activeConflict>().toEqualTypeOf<"kind">();
     }
   });
 

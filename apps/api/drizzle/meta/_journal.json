@@ -57,6 +57,13 @@
       "when": 1784280133078,
       "tag": "0007_first_namora",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784634085270,
+      "tag": "0008_overrated_khan",
+      "breakpoints": true
     }
   ]
 }

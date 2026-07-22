@@ -148,6 +148,9 @@ function createQueuedSelectDb(queues: Map<object, unknown[][]>) {
         });
         return {
           orderBy,
+          for: vi.fn().mockReturnValue({
+            then: (resolve: (value: unknown[]) => unknown) => Promise.resolve(resolve(nextRows)),
+          }),
           then: (resolve: (value: unknown[]) => unknown) => Promise.resolve(resolve(nextRows)),
         };
       }),
@@ -743,6 +746,195 @@ describe("WorkoutSessionRepository", () => {
       const result = await repo.completeSession(TENANT_B, USER_A, SESSION_ID);
 
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe("deleteById", () => {
+    /**
+     * Build a mock db exposing a `delete` chain (`delete(t).where(...).returning(...)`)
+     * alongside the shared queued-select harness for the scoped re-read.
+     *
+     * `deleteReturning` is the rows the `.returning()` resolves to.
+     * `reReadRows` is queued on `workoutSessions` for the disambiguation
+     * select that fires only when the delete matches 0 rows.
+     */
+    function buildDeleteDb(opts: {
+      deleteReturning: unknown[];
+      reReadRows?: unknown[][];
+    }) {
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, opts.reReadRows ?? [[]]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const returning = vi.fn().mockResolvedValue(opts.deleteReturning);
+      const where = vi.fn().mockReturnValue({ returning });
+      const del = vi.fn().mockReturnValue({ where });
+      return { db: { select, delete: del } as never, del, returning };
+    }
+
+    it("deletes the caller's own completed session and returns {kind:'deleted'} (cascades via FK onDelete)", async () => {
+      const { db, del } = buildDeleteDb({ deleteReturning: [{ id: SESSION_ID }] });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteById(TENANT_A, USER_A, SESSION_ID);
+
+      expect(result).toEqual({ kind: "deleted" });
+      expect(del).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns {kind:'not_found'} for a nonexistent session id — delete matches 0 rows and the scoped re-read finds nothing", async () => {
+      const { db, del } = buildDeleteDb({
+        deleteReturning: [],
+        reReadRows: [[]], // scoped re-read returns nothing
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteById(TENANT_A, USER_A, "no-such-session");
+
+      expect(result).toEqual({ kind: "not_found" });
+      expect(del).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns {kind:'not_found'} for another user's session — the scoped delete AND scoped re-read never surface the other owner's row (no IDOR)", async () => {
+      // USER_B asks for USER_A's session. The delete WHERE is scoped to
+      // (tenantId, USER_B, id) → 0 rows. The recovery re-read is scoped
+      // identically → 0 rows. USER_B learns nothing about USER_A's session.
+      const { db } = buildDeleteDb({
+        deleteReturning: [],
+        reReadRows: [[]],
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteById(TENANT_A, USER_B, SESSION_ID);
+
+      expect(result).toEqual({ kind: "not_found" });
+    });
+
+    it("returns {kind:'active_conflict'} for an in-progress session — the status='completed' guard skips it and the scoped re-read surfaces 'active' (R3)", async () => {
+      const { db } = buildDeleteDb({
+        deleteReturning: [], // status='completed' guard excludes the active row
+        reReadRows: [[{ status: "active" }]],
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteById(TENANT_A, USER_A, SESSION_ID);
+
+      expect(result).toEqual({ kind: "active_conflict" });
+    });
+
+    it("NEGATIVE CONTROL — a cross-tenant delete for another tenant's session returns {kind:'not_found'} (scoped re-read finds nothing for TENANT_B)", async () => {
+      const { db } = buildDeleteDb({
+        deleteReturning: [],
+        reReadRows: [[]],
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteById(TENANT_B, USER_A, SESSION_ID);
+
+      expect(result).toEqual({ kind: "not_found" });
+    });
+  });
+
+  describe("deleteAllByUser", () => {
+    function buildBulkDeleteDb(opts: {
+      deleteReturning: unknown[];
+      activeRows?: unknown[];
+      sessionRowsAfterDelete?: unknown[];
+      exerciseRowsAfterDelete?: unknown[];
+      setRowsAfterDelete?: unknown[];
+    }) {
+      const activeRows = opts.activeRows ?? [];
+      const sessionRowsAfterDelete = opts.sessionRowsAfterDelete ?? [];
+      const exerciseRowsAfterDelete = opts.exerciseRowsAfterDelete ?? [];
+      const setRowsAfterDelete = opts.setRowsAfterDelete ?? [];
+
+      const select = vi.fn().mockImplementation((shape?: unknown) => {
+        const hasStatusShape =
+          typeof shape === "object" &&
+          shape !== null &&
+          "status" in (shape as Record<string, unknown>);
+
+        return {
+          from: vi.fn().mockImplementation((table: object) => {
+            if (table !== workoutSessions && table !== sessionExercises && table !== setRecords) {
+              return {
+                where: vi.fn().mockReturnValue({
+                  for: vi.fn().mockResolvedValue([]),
+                }),
+              };
+            }
+            if (table === workoutSessions) {
+              if (hasStatusShape) {
+                return { where: vi.fn().mockResolvedValue(activeRows) };
+              }
+              return { where: vi.fn().mockResolvedValue(sessionRowsAfterDelete) };
+            }
+            if (table === sessionExercises) {
+              return { where: vi.fn().mockResolvedValue(exerciseRowsAfterDelete) };
+            }
+            if (table === setRecords) {
+              return { where: vi.fn().mockResolvedValue(setRowsAfterDelete) };
+            }
+            throw new Error(`Unexpected select table: ${String(table)}`);
+          }),
+        };
+      });
+
+      const returning = vi.fn().mockResolvedValue(opts.deleteReturning);
+      const where = vi.fn().mockReturnValue({ returning });
+      const del = vi.fn().mockReturnValue({ where });
+      const transaction = vi.fn().mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({ select, delete: del }));
+
+      return { db: { select, delete: del, transaction } as never, del, select, transaction };
+    }
+
+    it("deletes all completed sessions owned by the caller, returns the deleted count, and leaves no cascaded exercise/set rows behind", async () => {
+      const sessionA = { id: SESSION_ID };
+      const sessionB = { id: "dddddddd-0000-0000-0000-000000000099" };
+      const { db, del, select } = buildBulkDeleteDb({
+        deleteReturning: [sessionA, sessionB],
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteAllByUser(TENANT_A, USER_A);
+
+      expect(result).toEqual({ kind: "deleted", deletedCount: 2 });
+      expect(del).toHaveBeenCalledTimes(1);
+      expect(select).toHaveBeenCalledTimes(2);
+      expect(select.mock.invocationCallOrder[0]).toBeLessThan(del.mock.invocationCallOrder[0]!);
+    });
+
+    it("returns count 0 when the caller has no completed sessions", async () => {
+      const { db } = buildBulkDeleteDb({ deleteReturning: [] });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteAllByUser(TENANT_A, USER_A);
+
+      expect(result).toEqual({ kind: "deleted", deletedCount: 0 });
+    });
+
+    it("returns conflict and preserves completed history when an active session exists for the scoped tenant/user", async () => {
+      const { db, del, transaction } = buildBulkDeleteDb({
+        deleteReturning: [{ id: SESSION_ID }],
+        activeRows: [{ status: "active" }],
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteAllByUser(TENANT_A, USER_A);
+
+      expect(result).toEqual({ kind: "active_conflict" });
+      expect(del).not.toHaveBeenCalled();
+      expect(transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not leak another user's sessions in the same tenant — scoped delete returns count 0 and no active conflict", async () => {
+      const { db } = buildBulkDeleteDb({ deleteReturning: [] });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteAllByUser(TENANT_A, USER_B);
+
+      expect(result).toEqual({ kind: "deleted", deletedCount: 0 });
     });
   });
 

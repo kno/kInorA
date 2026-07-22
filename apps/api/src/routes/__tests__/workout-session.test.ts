@@ -57,6 +57,8 @@ function buildRepoMock(overrides: Partial<Record<keyof ReturnType<typeof buildRe
     findById: vi.fn().mockResolvedValue(activeSession),
     recordSet: vi.fn().mockResolvedValue(activeSession),
     completeSession: vi.fn().mockResolvedValue({ ...activeSession, status: "completed", completedAt: "2026-07-04T09:20:00.000Z" }),
+    deleteById: vi.fn().mockResolvedValue({ kind: "deleted" }),
+    deleteAllByUser: vi.fn().mockResolvedValue({ kind: "deleted", deletedCount: 0 }),
     listCompletedSessions: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
@@ -361,6 +363,130 @@ describe("Workout session routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual(completedSession);
     expect(repo.completeSession).toHaveBeenCalledWith(TENANT_A, USER_A, SESSION_ID);
+  });
+
+  describe("DELETE /workout-sessions/:id", () => {
+    it("returns 401 when delete is requested without authentication", async () => {
+      app = await buildTestApp(buildRepoMock(), createCyclingAuthMockDb({ sessionRows: [], membershipRows: [] }));
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/workout-sessions/${SESSION_ID}`,
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it("returns 204 and no body when the caller deletes their own completed session", async () => {
+      const repo = buildRepoMock({ deleteById: vi.fn().mockResolvedValue({ kind: "deleted" }) });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/workout-sessions/${SESSION_ID}`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(204);
+      expect(response.body).toBe("");
+      expect(repo.deleteById).toHaveBeenCalledWith(TENANT_A, USER_A, SESSION_ID);
+    });
+
+    it("returns 404 when the session does not exist for the caller", async () => {
+      const repo = buildRepoMock({ deleteById: vi.fn().mockResolvedValue({ kind: "not_found" }) });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/workout-sessions/${SESSION_ID}`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error).toBe("not_found");
+    });
+
+    it("returns 404 (no existence leak) when deleting another user's session in the same tenant", async () => {
+      // The route cannot distinguish "nonexistent" from "another user's" —
+      // the repo's scoped (tenantId, userId, id) predicate maps both to
+      // {kind:'not_found'}, surfacing no information about the other owner.
+      const repo = buildRepoMock({ deleteById: vi.fn().mockResolvedValue({ kind: "not_found" }) });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/workout-sessions/${SESSION_ID}`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error).toBe("not_found");
+    });
+
+    it("returns 409 when the session is active (in-progress) — R3 active guard", async () => {
+      const repo = buildRepoMock({ deleteById: vi.fn().mockResolvedValue({ kind: "active_conflict" }) });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/workout-sessions/${SESSION_ID}`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error).toBe("active_session_conflict");
+    });
+  });
+
+  describe("DELETE /workout-sessions", () => {
+    it("returns 200 with { deletedCount } when the caller bulk-deletes completed sessions", async () => {
+      const repo = buildRepoMock({
+        deleteAllByUser: vi.fn().mockResolvedValue({ kind: "deleted", deletedCount: 3 }),
+      });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: "/workout-sessions",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ deletedCount: 3 });
+      expect(repo.deleteAllByUser).toHaveBeenCalledWith(TENANT_A, USER_A);
+    });
+
+    it("returns 200 with { deletedCount: 0 } when the caller has no sessions to delete", async () => {
+      const repo = buildRepoMock({
+        deleteAllByUser: vi.fn().mockResolvedValue({ kind: "deleted", deletedCount: 0 }),
+      });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: "/workout-sessions",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ deletedCount: 0 });
+    });
+
+    it("returns 409 when an active session blocks bulk deletion for the scoped tenant/user", async () => {
+      const repo = buildRepoMock({
+        deleteAllByUser: vi.fn().mockResolvedValue({ kind: "active_conflict" }),
+      });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: "/workout-sessions",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: "active_session_conflict" });
+    });
   });
 
   describe("GET /workout-sessions/history", () => {

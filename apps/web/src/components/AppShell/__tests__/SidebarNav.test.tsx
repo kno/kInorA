@@ -87,6 +87,38 @@ describe("SidebarNav", () => {
     expect(html).toContain('<svg viewBox="0 0 24 24"');
   });
 
+  it("wraps the user identity (avatar + name) in a link to /profile", () => {
+    const html = renderToString(
+      SidebarNav({ user: { initials: "AR", name: "Ada Rivera", plan: "Pro" } }),
+    );
+
+    // The user-area link points to the profile page.
+    const userLink = html.match(/<a[^>]*href="\/profile"[^>]*>/);
+    expect(userLink).toBeTruthy();
+
+    // The avatar initials and the user's name live INSIDE that link so the
+    // whole identity surface is the click target, while the logout form stays
+    // a sibling (interactive elements must not nest inside an <a>).
+    const linkHtml = userLink![0];
+    const linkOpen = html.indexOf(linkHtml);
+    const linkClose = html.indexOf("</a>", linkOpen);
+    const linkInner = html.slice(linkOpen + linkHtml.length, linkClose);
+    expect(linkInner).toContain("AR");
+    expect(linkInner).toContain("Ada Rivera");
+
+    // The logout button must remain OUTSIDE the /profile link.
+    const logoutIdx = html.indexOf('aria-label="Log out"');
+    expect(logoutIdx).toBeGreaterThan(linkClose);
+  });
+
+  it("wraps the fallback user identity in a link to /profile when no user prop is given", () => {
+    const html = renderToString(SidebarNav());
+    expect(html).toMatch(/<a[^>]*href="\/profile"[^>]*>/);
+    // The fallback initials still render inside the link.
+    expect(html).toContain("?");
+    expect(html).toContain("Guest");
+  });
+
   it("highlights a different nav item when pathname changes", () => {
     mockedUsePathname.mockReturnValueOnce("/stats");
 

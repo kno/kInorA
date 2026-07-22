@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
  * Create-plan wizard — full-stack happy path + resume (07-v1-plan-wizard, PR 3).
  *
  * Exercises the real stack end-to-end: register a fresh user through the real
- * `/sign-up` UI (which sets the `kinora_session` cookie), drive the six-step
+ * `/sign-up` UI (which sets the `kinora_session` cookie), drive the seven-step
  * wizard, exit mid-flow and confirm the server-persisted draft resumes at the
  * same step, then Finish and assert a confirmed `plan_specs` row was persisted
  * (the draft is gone and a second promote returns 409) and that NO workout
@@ -66,43 +66,47 @@ test.describe("Create-plan wizard (07)", () => {
     await page.goto("/create-plan");
 
     // Step 1 — goal (auto-advances on selection, no Continue needed)
-    await expect(page.getByText("1 / 6")).toBeVisible();
+    await expect(page.getByText("1 / 7")).toBeVisible();
     await chooseAutoAdvance(page, /Strength/i);
 
     // Step 2 — location (auto-advances on selection, no Continue needed)
-    await expect(page.getByText("2 / 6")).toBeVisible();
+    await expect(page.getByText("2 / 7")).toBeVisible();
     await chooseAutoAdvance(page, /Gym/i);
 
     // Step 3 — equipment (multi-select; needs an explicit Continue). Selecting
     // by ACCESSIBLE NAME works even though the label is overprinted on the
     // full-bleed photo, because it is real, visible text.
-    await expect(page.getByText("3 / 6")).toBeVisible();
+    await expect(page.getByText("3 / 7")).toBeVisible();
     await chooseAndContinue(page, /Barbell/i);
 
     // Step 4 — frequency (auto-advances on selection). Exit mid-flow AFTER
     // this step is saved to prove the server draft resumes at the right place.
-    await expect(page.getByText("4 / 6")).toBeVisible();
+    await expect(page.getByText("4 / 7")).toBeVisible();
     await chooseAutoAdvance(page, /3 days/i);
 
     // Now on step 5 (duration). Navigate away (exit the wizard).
-    await expect(page.getByText("5 / 6")).toBeVisible();
+    await expect(page.getByText("5 / 7")).toBeVisible();
     await page.goto("/dashboard");
 
     // Re-enter — the wizard resumes from the server-persisted draft at step 5
     // with the prior answers intact.
     await page.goto("/create-plan");
-    await expect(page.getByText("5 / 6")).toBeVisible();
+    await expect(page.getByText("5 / 7")).toBeVisible();
     // Going back to frequency shows the previously chosen 3-days still pressed.
     await page.getByRole("button", { name: /Back/i }).click();
-    await expect(page.getByText("4 / 6")).toBeVisible();
+    await expect(page.getByText("4 / 7")).toBeVisible();
     await chooseAutoAdvance(page, /3 days/i);
 
     // Step 5 — duration. A PRESET click now auto-advances (no Continue).
-    await expect(page.getByText("5 / 6")).toBeVisible();
+    await expect(page.getByText("5 / 7")).toBeVisible();
     await chooseAutoAdvance(page, /60 min/i);
 
-    // Step 6 — limitations (empty list valid) → Finish
-    await expect(page.getByText("6 / 6")).toBeVisible();
+    // Step 6 — preferences are optional; continue with empty preferences.
+    await expect(page.getByText("6 / 7")).toBeVisible();
+    await page.getByRole("button", { name: /Continue/i }).click();
+
+    // Step 7 — limitations (empty list valid) → Finish
+    await expect(page.getByText("7 / 7")).toBeVisible();
     const finish = page.getByRole("button", { name: /Finish/i });
     await expect(finish).toBeEnabled();
     await Promise.all([

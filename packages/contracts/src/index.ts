@@ -93,6 +93,21 @@ export type StartSessionOutcome =
     };
 
 /**
+ * Discriminated result of `deleteSession` (10c-workout-session-delete).
+ *
+ * `deleted` — a completed session owned by the caller was removed (cascading
+ * FKs atomically drop its session_exercises + set_records). `not_found` — no
+ * session matched the scoped (tenantId, userId, id) predicate; the caller
+ * learns nothing about sessions they do not own. `active_conflict` — the
+ * session exists and is in-progress; R3 requires the user to complete or
+ * cancel it before deletion, surfaced as 409.
+ */
+export type DeleteSessionOutcome =
+  | { kind: "deleted" }
+  | { kind: "not_found" }
+  | { kind: "active_conflict" };
+
+/**
  * Shared plan list DTO (#93) — one source of truth for web and future mobile.
  * `name` is resolved server-side via `defaultPlanName(row.name, row.createdAt)`
  * before it reaches the contract, so clients receive a non-empty label.
@@ -125,6 +140,70 @@ export interface HealthResponse {
 export type PlanGoal = "strength" | "hypertrophy" | "fat_loss" | "general_fitness";
 
 export type TrainingLocation = "home" | "gym" | "outdoor";
+
+// ---------------------------------------------------------------------------
+// User memory — structured profile + preferences (10a / 10b)
+// User-scoped identity and training-context memory persisted per userId.
+// These types are the cross-boundary shapes; enum value sets MUST mirror the
+// database pgEnums defined in apps/api/src/db/schema.ts. `goal` reuses `PlanGoal`
+// because the profile goal IS the plan-wizard goal — single source of truth.
+// ---------------------------------------------------------------------------
+
+/**
+ * User experience level — mirrors the `experience_level` pgEnum.
+ * Nullable on the stored row: a profile may exist with NULL until the user
+ * chooses; UI MUST treat NULL as "unknown" rather than forcing a default.
+ */
+export type ExperienceLevel = "beginner" | "intermediate" | "advanced";
+
+/**
+ * User profile DTO (10a-user-profile).
+ * `name` is always present (NOT NULL, provisioned on registration from the
+ * email prefix). `goal` and `experienceLevel` are nullable; NULL means
+ * "not chosen yet", distinct from any default value.
+ */
+export interface UserProfile {
+  userId: string;
+  name: string;
+  goal: PlanGoal | null;
+  experienceLevel: ExperienceLevel | null;
+}
+
+/**
+ * User preferences DTO (10b-user-preferences).
+ * `defaultEquipment` is an array when non-null; an empty array `[]` is a
+ * valid value ("visited the page, chose nothing"), distinct from NULL
+ * ("never answered"). Stored as JSONB in the DB.
+ */
+export interface UserPreferences {
+  userId: string;
+  defaultLocation: string | null;
+  defaultDuration: number | null;
+  defaultEquipment: string[] | null;
+}
+
+/**
+ * PUT /user-profile request body. `name` is required and MUST be non-blank;
+ * caller-side validation rejects blank strings. `goal` and `experienceLevel`
+ * are optional; omitted fields MUST leave the stored value unchanged.
+ */
+export interface UpdateProfileRequest {
+  name: string;
+  goal?: PlanGoal;
+  experienceLevel?: ExperienceLevel;
+}
+
+/**
+ * PUT /user-preferences request body. Every field is optional — the
+ * endpoint is the canonical partial-update surface. Omitted fields MUST
+ * leave the stored value unchanged (partial merge semantics live in the
+ * repository, not here — the contract only declares what may be sent).
+ */
+export interface UpdatePreferencesRequest {
+  defaultLocation?: string;
+  defaultDuration?: number;
+  defaultEquipment?: string[];
+}
 
 export interface PlanLimitation {
   text: string;

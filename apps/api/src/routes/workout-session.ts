@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { requireAuth } from "../auth/plugin.js";
 import { validateRpe } from "@kinora/domain";
 import type {
+  DeleteSessionOutcome,
   StartSessionOutcome,
   WorkoutHistoryEntry,
   WorkoutHistoryQuery,
@@ -58,6 +59,20 @@ export interface WorkoutSessionRouteRepo {
     userId: string,
     id: string
   ): Promise<WorkoutSessionRecord | undefined>;
+  /**
+   * Delete one session owned by the caller (10c-workout-session-delete).
+   * The repo scopes the delete by (tenantId, userId, id) and guards active
+   * sessions — see {@link WorkoutSessionRepository.deleteById}.
+   */
+  deleteById(
+    tenantId: string,
+    userId: string,
+    id: string
+  ): Promise<DeleteSessionOutcome>;
+  deleteAllByUser(
+    tenantId: string,
+    userId: string
+  ): Promise<{ kind: "deleted"; deletedCount: number } | { kind: "active_conflict" }>;
   listCompletedSessions(
     tenantId: string,
     userId: string,
@@ -220,6 +235,52 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
       }
 
       return reply.code(200).send(session);
+    }
+  );
+
+  // DELETE /workout-sessions/:id (10c-workout-session-delete, R1 + R3).
+  // Tenant + user scoping and the active-session guard live in the repo; the
+  // route only translates the discriminated outcome into HTTP statuses:
+  //   deleted          → 204 (no body)
+  //   not_found        → 404 (covers nonexistent, another user's, another
+  //                          tenant's — indistinguishable, no existence leak)
+  //   active_conflict  → 409 (the caller must complete/cancel the session
+  //                          before deleting it)
+  fastify.delete<{ Params: SessionParams }>(
+    "/workout-sessions/:id",
+    { preHandler: requireAuth() },
+    async (request, reply) => {
+      const { tenantId, userId } = request.authContext!;
+      const { id } = request.params;
+
+      const outcome = await repo.deleteById(tenantId, userId, id);
+      if (outcome.kind === "not_found") {
+        return reply.code(404).send({ error: "not_found" });
+      }
+      if (outcome.kind === "active_conflict") {
+        return reply.code(409).send({ error: "active_session_conflict" });
+      }
+      return reply.code(204).send();
+    }
+  );
+
+  // DELETE /workout-sessions (10c-workout-session-delete, R2 + R3).
+  // The repo keeps the same tenant/user scoping + active-session guard as the
+  // single-delete path. The route only translates outcomes:
+  //   deleted          → 200 + { deletedCount }
+  //   active_conflict  → 409
+  fastify.delete(
+    "/workout-sessions",
+    { preHandler: requireAuth() },
+    async (request, reply) => {
+      const { tenantId, userId } = request.authContext!;
+
+      const outcome = await repo.deleteAllByUser(tenantId, userId);
+      if (outcome.kind === "active_conflict") {
+        return reply.code(409).send({ error: "active_session_conflict" });
+      }
+
+      return reply.code(200).send({ deletedCount: outcome.deletedCount });
     }
   );
 };

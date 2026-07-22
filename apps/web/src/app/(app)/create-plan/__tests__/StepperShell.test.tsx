@@ -24,8 +24,8 @@ function noopConfirm(): Promise<{ planId: string; status: string }> {
 }
 
 describe("StepperShell — optional plan name (#93)", () => {
-  const completeStep6Draft = {
-    step: 6,
+  const completeFinalDraft = {
+    step: 7,
     spec: {
       goal: "strength" as const,
       location: "gym" as const,
@@ -38,12 +38,12 @@ describe("StepperShell — optional plan name (#93)", () => {
 
   it("renders an optional plan-name input on the final step", () => {
     renderWithIntl(
-      <StepperShell
-        saveDraftAction={noopSave}
-        confirmPlanSpecAction={noopConfirm}
-        initialDraft={completeStep6Draft}
-      />,
-    );
+        <StepperShell
+          saveDraftAction={noopSave}
+          confirmPlanSpecAction={noopConfirm}
+          initialDraft={completeFinalDraft}
+        />,
+      );
     expect(screen.getByRole("textbox", { name: /plan name/i })).toBeTruthy();
   });
 
@@ -53,12 +53,12 @@ describe("StepperShell — optional plan name (#93)", () => {
       .fn()
       .mockResolvedValue({ planId: "plan-1", status: "generating" });
     renderWithIntl(
-      <StepperShell
-        saveDraftAction={saveDraftAction}
-        confirmPlanSpecAction={confirmPlanSpecAction}
-        initialDraft={completeStep6Draft}
-      />,
-    );
+        <StepperShell
+          saveDraftAction={saveDraftAction}
+          confirmPlanSpecAction={confirmPlanSpecAction}
+          initialDraft={completeFinalDraft}
+        />,
+      );
     const finish = screen.getByRole("button", { name: /Finish/i }) as HTMLButtonElement;
     // Blank name must NOT block finishing.
     expect(finish.disabled).toBe(false);
@@ -75,12 +75,12 @@ describe("StepperShell — optional plan name (#93)", () => {
   it("includes a non-blank plan name (trimmed) in the submitted draft", async () => {
     const saveDraftAction = vi.fn().mockResolvedValue(undefined);
     renderWithIntl(
-      <StepperShell
-        saveDraftAction={saveDraftAction}
-        confirmPlanSpecAction={noopConfirm}
-        initialDraft={completeStep6Draft}
-      />,
-    );
+        <StepperShell
+          saveDraftAction={saveDraftAction}
+          confirmPlanSpecAction={noopConfirm}
+          initialDraft={completeFinalDraft}
+        />,
+      );
     const nameInput = screen.getByRole("textbox", { name: /plan name/i });
     fireEvent.change(nameInput, { target: { value: "  Summer Cut  " } });
     fireEvent.click(screen.getByRole("button", { name: /Finish/i }));
@@ -94,15 +94,15 @@ describe("StepperShell — optional plan name (#93)", () => {
 
   it("pre-populates the name input from a resumed draft's spec.name (#93)", () => {
     renderWithIntl(
-      <StepperShell
-        saveDraftAction={noopSave}
-        confirmPlanSpecAction={noopConfirm}
-        initialDraft={{
-          ...completeStep6Draft,
-          spec: { ...completeStep6Draft.spec, name: "Resumed Block" },
-        }}
-      />,
-    );
+        <StepperShell
+          saveDraftAction={noopSave}
+          confirmPlanSpecAction={noopConfirm}
+          initialDraft={{
+            ...completeFinalDraft,
+            spec: { ...completeFinalDraft.spec, name: "Resumed Block" },
+          }}
+        />,
+      );
     const nameInput = screen.getByRole("textbox", {
       name: /plan name/i,
     }) as HTMLInputElement;
@@ -111,6 +111,76 @@ describe("StepperShell — optional plan name (#93)", () => {
 });
 
 describe("StepperShell", () => {
+  it("pre-fills the goal from the stored profile when the draft has no goal", () => {
+    renderWithIntl(
+      <StepperShell
+        saveDraftAction={noopSave}
+        confirmPlanSpecAction={noopConfirm}
+        initialProfile={{
+          userId: "user-1",
+          name: "Ada",
+          goal: "hypertrophy",
+          experienceLevel: "advanced",
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Hypertrophy/i }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    const cont = screen.getByRole("button", { name: /Continue/i }) as HTMLButtonElement;
+    expect(cont.disabled).toBe(false);
+  });
+
+  it("pre-fills location, duration, and equipment from stored preferences when the draft has no values", () => {
+    renderWithIntl(
+      <StepperShell
+        saveDraftAction={noopSave}
+        confirmPlanSpecAction={noopConfirm}
+        initialDraft={{ step: 3, spec: { goal: "strength" } }}
+        initialPreferences={{
+          userId: "user-1",
+          defaultLocation: "gym",
+          defaultDuration: 45,
+          defaultEquipment: ["barbell"],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Barbell/i }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+  });
+
+  it("does not overwrite resumed draft values with stored defaults", () => {
+    renderWithIntl(
+      <StepperShell
+        saveDraftAction={noopSave}
+        confirmPlanSpecAction={noopConfirm}
+        initialDraft={{
+          step: 2,
+          spec: { goal: "strength", location: "home", equipment: ["dumbbells"] },
+        }}
+        initialProfile={{
+          userId: "user-1",
+          name: "Ada",
+          goal: "hypertrophy",
+          experienceLevel: "advanced",
+        }}
+        initialPreferences={{
+          userId: "user-1",
+          defaultLocation: "gym",
+          defaultDuration: 45,
+          defaultEquipment: ["barbell"],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Home/i }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+  });
+
   it("renders the first step (goal) when there is no initial draft", () => {
     renderWithIntl(
       <StepperShell saveDraftAction={noopSave} confirmPlanSpecAction={noopConfirm} />,
@@ -118,14 +188,14 @@ describe("StepperShell", () => {
     expect(screen.getByRole("button", { name: /Strength/i })).toBeTruthy();
   });
 
-  it("passes step progress to OrbitProgress (value=step-1, max=5)", () => {
+  it("passes step progress to OrbitProgress (value=step-1, max=6)", () => {
     renderWithIntl(
       <StepperShell saveDraftAction={noopSave} confirmPlanSpecAction={noopConfirm} />,
     );
     const bar = screen.getByRole("progressbar");
     expect(bar.getAttribute("aria-valuenow")).toBe("0"); // step 1 → value 0
-    expect(bar.getAttribute("aria-valuemax")).toBe("5"); // total 6 → max 5
-    expect(screen.getByText("1 / 6")).toBeTruthy();
+    expect(bar.getAttribute("aria-valuemax")).toBe("6"); // total 7 → max 6
+    expect(screen.getByText("1 / 7")).toBeTruthy();
   });
 
   it("resolves wizard.step.progressAria's {step}/{total} interpolation through next-intl", () => {
@@ -142,7 +212,7 @@ describe("StepperShell", () => {
     // The actual interpolated string, not just "renders" — a `.replace()`
     // fallback or a dropped arg would leave literal "{step}"/"{total}".
     expect(screen.getByRole("progressbar").getAttribute("aria-label")).toBe(
-      "Step 4 of 6",
+      "Step 4 of 7",
     );
   });
 
@@ -184,7 +254,7 @@ describe("StepperShell", () => {
       expect(saveDraftAction).toHaveBeenCalledTimes(1);
     });
     // We are now on step 2 (location)
-    expect(screen.getByText("2 / 6")).toBeTruthy();
+    expect(screen.getByText("2 / 7")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Home/i })).toBeTruthy();
     // The draft submission carried step 2 and the chosen goal
     const firstCall = saveDraftAction.mock.calls[0]!;
@@ -204,7 +274,7 @@ describe("StepperShell", () => {
     );
     // Start at step 2 (location); go Back to step 1 (goal)
     fireEvent.click(screen.getByRole("button", { name: /Back/i }));
-    expect(screen.getByText("1 / 6")).toBeTruthy();
+    expect(screen.getByText("1 / 7")).toBeTruthy();
     // The previously chosen goal is still selected
     expect(
       screen.getByRole("button", { name: /Hypertrophy/i }).getAttribute("aria-pressed"),
@@ -224,7 +294,7 @@ describe("StepperShell", () => {
         }}
       />,
     );
-    expect(screen.getByText("4 / 6")).toBeTruthy();
+    expect(screen.getByText("4 / 7")).toBeTruthy();
     // Step 4 is frequency
     expect(screen.getByRole("button", { name: /3 days/i })).toBeTruthy();
   });
@@ -235,7 +305,7 @@ describe("StepperShell", () => {
         saveDraftAction={noopSave}
         confirmPlanSpecAction={noopConfirm}
         initialDraft={{
-          step: 6,
+          step: 7,
           spec: {
             goal: "strength",
             location: "gym",
@@ -262,7 +332,7 @@ describe("StepperShell", () => {
         saveDraftAction={saveDraftAction}
         confirmPlanSpecAction={confirmPlanSpecAction}
         initialDraft={{
-          step: 6,
+          step: 7,
           spec: {
             goal: "strength",
             location: "gym",
@@ -283,7 +353,7 @@ describe("StepperShell", () => {
     // The final answers are persisted before promote. The server action
     // enriches the draft with preferenceScores; the shell forwards the spec.
     const [step, finalSpec] = saveDraftAction.mock.calls[0]!;
-    expect(step).toBe(6);
+    expect(step).toBe(7);
     expect(finalSpec.goal).toBe("strength");
     expect(finalSpec.sessionDurationMinutes).toBe(60);
     // On success the wizard navigates to the plan status view with the planId.
@@ -309,7 +379,7 @@ describe("StepperShell", () => {
     );
     // step 2 (location) → pick gym auto-advances to step 3 (equipment)
     fireEvent.click(screen.getByRole("button", { name: /Gym/i }));
-    await waitFor(() => expect(screen.getByText("3 / 6")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("3 / 7")).toBeTruthy());
     // Equipment options for gym are shown
     expect(screen.getByRole("button", { name: /Barbell/i })).toBeTruthy();
     // The draft submitted for step 3 carries an empty equipment array default
@@ -318,13 +388,13 @@ describe("StepperShell", () => {
     expect(spec.equipment).toEqual([]);
   });
 
-  it("renders the limitations step (step 6) with a text input", () => {
+  it("renders the limitations step (step 7) with a text input", () => {
     renderWithIntl(
       <StepperShell
         saveDraftAction={noopSave}
         confirmPlanSpecAction={noopConfirm}
         initialDraft={{
-          step: 6,
+          step: 7,
           spec: {
             goal: "strength",
             location: "gym",
@@ -337,6 +407,106 @@ describe("StepperShell", () => {
       />,
     );
     expect(screen.getByRole("textbox", { name: /limitation/i })).toBeTruthy();
+  });
+
+  it("renders the new preferences step before limitations", () => {
+    renderWithIntl(
+      <StepperShell
+        saveDraftAction={noopSave}
+        confirmPlanSpecAction={noopConfirm}
+        initialDraft={{
+          step: 6,
+          spec: {
+            goal: "strength",
+            location: "gym",
+            daysPerWeek: 3,
+            sessionDurationMinutes: 60,
+            equipment: [],
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/default location/i)).toBeTruthy();
+    expect(screen.getByText("What defaults should we remember?")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Continue/i })).toBeTruthy();
+  });
+
+  it("saves user preferences before confirming the plan", async () => {
+    const saveUserPreferencesAction = vi.fn().mockResolvedValue(undefined);
+    const saveDraftAction = vi.fn().mockResolvedValue(undefined);
+    const confirmPlanSpecAction = vi.fn().mockResolvedValue({ planId: "plan-999", status: "generating" });
+
+    renderWithIntl(
+      <StepperShell
+        saveDraftAction={saveDraftAction}
+        saveUserPreferencesAction={saveUserPreferencesAction}
+        confirmPlanSpecAction={confirmPlanSpecAction}
+        initialDraft={{
+          step: 7,
+          spec: {
+            goal: "strength",
+            location: "gym",
+            daysPerWeek: 3,
+            sessionDurationMinutes: 60,
+            equipment: ["barbell"],
+            limitations: [],
+          },
+        }}
+        initialPreferences={{
+          userId: "user-1",
+          defaultLocation: "gym",
+          defaultDuration: 45,
+          defaultEquipment: ["barbell"],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Finish/i }));
+
+    await waitFor(() => expect(confirmPlanSpecAction).toHaveBeenCalledTimes(1));
+    expect(saveUserPreferencesAction).toHaveBeenCalledWith({
+      defaultLocation: "gym",
+      defaultDuration: 45,
+      defaultEquipment: ["barbell"],
+    });
+    expect(saveUserPreferencesAction.mock.invocationCallOrder[0]!).toBeLessThan(
+      saveDraftAction.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("blocks finish and surfaces an error when saving preferences fails", async () => {
+    const saveUserPreferencesAction = vi
+      .fn()
+      .mockRejectedValue(new Error("invalid_default_duration"));
+    const saveDraftAction = vi.fn().mockResolvedValue(undefined);
+    const confirmPlanSpecAction = vi.fn().mockResolvedValue({ planId: "plan-999", status: "generating" });
+
+    renderWithIntl(
+      <StepperShell
+        saveDraftAction={saveDraftAction}
+        saveUserPreferencesAction={saveUserPreferencesAction}
+        confirmPlanSpecAction={confirmPlanSpecAction}
+        initialDraft={{
+          step: 7,
+          spec: {
+            goal: "strength",
+            location: "gym",
+            daysPerWeek: 3,
+            sessionDurationMinutes: 60,
+            equipment: ["barbell"],
+            limitations: [],
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Finish/i }));
+
+    await waitFor(() => expect(saveUserPreferencesAction).toHaveBeenCalledTimes(1));
+    expect(saveDraftAction).not.toHaveBeenCalled();
+    expect(confirmPlanSpecAction).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toBeTruthy();
   });
 
   it("offers a continue-or-overwrite choice when resuming an existing draft", () => {
@@ -360,7 +530,7 @@ describe("StepperShell", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /Start over/i }));
-    expect(screen.getByText("1 / 6")).toBeTruthy();
+    expect(screen.getByText("1 / 7")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: /Strength/i }).getAttribute("aria-pressed"),
     ).toBe("false");
@@ -377,7 +547,7 @@ describe("StepperShell", () => {
       );
       fireEvent.click(screen.getByRole("button", { name: /Strength/i }));
       // No explicit Continue click — selection alone advances to step 2.
-      await waitFor(() => expect(screen.getByText("2 / 6")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("2 / 7")).toBeTruthy());
       expect(screen.getByRole("button", { name: /Home/i })).toBeTruthy();
       const [step, spec] = saveDraftAction.mock.calls[0]!;
       expect(step).toBe(2);
@@ -394,7 +564,7 @@ describe("StepperShell", () => {
         />,
       );
       fireEvent.click(screen.getByRole("button", { name: /Gym/i }));
-      await waitFor(() => expect(screen.getByText("3 / 6")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("3 / 7")).toBeTruthy());
     });
 
     it("advances after picking a frequency (step 4)", async () => {
@@ -410,7 +580,7 @@ describe("StepperShell", () => {
         />,
       );
       fireEvent.click(screen.getByRole("button", { name: /4 days/i }));
-      await waitFor(() => expect(screen.getByText("5 / 6")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("5 / 7")).toBeTruthy());
     });
 
     it("auto-advances when a duration PRESET is picked (step 5)", async () => {
@@ -431,8 +601,8 @@ describe("StepperShell", () => {
         />,
       );
       fireEvent.click(screen.getByRole("button", { name: /60 min/i }));
-      // A preset click commits and advances to step 6 (limitations).
-      await waitFor(() => expect(screen.getByText("6 / 6")).toBeTruthy());
+      // A preset click commits and advances to step 6 (preferences).
+      await waitFor(() => expect(screen.getByText("6 / 7")).toBeTruthy());
       const [step, spec] = saveDraftAction.mock.calls[0]!;
       expect(step).toBe(6);
       expect(spec.sessionDurationMinutes).toBe(60);
@@ -458,11 +628,11 @@ describe("StepperShell", () => {
       const input = screen.getByRole("spinbutton", { name: /custom duration/i });
       // Typing alone must NOT advance.
       fireEvent.change(input, { target: { value: "75" } });
-      expect(screen.getByText("5 / 6")).toBeTruthy();
+      expect(screen.getByText("5 / 7")).toBeTruthy();
       expect(saveDraftAction).not.toHaveBeenCalled();
       // Confirming the valid custom value commits and advances.
       fireEvent.click(screen.getByRole("button", { name: /set duration/i }));
-      await waitFor(() => expect(screen.getByText("6 / 6")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("6 / 7")).toBeTruthy());
       const [, spec] = saveDraftAction.mock.calls[0]!;
       expect(spec.sessionDurationMinutes).toBe(75);
     });
@@ -489,7 +659,7 @@ describe("StepperShell", () => {
       fireEvent.click(screen.getByRole("button", { name: /set duration/i }));
       // Invalid: inline error, no commit, stay on step 5.
       expect(screen.getByRole("alert")).toBeTruthy();
-      expect(screen.getByText("5 / 6")).toBeTruthy();
+      expect(screen.getByText("5 / 7")).toBeTruthy();
       expect(saveDraftAction).not.toHaveBeenCalled();
     });
 
@@ -511,7 +681,7 @@ describe("StepperShell", () => {
       );
       fireEvent.click(screen.getByRole("button", { name: /Barbell/i }));
       // Multi-choice: stay so the user can pick more before Continue.
-      expect(screen.getByText("3 / 6")).toBeTruthy();
+      expect(screen.getByText("3 / 7")).toBeTruthy();
       expect(saveDraftAction).not.toHaveBeenCalled();
     });
 
@@ -526,10 +696,10 @@ describe("StepperShell", () => {
       );
       // Pick a location → auto-advance to step 3.
       fireEvent.click(screen.getByRole("button", { name: /Gym/i }));
-      await waitFor(() => expect(screen.getByText("3 / 6")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("3 / 7")).toBeTruthy());
       // Back to step 2 → the earlier location is still selected.
       fireEvent.click(screen.getByRole("button", { name: /Back/i }));
-      expect(screen.getByText("2 / 6")).toBeTruthy();
+      expect(screen.getByText("2 / 7")).toBeTruthy();
       expect(
         screen.getByRole("button", { name: /Gym/i }).getAttribute("aria-pressed"),
       ).toBe("true");

@@ -144,6 +144,28 @@
   font-weight: 500;
 }
 
+/* The avatar + name surface links to /profile. Takes the available space
+   so the logout form (margin-left:auto) stays pinned to the right edge. */
+.userLink {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+  border-radius: var(--r-btn);
+  padding: 2px 0;
+}
+
+.userLink:hover {
+  background: var(--surface-2);
+}
+
+.userLink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Logout form — inline in user area, pushed to the right. */
 .logoutForm {
   margin-left: auto;

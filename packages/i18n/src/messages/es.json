@@ -511,6 +511,7 @@
       "locationTitle": "¿Dónde vas a entrenar?",
       "frequencyTitle": "¿Cuántos días por semana?",
       "durationTitle": "¿Cuánto dura cada sesión?",
+      "preferencesTitle": "¿Qué valores predeterminados debemos recordar?",
       "equipmentTitle": "¿Qué equipamiento tienes?",
       "limitationsTitle": "¿Alguna limitación a tener en cuenta?",
       "progressAria": "Paso {step} de {total}"
@@ -623,6 +624,12 @@
     },
     "chip": {
       "removeAria": "Eliminar {name}"
+    },
+    "preferences": {
+      "locationLabel": "Ubicación predeterminada",
+      "durationLabel": "Duración predeterminada de la sesión",
+      "equipmentLabel": "Equipamiento predeterminado",
+      "saveError": "No se pudieron guardar tus preferencias. Inténtalo de nuevo."
     }
   },
   "dashboard": {
@@ -760,7 +767,32 @@
   },
   "profile": {
     "title": "Perfil",
-    "description": "Gestiona los ajustes y las preferencias de tu cuenta."
+    "description": "Gestiona los ajustes y las preferencias de tu cuenta.",
+    "loading": {
+      "title": "Cargando tu perfil…",
+      "description": "Estamos obteniendo los detalles más recientes de tu perfil.",
+      "progressAria": "Cargando perfil"
+    },
+    "form": {
+      "heading": "Tu perfil",
+      "name": "Nombre",
+      "namePlaceholder": "Tu nombre",
+      "goal": "Objetivo",
+      "experience": "Nivel de experiencia",
+      "goalPlaceholder": "Selecciona un objetivo",
+      "experiencePlaceholder": "Selecciona un nivel",
+      "save": "Guardar",
+      "saving": "Guardando…",
+      "saved": "Perfil guardado.",
+      "error": "No se pudo guardar tu perfil. Inténtalo de nuevo.",
+      "loadError": "No se pudo cargar tu perfil. Recarga la página.",
+      "nameRequired": "El nombre es obligatorio."
+    },
+    "experience": {
+      "beginner": "Principiante",
+      "intermediate": "Intermedio",
+      "advanced": "Avanzado"
+    }
   },
   "offline": {
     "title": "Estás sin conexión",

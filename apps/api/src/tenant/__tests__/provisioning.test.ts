@@ -186,6 +186,136 @@ describe("provisionTenantForUser", () => {
       })
     ).rejects.toThrow(expectedError);
   });
+
+  // --- 10a-user-memory-structured Slice 3: registration auto-provisioning ---
+  // provisionTenantForUser MUST also insert a default user_profiles row inside
+  // the SAME transaction, so a freshly-registered user always has a profile row
+  // (name = email local part, goal/experienceLevel null). This removes the need
+  // for GET /user-profile to lazy-provision on first read for registered users.
+
+  it("inserts a default user_profiles row inside the transaction with the email local part as name", async () => {
+    const capturedPayloads: unknown[] = [];
+    const mockTx = {
+      insert: vi.fn().mockImplementation((table: { _: unknown }) => ({
+        values: vi.fn().mockImplementation((payload: unknown) => {
+          capturedPayloads.push({ table, payload });
+          return {
+            returning: vi.fn().mockImplementation(() => {
+              const n = capturedPayloads.length;
+              if (n === 1) return Promise.resolve([{ id: "t-1" }]);
+              if (n === 2) return Promise.resolve([{ id: "u-1" }]);
+              if (n === 3) return Promise.resolve([{ id: "m-1" }]);
+              // Profile insert (4th) carries no .returning() call — its values
+              // chain is awaited directly. This branch is unreachable but kept
+              // for shape symmetry with the shared mock.
+              return Promise.resolve([]);
+            }),
+          };
+        }),
+      })),
+    };
+
+    const mockDb = {
+      transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(mockTx)),
+    } as unknown as {
+      transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown>;
+    };
+
+    const result = await provisionTenantForUser(mockDb, {
+      tenantName: "Acme Corp",
+      userEmail: "admin@acme.com",
+    });
+
+    expect(result).toEqual({
+      tenantId: "t-1",
+      userId: "u-1",
+      membershipId: "m-1",
+    });
+
+    // Exactly four inserts in order: tenants, users, memberships, userProfiles.
+    expect(capturedPayloads).toHaveLength(4);
+    const profilePayload = capturedPayloads[3]!.payload as Record<string, unknown>;
+    expect(profilePayload).toMatchObject({
+      userId: "u-1",
+      name: "admin",
+      goal: null,
+      experienceLevel: null,
+    });
+  });
+
+  it("falls back to 'user' when the email has no local part for the default profile name", async () => {
+    const capturedPayloads: unknown[] = [];
+    const mockTx = {
+      insert: vi.fn().mockImplementation((table: { _: unknown }) => ({
+        values: vi.fn().mockImplementation((payload: unknown) => {
+          capturedPayloads.push({ table, payload });
+          return {
+            returning: vi.fn().mockImplementation(() => {
+              const n = capturedPayloads.length;
+              if (n === 1) return Promise.resolve([{ id: "t-1" }]);
+              if (n === 2) return Promise.resolve([{ id: "u-1" }]);
+              if (n === 3) return Promise.resolve([{ id: "m-1" }]);
+              return Promise.resolve([]);
+            }),
+          };
+        }),
+      })),
+    };
+
+    const mockDb = {
+      transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(mockTx)),
+    } as unknown as Parameters<typeof provisionTenantForUser>[0];
+
+    await provisionTenantForUser(mockDb, {
+      tenantName: "Acme Corp",
+      userEmail: "@acme.com", // empty local part
+    });
+
+    const profilePayload = capturedPayloads[3]!.payload as Record<string, unknown>;
+    expect(profilePayload.name).toBe("user");
+  });
+
+  it("provisions only ONE profile row per registration — the profile insert is part of the single provisioning transaction (no duplicate path)", async () => {
+    // Registration calls provisionTenantForUser exactly once; the profile row
+    // is the 4th insert in the SAME tx. A re-register of the same email fails
+    // earlier on the users_email_unique constraint (covered by AuthService
+    // register tests), so this row can never be duplicated at the source.
+    const capturedPayloads: unknown[] = [];
+    const mockTx = {
+      insert: vi.fn().mockImplementation(() => ({
+        values: vi.fn().mockImplementation((payload: unknown) => {
+          capturedPayloads.push(payload);
+          return {
+            returning: vi.fn().mockImplementation(() => {
+              const n = capturedPayloads.length;
+              if (n === 1) return Promise.resolve([{ id: "t-9" }]);
+              if (n === 2) return Promise.resolve([{ id: "u-9" }]);
+              if (n === 3) return Promise.resolve([{ id: "m-9" }]);
+              return Promise.resolve([]);
+            }),
+          };
+        }),
+      })),
+    };
+
+    const mockDb = {
+      transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(mockTx)),
+    } as unknown as Parameters<typeof provisionTenantForUser>[0];
+
+    await provisionTenantForUser(mockDb, {
+      tenantName: "WS",
+      userEmail: "solo@example.com",
+    });
+
+    // Exactly one of the four captured payloads is a userProfile-shaped row
+    // ({ userId, name, goal, experienceLevel }) — the others are tenant/user/
+    // membership rows which do NOT carry `goal`/`experienceLevel`.
+    const profileRows = capturedPayloads.filter(
+      (p): p is Record<string, unknown> =>
+        typeof p === "object" && p !== null && "goal" in p && "experienceLevel" in p
+    );
+    expect(profileRows).toHaveLength(1);
+  });
 });
 
 // --- Scenario: OAuth account linking to an existing user (Spec Req: Google-only) ---

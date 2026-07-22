@@ -7,6 +7,7 @@ export {
   OrbitLogoIcon,
   PlanIcon,
   StatsIcon,
+  UserIcon,
   createLibraryIconEntry,
   kinIconRegistry,
 } from "./KinIcon";
