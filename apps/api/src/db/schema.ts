@@ -12,8 +12,38 @@ import {
   numeric,
   varchar,
   smallint,
+  customType,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { DefaultVectorMemoryEmbeddingConfig } from "@kinora/contracts";
+
+const DEFAULT_VECTOR_MEMORY_EMBEDDING_CONFIG = {
+  provider: "openai",
+  model: "text-embedding-3-small",
+  version: "text-embedding-3-small",
+  dimension: 1536,
+} satisfies DefaultVectorMemoryEmbeddingConfig;
+
+const pgVector = customType<{
+  data: number[];
+  driverData: string;
+  config: { dimensions: number };
+}>({
+  dataType(config) {
+    return `vector(${config?.dimensions ?? DEFAULT_VECTOR_MEMORY_EMBEDDING_CONFIG.dimension})`;
+  },
+  toDriver(value) {
+    return `[${value.join(",")}]`;
+  },
+  fromDriver(value) {
+    const raw = value.trim();
+    if (raw === "[]") return [];
+    return raw
+      .slice(1, -1)
+      .split(",")
+      .map((entry) => Number(entry.trim()));
+  },
+});
 
 /**
  * Goal enum for the user profile (10a-user-profile).
@@ -420,6 +450,121 @@ export const aiProviderConfig = pgTable("ai_provider_config", {
   model: text("model").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const userMemoryStatusEnum = pgEnum("user_memory_status", [
+  "candidate",
+  "confirmed",
+  "embedding_pending",
+  "active",
+  "rejected",
+  "failed",
+  "deleted",
+]);
+
+export const userMemoryEligibilityEnum = pgEnum("user_memory_eligibility", [
+  "eligible",
+  "secret",
+  "raw_transcript",
+  "full_plan",
+  "sensitive_health",
+  "other",
+]);
+
+export const userMemoryConsentEnum = pgEnum("user_memory_consent", [
+  "granted",
+  "revoked",
+]);
+
+/**
+ * Vector memory settings — tenant+user scoped enable/disable state.
+ * Existing records stay reviewable even when `enabled=false`; the flag only
+ * blocks new writes/retrieval in later slices.
+ */
+export const vectorMemorySettings = pgTable(
+  "vector_memory_settings",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").notNull().default(true),
+    settingsVersion: integer("settings_version").notNull().default(1),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantUserUnique: uniqueIndex("vector_memory_settings_tenant_user_unique").on(
+      table.tenantId,
+      table.userId,
+    ),
+  }),
+);
+
+/**
+ * User memory vectors — tenant+user scoped durable facts with embedding metadata.
+ * Records are soft-deletable/soft-disablable for immediate retrieval exclusion.
+ */
+export const userMemoryVectors = pgTable(
+  "user_memory_vectors",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    summary: text("summary").notNull(),
+    source: text("source").notNull(),
+    status: userMemoryStatusEnum("status").notNull(),
+    eligibility: userMemoryEligibilityEnum("eligibility").notNull(),
+    consentStatus: userMemoryConsentEnum("consent_status").notNull(),
+    consentedAt: timestamp("consented_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    schemaVersion: text("schema_version").notNull().default("1"),
+    embeddingProvider: text("embedding_provider").notNull(),
+    embeddingModel: text("embedding_model").notNull(),
+    embeddingVersion: text("embedding_version").notNull(),
+    embeddingDimension: integer("embedding_dimension").notNull(),
+    embedding: pgVector("embedding", {
+      dimensions: DEFAULT_VECTOR_MEMORY_EMBEDDING_CONFIG.dimension,
+    }).notNull(),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    ownerStatusIdx: index("user_memory_vectors_owner_status_idx").on(
+      table.tenantId,
+      table.userId,
+      table.status,
+    ),
+    ownerEmbeddingMetadataIdx: index(
+      "user_memory_vectors_owner_embedding_metadata_idx",
+    ).on(
+      table.tenantId,
+      table.userId,
+      table.embeddingProvider,
+      table.embeddingModel,
+      table.embeddingVersion,
+      table.embeddingDimension,
+    ),
+    tenantUserIdempotencyUnique: uniqueIndex(
+      "user_memory_vectors_tenant_user_idempotency_unique",
+    ).on(table.tenantId, table.userId, table.idempotencyKey),
+    tenantUserFingerprintActiveUnique: uniqueIndex(
+      "user_memory_vectors_tenant_user_fingerprint_active_unique",
+    )
+      .on(table.tenantId, table.userId, table.fingerprint)
+      .where(sql`${table.deletedAt} is null`),
+  }),
+);
 
 /**
  * User Profiles — user-scoped structured memory (10a-user-profile).

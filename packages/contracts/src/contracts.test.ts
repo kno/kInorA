@@ -1,8 +1,10 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import * as contracts from "./index";
 import type {
+  DefaultVectorMemoryEmbeddingConfig,
   HealthResponse,
   LoginRequest,
+  MemorySettings,
   MembershipRole,
   MembershipStatus,
   OidcCallbackParams,
@@ -19,6 +21,10 @@ import type {
   TenantId,
   TenantQueryContextDTO,
   TrainingLocation,
+  UserMemory,
+  UserMemoryConsentStatus,
+  UserMemoryEligibility,
+  UserMemoryStatus,
   UserId,
   WorkoutPlanDetail,
   WorkoutPlanSummary,
@@ -33,7 +39,11 @@ describe("shared contracts boundary", () => {
     // .withStructuredOutput(WorkoutProgramSchema) in the OpenRouter adapter.
     // MUSCLE_GROUPS (09c-v1-progress-dashboard-stats) is the settled 10-group
     // taxonomy const — see design.md "Muscle-group taxonomy".
-    expect(Object.keys(contracts)).toEqual(["WorkoutProgramSchema", "MUSCLE_GROUPS"]);
+    expect(Object.keys(contracts)).toEqual([
+      "WorkoutProgramSchema",
+      "DEFAULT_VECTOR_MEMORY_EMBEDDING_CONFIG",
+      "MUSCLE_GROUPS",
+    ]);
   });
 
   it("defines the health response contract", () => {
@@ -171,5 +181,73 @@ describe("shared contracts boundary", () => {
       specId: string;
       name?: string;
     }>();
+  });
+
+  it("defines vector-memory lifecycle and ownership contracts", () => {
+    expectTypeOf<UserMemoryStatus>().toEqualTypeOf<
+      | "candidate"
+      | "confirmed"
+      | "embedding_pending"
+      | "active"
+      | "rejected"
+      | "failed"
+      | "deleted"
+    >();
+    expectTypeOf<UserMemoryEligibility>().toEqualTypeOf<
+      | "eligible"
+      | "secret"
+      | "raw_transcript"
+      | "full_plan"
+      | "sensitive_health"
+      | "other"
+    >();
+    expectTypeOf<UserMemoryConsentStatus>().toEqualTypeOf<"granted" | "revoked">();
+    expectTypeOf<UserMemory>().toEqualTypeOf<{
+      id: string;
+      tenantId: TenantId;
+      userId: UserId;
+      summary: string;
+      source: string;
+      status: UserMemoryStatus;
+      eligibility: UserMemoryEligibility;
+      consentStatus: UserMemoryConsentStatus;
+      consentedAt: string;
+      revokedAt?: string | null;
+      disabledAt?: string | null;
+      deletedAt?: string | null;
+      idempotencyKey: string;
+      fingerprint: string;
+      schemaVersion: string;
+      embeddingProvider: string;
+      embeddingModel: string;
+      embeddingVersion: string;
+      embeddingDimension: number;
+      createdAt: string;
+      updatedAt: string;
+    }>();
+    expectTypeOf<MemorySettings>().toEqualTypeOf<{
+      tenantId: TenantId;
+      userId: UserId;
+      enabled: boolean;
+      settingsVersion: number;
+      disabledAt?: string | null;
+      updatedAt: string;
+    }>();
+  });
+
+  it("exposes the configurable default vector embedding metadata", () => {
+    expectTypeOf<DefaultVectorMemoryEmbeddingConfig>().toEqualTypeOf<{
+      provider: string;
+      model: string;
+      version: string;
+      dimension: number;
+    }>();
+
+    expect(contracts.DEFAULT_VECTOR_MEMORY_EMBEDDING_CONFIG).toMatchObject({
+      provider: "openai",
+      model: "text-embedding-3-small",
+      version: "text-embedding-3-small",
+      dimension: 1536,
+    });
   });
 });
