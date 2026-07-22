@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { getTranslations } from "next-intl/server";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { AppShell } from "@/components/AppShell/AppShell";
 import type { SidebarUser } from "@/components/AppShell/SidebarNav";
@@ -20,6 +21,7 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const t = await getTranslations();
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
 
@@ -35,5 +37,5 @@ export default async function AppLayout({
     }
   }
 
-  return <AppShell user={user}>{children}</AppShell>;
+  return <AppShell user={user} memoryNavLabel={t("memory.navLabel")}>{children}</AppShell>;
 }

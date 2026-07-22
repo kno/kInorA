@@ -10,6 +10,7 @@ import type {
   PersistVectorMemoryInput,
   PersistVectorMemoryResult,
 } from "../ai/memory-retriever.js";
+import { classifyMemoryEligibility } from "./eligibility.js";
 
 type MemoryScope = { tenantId: string; userId: string };
 
@@ -55,20 +56,6 @@ export type UserMemoryCreateOutcome =
   | { kind: "failed"; reason: EmbeddingFailureReason | "disabled" };
 
 const SCHEMA_VERSION = "1";
-const SECRET_PATTERNS = [/\bpassword\b/i, /\bapi[_ -]?key\b/i, /\btoken\b/i, /\bsecret\b/i];
-const RAW_TRANSCRIPT_PATTERNS = [/^user:/im, /^assistant:/im, /^speaker\s*\d+:/im, /transcript/i];
-const FULL_PLAN_PATTERNS = [/weeklysessions/i, /day\s*1/i, /restSeconds/i, /sets?\s*[x×-]\s*reps?/i];
-const SENSITIVE_HEALTH_PATTERNS = [
-  /\bdiagnos/i,
-  /\binjury\b/i,
-  /\bpain\b/i,
-  /\brehab\b/i,
-  /\bhernia/i,
-  /\bmedication\b/i,
-  /\bdiabetes\b/i,
-  /\bblood pressure\b/i,
-];
-
 export class UserMemoryLifecycleService {
   constructor(
     private readonly repo: UserMemoryRepositoryPort,
@@ -139,6 +126,17 @@ export class UserMemoryLifecycleService {
       schemaVersion: SCHEMA_VERSION,
     });
 
+    if (result.kind === "rejected") {
+      await this.audit.record({
+        operation: "create",
+        outcome: "rejected",
+        tenantId: scope.tenantId,
+        userId: scope.userId,
+        reason: result.reason,
+      });
+      return result;
+    }
+
     if (result.kind === "failed") {
       await this.audit.record({
         operation: "create",
@@ -193,22 +191,7 @@ export function normalizeFactText(input: string): string {
 }
 
 export function classifyEligibility(input: string): UserMemory["eligibility"] {
-  if (input.length < 3) {
-    return "other";
-  }
-  if (SECRET_PATTERNS.some((pattern) => pattern.test(input))) {
-    return "secret";
-  }
-  if (RAW_TRANSCRIPT_PATTERNS.some((pattern) => pattern.test(input))) {
-    return "raw_transcript";
-  }
-  if (FULL_PLAN_PATTERNS.some((pattern) => pattern.test(input))) {
-    return "full_plan";
-  }
-  if (SENSITIVE_HEALTH_PATTERNS.some((pattern) => pattern.test(input))) {
-    return "sensitive_health";
-  }
-  return "eligible";
+  return classifyMemoryEligibility(input);
 }
 
 export const consoleUserMemoryAuditPort: UserMemoryAuditPort = {

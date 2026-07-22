@@ -794,6 +794,63 @@
       "advanced": "Avanzado"
     }
   },
+  "memory": {
+    "navLabel": "Memoria",
+    "title": "Tu memoria",
+    "description": "Revisa y controla lo que kInorA recuerda por ti.",
+    "loading": {
+      "title": "Cargando tu memoria…",
+      "description": "Estamos obteniendo tus recuerdos guardados y la configuración.",
+      "progressAria": "Cargando memoria"
+    },
+    "form": {
+      "label": "Dato para recordar",
+      "placeholder": "p. ej. Prefiere entrenar por la mañana",
+      "help": "Aquí solo se guardan datos confirmados, duraderos y no sensibles.",
+      "submit": "Guardar memoria",
+      "saving": "Guardando…",
+      "saved": "Memoria guardada.",
+      "error": "No pudimos actualizar tu memoria ahora mismo. Inténtalo de nuevo.",
+      "ineligible": "Solo se pueden guardar datos duraderos y no sensibles.",
+      "disabledHint": "La memoria está desactivada. Vuelve a activarla antes de guardar un dato nuevo."
+    },
+    "states": {
+      "emptyTitle": "Aún no hay memorias guardadas.",
+      "emptyDescription": "Guarda una preferencia duradera o una nota de contexto para no repetirla.",
+      "errorTitle": "No pudimos cargar tu memoria.",
+      "errorDescription": "Inténtalo de nuevo en un momento. Tus datos guardados no cambiaron.",
+      "offlineTitle": "Estás sin conexión",
+      "offlineDescription": "Vuelve a conectarte para cargar o actualizar tus memorias guardadas.",
+      "retry": "Reintentar"
+    },
+    "list": {
+      "label": "Memorias guardadas"
+    },
+    "item": {
+      "userConfirmationSource": "Confirmado por ti",
+      "metadata": "{source} · guardado el {createdAt}"
+    },
+    "controls": {
+      "disable": "Desactivar memoria",
+      "enable": "Activar memoria",
+      "delete": "Eliminar",
+      "deleteAria": "Eliminar memoria {summary}"
+    },
+    "confirm": {
+      "cancel": "Cancelar",
+      "deleteTitle": "Eliminar memoria",
+      "deleteBody": "¿Eliminar “{summary}”? Esto la quita de tu lista y del contexto futuro del plan de inmediato.",
+      "deleteConfirm": "Confirmar eliminación",
+      "disableTitle": "Desactivar memoria",
+      "disableBody": "¿Desactivar la memoria? Se detendrán los nuevos guardados y la generación de planes ignorará las memorias guardadas hasta que vuelvas a activarla.",
+      "disableConfirm": "Confirmar desactivación"
+    },
+    "status": {
+      "deleted": "Memoria eliminada.",
+      "disabled": "Memoria desactivada.",
+      "enabled": "Memoria activada."
+    }
+  },
   "offline": {
     "title": "Estás sin conexión",
     "description": "Parece que en este momento no tienes conexión a internet. Comprueba tu conexión e inténtalo de nuevo.",

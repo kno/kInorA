@@ -45,6 +45,6 @@ Chain strategy: stacked-to-main
 
 ## Phase 4: Testing / Cleanup
 
-- [ ] 4.1 RED: add web tests for `apps/web/src/app/(app)/memory/page.tsx` covering loading, empty, error, offline, and keyboard/a11y states.
-- [ ] 4.2 GREEN: build the memory-management UI under `apps/web/src/app/(app)/memory/`, wire nav copy in `apps/web/src/app/(app)/layout.tsx`, and add `en.json`/`es.json` keys.
-- [ ] 4.3 TRIANGLE: add integration/E2E coverage proving confirmed memory changes plan context, plus rollout/rollback notes in docs and `docker-compose.yml`.
+- [x] 4.1 RED: add web tests for `apps/web/src/app/(app)/memory/page.tsx` covering loading, empty, error, offline, and keyboard/a11y states.
+- [x] 4.2 GREEN: build the memory-management UI under `apps/web/src/app/(app)/memory/`, wire nav copy in `apps/web/src/app/(app)/layout.tsx`, and add `en.json`/`es.json` keys.
+- [x] 4.3 TRIANGLE: add integration/E2E coverage proving confirmed memory changes plan context, plus rollout/rollback notes in docs and `docker-compose.yml`.

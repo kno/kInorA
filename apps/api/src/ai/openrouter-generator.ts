@@ -1,6 +1,5 @@
 import { ChatOpenAI } from "@langchain/openai";
 import type { Runnable } from "@langchain/core/runnables";
-import { CallbackHandler } from "langfuse-langchain";
 import { WorkoutProgramSchema } from "@kinora/contracts";
 import type { PlanSpec, WorkoutProgram } from "@kinora/contracts";
 import type { PlanGenerator } from "./port.js";
@@ -29,12 +28,10 @@ export function warnIfAiConfigMissing(env: Record<string, string | undefined> = 
  * Routes generation requests to any model supported by OpenRouter via
  * LangChain's OpenAI-compatible `ChatOpenAI` client.
  *
- * Observability: Langfuse tracing is wired via the `CallbackHandler`. The
- * handler is a NO-OP when `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` are
- * not set (CI/dev safe). All `PlanSpec.limitations` text is masked with
- * `[REDACTED]` BEFORE the prompt reaches LangChain (and therefore before
- * it appears in any Langfuse trace) — health data must not be logged
- * (AGENTS.md §72).
+ * Observability: no callback is attached at this raw-output boundary because
+ * callback handlers receive model output before it can be validated or redacted.
+ * All `PlanSpec.limitations` text is masked with `[REDACTED]` BEFORE the prompt
+ * reaches LangChain — health data must not be logged (AGENTS.md §72).
  *
  * Structured output method: `"jsonSchema"` — preferred over `"functionCalling"`
  * because OpenRouter routes across many providers and not all of them support
@@ -49,11 +46,8 @@ export function warnIfAiConfigMissing(env: Record<string, string | undefined> = 
  */
 export class OpenRouterPlanGenerator implements PlanGenerator {
   private readonly chain: Runnable;
-  private readonly langfuseHandler: CallbackHandler;
 
   constructor() {
-    this.langfuseHandler = new CallbackHandler();
-
     const model = new ChatOpenAI({
       apiKey: process.env["OPENROUTER_API_KEY"] ?? "placeholder-key",
       model: process.env["OPENROUTER_MODEL"] ?? "openai/gpt-4o-mini",
@@ -82,9 +76,9 @@ export class OpenRouterPlanGenerator implements PlanGenerator {
     const limitationTerms = spec.limitations.map((l) => l.text);
     const maskedPrompt = mask(rawPrompt, limitationTerms);
 
-    const raw = await this.chain.invoke(maskedPrompt, {
-      callbacks: [this.langfuseHandler],
-    });
+    // Do not attach callbacks here: LangChain callbacks receive the raw
+    // structured model output before this boundary can validate or redact it.
+    const raw = await this.chain.invoke(maskedPrompt);
 
     // Explicit Zod parse — do NOT bare-cast with `as WorkoutProgram`.
     // LangChain's internal validation is not a substitute for an explicit

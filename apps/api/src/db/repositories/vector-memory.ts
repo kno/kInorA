@@ -221,35 +221,30 @@ export class VectorMemoryRepository {
         disabledAt: input.disabledAt ?? null,
         deletedAt: input.deletedAt ?? null,
       })
-      .onConflictDoUpdate({
+      .onConflictDoNothing({
         target: [
           userMemoryVectors.tenantId,
           userMemoryVectors.userId,
           userMemoryVectors.idempotencyKey,
         ],
-        set: {
-          summary: input.summary,
-          source: input.source,
-          status: input.status,
-          eligibility: input.eligibility,
-          consentStatus: input.consentStatus,
-          consentedAt: input.consentedAt,
-          revokedAt: input.revokedAt ?? null,
-          fingerprint: input.fingerprint,
-          schemaVersion: input.schemaVersion,
-          embeddingProvider: input.embeddingProvider,
-          embeddingModel: input.embeddingModel,
-          embeddingVersion: input.embeddingVersion,
-          embeddingDimension: input.embeddingDimension,
-          embedding: input.embedding,
-          disabledAt: input.disabledAt ?? null,
-          deletedAt: input.deletedAt ?? null,
-          updatedAt: new Date(),
-        },
       })
       .returning();
 
-    return rows[0] as VectorMemoryRecord;
+    if (rows[0]) {
+      return rows[0] as VectorMemoryRecord;
+    }
+
+    const conflictingRecord = await this.findByIdempotencyKey(
+      scope,
+      input.idempotencyKey,
+    );
+    if (conflictingRecord?.status === "deleted") {
+      throw new Error("vector memory idempotency key was already deleted");
+    }
+    if (conflictingRecord?.fingerprint === input.fingerprint) {
+      return conflictingRecord;
+    }
+    throw new Error("vector memory idempotency key is already active for different content");
   }
 
   async delete(
@@ -312,6 +307,7 @@ export class VectorMemoryRepository {
 
   async searchActiveCompatible(
     scope: VectorMemoryOwnerScope,
+    queryEmbedding: number[],
     compatibility: VectorMemoryCompatibility = DEFAULT_VECTOR_MEMORY_EMBEDDING_CONFIG,
     limit = 5,
   ): Promise<VectorMemoryRecord[]> {
@@ -336,6 +332,7 @@ export class VectorMemoryRepository {
           isNull(userMemoryVectors.deletedAt),
         ),
       )
+      .orderBy(sql`${userMemoryVectors.embedding} <=> ${JSON.stringify(queryEmbedding)}::vector`)
       .limit(limit);
 
     return (rows as VectorMemoryRecord[]).filter((record) =>

@@ -49,7 +49,7 @@ describe("PlanSpecRepository", () => {
       const { select } = selectChain([row]);
       const repo = new PlanSpecRepository({ select } as never);
 
-      const result = await repo.findConfirmedById(TENANT_A, "spec-uuid-1");
+      const result = await repo.findConfirmedById(TENANT_A, USER_A, "spec-uuid-1");
 
       expect(select).toHaveBeenCalledTimes(1);
       expect(result).not.toBeUndefined();
@@ -62,7 +62,7 @@ describe("PlanSpecRepository", () => {
       const { select } = selectChain([]);
       const repo = new PlanSpecRepository({ select } as never);
 
-      const result = await repo.findConfirmedById(TENANT_A, "spec-uuid-1");
+      const result = await repo.findConfirmedById(TENANT_A, USER_A, "spec-uuid-1");
 
       expect(result).toBeUndefined();
     });
@@ -72,7 +72,16 @@ describe("PlanSpecRepository", () => {
       const { select } = selectChain([]);
       const repo = new PlanSpecRepository({ select } as never);
 
-      const result = await repo.findConfirmedById(TENANT_B, "spec-uuid-1");
+      const result = await repo.findConfirmedById(TENANT_B, USER_B, "spec-uuid-1");
+
+      expect(result).toBeUndefined();
+    });
+
+    it("returns undefined for a confirmed spec owned by another user", async () => {
+      const { select } = selectChain([]);
+      const repo = new PlanSpecRepository({ select } as never);
+
+      const result = await repo.findConfirmedById(TENANT_A, USER_B, "spec-uuid-1");
 
       expect(result).toBeUndefined();
     });

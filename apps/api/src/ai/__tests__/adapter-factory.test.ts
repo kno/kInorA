@@ -9,8 +9,6 @@ const mockWithStructuredOutput = vi.fn(() => ({ invoke: mockInvoke }));
 const MockChatOpenAI = vi.fn(() => ({
   withStructuredOutput: mockWithStructuredOutput,
 }));
-const mockFlushAsync = vi.fn();
-
 vi.mock("@langchain/openai", () => ({
   ChatOpenAI: MockChatOpenAI,
 }));
@@ -21,11 +19,6 @@ vi.mock("@langchain/anthropic", () => ({
 
 vi.mock("@langchain/google-genai", () => ({
   ChatGoogleGenerativeAI: vi.fn(() => ({ withStructuredOutput: mockWithStructuredOutput })),
-}));
-
-const MockCallbackHandler = vi.fn(() => ({ flushAsync: mockFlushAsync }));
-vi.mock("langfuse-langchain", () => ({
-  CallbackHandler: MockCallbackHandler,
 }));
 
 // ---------------------------------------------------------------------------
@@ -120,38 +113,7 @@ describe("openrouter adapter still uses jsonSchema", () => {
   });
 });
 
-describe("Langfuse observability", () => {
-  it("maps LANGFUSE_HOST to LANGFUSE_BASEURL before constructing the callback handler", async () => {
-    process.env["LANGFUSE_HOST"] = "https://langfuse.example.test";
-
-    const adapters = buildAdapters();
-    const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
-    await adapter.generate(baseSpec);
-
-    expect(process.env["LANGFUSE_BASEURL"]).toBe("https://langfuse.example.test");
-    expect(MockCallbackHandler).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tags: ["plan-generation"],
-        metadata: expect.objectContaining({
-          feature: "plan-generation",
-          provider: "openrouter",
-          model: "openai/gpt-4o-mini",
-        }),
-      })
-    );
-  });
-
-  it("does not overwrite LANGFUSE_BASEURL when both Langfuse URL env vars are set", async () => {
-    process.env["LANGFUSE_BASEURL"] = "https://canonical-langfuse.example.test";
-    process.env["LANGFUSE_HOST"] = "https://legacy-langfuse.example.test";
-
-    const adapters = buildAdapters();
-    const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
-    await adapter.generate(baseSpec);
-
-    expect(process.env["LANGFUSE_BASEURL"]).toBe("https://canonical-langfuse.example.test");
-  });
-
+describe("safe observability metadata", () => {
   it("passes non-sensitive run metadata to the LangChain invoke config", async () => {
     const adapters = buildAdapters();
     const adapter = adapters["openai"]!("gpt-4o-mini");
@@ -170,40 +132,21 @@ describe("Langfuse observability", () => {
     );
   });
 
-  it("flushes the Langfuse handler after a successful invoke", async () => {
-    const adapters = buildAdapters();
-    const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
-    await adapter.generate(baseSpec);
-
-    expect(mockFlushAsync).toHaveBeenCalledTimes(1);
-  });
-
-  it("flushes the Langfuse handler when the LLM invoke fails", async () => {
-    mockInvoke.mockRejectedValueOnce(new Error("llm failed"));
-
+  it("does not attach callbacks to raw model output", async () => {
+    const sensitiveOutput = "User has osteoporosis";
+    mockInvoke.mockResolvedValueOnce({
+      weeklySessions: [{ day: 1, title: sensitiveOutput, exercises: [] }],
+      limitationWarnings: [],
+    });
     const adapters = buildAdapters();
     const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
 
-    await expect(adapter.generate(baseSpec)).rejects.toThrow("llm failed");
-    expect(mockFlushAsync).toHaveBeenCalledTimes(1);
-  });
-
-  it("preserves the original LLM error when Langfuse flush also fails", async () => {
-    mockInvoke.mockRejectedValueOnce(new Error("llm failed"));
-    mockFlushAsync.mockRejectedValueOnce(new Error("flush failed"));
-
-    const adapters = buildAdapters();
-    const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
-
-    await expect(adapter.generate(baseSpec)).rejects.toThrow("llm failed");
-  });
-
-  it("does not fail plan generation when only Langfuse flush fails", async () => {
-    mockFlushAsync.mockRejectedValueOnce(new Error("flush failed"));
-
-    const adapters = buildAdapters();
-    const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
-
-    await expect(adapter.generate(baseSpec)).resolves.toEqual(mockProgram);
+    await expect(adapter.generate(baseSpec)).resolves.toEqual({
+      weeklySessions: [{ day: 1, title: sensitiveOutput, exercises: [] }],
+      limitationWarnings: [],
+    });
+    expect(mockInvoke.mock.calls[0]?.[1]).toEqual(
+      expect.not.objectContaining({ callbacks: expect.anything() }),
+    );
   });
 });

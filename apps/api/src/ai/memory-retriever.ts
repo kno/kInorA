@@ -9,10 +9,12 @@ import {
   type EmbeddingFailureReason,
   type EmbeddingGenerator,
 } from "./embedding-port.js";
+import { classifyMemoryEligibility } from "../user-memory/eligibility.js";
 
 export interface VectorMemorySearchPort {
   searchActiveCompatible(
     scope: VectorMemoryOwnerScope,
+    queryEmbedding: number[],
     compatibility: VectorMemoryCompatibility,
     limit?: number,
   ): Promise<VectorMemoryRecord[]>;
@@ -36,6 +38,7 @@ export type PersistVectorMemoryInput = Omit<
 
 export type PersistVectorMemoryResult =
   | { kind: "stored"; record: VectorMemoryRecord }
+  | { kind: "rejected"; reason: PersistVectorMemoryInput["eligibility"] }
   | { kind: "failed"; reason: EmbeddingFailureReason };
 
 export interface RetrieveVectorMemoryOptions {
@@ -53,6 +56,11 @@ export class VectorMemoryWriteCoordinator {
     scope: VectorMemoryOwnerScope,
     input: PersistVectorMemoryInput,
   ): Promise<PersistVectorMemoryResult> {
+    const eligibility = classifyMemoryEligibility(input.summary);
+    if (eligibility !== "eligible") {
+      return { kind: "rejected", reason: eligibility };
+    }
+
     const embeddingResult = await generateEmbeddingWithPolicy(this.generator, input.summary, {
       timeoutMs: this.generator.config.timeoutMs,
       maxAttempts: this.generator.config.maxAttempts,
@@ -101,6 +109,7 @@ export class VectorMemoryRetriever {
     try {
       return await this.repo.searchActiveCompatible(
         scope,
+        embeddingResult.embedding,
         {
           provider: this.generator.config.provider,
           model: this.generator.config.model,

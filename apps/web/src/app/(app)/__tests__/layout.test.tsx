@@ -15,6 +15,12 @@ vi.mock("next/headers", () => ({
   })),
 }));
 
+vi.mock("next-intl/server", () => ({
+  getTranslations: async () => ((key: string) => ({
+    "memory.navLabel": "Memory",
+  })[key] ?? key),
+}));
+
 // Profile client is called only when a token exists (mocked as undefined above).
 vi.mock("../auth/profile-client", () => ({
   fetchProfile: vi.fn(async () => null),
@@ -57,5 +63,15 @@ describe("AppLayout (app route group)", () => {
     // At SSR, MobileNav renders (isDesktop defaults to false)
     expect(hasMobileNav).toBe(true);
     expect(html).toContain("Page content here");
+  });
+
+  it("wires the translated memory navigation label through the app shell", async () => {
+    const html = renderToString(
+      await AppLayout({
+        children: <p>Page content here</p>,
+      })
+    );
+
+    expect(html).toContain("Memory");
   });
 });
