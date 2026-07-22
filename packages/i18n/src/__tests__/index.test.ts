@@ -99,8 +99,9 @@ describe("@kinora/i18n package assembly", () => {
     // level labels; goal select reuses wizard.goal.*)
     // + 5 `wizard.preferences.*` keys authored in 10a Slice 5 for the
     // defaults step title/labels and preferences-save error feedback.
+    // + 39 `memory.*` keys authored in 10b for the memory-management surface.
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(570);
+    expect(Object.keys(flat)).toHaveLength(609);
   });
 
   it("ships the accepted profile + wizard preference keys in both catalogs", () => {
