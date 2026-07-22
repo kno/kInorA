@@ -1,7 +1,9 @@
 import type { PlanGenerator } from "./port.js";
 import type { WorkoutPlanRepository } from "../db/repositories/workout-plan.js";
 import type { PlanSpecRepository } from "../db/repositories/plan-spec.js";
+import type { VectorMemoryRecord } from "../db/repositories/vector-memory.js";
 import type { WsRegistry } from "../ws/registry.js";
+import { mask } from "./mask.js";
 import { assertPlanSpecShape } from "../plan/boundary.js";
 import {
   applyEquipmentSubstitutions,
@@ -66,7 +68,13 @@ export class PlanGenerationService {
       "createGenerating" | "markReady" | "markFailed"
     >,
     /** Optional WsRegistry. When provided, notifies the user after markReady/markFailed. */
-    private wsRegistry?: WsRegistry
+    private wsRegistry?: WsRegistry,
+    private memoryRetriever?: {
+      retrieve(
+        scope: { tenantId: string; userId: string },
+        options: { query: string; limit?: number },
+      ): Promise<VectorMemoryRecord[]>;
+    }
   ) {}
 
   /**
@@ -143,8 +151,9 @@ export class PlanGenerationService {
     console.info("[generation-service] generation started", { planId, tenantId });
 
     try {
+      const generationInput = await this.attachMemoryContext(tenantId, userId, planId, spec);
       // generate → post-process → guard → persist
-      const rawProgram = await this.generator.generate(spec);
+      const rawProgram = await this.generator.generate(generationInput);
       const normalized = normalizeProgramReps(rawProgram);
       const substituted = applyEquipmentSubstitutions(normalized, spec.equipment);
       const withWarnings = injectLimitationWarnings(substituted, spec.limitations);
@@ -205,4 +214,54 @@ export class PlanGenerationService {
       }
     }
   }
+
+  private async attachMemoryContext(
+    tenantId: string,
+    userId: string,
+    planId: string,
+    spec: import("@kinora/contracts").PlanSpec
+  ): Promise<import("@kinora/contracts").PlanSpec & { memoryContext?: string[] }> {
+    if (!this.memoryRetriever) {
+      return spec;
+    }
+
+    try {
+      const memories = await this.memoryRetriever.retrieve(
+        { tenantId, userId },
+        {
+          query: buildMemoryRetrievalQuery(spec),
+          limit: 3,
+        }
+      );
+
+      if (memories.length === 0) {
+        return spec;
+      }
+
+      console.info("[generation-service] vector memory retrieved", {
+        planId,
+        tenantId,
+        count: memories.length,
+      });
+
+      return {
+        ...spec,
+        memoryContext: memories.map((memory) => memory.summary),
+      };
+    } catch (error) {
+      console.warn("[generation-service] vector memory retrieval failed", {
+        planId,
+        tenantId,
+        errorName: error instanceof Error ? error.name : "unknown",
+      });
+      return spec;
+    }
+  }
+}
+
+function buildMemoryRetrievalQuery(spec: import("@kinora/contracts").PlanSpec): string {
+  const limitationText = spec.limitations.map((item) => item.text);
+  return mask([spec.goal, spec.location, ...spec.equipment, ...limitationText]
+    .filter((value) => value.trim() !== "")
+    .join(" "), limitationText);
 }

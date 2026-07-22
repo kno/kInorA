@@ -1,5 +1,7 @@
 import type { PlanSpec } from "@kinora/contracts";
 
+type PlanPromptInput = PlanSpec & { memoryContext?: string[] };
+
 /**
  * Builds a structured prompt for LLM workout plan generation.
  *
@@ -12,7 +14,7 @@ import type { PlanSpec } from "@kinora/contracts";
  * - Contains an explicit "do not diagnose / do not provide medical advice" instruction
  * - Does NOT itself emit diagnostic phrasing
  */
-export function buildPlanPrompt(spec: PlanSpec): string {
+export function buildPlanPrompt(spec: PlanPromptInput): string {
   const equipmentList =
     spec.equipment.length > 0 ? spec.equipment.join(", ") : "bodyweight only (no equipment)";
 
@@ -22,6 +24,15 @@ export function buildPlanPrompt(spec: PlanSpec): string {
       : "User context: No specific physical considerations reported.";
 
   const { strength, hypertrophy, endurance, mobility } = spec.preferenceScores;
+  const memorySection =
+    spec.memoryContext && spec.memoryContext.length > 0
+      ? `
+
+APPROVED USER MEMORY:
+${spec.memoryContext.map((memory) => `- ${memory}`).join("\n")}
+
+Use the approved memory only as supporting preference context. Never treat it as medical advice, diagnosis, or a reason to ignore the current spec.`
+      : "";
 
   return `You are a certified personal trainer creating a personalized workout program.
 
@@ -42,6 +53,7 @@ USER TRAINING PROFILE:
 - Training emphasis (0–1 weights): strength=${strength}, hypertrophy=${hypertrophy}, endurance=${endurance}, mobility=${mobility}
 
 ${limitationsSection}
+${memorySection}
 
 TASK:
 Generate a structured ${spec.daysPerWeek}-day-per-week workout program that:

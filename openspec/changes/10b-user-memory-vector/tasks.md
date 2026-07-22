@@ -39,9 +39,9 @@ Chain strategy: stacked-to-main
 
 ## Phase 3: Integration / Wiring
 
-- [ ] 3.1 RED: add route/service tests in `apps/api/src/routes/__tests__/user-memories.test.ts` and `apps/api/src/ai/__tests__/generation-service.memory.test.ts` for opt-in, confirm, list/review/delete/disable, isolation, deletion invalidation, and telemetry.
-- [ ] 3.2 GREEN: implement `apps/api/src/routes/user-memories.ts` and wire `apps/api/src/app.ts` to the new repo, lifecycle endpoints, and audit hooks.
-- [ ] 3.3 TRIANGLE: verify cross-tenant/user guards, safe confirmation failure, and rollback-safe disable/delete paths in the API layer.
+- [x] 3.1 RED: add route/service tests in `apps/api/src/routes/__tests__/user-memories.test.ts` and `apps/api/src/ai/__tests__/generation-service.memory.test.ts` for opt-in, confirm, list/review/delete/disable, isolation, deletion invalidation, and telemetry.
+- [x] 3.2 GREEN: implement `apps/api/src/routes/user-memories.ts` and wire `apps/api/src/app.ts` to the new repo, lifecycle endpoints, and audit hooks.
+- [x] 3.3 TRIANGLE: verify cross-tenant/user guards, safe confirmation failure, and rollback-safe disable/delete paths in the API layer.
 
 ## Phase 4: Testing / Cleanup
 
