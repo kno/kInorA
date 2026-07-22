@@ -82,6 +82,8 @@ jobs:
         run: docker compose build
 
       - name: Start PostgreSQL
+        # docker-compose.yml now pins pgvector/pgvector:pg17 so the 10b vector
+        # migration can run CREATE EXTENSION vector in CI and smoke boot checks.
         run: docker compose up -d --wait postgres
 
       - name: Run database migrations
