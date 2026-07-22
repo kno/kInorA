@@ -148,6 +148,9 @@ function createQueuedSelectDb(queues: Map<object, unknown[][]>) {
         });
         return {
           orderBy,
+          for: vi.fn().mockReturnValue({
+            then: (resolve: (value: unknown[]) => unknown) => Promise.resolve(resolve(nextRows)),
+          }),
           then: (resolve: (value: unknown[]) => unknown) => Promise.resolve(resolve(nextRows)),
         };
       }),
@@ -853,6 +856,13 @@ describe("WorkoutSessionRepository", () => {
 
         return {
           from: vi.fn().mockImplementation((table: object) => {
+            if (table !== workoutSessions && table !== sessionExercises && table !== setRecords) {
+              return {
+                where: vi.fn().mockReturnValue({
+                  for: vi.fn().mockResolvedValue([]),
+                }),
+              };
+            }
             if (table === workoutSessions) {
               if (hasStatusShape) {
                 return { where: vi.fn().mockResolvedValue(activeRows) };
@@ -873,8 +883,10 @@ describe("WorkoutSessionRepository", () => {
       const returning = vi.fn().mockResolvedValue(opts.deleteReturning);
       const where = vi.fn().mockReturnValue({ returning });
       const del = vi.fn().mockReturnValue({ where });
+      const transaction = vi.fn().mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({ select, delete: del }));
 
-      return { db: { select, delete: del } as never, del, select };
+      return { db: { select, delete: del, transaction } as never, del, select, transaction };
     }
 
     it("deletes all completed sessions owned by the caller, returns the deleted count, and leaves no cascaded exercise/set rows behind", async () => {
@@ -889,7 +901,7 @@ describe("WorkoutSessionRepository", () => {
 
       expect(result).toEqual({ kind: "deleted", deletedCount: 2 });
       expect(del).toHaveBeenCalledTimes(1);
-      expect(select).toHaveBeenCalledTimes(1);
+      expect(select).toHaveBeenCalledTimes(2);
       expect(select.mock.invocationCallOrder[0]).toBeLessThan(del.mock.invocationCallOrder[0]!);
     });
 
@@ -903,7 +915,7 @@ describe("WorkoutSessionRepository", () => {
     });
 
     it("returns conflict and preserves completed history when an active session exists for the scoped tenant/user", async () => {
-      const { db, del } = buildBulkDeleteDb({
+      const { db, del, transaction } = buildBulkDeleteDb({
         deleteReturning: [{ id: SESSION_ID }],
         activeRows: [{ status: "active" }],
       });
@@ -913,6 +925,7 @@ describe("WorkoutSessionRepository", () => {
 
       expect(result).toEqual({ kind: "active_conflict" });
       expect(del).not.toHaveBeenCalled();
+      expect(transaction).toHaveBeenCalledTimes(1);
     });
 
     it("does not leak another user's sessions in the same tenant — scoped delete returns count 0 and no active conflict", async () => {

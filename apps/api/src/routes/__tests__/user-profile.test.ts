@@ -47,11 +47,13 @@ function buildMockDb() {
 function buildRepo(overrides: Partial<{
   findUserEmailById: unknown;
   findProfileByUserId: unknown;
+  createProfileIfMissing: unknown;
   upsertProfile: unknown;
 }> = {}) {
   return {
     findUserEmailById: vi.fn().mockResolvedValue(USER_EMAIL),
     findProfileByUserId: vi.fn().mockResolvedValue(EXISTING_PROFILE),
+    createProfileIfMissing: vi.fn().mockResolvedValue(undefined),
     upsertProfile: vi
       .fn()
       .mockImplementation(
@@ -129,7 +131,15 @@ describe("GET /user-profile", () => {
 
   it("lazy-provisions a default row with name = email prefix when none exists", async () => {
     const repo = buildRepo({
-      findProfileByUserId: vi.fn().mockResolvedValue(null),
+      findProfileByUserId: vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          userId: USER_ID,
+          name: "alice",
+          goal: null,
+          experienceLevel: null,
+        }),
     });
     app = await buildTestApp(repo);
 
@@ -146,11 +156,39 @@ describe("GET /user-profile", () => {
     expect(body.experienceLevel).toBeNull();
     expect(repo.findProfileByUserId).toHaveBeenCalledWith(USER_ID);
     expect(repo.findUserEmailById).toHaveBeenCalledWith(USER_ID);
-    expect(repo.upsertProfile).toHaveBeenCalledWith(USER_ID, {
+    expect(repo.createProfileIfMissing).toHaveBeenCalledWith(USER_ID, {
       name: "alice",
       goal: null,
       experienceLevel: null,
     });
+  });
+
+  it("returns a concurrent PUT profile instead of overwriting it during lazy provisioning", async () => {
+    const concurrentProfile = {
+      ...EXISTING_PROFILE,
+      name: "Alice Updated",
+      goal: "hypertrophy" as const,
+      experienceLevel: "advanced" as const,
+    };
+    const repo = buildRepo({
+      findProfileByUserId: vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(concurrentProfile),
+    });
+    app = await buildTestApp(repo);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/user-profile",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(concurrentProfile);
+    expect(repo.createProfileIfMissing).toHaveBeenCalledTimes(1);
+    expect(repo.upsertProfile).not.toHaveBeenCalled();
+    expect(repo.findProfileByUserId).toHaveBeenCalledTimes(2);
   });
 
   it("user isolation: findProfileByUserId is called only with the session userId, never client input", async () => {

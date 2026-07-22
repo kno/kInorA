@@ -33,7 +33,7 @@ import type {
   WorkoutSessionRecord,
 } from "@kinora/contracts";
 import type { Database } from "../client.js";
-import { sessionExercises, setRecords, workoutPlans, workoutSessions } from "../schema.js";
+import { sessionExercises, setRecords, users, workoutPlans, workoutSessions } from "../schema.js";
 
 interface WorkoutPlanRow {
   id: string;
@@ -294,6 +294,13 @@ export class WorkoutSessionRepository {
 
     // Branch C — no active session → create a new row, persisting the day.
     return this.db.transaction(async (tx) => {
+      // Serialize session creation with bulk history deletion for this user.
+      await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, userId))
+        .for("update");
+
       const sessionRows = await tx
         .insert(workoutSessions)
         .values({ tenantId, userId, workoutPlanId, status: "active", day })
@@ -504,45 +511,49 @@ export class WorkoutSessionRepository {
    * Deletes every completed workout session owned by the caller within the
    * active tenant (10c-workout-session-delete, R2 + R3).
    *
-   * The active-session guard runs before the write so a conflict never removes
-   * completed history. Both the read and write are scoped to `(tenantId,
-   * userId)`.
+   * The user-row lock serializes this operation with active-session creation, so
+   * the guard and delete cannot be separated by a concurrent insert. Both the
+   * read and write are scoped to `(tenantId, userId)`.
    */
   async deleteAllByUser(
     tenantId: string,
     userId: string
   ): Promise<DeleteAllSessionsOutcome> {
-    const activeRows = await this.db
-      .select({ status: workoutSessions.status })
-      .from(workoutSessions)
-      .where(
-        and(
-          eq(workoutSessions.tenantId, tenantId),
-          eq(workoutSessions.userId, userId),
-          eq(workoutSessions.status, "active")
+    return this.db.transaction(async (tx) => {
+      await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, userId))
+        .for("update");
+
+      const activeRows = await tx
+        .select({ status: workoutSessions.status })
+        .from(workoutSessions)
+        .where(
+          and(
+            eq(workoutSessions.tenantId, tenantId),
+            eq(workoutSessions.userId, userId),
+            eq(workoutSessions.status, "active")
+          )
+        );
+
+      if (activeRows.length > 0) {
+        return { kind: "active_conflict" };
+      }
+
+      const deleted = await tx
+        .delete(workoutSessions)
+        .where(
+          and(
+            eq(workoutSessions.tenantId, tenantId),
+            eq(workoutSessions.userId, userId),
+            eq(workoutSessions.status, "completed")
+          )
         )
-      );
+        .returning({ id: workoutSessions.id });
 
-    if (activeRows.length > 0) {
-      return { kind: "active_conflict" };
-    }
-
-    const deleted = await this.db
-      .delete(workoutSessions)
-      .where(
-        and(
-          eq(workoutSessions.tenantId, tenantId),
-          eq(workoutSessions.userId, userId),
-          eq(workoutSessions.status, "completed")
-        )
-      )
-      .returning({ id: workoutSessions.id });
-
-    if (deleted.length > 0) {
       return { kind: "deleted", deletedCount: deleted.length };
-    }
-
-    return { kind: "deleted", deletedCount: 0 };
+    });
   }
 
   /**

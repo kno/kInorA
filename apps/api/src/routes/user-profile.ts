@@ -39,7 +39,7 @@ interface UserProfileRow {
 /**
  * Route port for `/user-profile`. Exposes:
  *   - `findUserEmailById` — feeds lazy provisioning (default name = email prefix)
- *   - `findProfileByUserId` / `upsertProfile` — profile read + write
+ *   - `findProfileByUserId` / `createProfileIfMissing` / `upsertProfile` — profile read + write
  *
  * User isolation is enforced by the single-column `userId` predicate: every
  * method is keyed ONLY on the authenticated session's `userId`, which the
@@ -48,6 +48,10 @@ interface UserProfileRow {
 export interface UserProfileRouteRepo {
   findUserEmailById(userId: string): Promise<string | null>;
   findProfileByUserId(userId: string): Promise<UserProfileRow | null>;
+  createProfileIfMissing(
+    userId: string,
+    input: { name: string; goal: PlanGoal | null; experienceLevel: ExperienceLevel | null }
+  ): Promise<void>;
   upsertProfile(
     userId: string,
     input: { name: string; goal: PlanGoal | null; experienceLevel: ExperienceLevel | null }
@@ -122,12 +126,13 @@ export const userProfileRoutes: FastifyPluginAsync<UserProfileRoutesOptions> = a
       // only extra query and only on the first-ever GET for this user.
       const email = await repo.findUserEmailById(userId);
       const name = email ? defaultNameFromEmail(email) : "user";
-      const created = await repo.upsertProfile(userId, {
+      await repo.createProfileIfMissing(userId, {
         name,
         goal: null,
         experienceLevel: null,
       });
-      return reply.code(200).send(toDTO(created));
+      const provisioned = await repo.findProfileByUserId(userId);
+      return reply.code(200).send(toDTO(provisioned!));
     }
   );
 
