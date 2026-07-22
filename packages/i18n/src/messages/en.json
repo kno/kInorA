@@ -794,6 +794,63 @@
       "advanced": "Advanced"
     }
   },
+  "memory": {
+    "navLabel": "Memory",
+    "title": "Your memory",
+    "description": "Review and control what kInorA remembers for you.",
+    "loading": {
+      "title": "Loading your memory…",
+      "description": "We are fetching your saved memories and settings.",
+      "progressAria": "Loading memory"
+    },
+    "form": {
+      "label": "Fact to remember",
+      "placeholder": "e.g. Prefers morning workouts",
+      "help": "Only confirmed, durable, non-sensitive facts are stored here.",
+      "submit": "Save memory",
+      "saving": "Saving…",
+      "saved": "Memory saved.",
+      "error": "We could not update your memory right now. Please try again.",
+      "ineligible": "Only durable, non-sensitive facts can be saved.",
+      "disabledHint": "Memory is disabled. Re-enable it before saving a new fact."
+    },
+    "states": {
+      "emptyTitle": "No saved memories yet.",
+      "emptyDescription": "Save a durable preference or context note to avoid repeating it.",
+      "errorTitle": "We could not load your memory.",
+      "errorDescription": "Try again in a moment. Your saved facts were not changed.",
+      "offlineTitle": "You are offline",
+      "offlineDescription": "Reconnect to load or update your saved memories.",
+      "retry": "Retry"
+    },
+    "list": {
+      "label": "Saved memories"
+    },
+    "item": {
+      "userConfirmationSource": "Confirmed by you",
+      "metadata": "{source} · saved {createdAt}"
+    },
+    "controls": {
+      "disable": "Disable memory",
+      "enable": "Enable memory",
+      "delete": "Delete",
+      "deleteAria": "Delete memory {summary}"
+    },
+    "confirm": {
+      "cancel": "Cancel",
+      "deleteTitle": "Delete memory",
+      "deleteBody": "Delete “{summary}”? This removes it from your list and future plan context immediately.",
+      "deleteConfirm": "Confirm delete",
+      "disableTitle": "Disable memory",
+      "disableBody": "Disable memory? New saves stop and plan generation will ignore saved memories until you enable it again.",
+      "disableConfirm": "Confirm disable"
+    },
+    "status": {
+      "deleted": "Memory deleted.",
+      "disabled": "Memory disabled.",
+      "enabled": "Memory enabled."
+    }
+  },
   "offline": {
     "title": "You're Offline",
     "description": "It looks like you're currently disconnected from the internet. Please check your connection and try again.",

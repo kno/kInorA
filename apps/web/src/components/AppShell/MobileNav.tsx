@@ -10,7 +10,7 @@ import styles from "./MobileNav.module.css";
 interface TabItem {
   label: string;
   href: string;
-  icon: "home" | "plan" | "stats" | "history" | "exercises" | "profile";
+  icon: "home" | "plan" | "stats" | "history" | "exercises" | "profile" | "memory";
 }
 
 const TABS: TabItem[] = [
@@ -28,8 +28,12 @@ const TABS: TabItem[] = [
  * Fixed to the bottom of the viewport with safe-area padding for notched
  * devices. Tap targets are at least 44px. Active tab uses --accent color.
  */
-export function MobileNav() {
+export function MobileNav({ memoryNavLabel }: { memoryNavLabel?: string } = {}) {
   const pathname = usePathname();
+  const tabs = [
+    ...TABS,
+    ...(memoryNavLabel ? [{ label: memoryNavLabel, href: "/memory", icon: "memory" as const }] : []),
+  ];
 
   return (
     <>
@@ -38,7 +42,7 @@ export function MobileNav() {
 
       <nav className={styles.bar} aria-label="Mobile navigation">
         {/* Left tabs: Dashboard, Plan, Statistics */}
-        {TABS.slice(0, 3).map((tab) => (
+        {tabs.slice(0, 3).map((tab) => (
           <MobileTab
             key={tab.href}
             tab={tab}
@@ -58,7 +62,7 @@ export function MobileNav() {
         </div>
 
         {/* Right tabs: History, Exercises, Profile */}
-        {TABS.slice(3, 6).map((tab) => (
+        {tabs.slice(3, 7).map((tab) => (
           <MobileTab
             key={tab.href}
             tab={tab}
@@ -118,5 +122,7 @@ function TabIcon({ name }: { name: TabItem["icon"] }) {
       return <ExercisesIcon className={styles.icon} size={22} />;
     case "profile":
       return <UserIcon className={styles.icon} size={22} />;
+    case "memory":
+      return <HistoryIcon className={styles.icon} size={22} />;
   }
 }

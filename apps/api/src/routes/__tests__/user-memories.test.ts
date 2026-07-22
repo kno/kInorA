@@ -5,6 +5,7 @@ import { authPlugin } from "../../auth/plugin.js";
 import { userMemoryRoutes } from "../user-memories.js";
 import {
   UserMemoryLifecycleService,
+  classifyEligibility,
   type UserMemoryAuditPort,
 } from "../../user-memory/service.js";
 import { VectorMemoryRetriever } from "../../ai/memory-retriever.js";
@@ -117,6 +118,7 @@ class InMemoryVectorMemoryStore {
   searchActiveCompatible = vi.fn(
     async (
       scope: { tenantId: string; userId: string },
+      _queryEmbedding: number[],
       compatibility: {
         provider: string;
         model: string;
@@ -202,7 +204,12 @@ async function buildTestApp(options?: {
   store?: InMemoryVectorMemoryStore;
   writerResult?: "stored" | "provider_failure" | "timeout";
   audit?: ReturnType<typeof buildAuditPort>;
-}): Promise<{ app: FastifyInstance; store: InMemoryVectorMemoryStore; audit: ReturnType<typeof buildAuditPort> }> {
+}): Promise<{
+  app: FastifyInstance;
+  store: InMemoryVectorMemoryStore;
+  audit: ReturnType<typeof buildAuditPort>;
+  writer: { saveConfirmedMemory: ReturnType<typeof vi.fn> };
+}> {
   const store = options?.store ?? new InMemoryVectorMemoryStore();
   const audit = options?.audit ?? buildAuditPort();
 
@@ -265,10 +272,45 @@ async function buildTestApp(options?: {
     service: new UserMemoryLifecycleService(store as never, writer as never, audit.port),
   });
 
-  return { app, store, audit };
+  return { app, store, audit, writer };
 }
 
 describe("userMemoryRoutes", () => {
+  it.each([
+    "I have sciatica",
+    "I have arthritis",
+    "I had surgery",
+    "I have a fracture",
+    "I had a stroke",
+    "I have hypertension",
+    "I have asthma",
+    "I have an injury",
+    "I have pain",
+    "I need rehab",
+    "I have a hernia",
+    "I take medication",
+    "I have diabetes",
+    "I have high blood pressure",
+    "I have a torn ACL",
+    "I am allergic to peanuts",
+    "I have a migraine",
+    "I have epilepsy",
+     "I have celiac disease",
+     "I have osteoporosis",
+     "I have high cholesterol",
+    "I have a heart condition",
+    "I have a chronic condition",
+    "I am pregnant",
+    "My medical history is complex",
+    "I have an unknown syndrome",
+  ])("classifies %s as sensitive health and never as eligible", (fact) => {
+    expect(classifyEligibility(fact)).toBe("sensitive_health");
+  });
+
+  it("keeps normal workout preferences eligible", () => {
+    expect(classifyEligibility("Prefers morning workouts")).toBe("eligible");
+  });
+
   let app: FastifyInstance;
 
   beforeEach(() => {
@@ -339,6 +381,26 @@ describe("userMemoryRoutes", () => {
     expect(listResponse.json().memories).toHaveLength(1);
     expect(listResponse.json().memories[0].summary).toBe("Prefers morning workouts");
   });
+
+  it.each(["I have celiac disease", "I have osteoporosis", "I have high cholesterol"])(
+    "rejects %s before embedding or persistence",
+    async (fact) => {
+      const built = await buildTestApp();
+      app = built.app;
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/user-memories",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: { factText: fact, source: "user_confirmation", idempotencyKey: "idem-health" },
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toEqual({ error: "memory_ineligible", reason: "sensitive_health" });
+      expect(built.writer.saveConfirmedMemory).not.toHaveBeenCalled();
+      expect(built.store.memories).toHaveLength(0);
+    },
+  );
 
   it("rejects sensitive or secret content with safe feedback and non-sensitive audit metadata", async () => {
     const built = await buildTestApp();

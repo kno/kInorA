@@ -36,6 +36,20 @@ services:
       # Additional AI provider keys (09-ai-provider-admin).
       # Only the key for the currently-selected provider needs to be set.
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # 10b vector memory: embedding/runtime configuration must stay aligned with
+      # the persisted pgvector rows (provider/model/version/dimension). Keep these
+      # values stable per environment unless you are intentionally creating a new
+      # compatible vector cohort and re-embedding data.
+      VECTOR_MEMORY_EMBEDDING_PROVIDER: ${VECTOR_MEMORY_EMBEDDING_PROVIDER:-openai}
+      VECTOR_MEMORY_EMBEDDING_MODEL: ${VECTOR_MEMORY_EMBEDDING_MODEL:-text-embedding-3-small}
+      VECTOR_MEMORY_EMBEDDING_VERSION: ${VECTOR_MEMORY_EMBEDDING_VERSION:-text-embedding-3-small}
+      VECTOR_MEMORY_EMBEDDING_DIMENSION: ${VECTOR_MEMORY_EMBEDDING_DIMENSION:-1536}
+      VECTOR_MEMORY_EMBEDDING_TIMEOUT_MS: ${VECTOR_MEMORY_EMBEDDING_TIMEOUT_MS:-3000}
+      VECTOR_MEMORY_EMBEDDING_MAX_ATTEMPTS: ${VECTOR_MEMORY_EMBEDDING_MAX_ATTEMPTS:-2}
+      # Rollback boundary: Unset OPENAI_API_KEY to fail open for confirmed-memory
+      # writes/retrieval while keeping the rest of the API online. Do NOT swap the
+      # Postgres image back to plain postgres:* because 0010_vector_memory.sql runs
+      # CREATE EXTENSION vector.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY}
       OPENCODE_GO_API_KEY: ${OPENCODE_GO_API_KEY}

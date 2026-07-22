@@ -100,6 +100,18 @@ kInorA is a platform composed of a **web** (public landing + private area) and a
    cannot start the pgvector-capable Postgres container, stop here and fix the
    runtime prerequisite instead of removing the extension from the migration.
 
+   For 10b vector memory, keep `VECTOR_MEMORY_EMBEDDING_MODEL` and
+   `VECTOR_MEMORY_EMBEDDING_DIMENSION` aligned with the embeddings already stored
+   in Postgres (`text-embedding-3-small` / `1536` by default in compose). Changing
+   those values without re-embedding creates an incompatible cohort that the API
+   will intentionally skip during retrieval.
+
+   Current rollback boundary: if you need to disable vector-memory writes/retrieval
+   without taking the API down, unset `OPENAI_API_KEY` (or provide an invalid vector
+   embedding provider override) so the embedding boundary fails open while the rest
+   of plan generation keeps working. Do not remove `CREATE EXTENSION vector` from
+   the migration or swap the checked-in Postgres image away from `pgvector/pgvector:pg17`.
+
    _(optional)_ Seed the exercise catalog with initial data:
 
    ```bash

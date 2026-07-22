@@ -11,7 +11,7 @@ import styles from "./SidebarNav.module.css";
 interface NavItem {
   label: string;
   href: string;
-  icon: "home" | "plan" | "stats" | "history" | "create" | "exercises";
+  icon: "home" | "plan" | "stats" | "history" | "create" | "exercises" | "memory";
 }
 
 /** Minimal identity shape for the sidebar user area. */
@@ -45,9 +45,21 @@ const NAV_ITEMS: NavItem[] = [
  * `user` prop (resolved server-side in AppLayout); when absent it falls
  * back to a placeholder.
  */
-export function SidebarNav({ user }: { user?: SidebarUser } = {}) {
+export function SidebarNav({
+  user,
+  memoryNavLabel,
+}: {
+  user?: SidebarUser;
+  memoryNavLabel?: string;
+} = {}) {
   const pathname = usePathname();
   const identity = user ?? FALLBACK_USER;
+  const navItems = [
+    ...NAV_ITEMS,
+    ...(memoryNavLabel
+      ? [{ label: memoryNavLabel, href: "/memory", icon: "memory" as const }]
+      : []),
+  ];
 
   return (
     <aside className={styles.sidebar} aria-label="Main navigation">
@@ -59,7 +71,7 @@ export function SidebarNav({ user }: { user?: SidebarUser } = {}) {
 
       {/* Navigation items */}
       <nav className={styles.nav}>
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const isActive = isActivePath(pathname, item.href);
           return (
             <Link
@@ -126,5 +138,7 @@ function NavIcon({ name }: { name: NavItem["icon"] }) {
       return <CreateIcon className={styles.icon} size={20} />;
     case "exercises":
       return <ExercisesIcon className={styles.icon} size={20} />;
+    case "memory":
+      return <HistoryIcon className={styles.icon} size={20} />;
   }
 }
