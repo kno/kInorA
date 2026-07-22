@@ -93,4 +93,20 @@ export class UserProfileRepository {
       .returning();
     return rows[0] as UserProfileRecord;
   }
+
+  /** Insert the default row without overwriting a concurrent PUT. */
+  async createIfMissing(
+    userId: string,
+    input: UserProfileUpsertInput
+  ): Promise<void> {
+    await this.db
+      .insert(userProfiles)
+      .values({
+        userId,
+        name: input.name,
+        goal: input.goal,
+        experienceLevel: input.experienceLevel,
+      })
+      .onConflictDoNothing({ target: userProfiles.userId });
+  }
 }

@@ -23,9 +23,10 @@ function onConflictChain(returnRows: unknown[]) {
   const returning = vi.fn().mockResolvedValue(returnRows);
   // Drizzle API: .onConflictDoUpdate({ target, set }) returns { returning }
   const onConflictDoUpdate = vi.fn().mockReturnValue({ returning });
-  const values = vi.fn().mockReturnValue({ onConflictDoUpdate });
+  const onConflictDoNothing = vi.fn().mockResolvedValue(undefined);
+  const values = vi.fn().mockReturnValue({ onConflictDoUpdate, onConflictDoNothing });
   const insert = vi.fn().mockReturnValue({ values });
-  return { insert, values, onConflictDoUpdate, returning };
+  return { insert, values, onConflictDoUpdate, onConflictDoNothing, returning };
 }
 
 function selectChain(rows: unknown[]) {
@@ -169,6 +170,28 @@ describe("UserProfileRepository", () => {
 
       expect(insertA).toHaveBeenCalledTimes(1);
       expect(insertB).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("createIfMissing", () => {
+    it("uses insert-on-conflict-no-op so lazy provisioning cannot overwrite a concurrent PUT", async () => {
+      const { insert, values, onConflictDoNothing } = onConflictChain([]);
+      const repo = new UserProfileRepository({ insert } as never);
+
+      await repo.createIfMissing(USER_A, {
+        name: "alex",
+        goal: null,
+        experienceLevel: null,
+      });
+
+      expect(insert).toHaveBeenCalledTimes(1);
+      expect(values).toHaveBeenCalledWith({
+        userId: USER_A,
+        name: "alex",
+        goal: null,
+        experienceLevel: null,
+      });
+      expect(onConflictDoNothing).toHaveBeenCalledTimes(1);
     });
   });
 });

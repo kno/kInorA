@@ -220,6 +220,10 @@ export async function buildApp(
     findUserEmailById: async (id: string) =>
       (await adminUserRepo.findById(id))?.email ?? null,
     findProfileByUserId: (id: string) => userProfileRepo.findByUserId(id),
+    createProfileIfMissing: (
+      id: string,
+      input: Parameters<typeof userProfileRepo.createIfMissing>[1]
+    ) => userProfileRepo.createIfMissing(id, input),
     upsertProfile: (id: string, input: Parameters<typeof userProfileRepo.upsert>[1]) =>
       userProfileRepo.upsert(id, input),
   };
