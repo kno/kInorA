@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import type { PlanSpec } from "@kinora/contracts";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { promotePlanSpec, confirmPlanGen, submitDraft, regeneratePlan } from "./plan-draft-client";
+import { updateUserPreferences } from "./preferences-client";
 
 /**
  * Server Actions for the create-plan wizard.
@@ -55,6 +56,22 @@ export async function confirmPlanSpecAction(): Promise<{ planId: string; status:
     throw new Error(confirmResult.message);
   }
   return { planId: confirmResult.planId, status: confirmResult.status };
+}
+
+export async function saveUserPreferencesAction(input: {
+  defaultLocation?: string | null;
+  defaultDuration?: number | null;
+  defaultEquipment?: string[] | null;
+}): Promise<void> {
+  const token = await sessionToken();
+  const result = await updateUserPreferences(token, {
+    defaultLocation: (input.defaultLocation as "home" | "gym" | "outdoor" | null | undefined) ?? null,
+    defaultDuration: input.defaultDuration ?? null,
+    defaultEquipment: input.defaultEquipment ?? null,
+  });
+  if (result.kind !== "ok") {
+    throw new Error(result.message);
+  }
 }
 
 /**

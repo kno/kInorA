@@ -17,6 +17,7 @@ import {
   makeDeferred,
   buildPlaywrightArgs,
   nodeMemoryCap,
+  e2eTimeoutMs,
   stackEnv,
   isUnsupportedResourceFlagsFailure,
   fallbackReason,
@@ -296,6 +297,23 @@ describe("nodeMemoryCap", () => {
   it("floors fractional values", () => {
     expect(nodeMemoryCap("4096.9")).toBe(4096);
   });
+});
+
+describe("e2eTimeoutMs", () => {
+  it("uses a safe 15-minute default when unset", () => {
+    expect(e2eTimeoutMs(undefined)).toBe(900_000);
+  });
+
+  it("honors a positive configured timeout", () => {
+    expect(e2eTimeoutMs("120000")).toBe(120_000);
+  });
+
+  it.each(["", "abc", "0", "-1"]) (
+    "falls back to the safe default for invalid value %s",
+    (value) => {
+      expect(e2eTimeoutMs(value)).toBe(900_000);
+    },
+  );
 });
 
 describe("stackEnv — NO NODE_OPTIONS mutation (spec 8)", () => {
@@ -662,6 +680,32 @@ describe("lifecycle signal handling", () => {
     lifecycle.recordSignal("SIGTERM");
     expect(lifecycle.signalExitCode).toBe(143);
     expect(lifecycle.receivedSignal).toBe("SIGTERM");
+    restoreClock();
+  });
+
+  it("terminates the Playwright group and returns 124 on timeout", async () => {
+    const fakes = makeFakes();
+    const {
+      lifecycle,
+      child,
+      childExit,
+      forwardSignal,
+      webServerCleanupDeferred,
+      removePostgresDeferred,
+      removePostgres,
+      restoreClock,
+    } = fakes;
+    lifecycle.markRunning();
+    lifecycle.setChild(child, childExit.promise);
+    lifecycle.recordTimeout();
+    const teardown = lifecycle.teardownOnce();
+    webServerCleanupDeferred.resolve();
+    removePostgresDeferred.resolve();
+
+    await expect(teardown).resolves.toBe(124);
+    expect(forwardSignal).toHaveBeenCalledWith(child, "SIGTERM");
+    expect(removePostgres).toHaveBeenCalledTimes(1);
+    expect(lifecycle.state).toBe("cleaned");
     restoreClock();
   });
 

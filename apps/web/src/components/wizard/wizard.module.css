@@ -10,6 +10,18 @@
   gap: var(--sp-3);
 }
 
+.section {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
 .inputRow {
   display: flex;
   gap: var(--sp-2);

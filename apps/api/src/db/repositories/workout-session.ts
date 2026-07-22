@@ -17,6 +17,7 @@ import {
 } from "../progress-domain.js";
 import type {
   DashboardSummaryDTO,
+  DeleteSessionOutcome,
   ExerciseDetailDTO,
   KpiWithDelta,
   MuscleGroup,
@@ -32,7 +33,7 @@ import type {
   WorkoutSessionRecord,
 } from "@kinora/contracts";
 import type { Database } from "../client.js";
-import { sessionExercises, setRecords, workoutPlans, workoutSessions } from "../schema.js";
+import { sessionExercises, setRecords, users, workoutPlans, workoutSessions } from "../schema.js";
 
 interface WorkoutPlanRow {
   id: string;
@@ -80,6 +81,10 @@ interface SetRecordRow {
   completed: boolean;
   notes: string | null;
 }
+
+type DeleteAllSessionsOutcome =
+  | { kind: "deleted"; deletedCount: number }
+  | { kind: "active_conflict" };
 
 type StartTx = Pick<Database, "insert">;
 
@@ -289,6 +294,13 @@ export class WorkoutSessionRepository {
 
     // Branch C — no active session → create a new row, persisting the day.
     return this.db.transaction(async (tx) => {
+      // Serialize session creation with bulk history deletion for this user.
+      await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, userId))
+        .for("update");
+
       const sessionRows = await tx
         .insert(workoutSessions)
         .values({ tenantId, userId, workoutPlanId, status: "active", day })
@@ -436,6 +448,112 @@ export class WorkoutSessionRepository {
     }
 
     return undefined;
+  }
+
+  /**
+   * Deletes a single workout session owned by the caller (10c-workout-session-delete).
+   *
+   * Two-phase, scoped write — same IDOR discipline as `recordSet` /
+   * `completeSession`:
+   *
+   * 1. `DELETE ... WHERE (tenantId, userId, id) AND status='completed'`. The
+   *    `status='completed'` guard is R3's active-session protection at the
+   *    storage layer: an in-progress session is physically excluded from the
+   *    delete so it can never be silently removed. Cascading FKs
+   *    (`onDelete: "cascade"` on `session_exercises` → `workout_sessions` and
+   *    `set_records` → `session_exercises`) atomically drop the child rows.
+   * 2. On a 0-row delete, disambiguate with a SCOPED re-read — NEVER an
+   *    unscoped `WHERE id = :id` (that would let a caller learn another
+   *    tenant's/user's session exists). The re-read resolves one of:
+   *      - row with `status='active'` → `active_conflict` (route: 409)
+   *      - no row → `not_found` (route: 404), covering nonexistent, another
+   *        user's session, and another tenant's session indistinguishably.
+   */
+  async deleteById(
+    tenantId: string,
+    userId: string,
+    id: string
+  ): Promise<DeleteSessionOutcome> {
+    const deleted = await this.db
+      .delete(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.id, id),
+          eq(workoutSessions.status, "completed")
+        )
+      )
+      .returning({ id: workoutSessions.id });
+
+    if (deleted.length > 0) {
+      return { kind: "deleted" };
+    }
+
+    const rows = await this.db
+      .select({ status: workoutSessions.status })
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.id, id)
+        )
+      );
+    const row = rows[0] as { status: string } | undefined;
+    if (row && row.status === "active") {
+      return { kind: "active_conflict" };
+    }
+    return { kind: "not_found" };
+  }
+
+  /**
+   * Deletes every completed workout session owned by the caller within the
+   * active tenant (10c-workout-session-delete, R2 + R3).
+   *
+   * The user-row lock serializes this operation with active-session creation, so
+   * the guard and delete cannot be separated by a concurrent insert. Both the
+   * read and write are scoped to `(tenantId, userId)`.
+   */
+  async deleteAllByUser(
+    tenantId: string,
+    userId: string
+  ): Promise<DeleteAllSessionsOutcome> {
+    return this.db.transaction(async (tx) => {
+      await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, userId))
+        .for("update");
+
+      const activeRows = await tx
+        .select({ status: workoutSessions.status })
+        .from(workoutSessions)
+        .where(
+          and(
+            eq(workoutSessions.tenantId, tenantId),
+            eq(workoutSessions.userId, userId),
+            eq(workoutSessions.status, "active")
+          )
+        );
+
+      if (activeRows.length > 0) {
+        return { kind: "active_conflict" };
+      }
+
+      const deleted = await tx
+        .delete(workoutSessions)
+        .where(
+          and(
+            eq(workoutSessions.tenantId, tenantId),
+            eq(workoutSessions.userId, userId),
+            eq(workoutSessions.status, "completed")
+          )
+        )
+        .returning({ id: workoutSessions.id });
+
+      return { kind: "deleted", deletedCount: deleted.length };
+    });
   }
 
   /**

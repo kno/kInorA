@@ -6,6 +6,7 @@ import {
   MembershipRepository,
   TenantLookupRepository,
 } from "../db/repositories/auth-context.js";
+import { UserProfileRepository } from "../db/repositories/user-profile.js";
 import { SessionRepository } from "../db/repositories/session.js";
 import {
   validatePasswordPolicy,
@@ -49,6 +50,7 @@ export class AuthService {
   private memberRepo: MembershipRepository;
   private tenantRepo: TenantLookupRepository;
   private sessionRepo: SessionRepository;
+  private userProfileRepo: UserProfileRepository;
 
   constructor(private db: Database) {
     this.credRepo = new CredentialsRepository(db);
@@ -56,6 +58,7 @@ export class AuthService {
     this.memberRepo = new MembershipRepository(db);
     this.tenantRepo = new TenantLookupRepository(db);
     this.sessionRepo = new SessionRepository(db);
+    this.userProfileRepo = new UserProfileRepository(db);
   }
 
   /**
@@ -184,11 +187,17 @@ export class AuthService {
    */
   async getProfile(
     userId: string,
-  ): Promise<{ email: string; initials: string } | null> {
+  ): Promise<{ email: string; initials: string; name: string } | null> {
     const user = await this.userRepo.findById(userId);
     if (!user) return null;
+
+    const profile = await this.userProfileRepo.findByUserId(userId);
     const emailLocal = user.email.split("@")[0] ?? "";
     const initials = emailLocal.charAt(0).toUpperCase();
-    return { email: user.email, initials };
+    return {
+      email: user.email,
+      initials,
+      name: profile?.name ?? user.email,
+    };
   }
 }

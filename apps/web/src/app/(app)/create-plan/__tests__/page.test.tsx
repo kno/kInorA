@@ -8,6 +8,8 @@ type AnyElement = ReactElement<AnyProps>;
 const cookieGet = vi.fn();
 const loadCurrentDraft = vi.fn();
 const getTranslations = vi.fn();
+const fetchUserProfile = vi.fn();
+const fetchUserPreferences = vi.fn();
 
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({ get: cookieGet })),
@@ -23,10 +25,19 @@ vi.mock("next-intl/server", () => ({
 vi.mock("../actions", () => ({
   saveDraftAction: vi.fn(),
   confirmPlanSpecAction: vi.fn(),
+  saveUserPreferencesAction: vi.fn(),
 }));
 
 vi.mock("../plan-draft-client", () => ({
   loadCurrentDraft: (...args: unknown[]) => loadCurrentDraft(...args),
+}));
+
+vi.mock("../../profile/profile-form-client", () => ({
+  fetchUserProfile: (...args: unknown[]) => fetchUserProfile(...args),
+}));
+
+vi.mock("../preferences-client", () => ({
+  fetchUserPreferences: (...args: unknown[]) => fetchUserPreferences(...args),
 }));
 
 // Stub StepperShell so the page test asserts wiring, not the shell internals.
@@ -44,10 +55,27 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+function mockUserMemorySuccess() {
+  fetchUserProfile.mockResolvedValue({
+    kind: "ok",
+    profile: { userId: "u", name: "Ada", goal: null, experienceLevel: null },
+  });
+  fetchUserPreferences.mockResolvedValue({
+    kind: "ok",
+    preferences: {
+      userId: "u",
+      defaultLocation: null,
+      defaultDuration: null,
+      defaultEquipment: null,
+    },
+  });
+}
+
 describe("CreatePlanPage", () => {
   it("resolves copy server-side via next-intl's getTranslations (not resolvePageI18n)", async () => {
     cookieGet.mockReturnValue({ value: "tok-1" });
     loadCurrentDraft.mockResolvedValue(null);
+    mockUserMemorySuccess();
     getTranslations.mockResolvedValue(() => "");
 
     await CreatePlanPage();
@@ -58,6 +86,7 @@ describe("CreatePlanPage", () => {
   it("does NOT thread a messages prop to StepperShell", async () => {
     cookieGet.mockReturnValue({ value: "tok-1" });
     loadCurrentDraft.mockResolvedValue(null);
+    mockUserMemorySuccess();
     getTranslations.mockResolvedValue(() => "");
 
     const page = (await CreatePlanPage()) as AnyElement;
@@ -68,12 +97,18 @@ describe("CreatePlanPage", () => {
   it("hydrates the stepper with the current server draft when one exists", async () => {
     cookieGet.mockReturnValue({ value: "tok-1" });
     loadCurrentDraft.mockResolvedValue({ step: 3, spec: { goal: "strength" } });
+    fetchUserProfile.mockResolvedValue({ kind: "ok", profile: { userId: "u", name: "Ada", goal: "strength", experienceLevel: "intermediate" } });
+    fetchUserPreferences.mockResolvedValue({ kind: "ok", preferences: { userId: "u", defaultLocation: "gym", defaultDuration: 45, defaultEquipment: ["barbell"] } });
     getTranslations.mockResolvedValue(() => "");
 
     const page = (await CreatePlanPage()) as AnyElement;
 
     expect(loadCurrentDraft).toHaveBeenCalledWith("tok-1");
+    expect(fetchUserProfile).toHaveBeenCalledWith("tok-1");
+    expect(fetchUserPreferences).toHaveBeenCalledWith("tok-1");
     expect(page.props.initialDraft).toEqual({ step: 3, spec: { goal: "strength" } });
+    expect(page.props.initialProfile).toEqual({ userId: "u", name: "Ada", goal: "strength", experienceLevel: "intermediate" });
+    expect(page.props.initialPreferences).toEqual({ userId: "u", defaultLocation: "gym", defaultDuration: 45, defaultEquipment: ["barbell"] });
     expect(page.props.saveDraftAction).toBeDefined();
     expect(page.props.confirmPlanSpecAction).toBeDefined();
   });
@@ -81,16 +116,21 @@ describe("CreatePlanPage", () => {
   it("starts the stepper with no draft when the API has none", async () => {
     cookieGet.mockReturnValue({ value: "tok-2" });
     loadCurrentDraft.mockResolvedValue(null);
+    fetchUserProfile.mockResolvedValue({ kind: "error", message: "api_unreachable" });
+    fetchUserPreferences.mockResolvedValue({ kind: "error", message: "api_unreachable" });
     getTranslations.mockResolvedValue(() => "");
 
     const page = (await CreatePlanPage()) as AnyElement;
 
     expect(page.props.initialDraft).toBeUndefined();
+    expect(page.props.initialProfile).toBeNull();
+    expect(page.props.initialPreferences).toBeNull();
   });
 
   it("passes an undefined token when no session cookie is present", async () => {
     cookieGet.mockReturnValue(undefined);
     loadCurrentDraft.mockResolvedValue(null);
+    mockUserMemorySuccess();
     getTranslations.mockResolvedValue(() => "");
 
     await CreatePlanPage();

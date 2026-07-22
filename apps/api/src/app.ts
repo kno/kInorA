@@ -21,6 +21,10 @@ import { warnIfAiConfigMissing } from "./ai/openrouter-generator.js";
 import { DynamicPlanGenerator } from "./ai/dynamic-generator.js";
 import { buildAdapters } from "./ai/adapter-factory.js";
 import { adminAiConfigRoutes } from "./routes/admin-ai-config.js";
+import { userProfileRoutes } from "./routes/user-profile.js";
+import { userPreferencesRoutes } from "./routes/user-preferences.js";
+import { UserProfileRepository } from "./db/repositories/user-profile.js";
+import { UserPreferencesRepository } from "./db/repositories/user-preferences.js";
 import { createPlanRouteRepo } from "./plan-route-repo.js";
 import { WsRegistry } from "./ws/registry.js";
 import type { PlanGenerator } from "./ai/port.js";
@@ -203,6 +207,38 @@ export async function buildApp(
     upsertConfig: (provider, model) => configRepo.upsert(provider, model),
   };
   await app.register(adminAiConfigRoutes, { repo: adminAiConfigRepo });
+
+  // User profile + preferences routes (10a-user-memory-structured, Slice 2).
+  // User-scoped tables (keyed by `userId`, no tenant column) — isolation is
+  // enforced by the single-column predicate the repos already use. The route
+  // ports are built here from the concrete repos + UserRepository (for the
+  // lazy-provision email lookup) so the route files stay free of any DB-layer
+  // import. `adminUserRepo` is reused for the email lookup.
+  const userProfileRepo = new UserProfileRepository(database);
+  const userPreferencesRepo = new UserPreferencesRepository(database);
+  const userProfileRouteRepo = {
+    findUserEmailById: async (id: string) =>
+      (await adminUserRepo.findById(id))?.email ?? null,
+    findProfileByUserId: (id: string) => userProfileRepo.findByUserId(id),
+    createProfileIfMissing: (
+      id: string,
+      input: Parameters<typeof userProfileRepo.createIfMissing>[1]
+    ) => userProfileRepo.createIfMissing(id, input),
+    upsertProfile: (id: string, input: Parameters<typeof userProfileRepo.upsert>[1]) =>
+      userProfileRepo.upsert(id, input),
+  };
+  const userPreferencesRouteRepo = {
+    findPreferencesByUserId: (id: string) =>
+      userPreferencesRepo.findByUserId(id),
+    upsertPreferences: (
+      id: string,
+      input: Parameters<typeof userPreferencesRepo.upsert>[1]
+    ) => userPreferencesRepo.upsert(id, input),
+  };
+  await app.register(userProfileRoutes, { repo: userProfileRouteRepo });
+  await app.register(userPreferencesRoutes, {
+    repo: userPreferencesRouteRepo,
+  });
 
   // WebSocket plugin + authenticated plan-status route.
   // WsRegistry is shared between this route and PlanGenerationService so

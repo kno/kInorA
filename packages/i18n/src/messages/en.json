@@ -511,6 +511,7 @@
       "locationTitle": "Where will you train?",
       "frequencyTitle": "How many days per week?",
       "durationTitle": "How long is each session?",
+      "preferencesTitle": "What defaults should we remember?",
       "equipmentTitle": "What equipment do you have?",
       "limitationsTitle": "Any limitations to keep in mind?",
       "progressAria": "Step {step} of {total}"
@@ -623,6 +624,12 @@
     },
     "chip": {
       "removeAria": "Remove {name}"
+    },
+    "preferences": {
+      "locationLabel": "Default location",
+      "durationLabel": "Default session duration",
+      "equipmentLabel": "Default equipment",
+      "saveError": "Could not save your preferences. Please try again."
     }
   },
   "dashboard": {
@@ -760,7 +767,32 @@
   },
   "profile": {
     "title": "Profile",
-    "description": "Manage your account settings and preferences."
+    "description": "Manage your account settings and preferences.",
+    "loading": {
+      "title": "Loading your profile…",
+      "description": "We are getting your latest profile details.",
+      "progressAria": "Loading profile"
+    },
+    "form": {
+      "heading": "Your profile",
+      "name": "Name",
+      "namePlaceholder": "Your name",
+      "goal": "Goal",
+      "experience": "Experience level",
+      "goalPlaceholder": "Select a goal",
+      "experiencePlaceholder": "Select a level",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Profile saved.",
+      "error": "Could not save your profile. Please try again.",
+      "loadError": "Could not load your profile. Please reload the page.",
+      "nameRequired": "Name is required."
+    },
+    "experience": {
+      "beginner": "Beginner",
+      "intermediate": "Intermediate",
+      "advanced": "Advanced"
+    }
   },
   "offline": {
     "title": "You're Offline",

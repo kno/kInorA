@@ -1,5 +1,5 @@
 import type { Database } from "../db/client.js";
-import { tenants, users, memberships, oauth_accounts } from "../db/schema.js";
+import { tenants, users, memberships, oauth_accounts, userProfiles } from "../db/schema.js";
 
 /**
  * Input for the tenant provisioning primitive.
@@ -9,6 +9,19 @@ import { tenants, users, memberships, oauth_accounts } from "../db/schema.js";
 export interface ProvisionTenantInput {
   tenantName: string;
   userEmail: string;
+}
+
+/**
+ * Derive a default profile `name` from the email local part (10a-user-memory-structured
+ * Slice 3). Mirrors {@link defaultNameFromEmail} in the user-profile route: the
+ * registered user always lands with a profile row whose name matches what GET
+ * /user-profile's lazy-provision path would have derived — so there is exactly one
+ * "default name" rule across registration and first-read. Falls back to "user" when
+ * the email has no local part.
+ */
+function defaultProfileNameFromEmail(email: string): string {
+  const localPart = email.split("@")[0];
+  return localPart && localPart.trim() !== "" ? localPart : "user";
 }
 
 /**
@@ -74,6 +87,22 @@ export async function provisionTenantForUser(
     if (!membershipRow) {
       throw new Error("Failed to create membership: no rows returned");
     }
+
+    // 10a-user-memory-structured Slice 3 — auto-provision a default
+    // user_profiles row in the SAME transaction. name = email local part
+    // (defaultProfileNameFromEmail); goal/experienceLevel are nullable and left
+    // null so the user can set them later via PUT /user-profile. This makes the
+    // lazy-provision branch in GET /user-profile a no-op for registered users:
+    // the row already exists, so the first read returns the pre-provisioned
+    // state without a second insert. Upsert semantics on userProfiles are not
+    // needed here because provisionTenantForUser creates a brand-new user
+    // (users_email_unique), so userId is fresh and cannot collide.
+    await tx.insert(userProfiles).values({
+      userId: userRow.id,
+      name: defaultProfileNameFromEmail(input.userEmail),
+      goal: null,
+      experienceLevel: null,
+    });
 
     return {
       tenantId: tenantRow.id,
