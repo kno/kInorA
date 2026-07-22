@@ -102,6 +102,30 @@ export function assertEmbeddingDimension(
   }
 }
 
+function belongsToScope(
+  record: Pick<VectorMemoryRecord, "tenantId" | "userId">,
+  scope: VectorMemoryOwnerScope,
+): boolean {
+  return record.tenantId === scope.tenantId && record.userId === scope.userId;
+}
+
+function isCompatibleActiveRecord(
+  record: VectorMemoryRecord,
+  scope: VectorMemoryOwnerScope,
+  compatibility: VectorMemoryCompatibility,
+): boolean {
+  return (
+    belongsToScope(record, scope) &&
+    record.status === "active" &&
+    record.embeddingProvider === compatibility.provider &&
+    record.embeddingModel === compatibility.model &&
+    record.embeddingVersion === compatibility.version &&
+    record.embeddingDimension === compatibility.dimension &&
+    record.disabledAt === null &&
+    record.deletedAt === null
+  );
+}
+
 export class VectorMemoryRepository {
   constructor(private db: Database) {}
 
@@ -119,7 +143,9 @@ export class VectorMemoryRepository {
       .orderBy(desc(userMemoryVectors.updatedAt))
       .limit(100);
 
-    return rows as VectorMemoryRecord[];
+    return (rows as VectorMemoryRecord[]).filter(
+      (record) => belongsToScope(record, scope) && record.deletedAt === null,
+    );
   }
 
   async getSettings(scope: VectorMemoryOwnerScope): Promise<VectorMemorySettingsRecord | null> {
@@ -142,11 +168,7 @@ export class VectorMemoryRepository {
     input: CreateVectorMemoryInput,
   ): Promise<VectorMemoryRecord> {
     assertEligibilityForPersistence(input.eligibility);
-    assertEmbeddingDimension(DEFAULT_VECTOR_MEMORY_EMBEDDING_CONFIG.dimension, input.embedding);
-    assertEmbeddingDimension(
-      DEFAULT_VECTOR_MEMORY_EMBEDDING_CONFIG.dimension,
-      new Array(input.embeddingDimension).fill(0),
-    );
+    assertEmbeddingDimension(input.embeddingDimension, input.embedding);
 
     if (input.consentStatus !== "granted") {
       throw new Error(`vector memory consent must be granted (got ${input.consentStatus})`);
@@ -163,6 +185,12 @@ export class VectorMemoryRepository {
     );
     if (existingByIdempotencyKey?.status === "deleted") {
       throw new Error("vector memory idempotency key was already deleted");
+    }
+    if (
+      existingByIdempotencyKey?.status === "active" &&
+      existingByIdempotencyKey.fingerprint !== input.fingerprint
+    ) {
+      throw new Error("vector memory idempotency key is already active for different content");
     }
 
     const existing = await this.findActiveByFingerprint(scope, input.fingerprint);
@@ -310,7 +338,9 @@ export class VectorMemoryRepository {
       )
       .limit(limit);
 
-    return rows as VectorMemoryRecord[];
+    return (rows as VectorMemoryRecord[]).filter((record) =>
+      isCompatibleActiveRecord(record, scope, compatibility),
+    );
   }
 
   private async findActiveByFingerprint(
