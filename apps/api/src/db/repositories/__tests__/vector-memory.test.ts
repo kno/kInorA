@@ -270,7 +270,40 @@ describe("VectorMemoryRepository", () => {
       expect(insertChain.insert).not.toHaveBeenCalled();
     });
 
-    it("rejects an embedding that matches caller metadata but not the configured dimension", async () => {
+    it("rejects an active idempotency-key collision with different content", async () => {
+      const existing = vectorMemoryRow();
+      const existingLookup = selectSequence([settingsRow()], [existing]);
+      const insertChain = insertUpdateChain([existing]);
+      const repo = new VectorMemoryRepository({
+        select: existingLookup.select,
+        insert: insertChain.insert,
+      } as never);
+
+      await expect(
+        repo.create(
+          { tenantId: TENANT_A, userId: USER_A },
+          {
+            summary: "Prefers evening workouts",
+            source: "user_confirmation",
+            status: "active",
+            eligibility: "eligible",
+            consentStatus: "granted",
+            consentedAt: existing.consentedAt,
+            idempotencyKey: existing.idempotencyKey,
+            fingerprint: "different-fingerprint",
+            schemaVersion: existing.schemaVersion,
+            embeddingProvider: existing.embeddingProvider,
+            embeddingModel: existing.embeddingModel,
+            embeddingVersion: existing.embeddingVersion,
+            embeddingDimension: 1536,
+            embedding: new Array(1536).fill(0.2),
+          },
+        ),
+      ).rejects.toThrow(/different content/i);
+      expect(insertChain.insert).not.toHaveBeenCalled();
+    });
+
+    it("rejects an embedding whose length does not match the supplied metadata dimension", async () => {
       const repo = new VectorMemoryRepository({ select: vi.fn() } as never);
 
       await expect(
@@ -289,7 +322,7 @@ describe("VectorMemoryRepository", () => {
             embeddingProvider: "openai",
             embeddingModel: "test-model",
             embeddingVersion: "test-version",
-            embeddingDimension: 2,
+            embeddingDimension: 3,
             embedding: [0.1, 0.2],
           },
         ),
@@ -380,6 +413,52 @@ describe("VectorMemoryRepository", () => {
       expect(result[0]?.embeddingProvider).toBe("openai");
       expect(result[0]?.tenantId).toBe(TENANT_A);
       expect(result[0]?.userId).toBe(USER_A);
+    });
+
+    it("defensively excludes disabled, deleted, incompatible, and cross-scope rows even if the adapter returns them", async () => {
+      const compatible = vectorMemoryRow({
+        embeddingVersion: "2026-07-22",
+        embeddingDimension: 3,
+        embedding: [0.1, 0.2, 0.3],
+      });
+      const select = vi
+        .fn()
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) }),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([
+                compatible,
+                vectorMemoryRow({ embeddingProvider: "other" }),
+                vectorMemoryRow({ embeddingModel: "text-embedding-3-large" }),
+                vectorMemoryRow({ embeddingVersion: "2025-01-01" }),
+                vectorMemoryRow({ embeddingDimension: 4, embedding: [0.1, 0.2, 0.3, 0.4] }),
+                vectorMemoryRow({ disabledAt: new Date("2026-07-22T13:00:00Z") }),
+                vectorMemoryRow({ deletedAt: new Date("2026-07-22T13:00:00Z") }),
+                vectorMemoryRow({ tenantId: TENANT_B }),
+                vectorMemoryRow({ userId: USER_B }),
+                vectorMemoryRow({ status: "failed" }),
+              ]),
+            }),
+          }),
+        });
+      const repo = new VectorMemoryRepository({ select } as never);
+
+      const result = await repo.searchActiveCompatible(
+        { tenantId: TENANT_A, userId: USER_A },
+        {
+          provider: "openai",
+          model: "text-embedding-3-small",
+          version: "2026-07-22",
+          dimension: 3,
+        },
+      );
+
+      expect(result).toEqual([compatible]);
     });
 
     it("keeps same-tenant rows isolated across different users", async () => {
