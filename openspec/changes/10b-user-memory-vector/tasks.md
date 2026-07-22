@@ -33,9 +33,9 @@ Chain strategy: stacked-to-main
 
 ## Phase 2: Core Implementation
 
-- [ ] 2.1 RED: add failing tests for `apps/api/src/ai/__tests__/vector-memory-retriever.test.ts` covering provider/model/version/dimension compatibility, one retry, timeout, and fail-open retrieval.
-- [ ] 2.2 GREEN: add `apps/api/src/ai/embedding-port.ts` and `apps/api/src/ai/memory-retriever.ts`; persist provider/model/version/dimension metadata and normalize empty/offline errors to `[]`.
-- [ ] 2.3 TRIANGLE: inject approved memory context in `apps/api/src/ai/generation-service.ts`/`prompt.ts` only for the bounded plan slice; keep provider failures non-blocking.
+- [x] 2.1 RED: add failing tests for `apps/api/src/ai/__tests__/vector-memory-retriever.test.ts` covering provider/model/version/dimension compatibility, one retry, timeout, and fail-open retrieval.
+- [x] 2.2 GREEN: add `apps/api/src/ai/embedding-port.ts` and `apps/api/src/ai/memory-retriever.ts`; persist provider/model/version/dimension metadata and normalize empty/offline errors to `[]`.
+- [x] 2.3 TRIANGLE: inject approved memory context in `apps/api/src/ai/generation-service.ts`/`prompt.ts` only for the bounded plan slice; keep provider failures non-blocking.
 
 ## Phase 3: Integration / Wiring
 
