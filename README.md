@@ -78,17 +78,27 @@ kInorA is a platform composed of a **web** (public landing + private area) and a
 
    Key variables to configure: `DATABASE_URL`, `AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OPENAI_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`.
 
+   The checked-in local database image is `pgvector/pgvector:pg17` because the
+   Slice 1 vector-memory migration runs `CREATE EXTENSION vector`.
+
 4. Start the local database:
 
    ```bash
    docker compose up -d postgres
    ```
 
+   This must boot the checked-in `pgvector/pgvector:pg17` service. A plain
+   `postgres:*` image will fail the vector-memory migration.
+
 5. Run migrations:
 
    ```bash
    pnpm --filter api db:migrate
    ```
+
+   The migration now includes `CREATE EXTENSION vector;`. If your environment
+   cannot start the pgvector-capable Postgres container, stop here and fix the
+   runtime prerequisite instead of removing the extension from the migration.
 
    _(optional)_ Seed the exercise catalog with initial data:
 

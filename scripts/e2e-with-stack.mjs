@@ -30,7 +30,7 @@ import { spawn, spawnSync } from "node:child_process";
 import os from "node:os";
 
 const CONTAINER_NAME = "kinora-e2e-pg";
-const PG_IMAGE = "postgres:17-alpine";
+export const PG_IMAGE = "pgvector/pgvector:pg17";
 const PG_DB = "kinora";
 const PG_USER = "kinora";
 const PG_PASSWORD = "kinora";
