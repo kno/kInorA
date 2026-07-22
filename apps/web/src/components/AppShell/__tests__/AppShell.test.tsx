@@ -47,6 +47,16 @@ describe("AppShell", () => {
     expect(html).toContain("Content area");
   });
 
+  it("renders the memory navigation item when the shell receives a translated memory label", () => {
+    const html = renderToString(
+      <AppShell memoryNavLabel="Memory">
+        <p>content</p>
+      </AppShell>
+    );
+
+    expect(html).toContain("Memory");
+  });
+
   it("renders the desktop sidebar (and not the mobile nav) at >=768px", () => {
     // Mock matchMedia to report a desktop viewport so the post-hydration
     // effect switches AppShell to the SidebarNav branch.

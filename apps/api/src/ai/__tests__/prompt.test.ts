@@ -170,4 +170,34 @@ describe("buildPlanPrompt", () => {
       }
     });
   });
+
+  it.each([
+    "I have sciatica",
+    "I have arthritis",
+    "I had surgery",
+    "I have a fracture",
+    "I had a stroke",
+    "I have hypertension",
+    "I have a torn ACL",
+    "I am allergic to peanuts",
+    "I have celiac disease",
+    "I have osteoporosis",
+    "I have asthma",
+    "I have diabetes",
+    "I have epilepsy",
+    "I have a migraine",
+    "I have a chronic condition",
+  ])(
+    "redacts %s memory context before provider delivery",
+    (sensitiveMemory) => {
+      const prompt = buildPlanPrompt({
+        ...baseSpec,
+        memoryContext: [sensitiveMemory, "Prefers morning workouts"],
+      });
+
+      expect(prompt).toContain("[REDACTED]");
+      expect(prompt).not.toContain(sensitiveMemory);
+      expect(prompt).toContain("Prefers morning workouts");
+    },
+  );
 });

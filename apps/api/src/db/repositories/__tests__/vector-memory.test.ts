@@ -72,9 +72,10 @@ function selectSequence(...rows: unknown[][]) {
 function insertUpdateChain(returnRows: unknown[]) {
   const returning = vi.fn().mockResolvedValue(returnRows);
   const onConflictDoUpdate = vi.fn().mockReturnValue({ returning });
-  const values = vi.fn().mockReturnValue({ onConflictDoUpdate });
+  const onConflictDoNothing = vi.fn().mockReturnValue({ returning });
+  const values = vi.fn().mockReturnValue({ onConflictDoUpdate, onConflictDoNothing });
   const insert = vi.fn().mockReturnValue({ values });
-  return { insert, values, onConflictDoUpdate, returning };
+  return { insert, values, onConflictDoUpdate, onConflictDoNothing, returning };
 }
 
 function updateReturningChain(returnRows: unknown[]) {
@@ -303,6 +304,64 @@ describe("VectorMemoryRepository", () => {
       expect(insertChain.insert).not.toHaveBeenCalled();
     });
 
+    it("returns the row won by a concurrent same-key insert without overwriting it", async () => {
+      const winner = vectorMemoryRow({ fingerprint: "winner-fingerprint" });
+      let insertAttempts = 0;
+      let releaseInsertAttempts!: () => void;
+      const bothInsertAttempts = new Promise<void>((resolve) => {
+        releaseInsertAttempts = resolve;
+      });
+      let inserted = false;
+      const select = vi.fn().mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockImplementation(async () => (inserted ? [winner] : [])),
+          }),
+        }),
+      }));
+      const returning = vi.fn().mockImplementation(async () => {
+        insertAttempts += 1;
+        if (insertAttempts === 2) releaseInsertAttempts();
+        await bothInsertAttempts;
+        if (inserted) return [];
+        inserted = true;
+        return [winner];
+      });
+      const onConflictDoNothing = vi.fn().mockReturnValue({ returning });
+      const values = vi.fn().mockReturnValue({ onConflictDoNothing });
+      const insert = vi.fn().mockReturnValue({ values });
+      const repo = new VectorMemoryRepository({
+        select,
+        insert,
+      } as never);
+
+      const input = {
+        summary: winner.summary,
+        source: winner.source,
+        status: "active" as const,
+        eligibility: "eligible" as const,
+        consentStatus: "granted" as const,
+        consentedAt: winner.consentedAt,
+        idempotencyKey: winner.idempotencyKey,
+        fingerprint: winner.fingerprint,
+        schemaVersion: winner.schemaVersion,
+        embeddingProvider: winner.embeddingProvider,
+        embeddingModel: winner.embeddingModel,
+        embeddingVersion: winner.embeddingVersion,
+        embeddingDimension: winner.embeddingDimension,
+        embedding: winner.embedding,
+      };
+      const [first, second] = await Promise.all([
+        repo.create({ tenantId: TENANT_A, userId: USER_A }, input),
+        repo.create({ tenantId: TENANT_A, userId: USER_A }, input),
+      ]);
+
+      expect(insert).toHaveBeenCalledTimes(2);
+      expect(onConflictDoNothing).toHaveBeenCalledTimes(2);
+      expect(first).toEqual(winner);
+      expect(second).toEqual(winner);
+    });
+
     it("rejects an embedding whose length does not match the supplied metadata dimension", async () => {
       const repo = new VectorMemoryRepository({ select: vi.fn() } as never);
 
@@ -377,6 +436,7 @@ describe("VectorMemoryRepository", () => {
 
       const result = await repo.searchActiveCompatible(
         { tenantId: TENANT_A, userId: USER_A },
+        new Array(1536).fill(0.1),
         {
           provider: "openai",
           model: "text-embedding-3-small",
@@ -389,18 +449,20 @@ describe("VectorMemoryRepository", () => {
     });
 
     it("returns only metadata-compatible active rows for the scoped owner", async () => {
+      const orderBy = vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([vectorMemoryRow()]) });
       const select = vi
         .fn()
         .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) }) }) })
         .mockReturnValueOnce({
           from: vi.fn().mockReturnValue({
-            where: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([vectorMemoryRow()]) }),
+            where: vi.fn().mockReturnValue({ orderBy }),
           }),
         });
       const repo = new VectorMemoryRepository({ select } as never);
 
       const result = await repo.searchActiveCompatible(
         { tenantId: TENANT_A, userId: USER_A },
+        [0.1, 0.2, 0.3],
         {
           provider: "openai",
           model: "text-embedding-3-small",
@@ -413,6 +475,7 @@ describe("VectorMemoryRepository", () => {
       expect(result[0]?.embeddingProvider).toBe("openai");
       expect(result[0]?.tenantId).toBe(TENANT_A);
       expect(result[0]?.userId).toBe(USER_A);
+      expect(orderBy).toHaveBeenCalledTimes(1);
     });
 
     it("defensively excludes disabled, deleted, incompatible, and cross-scope rows even if the adapter returns them", async () => {
@@ -431,18 +494,20 @@ describe("VectorMemoryRepository", () => {
         .mockReturnValueOnce({
           from: vi.fn().mockReturnValue({
             where: vi.fn().mockReturnValue({
-              limit: vi.fn().mockResolvedValue([
-                compatible,
-                vectorMemoryRow({ embeddingProvider: "other" }),
-                vectorMemoryRow({ embeddingModel: "text-embedding-3-large" }),
-                vectorMemoryRow({ embeddingVersion: "2025-01-01" }),
-                vectorMemoryRow({ embeddingDimension: 4, embedding: [0.1, 0.2, 0.3, 0.4] }),
-                vectorMemoryRow({ disabledAt: new Date("2026-07-22T13:00:00Z") }),
-                vectorMemoryRow({ deletedAt: new Date("2026-07-22T13:00:00Z") }),
-                vectorMemoryRow({ tenantId: TENANT_B }),
-                vectorMemoryRow({ userId: USER_B }),
-                vectorMemoryRow({ status: "failed" }),
-              ]),
+              orderBy: vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([
+                  compatible,
+                  vectorMemoryRow({ embeddingProvider: "other" }),
+                  vectorMemoryRow({ embeddingModel: "text-embedding-3-large" }),
+                  vectorMemoryRow({ embeddingVersion: "2025-01-01" }),
+                  vectorMemoryRow({ embeddingDimension: 4, embedding: [0.1, 0.2, 0.3, 0.4] }),
+                  vectorMemoryRow({ disabledAt: new Date("2026-07-22T13:00:00Z") }),
+                  vectorMemoryRow({ deletedAt: new Date("2026-07-22T13:00:00Z") }),
+                  vectorMemoryRow({ tenantId: TENANT_B }),
+                  vectorMemoryRow({ userId: USER_B }),
+                  vectorMemoryRow({ status: "failed" }),
+                ]),
+              }),
             }),
           }),
         });
@@ -450,6 +515,7 @@ describe("VectorMemoryRepository", () => {
 
       const result = await repo.searchActiveCompatible(
         { tenantId: TENANT_A, userId: USER_A },
+        [0.1, 0.2, 0.3],
         {
           provider: "openai",
           model: "text-embedding-3-small",
@@ -468,7 +534,9 @@ describe("VectorMemoryRepository", () => {
         .mockReturnValueOnce({
           from: vi.fn().mockReturnValue({
             where: vi.fn().mockReturnValue({
-              limit: vi.fn().mockResolvedValue([vectorMemoryRow({ userId: USER_B })]),
+              orderBy: vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([vectorMemoryRow({ userId: USER_B })]),
+              }),
             }),
           }),
         });
@@ -476,6 +544,7 @@ describe("VectorMemoryRepository", () => {
 
       const result = await repo.searchActiveCompatible(
         { tenantId: TENANT_A, userId: USER_B },
+        new Array(1536).fill(0.1),
         {
           provider: "openai",
           model: "text-embedding-3-small",

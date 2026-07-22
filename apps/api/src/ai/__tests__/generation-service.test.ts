@@ -100,6 +100,8 @@ describe("PlanGenerationService", () => {
         service.startGeneration(TENANT_A, USER_A, SPEC_ID)
       ).rejects.toThrow(/not found|unconfirmed/i);
 
+      expect(specRepo.findConfirmedById).toHaveBeenCalledWith(TENANT_A, USER_A, SPEC_ID);
+
       // Generator must NOT be called before validation
       expect(planRepo.createGenerating).not.toHaveBeenCalled();
     });
