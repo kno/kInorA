@@ -1,8 +1,12 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import * as contracts from "./index";
 import type {
+  CreateUserMemoryRequest,
+  CreateUserMemoryResponse,
   DefaultVectorMemoryEmbeddingConfig,
+  DeleteUserMemoryResponse,
   HealthResponse,
+  ListUserMemoriesResponse,
   LoginRequest,
   MemorySettings,
   MembershipRole,
@@ -21,6 +25,7 @@ import type {
   TenantId,
   TenantQueryContextDTO,
   TrainingLocation,
+  UpdateMemorySettingsRequest,
   UserMemory,
   UserMemoryConsentStatus,
   UserMemoryEligibility,
@@ -232,6 +237,24 @@ describe("shared contracts boundary", () => {
       settingsVersion: number;
       disabledAt?: string | null;
       updatedAt: string;
+    }>();
+    expectTypeOf<CreateUserMemoryRequest>().toEqualTypeOf<{
+      factText: string;
+      source: string;
+      idempotencyKey: string;
+    }>();
+    expectTypeOf<CreateUserMemoryResponse>().toEqualTypeOf<{
+      memory: UserMemory;
+    }>();
+    expectTypeOf<ListUserMemoriesResponse>().toEqualTypeOf<{
+      settings: MemorySettings;
+      memories: UserMemory[];
+    }>();
+    expectTypeOf<UpdateMemorySettingsRequest>().toEqualTypeOf<{
+      enabled: boolean;
+    }>();
+    expectTypeOf<DeleteUserMemoryResponse>().toEqualTypeOf<{
+      deleted: true;
     }>();
   });
 
