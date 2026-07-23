@@ -228,6 +228,12 @@ export async function buildApp(
     {
       checkAndConsume: (scope, feature, operationKey) =>
         checkAndConsumeQuota.checkAndConsume(scope, feature, operationKey),
+      // #174: release the reserved unit if embed+store fails terminally, so a
+      // fact that is never retried does not leak a memory_write unit. The
+      // period is threaded from the consumed decision (FIX B) — never
+      // re-derived from the current clock.
+      refund: (scope, feature, operationKey, period) =>
+        checkAndConsumeQuota.refund(scope, feature, operationKey, period).then(() => undefined),
     }
   );
 

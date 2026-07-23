@@ -17,6 +17,8 @@ import type {
   QuotaLedgerConsumeInput,
   QuotaLedgerConsumeResult,
   QuotaLedgerPort,
+  QuotaLedgerRefundInput,
+  QuotaLedgerRefundResult,
 } from "../../billing/quota-consumption.js";
 import type { BillingScope } from "../../billing/types.js";
 
@@ -260,8 +262,136 @@ export class QuotaLedgerRepository implements QuotaLedgerPort {
             ),
           );
       }
-      await this.writeLedger(tx, input, "allowed", "allowed");
+      // #174 FIX A: record on the ledger row, AT THIS INSTANT, whether THIS
+      // consume incremented the member counter. `refund` reverses based on
+      // this recorded fact — never by re-reading current allocation
+      // existence — so an admin adding/removing a per-member allocation
+      // between consume and a compensating void can never desync the
+      // tenant/member mirror.
+      await this.writeLedger(tx, input, "allowed", "allowed", allocationLimit !== null);
       return { outcome: "consumed" };
+    });
+  }
+
+  /**
+   * Compensation for a FRESH `allowed` consume (#174). Runs a single
+   * transaction that mirrors `consume` in reverse:
+   *   1. lock the tenant counter FIRST (the same lock consume takes) so a void
+   *      serializes with any concurrent consume/void for this scope
+   *   2. find the ledger row; only an `allowed` row is voidable. A missing or
+   *      non-`allowed` row is a no-op — this makes a double-void safe and means
+   *      a transient (never-persisted) denial is never "refunded"
+   *   3. delete the ledger row so a same-key retry is re-evaluated as a fresh
+   *      consume (matching the deterministic-key self-heal)
+   *   4. decrement the tenant counter, and — mirroring consume — the per-member
+   *      counter when a per-member allocation exists. Both decrements are
+   *      floored at 0 (`GREATEST(used - 1, 0)`) so the non-negative check
+   *      constraint can never be violated even under an unexpected interleaving.
+   */
+  async refund(input: QuotaLedgerRefundInput): Promise<QuotaLedgerRefundResult> {
+    const { scope, feature, period, operationKey } = input;
+
+    return this.db.transaction(async (tx) => {
+      // 1. Lock the tenant aggregate counter FIRST — same serialization point
+      // as consume, so a void and a concurrent consume/void for this scope
+      // never interleave mid-decrement.
+      await tx
+        .select({ used: tenantQuotaCounters.used })
+        .from(tenantQuotaCounters)
+        .where(
+          and(
+            eq(tenantQuotaCounters.tenantId, scope.tenantId),
+            eq(tenantQuotaCounters.feature, feature),
+            eq(tenantQuotaCounters.period, period),
+          ),
+        )
+        .for("update");
+
+      // 2. Only a FRESH allowed consume is voidable. A missing row (never
+      // consumed / already voided) or a non-allowed row is a safe no-op.
+      // `memberCounterCredited` is read here — the fact RECORDED AT CONSUME
+      // TIME — so step 4 below reverses exactly what this operation did,
+      // regardless of any allocation change since (#174 FIX A).
+      const [existing] = await tx
+        .select({
+          decision: billingUsageLedger.decision,
+          memberCounterCredited: billingUsageLedger.memberCounterCredited,
+        })
+        .from(billingUsageLedger)
+        .where(
+          and(
+            eq(billingUsageLedger.tenantId, scope.tenantId),
+            eq(billingUsageLedger.userId, scope.userId),
+            eq(billingUsageLedger.feature, feature),
+            eq(billingUsageLedger.period, period),
+            eq(billingUsageLedger.operationKey, operationKey),
+          ),
+        );
+      if (!existing || existing.decision !== "allowed") {
+        return { outcome: "noop" };
+      }
+
+      // 3. Delete the ledger row so a retry re-consumes (self-heal) instead of
+      // replaying — and so a concurrent double-void finds nothing to reverse.
+      await tx
+        .delete(billingUsageLedger)
+        .where(
+          and(
+            eq(billingUsageLedger.tenantId, scope.tenantId),
+            eq(billingUsageLedger.userId, scope.userId),
+            eq(billingUsageLedger.feature, feature),
+            eq(billingUsageLedger.period, period),
+            eq(billingUsageLedger.operationKey, operationKey),
+          ),
+        );
+
+      // 4. Reverse the tenant counter (floored at 0).
+      await tx
+        .update(tenantQuotaCounters)
+        .set({
+          used: sql`GREATEST(${tenantQuotaCounters.used} - 1, 0)`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(tenantQuotaCounters.tenantId, scope.tenantId),
+            eq(tenantQuotaCounters.feature, feature),
+            eq(tenantQuotaCounters.period, period),
+          ),
+        );
+
+      // 5. Reverse the member counter iff THIS op incremented it, per the
+      // fact recorded on the ledger row at consume time (step 2) — NEVER by
+      // re-reading current `memberQuotaAllocations` existence. Consume
+      // decided whether to touch the member counter based on allocation
+      // existence AT CONSUME TIME; if refund instead re-read allocation
+      // existence AT VOID TIME, an admin change in that window would desync
+      // the mirror two ways: adding an allocation after a no-allocation
+      // consume would make refund decrement a member counter this op never
+      // touched (corrupting another operation's real usage — an under-count
+      // that lets the member exceed their allocation by one); removing an
+      // allocation after a with-allocation consume would make refund skip
+      // the decrement entirely (leaking the member unit forever). Keying off
+      // the ledger-recorded fact keeps consume/void symmetric regardless of
+      // any allocation change in between (#174 FIX A).
+      if (existing.memberCounterCredited) {
+        await tx
+          .update(memberQuotaCounters)
+          .set({
+            used: sql`GREATEST(${memberQuotaCounters.used} - 1, 0)`,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(memberQuotaCounters.tenantId, scope.tenantId),
+              eq(memberQuotaCounters.userId, scope.userId),
+              eq(memberQuotaCounters.feature, feature),
+              eq(memberQuotaCounters.period, period),
+            ),
+          );
+      }
+
+      return { outcome: "refunded" };
     });
   }
 
@@ -270,6 +400,7 @@ export class QuotaLedgerRepository implements QuotaLedgerPort {
     input: QuotaLedgerConsumeInput,
     decision: "allowed" | "denied",
     reason: string,
+    memberCounterCredited = false,
   ): Promise<void> {
     await tx
       .insert(billingUsageLedger)
@@ -281,6 +412,7 @@ export class QuotaLedgerRepository implements QuotaLedgerPort {
         operationKey: input.operationKey,
         decision,
         reason,
+        memberCounterCredited,
       })
       .onConflictDoNothing();
   }

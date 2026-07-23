@@ -24,7 +24,13 @@ export type EntitlementDecision =
  * Result of an atomic check-and-consume: allowed carries the resolved tier and
  * billing period; denied carries the reason the route/service maps to a
  * fail-closed response.
+ *
+ * `replayed` distinguishes a FRESH consume (this call advanced the counter and
+ * wrote the ledger row) from an idempotent REPLAY of a prior decision (this
+ * call advanced nothing). A caller that compensates a failed operation (e.g.
+ * the memory_write void, #174) MUST void only what it freshly consumed — a
+ * replay's unit belongs to the prior/in-flight attempt and must never be voided.
  */
 export type ConsumeDecision =
-  | { allowed: true; tier: BillingTier; source: BillingSource; period: string }
+  | { allowed: true; tier: BillingTier; source: BillingSource; period: string; replayed: boolean }
   | { allowed: false; reason: BillingDenialReason };
