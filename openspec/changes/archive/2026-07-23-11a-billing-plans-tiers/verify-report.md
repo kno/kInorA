@@ -200,8 +200,8 @@ auth plugin additionally re-checks tenant-scoped membership status per request
 ## Owner-only vs "trainer" decision — CORRECT / ACCEPTABLE (not a gap)
 
 The spec text says "owners/trainers" and "GIVEN trainer O **owns** tenant T". The
-`membership_role` pgEnum is `["owner","member"]` — there is no distinct `trainer`
-role, and `provisioning.ts` creates the tenant creator as `owner`. In a
+`membership_role` pgEnum is `["owner","member"]` — there is no distinct
+`trainer` role, and `provisioning.ts` creates the tenant creator as `owner`. In a
 trainer-managed tenant, the "trainer" **is** the tenant owner. Therefore
 resolving the authorized quota administrator as an **active owner** is the
 faithful, schema-backed reading of the spec, not a shortcut: the scenario's own
@@ -257,7 +257,7 @@ Tasks 3.1/3.2/3.3 are `[x]` in `tasks.md` and match the code state. Phase 4
 Harness: `podman run pgvector/pgvector:pg17` on port 55434 →
 `DATABASE_URL=… pnpm --filter api db:migrate` (migrations applied) →
 `DATABASE_URL=… pnpm --filter api test src/db/repositories/__tests__/billing-admin.integration.test.ts`.
-Container removed after run; no artifacts left in the tree.
+Container removed after run (podman rm -f); no artifacts left in the tree.
 
 | Check | Result |
 |---|---|
