@@ -68,6 +68,10 @@ export function BillingPageClient({ initialData, initialError = null }: BillingP
         setData(result.data);
         setError(null);
       } else {
+        // #176 — a failed client refetch must be observable, not silently
+        // swallowed. Structured event + failure kind only; never any token or
+        // response content (the Result carries only an error kind string).
+        console.error({ event: "billing_visibility_refresh_failed", kind: result.message });
         setError(result.message);
       }
     } finally {

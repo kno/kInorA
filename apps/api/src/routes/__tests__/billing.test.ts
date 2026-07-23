@@ -89,10 +89,11 @@ async function buildTestApp(
     userId: OWNER_ID,
     role: "owner",
   }),
+  logger?: SpyLogger,
 ): Promise<FastifyInstance> {
   const db = buildMockDb(authMembershipRow) as never;
 
-  const app = Fastify();
+  const app = logger ? Fastify({ loggerInstance: logger as never }) : Fastify();
   app.setErrorHandler((error: unknown, _req, reply) => {
     if (
       typeof error === "object" &&
@@ -116,6 +117,37 @@ async function buildTestApp(
   });
 
   return app;
+}
+
+// A minimal pino-compatible spy logger. Fastify v5 accepts a pre-built logger
+// via `loggerInstance`; `request.log` is a child of it. `child()` returns the
+// same object so warn/error calls made on the per-request logger accumulate on
+// one set of spies we can assert against.
+type SpyLogger = {
+  level: string;
+  warn: ReturnType<typeof vi.fn>;
+  info: ReturnType<typeof vi.fn>;
+  error: ReturnType<typeof vi.fn>;
+  debug: ReturnType<typeof vi.fn>;
+  fatal: ReturnType<typeof vi.fn>;
+  trace: ReturnType<typeof vi.fn>;
+  silent: ReturnType<typeof vi.fn>;
+  child: () => SpyLogger;
+};
+
+function createSpyLogger(): SpyLogger {
+  const logger: SpyLogger = {
+    level: "info",
+    warn: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    fatal: vi.fn(),
+    trace: vi.fn(),
+    silent: vi.fn(),
+    child: () => logger,
+  };
+  return logger;
 }
 
 function buildUnusedVisibilityPort(): BillingVisibilityPort {
@@ -552,5 +584,177 @@ describe("Cross-tenant billing denied", () => {
     expect(res.statusCode).toBe(403);
     expect(res.json()).toEqual({ error: "unauthorized_quota_admin" });
     expect(port.writeMemberAllocation).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scenario: Denied quota-admin attempts are observable (#175)
+//
+// Only SUCCESSFUL quota-admin mutations write a billing_audit_events row. A
+// denied attempt (unauthorized non-owner, cross-tenant subject probe,
+// out-of-bounds allocation) must ALSO be observable — but via a structured
+// server-side log (the request logger), NOT a new audit DB row: writing a row
+// per denied probe is DoS-able (an attacker could spam denials to bloat the
+// table). The log carries actor + attempted subject + reason and never any
+// secret. The correct 403/422 is still returned and the success-path audit is
+// unchanged.
+// ---------------------------------------------------------------------------
+
+describe("Denied quota-admin attempts are observable (#175)", () => {
+  let app: FastifyInstance;
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  const DENIAL_EVENT = "billing.quota_admin.denied";
+
+  it("logs a structured denial (actor + subject + reason) for a non-owner allocation attempt, still 403", async () => {
+    const log = createSpyLogger();
+    const port = buildFakePort({ actor: MEMBER_ACTIVE, subject: MEMBER_ACTIVE });
+    app = await buildTestApp(
+      port,
+      buildActiveMembershipRow({ tenantId: TENANT_A, userId: OWNER_ID, role: "member" }),
+      log,
+    );
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/billing/allocations",
+      headers: auth,
+      payload: { userId: MEMBER_ID, feature: "plan_generation", period: PERIOD, limit: 5 },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toEqual({ error: "unauthorized_quota_admin" });
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: DENIAL_EVENT,
+        route: "PUT /billing/allocations",
+        tenantId: TENANT_A,
+        actorUserId: OWNER_ID,
+        subjectUserId: MEMBER_ID,
+        reason: "unauthorized_quota_admin",
+      }),
+      expect.any(String),
+    );
+  });
+
+  it("logs a structured denial for a cross-tenant subject probe, still 403", async () => {
+    const log = createSpyLogger();
+    const port = buildFakePort({ actor: OWNER_ACTIVE, subject: null, tenantTier: "pro" });
+    app = await buildTestApp(port, undefined, log);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/billing/allocations",
+      headers: auth,
+      payload: { userId: OTHER_TENANT_MEMBER, feature: "plan_generation", period: PERIOD, limit: 3 },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: DENIAL_EVENT,
+        actorUserId: OWNER_ID,
+        subjectUserId: OTHER_TENANT_MEMBER,
+        reason: "unauthorized_quota_admin",
+      }),
+      expect.any(String),
+    );
+  });
+
+  it("logs a structured denial for an out-of-bounds allocation, still 422", async () => {
+    const log = createSpyLogger();
+    const port = buildFakePort({ actor: OWNER_ACTIVE, subject: MEMBER_ACTIVE, tenantTier: "free" });
+    app = await buildTestApp(port, undefined, log);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/billing/allocations",
+      headers: auth,
+      payload: { userId: MEMBER_ID, feature: "plan_generation", period: PERIOD, limit: 5 },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: DENIAL_EVENT,
+        reason: "allocation_out_of_bounds",
+        subjectUserId: MEMBER_ID,
+      }),
+      expect.any(String),
+    );
+  });
+
+  it("logs a structured denial for a non-owner usage read, still 403", async () => {
+    const log = createSpyLogger();
+    const port = buildFakePort({ actor: MEMBER_ACTIVE });
+    app = await buildTestApp(
+      port,
+      buildActiveMembershipRow({ tenantId: TENANT_A, userId: OWNER_ID, role: "member" }),
+      log,
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/billing/usage?period=${PERIOD}`,
+      headers: auth,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: DENIAL_EVENT,
+        route: "GET /billing/usage",
+        actorUserId: OWNER_ID,
+        reason: "unauthorized_quota_admin",
+      }),
+      expect.any(String),
+    );
+  });
+
+  it("does NOT log a denial on the success path (200)", async () => {
+    const log = createSpyLogger();
+    const port = buildFakePort({ actor: OWNER_ACTIVE, subject: MEMBER_ACTIVE, tenantTier: "pro" });
+    app = await buildTestApp(port, undefined, log);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/billing/allocations",
+      headers: auth,
+      payload: { userId: MEMBER_ID, feature: "plan_generation", period: PERIOD, limit: 5 },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const denialCalls = log.warn.mock.calls.filter(
+      ([obj]) => (obj as { event?: string })?.event === DENIAL_EVENT,
+    );
+    expect(denialCalls).toHaveLength(0);
+  });
+
+  it("never puts the session token into the denial log payload", async () => {
+    const log = createSpyLogger();
+    const port = buildFakePort({ actor: MEMBER_ACTIVE, subject: MEMBER_ACTIVE });
+    app = await buildTestApp(
+      port,
+      buildActiveMembershipRow({ tenantId: TENANT_A, userId: OWNER_ID, role: "member" }),
+      log,
+    );
+
+    await app.inject({
+      method: "PUT",
+      url: "/billing/allocations",
+      headers: auth,
+      payload: { userId: MEMBER_ID, feature: "plan_generation", period: PERIOD, limit: 5 },
+    });
+
+    const denialCalls = log.warn.mock.calls.filter(
+      ([obj]) => (obj as { event?: string })?.event === DENIAL_EVENT,
+    );
+    expect(denialCalls.length).toBeGreaterThan(0);
+    // The structured denial payload carries only ids + reason, never a secret.
+    const serialized = JSON.stringify(denialCalls);
+    expect(serialized).not.toContain(VALID_TOKEN);
+    expect(serialized.toLowerCase()).not.toContain("authorization");
   });
 });

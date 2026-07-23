@@ -63,6 +63,35 @@ function denialStatus(reason: string): number {
   return 403;
 }
 
+/**
+ * #175 — make a DENIED quota-admin attempt observable. Only SUCCESSFUL
+ * mutations write a `billing_audit_events` row (see BillingAdminRepository);
+ * denials are emitted as a STRUCTURED SERVER LOG via the per-request logger
+ * instead of a new audit DB row. Rationale: writing a row per denied probe is
+ * DoS-able — an attacker could spam denials to bloat the audit table — whereas
+ * a log line is bounded by log retention and never grows unbounded product
+ * state. The payload carries the actor, the attempted subject, and the reason
+ * (ids + enum only) so it is diagnosable without exposing any secret, session
+ * token, or private member content.
+ */
+function logDeniedQuotaAdmin(
+  request: FastifyRequest,
+  context: {
+    route: string;
+    tenantId: string;
+    actorUserId: string;
+    reason: string;
+    subjectUserId?: string;
+    feature?: string;
+    period?: string;
+  },
+): void {
+  request.log.warn(
+    { event: "billing.quota_admin.denied", ...context },
+    "denied quota-admin attempt",
+  );
+}
+
 export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
   fastify,
   options,
@@ -96,6 +125,13 @@ export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
       });
 
       if (!result.ok) {
+        logDeniedQuotaAdmin(request, {
+          route: "GET /billing/usage",
+          tenantId,
+          actorUserId: userId,
+          period,
+          reason: result.reason,
+        });
         return reply.code(denialStatus(result.reason)).send({ error: result.reason });
       }
 
@@ -142,6 +178,15 @@ export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
       });
 
       if (!result.ok) {
+        logDeniedQuotaAdmin(request, {
+          route: "PUT /billing/allocations",
+          tenantId,
+          actorUserId: userId,
+          subjectUserId: body.userId,
+          feature: body.feature,
+          period: body.period,
+          reason: result.reason,
+        });
         return reply.code(denialStatus(result.reason)).send({ error: result.reason });
       }
 

@@ -73,6 +73,19 @@ function isBillingVisibilityDTO(value: unknown): value is BillingVisibilityDTO {
 // quickly to the existing api_unreachable/error Result instead.
 const FETCH_TIMEOUT_MS = 5_000;
 
+// #176 — emit a structured server-side telemetry line when a billing-visibility
+// read fails. This module is `server-only`, so `console.error` lands on the
+// Next.js server stdout (the app's logging convention; see i18n/request.ts).
+// The payload carries the failure kind and minimal context ONLY — never the
+// session token or any response body content. A 4xx business denial (e.g.
+// inactive_membership) is an expected outcome, not a read failure, and is NOT
+// logged here.
+const READ_FAILURE_EVENT = "billing_visibility_read_failed";
+
+function logReadFailure(kind: string, context: Record<string, unknown> = {}): void {
+  console.error({ event: READ_FAILURE_EVENT, kind, ...context });
+}
+
 /**
  * Fetch the member-facing billing visibility read (spec `Billing State
  * Visibility`, Phase 4). Backed by `GET /billing/visibility` (Phase 4,
@@ -97,16 +110,21 @@ export async function getBillingVisibility(
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch {
+    logReadFailure("api_unreachable");
     return { kind: "error", message: "api_unreachable" };
   }
 
   if (!res.ok) {
+    if (res.status >= 500) {
+      logReadFailure("server_error", { status: res.status });
+    }
     const payload = (await res.json().catch(() => ({}))) as { error?: string };
     return { kind: "error", message: payload.error ?? `api_error_${res.status}` };
   }
 
   const body = (await res.json().catch(() => null)) as unknown;
   if (!isBillingVisibilityDTO(body)) {
+    logReadFailure("invalid_response");
     return { kind: "error", message: "invalid_response" };
   }
 
