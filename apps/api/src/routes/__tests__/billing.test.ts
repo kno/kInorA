@@ -8,6 +8,7 @@ import {
   type QuotaAdminPort,
   type AdminMembershipView,
 } from "../../billing/quota-admin.js";
+import { GetBillingVisibility, type BillingVisibilityPort } from "../../billing/billing-visibility.js";
 import {
   VALID_TOKEN,
   createAuthMockDb,
@@ -108,9 +109,26 @@ async function buildTestApp(
   await app.register(billingRoutes, {
     setMemberAllocation: new SetMemberAllocation(port),
     getTenantUsage: new GetTenantUsage(port),
+    // Not exercised by this suite — GET /billing/visibility has its own suite
+    // in billing-visibility.test.ts. Provided only to satisfy the shared
+    // billingRoutes plugin's required options.
+    getBillingVisibility: new GetBillingVisibility(buildUnusedVisibilityPort()),
   });
 
   return app;
+}
+
+function buildUnusedVisibilityPort(): BillingVisibilityPort {
+  return {
+    loadContext: vi.fn(async () => ({
+      membershipStatus: null,
+      billing: null,
+      activeOverrideTier: null,
+      activeOverrideEndsAt: null,
+    })),
+    readTenantUsage: vi.fn(async () => []),
+    readOwnMemberUsage: vi.fn(async () => []),
+  };
 }
 
 const auth = { authorization: `Bearer ${VALID_TOKEN}` };
@@ -202,6 +220,7 @@ describe("PUT /billing/allocations — Member Quota Administration", () => {
     await app0.register(billingRoutes, {
       setMemberAllocation: new SetMemberAllocation(port),
       getTenantUsage: new GetTenantUsage(port),
+      getBillingVisibility: new GetBillingVisibility(buildUnusedVisibilityPort()),
     });
     app = app0;
 

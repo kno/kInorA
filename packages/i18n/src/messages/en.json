@@ -851,6 +851,58 @@
       "enabled": "Memory enabled."
     }
   },
+  "billing": {
+    "navLabel": "Billing",
+    "title": "Billing",
+    "description": "Review your plan, trial status, and usage for this account.",
+    "loading": {
+      "title": "Loading your billing…",
+      "description": "We are fetching your plan, trial, and usage details.",
+      "progressAria": "Loading billing"
+    },
+    "states": {
+      "emptyTitle": "No billing data yet.",
+      "emptyDescription": "Billing details will appear here once your tenant's plan is set up.",
+      "errorTitle": "We could not load your billing.",
+      "errorDescription": "Try again in a moment. Nothing has changed.",
+      "offlineTitle": "You are offline",
+      "offlineDescription": "Reconnect to load your billing details.",
+      "retry": "Retry"
+    },
+    "tier": {
+      "free": "Free",
+      "pro": "Pro"
+    },
+    "status": {
+      "active": "Active",
+      "trialing": "Trial",
+      "expired": "Expired",
+      "overridden": "Special access"
+    },
+    "trial": {
+      "badge": "Pro trial — {daysRemaining, plural, one {# day left} other {# days left}}",
+      "expiredTitle": "Your Pro trial has ended",
+      "expiredDescription": "You are now on the Free plan. Upgrade to keep premium features."
+    },
+    "usage": {
+      "tenantTitle": "Tenant usage this period",
+      "memberTitle": "Your usage this period",
+      "row": "{feature} — {used}/{limit} used",
+      "emptyTitle": "No usage recorded yet",
+      "emptyDescription": "Usage for this billing period will appear here once it starts."
+    },
+    "feature": {
+      "plan_generation": "Plan generations",
+      "plan_regeneration": "Plan regenerations",
+      "memory_write": "Memory writes",
+      "memory_retrieval": "Memory retrievals"
+    },
+    "upgrade": {
+      "title": "Unlock Pro features",
+      "description": "Upgrade to Pro for unlimited plan generations and premium memory.",
+      "cta": "View upgrade options"
+    }
+  },
   "offline": {
     "title": "You're Offline",
     "description": "It looks like you're currently disconnected from the internet. Please check your connection and try again.",
