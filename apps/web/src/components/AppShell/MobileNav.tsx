@@ -10,7 +10,7 @@ import styles from "./MobileNav.module.css";
 interface TabItem {
   label: string;
   href: string;
-  icon: "home" | "plan" | "stats" | "history" | "exercises" | "profile" | "memory";
+  icon: "home" | "plan" | "stats" | "history" | "exercises" | "profile" | "memory" | "billing";
 }
 
 const TABS: TabItem[] = [
@@ -28,11 +28,15 @@ const TABS: TabItem[] = [
  * Fixed to the bottom of the viewport with safe-area padding for notched
  * devices. Tap targets are at least 44px. Active tab uses --accent color.
  */
-export function MobileNav({ memoryNavLabel }: { memoryNavLabel?: string } = {}) {
+export function MobileNav({
+  memoryNavLabel,
+  billingNavLabel,
+}: { memoryNavLabel?: string; billingNavLabel?: string } = {}) {
   const pathname = usePathname();
   const tabs = [
     ...TABS,
     ...(memoryNavLabel ? [{ label: memoryNavLabel, href: "/memory", icon: "memory" as const }] : []),
+    ...(billingNavLabel ? [{ label: billingNavLabel, href: "/billing", icon: "billing" as const }] : []),
   ];
 
   return (
@@ -61,8 +65,10 @@ export function MobileNav({ memoryNavLabel }: { memoryNavLabel?: string } = {}) 
           </Link>
         </div>
 
-        {/* Right tabs: History, Exercises, Profile */}
-        {tabs.slice(3, 7).map((tab) => (
+        {/* Right tabs: History, Exercises, Profile, then any trailing
+            i18n-gated tabs (Memory, Billing). Use an open-ended slice so a
+            newly added trailing tab is never dropped. */}
+        {tabs.slice(3).map((tab) => (
           <MobileTab
             key={tab.href}
             tab={tab}
@@ -124,5 +130,7 @@ function TabIcon({ name }: { name: TabItem["icon"] }) {
       return <UserIcon className={styles.icon} size={22} />;
     case "memory":
       return <HistoryIcon className={styles.icon} size={22} />;
+    case "billing":
+      return <StatsIcon className={styles.icon} size={22} />;
   }
 }
