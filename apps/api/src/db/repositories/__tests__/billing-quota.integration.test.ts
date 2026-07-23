@@ -21,8 +21,9 @@
  * the default `vitest run` stays hermetic.
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { and, eq } from "drizzle-orm";
 import { createDbClient } from "../../client.js";
-import { memberships, tenants, users } from "../../schema.js";
+import { billingUsageLedger, memberships, tenants, users } from "../../schema.js";
 import { QuotaLedgerRepository } from "../billing-quota.js";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -145,6 +146,65 @@ describe.skipIf(!hasDb)("QuotaLedgerRepository (real Postgres)", () => {
     });
     // specA + the re-evaluated specB = 2 consumed units.
     expect(counter?.used).toBe(2);
+  });
+
+  it("#171: an inactive-membership denial is NOT cached; reactivation lets the SAME operation key be re-evaluated and consume", async () => {
+    const { tenantId, userId } = await seedActiveTenant();
+    const scope = { tenantId, userId };
+    const operationKey = "plan_generation:reactivate";
+
+    // Suspend the member AFTER the entitlement read would have passed — the
+    // in-transaction fail-closed re-check inside consume() catches it and denies.
+    await db
+      .update(memberships)
+      .set({ status: "suspended" })
+      .where(and(eq(memberships.tenantId, tenantId), eq(memberships.userId, userId)));
+
+    const denied = await repo.consume({
+      scope,
+      feature: "plan_generation",
+      period: PERIOD,
+      operationKey,
+      tenantLimit: 1,
+    });
+    expect(denied).toEqual({ outcome: "denied", reason: "inactive_membership" });
+
+    // The transient denial MUST NOT be persisted to the idempotency ledger —
+    // otherwise the deterministic operation key would replay this stale 403
+    // forever, locking a reactivated member out for the rest of the period.
+    const ledgerRows = await db
+      .select()
+      .from(billingUsageLedger)
+      .where(
+        and(
+          eq(billingUsageLedger.tenantId, tenantId),
+          eq(billingUsageLedger.userId, userId),
+          eq(billingUsageLedger.operationKey, operationKey),
+        ),
+      );
+    expect(ledgerRows).toHaveLength(0);
+
+    // Reactivate the membership and retry with the SAME deterministic key. It
+    // must be RE-EVALUATED (now active + pool has room) and consume — not replay
+    // the stale inactive_membership denial.
+    await db
+      .update(memberships)
+      .set({ status: "active" })
+      .where(and(eq(memberships.tenantId, tenantId), eq(memberships.userId, userId)));
+
+    const retry = await repo.consume({
+      scope,
+      feature: "plan_generation",
+      period: PERIOD,
+      operationKey,
+      tenantLimit: 1,
+    });
+    expect(retry.outcome).toBe("consumed");
+
+    const [counter] = await db.query.tenantQuotaCounters.findMany({
+      where: (t, { and: andOp, eq: eqOp }) => andOp(eqOp(t.tenantId, tenantId), eqOp(t.feature, "plan_generation")),
+    });
+    expect(counter?.used).toBe(1);
   });
 
   it("CRITICAL 2: a mid-period tier downgrade (fresh lower tenantLimit) is enforced, not the stale stored limit", async () => {

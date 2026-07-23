@@ -266,6 +266,68 @@ describe("PUT /billing/allocations — Member Quota Administration", () => {
     expect(res.json()).toEqual({ error: "invalid_allocation_request" });
     expect(port.writeMemberAllocation).not.toHaveBeenCalled();
   });
+
+  it.each(["2026-13", "2026-00"])(
+    "rejects an impossible month in the period (%s) → 422 at the route, never writing (#173)",
+    async (badPeriod) => {
+      const port = buildFakePort({ actor: OWNER_ACTIVE, subject: MEMBER_ACTIVE, tenantTier: "pro" });
+      app = await buildTestApp(port);
+
+      const res = await app.inject({
+        method: "PUT",
+        url: "/billing/allocations",
+        headers: auth,
+        payload: { userId: MEMBER_ID, feature: "plan_generation", period: badPeriod, limit: 1 },
+      });
+
+      expect(res.statusCode).toBe(422);
+      expect(res.json()).toEqual({ error: "invalid_allocation_request" });
+      expect(port.writeMemberAllocation).not.toHaveBeenCalled();
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Scenario: Period bounds are enforced at the use-case layer too (#173)
+// ---------------------------------------------------------------------------
+
+describe("SetMemberAllocation — period bounds (use case)", () => {
+  it.each(["2026-13", "2026-00"])(
+    "rejects an impossible month (%s) → allocation_out_of_bounds, never writing",
+    async (badPeriod) => {
+      const port = buildFakePort({ actor: OWNER_ACTIVE, subject: MEMBER_ACTIVE, tenantTier: "pro" });
+      const useCase = new SetMemberAllocation(port);
+
+      const result = await useCase.execute({
+        tenantId: TENANT_A,
+        actorUserId: OWNER_ID,
+        subjectUserId: MEMBER_ID,
+        feature: "plan_generation",
+        period: badPeriod,
+        limit: 1,
+      });
+
+      expect(result).toEqual({ ok: false, reason: "allocation_out_of_bounds" });
+      expect(port.writeMemberAllocation).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still accepts a valid YYYY-MM period", async () => {
+    const port = buildFakePort({ actor: OWNER_ACTIVE, subject: MEMBER_ACTIVE, tenantTier: "pro" });
+    const useCase = new SetMemberAllocation(port);
+
+    const result = await useCase.execute({
+      tenantId: TENANT_A,
+      actorUserId: OWNER_ID,
+      subjectUserId: MEMBER_ID,
+      feature: "plan_generation",
+      period: "2026-12",
+      limit: 1,
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(port.writeMemberAllocation).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
