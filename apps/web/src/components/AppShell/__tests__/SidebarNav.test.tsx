@@ -119,6 +119,31 @@ describe("SidebarNav", () => {
     expect(html).toContain("Guest");
   });
 
+  it("renders a billing nav item with the translated label and /billing link when billingNavLabel is provided", () => {
+    const html = renderToString(SidebarNav({ billingNavLabel: "Billing" }));
+
+    expect(html).toContain('href="/billing"');
+    // The link content is the supplied i18n label, not a hardcoded string.
+    const billingLink = html.match(/<a[^>]*href="\/billing"[^>]*>[\s\S]*?<\/a>/);
+    expect(billingLink).toBeTruthy();
+    expect(billingLink![0]).toContain("Billing");
+  });
+
+  it("omits the billing nav item when billingNavLabel is not provided", () => {
+    const html = renderToString(SidebarNav());
+    expect(html).not.toContain('href="/billing"');
+  });
+
+  it("marks the billing nav item active on the /billing route", () => {
+    mockedUsePathname.mockReturnValueOnce("/billing");
+
+    const html = renderToString(SidebarNav({ billingNavLabel: "Billing" }));
+
+    const billingLink = html.match(/<a[^>]*href="\/billing"[^>]*>/);
+    expect(billingLink).toBeTruthy();
+    expect(billingLink![0]).toContain('aria-current="page"');
+  });
+
   it("highlights a different nav item when pathname changes", () => {
     mockedUsePathname.mockReturnValueOnce("/stats");
 

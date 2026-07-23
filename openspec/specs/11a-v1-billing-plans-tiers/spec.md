@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define launch billing tiers, 30-day Pro trial behavior, hybrid tenant/member quota gating, owner/trainer quota administration, admin overrides, and upgrade prompts without external payment dependency.
+Define launch billing tiers, 30-day Pro trial behavior, hybrid tenant/member quota gating, tenant-owner quota administration, admin overrides, and upgrade prompts without external payment dependency.
 
 ## Dependencies
 
@@ -124,23 +124,23 @@ Premium AI operations MUST atomically check and consume both tenant aggregate qu
 
 ### Requirement: Member Quota Administration
 
-Tenant owners/trainers MUST configure per-member allocations within plan bounds and view non-sensitive usage totals only. Quota management MUST NOT authorize access to member memories, health details, prompts, generated private content, or cross-tenant data.
+The tenant owner (`membership_role='owner'`) MUST configure per-member allocations within plan bounds and view non-sensitive usage totals only. Quota management MUST NOT authorize access to member memories, health details, prompts, generated private content, or cross-tenant data.
 
-#### Scenario: Authorized trainer changes allocation
+#### Scenario: Authorized owner changes allocation
 
-- GIVEN trainer O owns tenant T and member U is active in T
+- GIVEN owner O owns tenant T and member U is active in T
 - WHEN O sets U's allocation within plan bounds
 - THEN the allocation changes and an audit record is written
 
 #### Scenario: Unauthorized member quota edit rejected
 
-- GIVEN member U is not an owner/trainer of tenant T
+- GIVEN member U is not the owner of tenant T
 - WHEN U edits their own or another member's allocation
 - THEN the request is rejected and allocation is unchanged
 
-#### Scenario: Trainer privacy boundaries
+#### Scenario: Owner privacy boundaries
 
-- GIVEN trainer O views tenant usage totals
+- GIVEN owner O views tenant usage totals
 - WHEN totals are returned
 - THEN they contain aggregate counts only and no memories, prompts, health details, or private generated content
 
@@ -188,4 +188,4 @@ Admin overrides MUST be tenant-scoped, audited, time-limited, and SHALL expire a
 - WHEN they attempt to create an override
 - THEN the request is rejected and no override changes state
 
-**Note**: "trainer" denotes the tenant `owner` of a trainer-managed tenant; 11a has no distinct `trainer` role (`membership_role` is `owner`/`member`), so owner-only enforcement for quota administration is a faithful reading of this spec, not a gap.
+**Note**: Quota administration is owner-only. A "trainer-managed tenant" is a tenant *type* whose owner acts as the trainer; 11a models no distinct `trainer` role (`membership_role` is `owner`/`member`). Quota-admin actor wording therefore references the tenant `owner` to align with the schema and the owner-only implementation.
