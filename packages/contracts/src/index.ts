@@ -450,6 +450,32 @@ export interface SetMemberAllocationRequest {
   limit: number;
 }
 
+/**
+ * A single member allocation as returned after a quota-admin write. Counts/limits
+ * only — never any member memory, prompt, health, or generated private content.
+ */
+export interface MemberAllocationDTO {
+  userId: UserId;
+  feature: BillingFeature;
+  period: string;
+  limit: number;
+}
+
+export interface SetMemberAllocationResponse {
+  allocation: MemberAllocationDTO;
+}
+
+/**
+ * Owner/trainer quota-administration usage report for one tenant + period.
+ * Privacy boundary: exposes ONLY aggregate tenant counts and per-member usage
+ * counts (integers/enums). It MUST NOT carry member memories, prompts, health
+ * details, generated private content, or any cross-tenant data.
+ */
+export interface TenantUsageReportDTO {
+  tenantUsage: TenantQuotaUsageDTO[];
+  memberUsage: MemberQuotaUsageDTO[];
+}
+
 export interface CreateAdminOverrideRequest {
   tier: BillingTier;
   startsAt: string;
