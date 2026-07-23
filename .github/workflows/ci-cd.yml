@@ -60,6 +60,83 @@ jobs:
       - name: Build
         run: pnpm build
 
+  billing-integration:
+    name: Billing integration (real Postgres)
+    runs-on: ubuntu-latest
+    # The three billing integration suites are gated behind
+    # `describe.skipIf(!process.env.DATABASE_URL)` and never run in the hermetic
+    # `ci` job. They guard CRITICAL billing invariants that a pure-fake unit
+    # suite cannot reproduce (concurrent exactly-once consume + idempotent
+    # replay, mid-period downgrade enforcement, atomic allocation+audit writes,
+    # member-usage isolation). This job wires a real Postgres so `skipIf` does
+    # NOT skip them and the invariants are gated on every PR and merge.
+    services:
+      postgres:
+        # pgvector/pgvector:pg17 (not plain postgres:17): `db:migrate` applies
+        # the full migration set, and 0010_vector_memory.sql runs
+        # `CREATE EXTENSION vector`, which only exists in the pgvector image.
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: kinora
+          POSTGRES_USER: kinora
+          POSTGRES_PASSWORD: kinora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kinora -d kinora"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://kinora:kinora@localhost:5432/kinora
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.17.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run database migrations
+        run: pnpm --filter api db:migrate
+
+      - name: Billing integration suites (real Postgres)
+        # Target the three integration files directly so this job's purpose —
+        # gating the billing invariants — is explicit. The `json` reporter emits
+        # a machine-readable result file (into the runner temp dir, never the
+        # tracked tree) consumed by the guard step below; the `default` reporter
+        # keeps the human-readable output in the job log.
+        run: >-
+          pnpm --filter api exec vitest run
+          --reporter=default --reporter=json
+          --outputFile.json="$RUNNER_TEMP/billing-vitest-results.json"
+          src/db/repositories/__tests__/billing-quota.integration.test.ts
+          src/db/repositories/__tests__/billing-admin.integration.test.ts
+          src/db/repositories/__tests__/billing-visibility.integration.test.ts
+
+      - name: Assert billing suites executed (guard against false-green)
+        # Each integration file pairs `describe.skipIf(!hasDb)` (the real tests)
+        # with a `describe.skipIf(hasDb)` placeholder that passes trivially when
+        # DATABASE_URL is absent. So if DATABASE_URL is ever dropped/renamed or
+        # the service is unreachable, vitest runs ONLY the 3 placeholders, exits
+        # 0, and the job goes GREEN having verified NONE of the billing
+        # invariants. This guard fails the job RED unless the real suites
+        # actually ran: a DB-present run yields 12 passed / 3 skipped, whereas a
+        # DB-absent run yields only the 3 placeholders.
+        run: >-
+          node -e 'const r = require(process.argv[1]); const passed = r.numPassedTests ?? 0; const MIN = 12; if (passed < MIN) { console.error("ERROR: billing integration suites did NOT execute (numPassedTests=" + passed + " < " + MIN + "). DATABASE_URL was likely unset/unreachable, so vitest ran only the skip-placeholder tests and would have gone GREEN without verifying any billing invariant. Failing the job."); process.exit(1); } console.log("OK: billing integration suites executed (" + passed + " passed tests).");'
+          "$RUNNER_TEMP/billing-vitest-results.json"
+
   docker-smoke:
     name: Docker build & boot smoke
     runs-on: ubuntu-latest
