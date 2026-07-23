@@ -851,6 +851,58 @@
       "enabled": "Memoria activada."
     }
   },
+  "billing": {
+    "navLabel": "Facturación",
+    "title": "Facturación",
+    "description": "Revisa tu plan, el estado de prueba y el uso de esta cuenta.",
+    "loading": {
+      "title": "Cargando tu facturación…",
+      "description": "Estamos obteniendo los detalles de tu plan, prueba y uso.",
+      "progressAria": "Cargando facturación"
+    },
+    "states": {
+      "emptyTitle": "Aún no hay datos de facturación.",
+      "emptyDescription": "Los detalles de facturación aparecerán aquí en cuanto se configure el plan de tu cuenta.",
+      "errorTitle": "No pudimos cargar tu facturación.",
+      "errorDescription": "Inténtalo de nuevo en un momento. No hubo cambios.",
+      "offlineTitle": "Estás sin conexión",
+      "offlineDescription": "Vuelve a conectarte para cargar los detalles de facturación.",
+      "retry": "Reintentar"
+    },
+    "tier": {
+      "free": "Gratis",
+      "pro": "Pro"
+    },
+    "status": {
+      "active": "Activo",
+      "trialing": "Prueba",
+      "expired": "Vencido",
+      "overridden": "Acceso especial"
+    },
+    "trial": {
+      "badge": "Prueba Pro — {daysRemaining, plural, one {# día restante} other {# días restantes}}",
+      "expiredTitle": "Tu prueba Pro ha terminado",
+      "expiredDescription": "Ahora estás en el plan Gratis. Mejora tu plan para conservar las funciones premium."
+    },
+    "usage": {
+      "tenantTitle": "Uso de la cuenta este periodo",
+      "memberTitle": "Tu uso este periodo",
+      "row": "{feature} — {used}/{limit} usados",
+      "emptyTitle": "Aún no hay uso registrado",
+      "emptyDescription": "El uso de este periodo de facturación aparecerá aquí en cuanto comience."
+    },
+    "feature": {
+      "plan_generation": "Generaciones de plan",
+      "plan_regeneration": "Regeneraciones de plan",
+      "memory_write": "Escrituras de memoria",
+      "memory_retrieval": "Recuperaciones de memoria"
+    },
+    "upgrade": {
+      "title": "Desbloquea las funciones Pro",
+      "description": "Mejora a Pro para generaciones de plan ilimitadas y memoria premium.",
+      "cta": "Ver opciones de mejora"
+    }
+  },
   "offline": {
     "title": "Estás sin conexión",
     "description": "Parece que en este momento no tienes conexión a internet. Comprueba tu conexión e inténtalo de nuevo.",
