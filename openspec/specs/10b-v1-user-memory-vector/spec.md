@@ -13,11 +13,11 @@ Store conversational memory as embeddings for retrieval during AI interactions w
 
 ### Requirement: Vector Conversation Memory
 
-The system MUST store only opt-in, user-confirmed, eligible durable facts as compact vector memory. Records MUST be tenant-scoped, user-scoped, reviewable, auditable, and tagged with source, provider, model, dimension, and schema version. The system MUST NOT embed raw transcripts, secrets, full plans, or sensitive health data by default.
+The system MUST store only opt-in, user-confirmed, eligible durable facts as compact vector memory when active-tenant entitlement allows premium vector-memory writes and hybrid tenant/member quota consumption succeeds. Records MUST remain tenant-scoped, user-scoped, reviewable, auditable, and tagged with source, provider, model, dimension, and schema version. The system MUST NOT embed raw transcripts, secrets, full plans, sensitive health data by default, or denied-tenant memories.
 
 #### Scenario: Confirmed eligible fact stored
 
-- GIVEN vector memory is enabled and the user confirms "prefers morning workouts" as durable
+- GIVEN vector memory is enabled, entitlement allows premium memory, and the user confirms "prefers morning workouts"
 - WHEN the memory is saved
 - THEN it is embedded with tenant id, user id, source, provider, model, dimension, version, and timestamps
 
@@ -31,7 +31,7 @@ The system MUST store only opt-in, user-confirmed, eligible durable facts as com
 
 - GIVEN an equivalent active memory exists for the same tenant and user
 - WHEN the confirmed fact is saved again or retried
-- THEN the system MUST update or return the existing record without creating another active memory
+- THEN the system MUST update or return the existing record without creating another active memory or consuming quota twice
 
 #### Scenario: Provider failure or timeout
 
@@ -45,33 +45,63 @@ The system MUST store only opt-in, user-confirmed, eligible durable facts as com
 - WHEN the memory write is validated
 - THEN the vector write is rejected and observable failure metadata is emitted
 
+#### Scenario: Expired trial blocks premium memory write
+
+- GIVEN a tenant trial is expired with no active override
+- WHEN a user confirms saving a vector memory
+- THEN the write is denied before embedding and no memory row is created
+
+#### Scenario: Suspended membership blocks memory write
+
+- GIVEN user U is suspended, revoked, or inactive in tenant T
+- WHEN U confirms saving a vector memory in T
+- THEN the write is denied before embedding and no quota is consumed
+
 ### Requirement: Empty Memory Behavior
 
-The bounded AI retrieval flow MUST fail open when vector memory is empty, disabled, offline, misconfigured, unavailable, incompatible, or retrieval fails. It MUST continue without memory rather than blocking generation or exposing technical errors.
+The bounded AI retrieval flow MUST first require active-tenant entitlement and hybrid quota allowance for premium memory retrieval. If entitlement is denied, retrieval MUST NOT run and the AI flow MUST continue without premium memory only where the parent AI operation itself is allowed. If entitlement is allowed, technical empty/offline/misconfigured/unavailable retrieval MUST fail open without exposing technical errors.
 
 #### Scenario: Empty memory fallback
 
-- GIVEN the user has no active vector memories
+- GIVEN entitlement allows memory and the user has no active vector memories
 - WHEN the bounded AI flow retrieves context
 - THEN it receives empty memory context and uses default behavior
 
 #### Scenario: Retrieval unavailable fallback
 
-- GIVEN vector search is offline, disabled, timed out, or unavailable
+- GIVEN entitlement allows memory and vector search is offline, disabled, timed out, or unavailable
 - WHEN retrieval runs
 - THEN the flow continues without memory and emits operational telemetry
 
 #### Scenario: Compatible memory affects response
 
-- GIVEN a compatible approved memory says the user prefers morning workouts
+- GIVEN entitlement allows memory and an approved memory says the user prefers morning workouts
 - WHEN the bounded plan-related AI flow runs
 - THEN injected context demonstrably influences the response or displayed context
 
 #### Scenario: Incompatible vector excluded
 
-- GIVEN stored vectors use incompatible provider, model, dimension, or version
+- GIVEN entitlement allows memory and stored vectors use incompatible provider, model, dimension, or version
 - WHEN retrieval runs
 - THEN incompatible records are excluded and the flow continues with compatible or empty context
+
+#### Scenario: Denied entitlement skips retrieval
+
+- GIVEN a Free tenant without trial or override
+- WHEN a bounded AI flow evaluates premium memory retrieval
+- THEN retrieval is skipped for product entitlement reasons and technical fail-open is not used as a bypass
+
+#### Scenario: Memory management remains available
+
+- GIVEN a tenant's trial is expired
+- WHEN the user lists, deletes, reviews, or disables memories
+- THEN management controls remain available and tenant/user isolation still applies
+
+#### Scenario: Trainer quota access cannot read memories
+
+- GIVEN trainer O manages member U's quota in tenant T
+- WHEN O views usage totals
+- THEN U's vector memories, prompts, health details, and generated private content are not returned
 
 ### Requirement: Vector Memory Isolation
 

@@ -31,7 +31,7 @@ AI provider selection is a singleton admin configuration (`ai_provider_config`) 
    - Cons: Requires decisions for personal users in multi-tenant futures, and trial provisioning must be backfilled for existing tenants.
    - Effort: Medium
 
-2. **User-owned billing state only** — Persist tier/trial by `userId`, matching today’s mostly personal account usage and some existing user-scoped profile/preferences tables.
+2. **User-owned billing state only** — Persist tier/trial by `userId`, matching today's mostly personal account usage and some existing user-scoped profile/preferences tables.
    - Pros: Simpler for v1 personal accounts; easier account-area display.
    - Cons: Conflicts with tenant-owned data and future trainer/B2B roadmap, ambiguous when a user belongs to multiple tenants, harder to enforce tenant-scoped feature usage safely.
    - Effort: Low initially, Medium/High later
