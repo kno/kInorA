@@ -214,6 +214,128 @@ describe("PlanGenerationService vector memory integration", () => {
     expect(query).toContain("[REDACTED]");
   });
 
+  it("skips retrieval entirely when the memory entitlement is denied (fail-closed, no fallback)", async () => {
+    const generator = {
+      generate: vi.fn(async (spec: PlanSpec & { memoryContext?: string[] }) =>
+        workoutProgram(spec.memoryContext?.[0] ?? "Generated plan"),
+      ),
+    };
+    const specRepo = {
+      findConfirmedById: vi.fn().mockResolvedValue({ specJson: confirmedSpec }),
+    };
+    const planRepo = {
+      createGenerating: vi.fn().mockResolvedValue({ id: PLAN_ID, status: "generating" }),
+      markReady: vi.fn().mockResolvedValue({ id: PLAN_ID, status: "ready" }),
+      markFailed: vi.fn().mockResolvedValue({ id: PLAN_ID, status: "failed" }),
+    };
+    const memoryRetriever = {
+      retrieve: vi.fn().mockResolvedValue([compatibleMemory]),
+    };
+    const memoryEntitlement = {
+      check: vi.fn().mockResolvedValue({ allowed: false, reason: "premium_required" }),
+    };
+    const service = new PlanGenerationService(
+      generator as never,
+      specRepo as never,
+      planRepo as never,
+      undefined,
+      memoryRetriever as never,
+      memoryEntitlement as never,
+    );
+
+    await service.startGeneration(TENANT_ID, USER_ID, SPEC_ID);
+    await vi.runAllTimersAsync();
+
+    // Product entitlement denial must SKIP retrieval — the embedding/search path
+    // is never touched and denial is not usable as a fallback.
+    expect(memoryEntitlement.check).toHaveBeenCalledWith({ tenantId: TENANT_ID, userId: USER_ID });
+    expect(memoryRetriever.retrieve).not.toHaveBeenCalled();
+    expect(generator.generate).toHaveBeenCalledWith(
+      expect.not.objectContaining({ memoryContext: expect.anything() }),
+    );
+  });
+
+  it("fails open and completes generation when the memory entitlement check THROWS (not just when it denies)", async () => {
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const generator = {
+      generate: vi.fn(async (spec: PlanSpec & { memoryContext?: string[] }) =>
+        workoutProgram(spec.memoryContext?.[0] ?? "Generated plan"),
+      ),
+    };
+    const specRepo = {
+      findConfirmedById: vi.fn().mockResolvedValue({ specJson: confirmedSpec }),
+    };
+    const planRepo = {
+      createGenerating: vi.fn().mockResolvedValue({ id: PLAN_ID, status: "generating" }),
+      markReady: vi.fn().mockResolvedValue({ id: PLAN_ID, status: "ready" }),
+      markFailed: vi.fn().mockResolvedValue({ id: PLAN_ID, status: "failed" }),
+    };
+    const memoryRetriever = { retrieve: vi.fn().mockResolvedValue([]) };
+    const memoryEntitlement = {
+      check: vi.fn().mockRejectedValue(new Error("billing table read failed")),
+    };
+    const service = new PlanGenerationService(
+      generator as never,
+      specRepo as never,
+      planRepo as never,
+      undefined,
+      memoryRetriever as never,
+      memoryEntitlement as never,
+    );
+
+    await service.startGeneration(TENANT_ID, USER_ID, SPEC_ID);
+    await vi.runAllTimersAsync();
+
+    // A technical gate failure must NOT abort generation: retrieval is
+    // skipped (fail-open), generation still reaches markReady, and markFailed
+    // is never called for this optional-enhancement failure.
+    expect(memoryRetriever.retrieve).not.toHaveBeenCalled();
+    expect(planRepo.markReady).toHaveBeenCalledTimes(1);
+    expect(planRepo.markFailed).not.toHaveBeenCalled();
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      "[generation-service] memory entitlement check failed",
+      expect.objectContaining({ planId: PLAN_ID, tenantId: TENANT_ID }),
+    );
+  });
+
+  it("retrieves normally when the memory entitlement is allowed", async () => {
+    const generator = {
+      generate: vi.fn(async (spec: PlanSpec & { memoryContext?: string[] }) =>
+        workoutProgram(spec.memoryContext?.[0] ?? "Generated plan"),
+      ),
+    };
+    const specRepo = {
+      findConfirmedById: vi.fn().mockResolvedValue({ specJson: confirmedSpec }),
+    };
+    const planRepo = {
+      createGenerating: vi.fn().mockResolvedValue({ id: PLAN_ID, status: "generating" }),
+      markReady: vi.fn().mockResolvedValue({ id: PLAN_ID, status: "ready" }),
+      markFailed: vi.fn().mockResolvedValue({ id: PLAN_ID, status: "failed" }),
+    };
+    const memoryRetriever = {
+      retrieve: vi.fn().mockResolvedValue([compatibleMemory]),
+    };
+    const memoryEntitlement = {
+      check: vi.fn().mockResolvedValue({ allowed: true, tier: "pro", source: "system" }),
+    };
+    const service = new PlanGenerationService(
+      generator as never,
+      specRepo as never,
+      planRepo as never,
+      undefined,
+      memoryRetriever as never,
+      memoryEntitlement as never,
+    );
+
+    await service.startGeneration(TENANT_ID, USER_ID, SPEC_ID);
+    await vi.runAllTimersAsync();
+
+    expect(memoryRetriever.retrieve).toHaveBeenCalledTimes(1);
+    expect(generator.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ memoryContext: ["Prefers morning workouts"] }),
+    );
+  });
+
   it("does not enable retrieval or throw when optional embedding config is invalid", async () => {
     const config = resolveEmbeddingRuntimeConfig({
       VECTOR_MEMORY_EMBEDDING_PROVIDER: "unsupported-provider",

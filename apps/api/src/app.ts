@@ -52,6 +52,12 @@ import {
   UserMemoryLifecycleService,
   consoleUserMemoryAuditPort,
 } from "./user-memory/service.js";
+import {
+  BillingStateReaderRepository,
+  QuotaLedgerRepository,
+} from "./db/repositories/billing-quota.js";
+import { CheckEntitlement } from "./billing/entitlement.js";
+import { CheckAndConsumeQuota } from "./billing/quota-consumption.js";
 
 export interface BuildAppOptions {
   db?: Database;
@@ -182,12 +188,29 @@ export async function buildApp(
   const vectorMemoryRepo = new VectorMemoryRepository(database);
   const { retriever: vectorMemoryRetriever, writer: vectorMemoryWriter } =
     createOptionalVectorMemoryServices(vectorMemoryRepo, resolveEmbeddingRuntimeConfig());
+
+  // 11a billing core — entitlement + atomic hybrid quota consume.
+  // Repositories live in the infra layer; the pure use cases depend only on
+  // their ports. The composition root is the sole place they are wired.
+  const billingStateReader = new BillingStateReaderRepository(database);
+  const quotaLedgerRepo = new QuotaLedgerRepository(database);
+  const checkEntitlement = new CheckEntitlement(billingStateReader);
+  const checkAndConsumeQuota = new CheckAndConsumeQuota(checkEntitlement, quotaLedgerRepo);
+  // Premium retrieval gate: deny → skip retrieval before embedding/search.
+  const memoryEntitlement = {
+    check: (scope: { tenantId: string; userId: string }) =>
+      checkEntitlement
+        .check(scope, "memory_retrieval")
+        .then((decision) => ({ allowed: decision.allowed })),
+  };
+
   const planGenerationService = new PlanGenerationService(
     generator,
     planSpecRepo,
     workoutPlanRepo,
     registry,
-    vectorMemoryRetriever
+    vectorMemoryRetriever,
+    memoryEntitlement
   );
   const userMemoryService = new UserMemoryLifecycleService(
     vectorMemoryRepo,
@@ -210,6 +233,10 @@ export async function buildApp(
   await app.register(planRoutes, {
     repo: planRouteRepo,
     generationService: planGenerationService,
+    billing: {
+      checkAndConsume: (scope, feature, operationKey) =>
+        checkAndConsumeQuota.checkAndConsume(scope, feature, operationKey),
+    },
   });
 
   await app.register(workoutSessionRoutes, {

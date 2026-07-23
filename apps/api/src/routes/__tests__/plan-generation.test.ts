@@ -107,8 +107,16 @@ class UnprocessableError extends Error {
   }
 }
 
-function buildMockGenerationService(result: { planId: string; status: "generating" } | Error) {
+function buildMockGenerationService(
+  result: { planId: string; status: "generating" } | Error,
+  /** Reject to model assertGeneratable finding an invalid/nonexistent spec. */
+  validationError?: Error,
+) {
   return {
+    assertGeneratable: vi.fn().mockImplementation(() => {
+      if (validationError) return Promise.reject(validationError);
+      return Promise.resolve(undefined);
+    }),
     startGeneration: vi.fn().mockImplementation(() => {
       if (result instanceof Error) return Promise.reject(result);
       return Promise.resolve(result);
@@ -132,10 +140,28 @@ function buildMockPlanRepo(opts: {
 
 // --- App builder ---
 
+function buildAllowBilling() {
+  return {
+    checkAndConsume: vi.fn().mockResolvedValue({
+      allowed: true,
+      tier: "free",
+      source: "backfill",
+      period: "2026-07",
+    }),
+  };
+}
+
+function buildDenyBilling(reason: string) {
+  return {
+    checkAndConsume: vi.fn().mockResolvedValue({ allowed: false, reason }),
+  };
+}
+
 async function buildTestApp(opts: {
   db: Database;
   generationService?: ReturnType<typeof buildMockGenerationService>;
   planRepo?: ReturnType<typeof buildMockPlanRepo>;
+  billing?: { checkAndConsume: ReturnType<typeof vi.fn> };
 }): Promise<FastifyInstance> {
   const app = Fastify();
 
@@ -156,6 +182,7 @@ async function buildTestApp(opts: {
   // Fix 2: generationService is required — pass a no-op if caller omits it
   // (only happens for tests that only test non-generation routes).
   const svc = opts.generationService ?? {
+    assertGeneratable: vi.fn().mockResolvedValue(undefined),
     startGeneration: vi.fn().mockRejectedValue(new Error("unexpected call")),
   };
 
@@ -188,6 +215,7 @@ async function buildTestApp(opts: {
   await app.register(planRoutes, {
     repo,
     generationService: svc as never,
+    billing: opts.billing as never,
   });
 
   return app;
@@ -578,6 +606,227 @@ describe("Plan generation routes", () => {
       expect(planRepo.findLatestByPlanSpec).toHaveBeenCalledWith(TENANT_A, USER_B, SPEC_ID);
       // (b) Response is 404 — same-tenant cross-user spec is not accessible
       expect(response.statusCode).toBe(404);
+    });
+  });
+
+  // ─── Generation metering gate (11a Phase 2) ───────────────────────────────
+
+  describe("Generation metering gate", () => {
+    it("consumes the plan_generation feature before generation on confirm and allows it", async () => {
+      const db = buildSessionOnlyDb(buildSessionRow());
+      const generationService = buildMockGenerationService({ planId: PLAN_ID, status: "generating" });
+      const billing = buildAllowBilling();
+      app = await buildTestApp({ db, generationService, billing });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/plan-specs/${SPEC_ID}/confirm`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(billing.checkAndConsume).toHaveBeenCalledTimes(1);
+      const [scope, feature] = billing.checkAndConsume.mock.calls[0];
+      expect(scope).toEqual({ tenantId: TENANT_A, userId: USER_A });
+      expect(feature).toBe("plan_generation");
+      expect(generationService.startGeneration).toHaveBeenCalled();
+    });
+
+    it("denies confirm with 403 and reason when the tenant quota is exhausted, without starting generation", async () => {
+      const db = buildSessionOnlyDb(buildSessionRow());
+      const generationService = buildMockGenerationService({ planId: PLAN_ID, status: "generating" });
+      const billing = buildDenyBilling("tenant_quota_exhausted");
+      app = await buildTestApp({ db, generationService, billing });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/plan-specs/${SPEC_ID}/confirm`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error).toBe("tenant_quota_exhausted");
+      // Fail-closed: no expensive generation work is started on denial.
+      expect(generationService.startGeneration).not.toHaveBeenCalled();
+    });
+
+    it("consumes plan_regeneration (not plan_generation) on regenerate", async () => {
+      const db = buildSessionOnlyDb(buildSessionRow());
+      const generationService = buildMockGenerationService({ planId: PLAN_ID, status: "generating" });
+      const billing = buildAllowBilling();
+      app = await buildTestApp({ db, generationService, billing });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/plan-specs/${SPEC_ID}/regenerate`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(202);
+      expect(billing.checkAndConsume.mock.calls[0][1]).toBe("plan_regeneration");
+    });
+
+    it("denies regenerate with 403 and does not start generation when denied", async () => {
+      const db = buildSessionOnlyDb(buildSessionRow());
+      const generationService = buildMockGenerationService({ planId: PLAN_ID, status: "generating" });
+      const billing = buildDenyBilling("premium_required");
+      app = await buildTestApp({ db, generationService, billing });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/plan-specs/${SPEC_ID}/regenerate`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error).toBe("premium_required");
+      expect(generationService.startGeneration).not.toHaveBeenCalled();
+    });
+
+    it("passes a non-empty operation key derived from the spec id to the gate on confirm", async () => {
+      const db = buildSessionOnlyDb(buildSessionRow());
+      const generationService = buildMockGenerationService({ planId: PLAN_ID, status: "generating" });
+      const billing = buildAllowBilling();
+      app = await buildTestApp({ db, generationService, billing });
+
+      await app.inject({
+        method: "POST",
+        url: `/plan-specs/${SPEC_ID}/confirm`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      const operationKey = billing.checkAndConsume.mock.calls[0][2] as string;
+      expect(typeof operationKey).toBe("string");
+      expect(operationKey.trim()).not.toBe("");
+      expect(operationKey).toContain(SPEC_ID);
+    });
+
+    // WARNING B (review correction): quota must never be consumed for a
+    // spec that fails validation — otherwise a bad :id burns the sole
+    // Free-tier monthly unit with no plan ever generated.
+    it("confirm: returns 404 for a nonexistent/cross-tenant spec WITHOUT consuming quota", async () => {
+      const db = buildSessionOnlyDb(buildSessionRow());
+      const notFound = Object.assign(new Error("PlanSpec not found or unconfirmed"), { statusCode: 404 });
+      const generationService = buildMockGenerationService(
+        { planId: PLAN_ID, status: "generating" },
+        notFound,
+      );
+      const billing = buildAllowBilling();
+      app = await buildTestApp({ db, generationService, billing });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/plan-specs/${SPEC_ID}/confirm`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(billing.checkAndConsume).not.toHaveBeenCalled();
+      expect(generationService.startGeneration).not.toHaveBeenCalled();
+    });
+
+    it("confirm: returns 422 for an invalid spec shape WITHOUT consuming quota", async () => {
+      const db = buildSessionOnlyDb(buildSessionRow());
+      const invalid = Object.assign(new Error("PlanSpec.preferenceScores must be an object"), {
+        statusCode: 422,
+      });
+      const generationService = buildMockGenerationService(
+        { planId: PLAN_ID, status: "generating" },
+        invalid,
+      );
+      const billing = buildAllowBilling();
+      app = await buildTestApp({ db, generationService, billing });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/plan-specs/${SPEC_ID}/confirm`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(billing.checkAndConsume).not.toHaveBeenCalled();
+      expect(generationService.startGeneration).not.toHaveBeenCalled();
+    });
+
+    it("confirm: a subsequent valid confirm still succeeds and consumes exactly once after a prior invalid attempt", async () => {
+      const db = buildSessionOnlyDb(buildSessionRow());
+      const notFound = Object.assign(new Error("PlanSpec not found"), { statusCode: 404 });
+      const invalidAttempt = buildMockGenerationService(
+        { planId: PLAN_ID, status: "generating" },
+        notFound,
+      );
+      const billing = buildAllowBilling();
+      app = await buildTestApp({ db, generationService: invalidAttempt, billing });
+
+      const badResponse = await app.inject({
+        method: "POST",
+        url: `/plan-specs/${SPEC_ID}/confirm`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+      expect(badResponse.statusCode).toBe(404);
+      expect(billing.checkAndConsume).not.toHaveBeenCalled();
+      await app.close();
+
+      // A fresh valid attempt against the SAME billing gate still succeeds —
+      // the failed attempt above did not spend the unit.
+      const validAttempt = buildMockGenerationService({ planId: PLAN_ID, status: "generating" });
+      app = await buildTestApp({ db, generationService: validAttempt, billing });
+
+      const okResponse = await app.inject({
+        method: "POST",
+        url: `/plan-specs/${SPEC_ID}/confirm`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(okResponse.statusCode).toBe(200);
+      expect(billing.checkAndConsume).toHaveBeenCalledTimes(1);
+    });
+
+    it("regenerate: returns 422 for an invalid spec WITHOUT consuming quota", async () => {
+      const db = buildSessionOnlyDb(buildSessionRow());
+      const invalid = Object.assign(new Error("invalid spec"), { statusCode: 422 });
+      const generationService = buildMockGenerationService(
+        { planId: PLAN_ID, status: "generating" },
+        invalid,
+      );
+      const billing = buildAllowBilling();
+      app = await buildTestApp({ db, generationService, billing });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/plan-specs/${SPEC_ID}/regenerate`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(billing.checkAndConsume).not.toHaveBeenCalled();
+      expect(generationService.startGeneration).not.toHaveBeenCalled();
+    });
+
+    it("calls assertGeneratable before checkAndConsume on confirm (validation precedes consumption)", async () => {
+      const db = buildSessionOnlyDb(buildSessionRow());
+      const callOrder: string[] = [];
+      const generationService = {
+        assertGeneratable: vi.fn().mockImplementation(async () => {
+          callOrder.push("assertGeneratable");
+        }),
+        startGeneration: vi.fn().mockResolvedValue({ planId: PLAN_ID, status: "generating" }),
+      };
+      const billing = {
+        checkAndConsume: vi.fn().mockImplementation(async () => {
+          callOrder.push("checkAndConsume");
+          return { allowed: true, tier: "free", source: "backfill", period: "2026-07" };
+        }),
+      };
+      app = await buildTestApp({ db, generationService, billing });
+
+      await app.inject({
+        method: "POST",
+        url: `/plan-specs/${SPEC_ID}/confirm`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(callOrder).toEqual(["assertGeneratable", "checkAndConsume"]);
     });
   });
 });
