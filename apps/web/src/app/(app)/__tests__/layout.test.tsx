@@ -18,6 +18,7 @@ vi.mock("next/headers", () => ({
 vi.mock("next-intl/server", () => ({
   getTranslations: async () => ((key: string) => ({
     "memory.navLabel": "Memory",
+    "billing.navLabel": "Billing",
   })[key] ?? key),
 }));
 
@@ -73,5 +74,17 @@ describe("AppLayout (app route group)", () => {
     );
 
     expect(html).toContain("Memory");
+  });
+
+  it("wires the translated billing navigation label and /billing link through the app shell", async () => {
+    const html = renderToString(
+      await AppLayout({
+        children: <p>Page content here</p>,
+      })
+    );
+
+    // The billing nav entry must be reachable: translated label + route.
+    expect(html).toContain("Billing");
+    expect(html).toContain('href="/billing"');
   });
 });
