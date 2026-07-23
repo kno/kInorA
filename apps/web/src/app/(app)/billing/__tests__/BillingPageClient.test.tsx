@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, screen, waitFor } from "@testing-library/react";
 import type { BillingVisibilityDTO } from "@kinora/contracts";
 import { renderWithIntl } from "@/test-utils/render-with-intl";
@@ -11,7 +11,14 @@ vi.mock("../actions.js", () => ({
   getBillingVisibilityAction: (...args: unknown[]) => getBillingVisibilityAction(...args),
 }));
 
+let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+beforeEach(() => {
+  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
 afterEach(() => {
+  consoleErrorSpy.mockRestore();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -167,6 +174,44 @@ describe("BillingPageClient", () => {
     await waitFor(() => expect(getBillingVisibilityAction).toHaveBeenCalledTimes(1));
     // Still in the error state — the failed retry did not fabricate data.
     expect(screen.getByRole("button", { name: /retry/i })).toBeDefined();
+  });
+
+  // #176 — a failed client refetch must be observable, not silently swallowed.
+  it("logs a structured telemetry event when a refetch fails (#176)", async () => {
+    vi.stubGlobal("navigator", { onLine: true });
+    getBillingVisibilityAction.mockResolvedValue({ kind: "error", message: "server_error" });
+    renderWithIntl(<BillingPageClient initialData={null} initialError="server_error" />);
+
+    const retry = screen.getByRole("button", { name: /retry/i });
+    await act(async () => {
+      retry.click();
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(console.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "billing_visibility_refresh_failed",
+          kind: "server_error",
+        }),
+      ),
+    );
+  });
+
+  it("does NOT log a telemetry event when a refresh succeeds (#176)", async () => {
+    getBillingVisibilityAction.mockResolvedValue({ kind: "ok", data: TRIALING });
+    renderWithIntl(<BillingPageClient initialData={FREE_ACTIVE} />);
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(screen.getByText("Pro")).toBeDefined());
+    const refreshFailureCalls = consoleErrorSpy.mock.calls.filter(
+      ([obj]) => (obj as { event?: string })?.event === "billing_visibility_refresh_failed",
+    );
+    expect(refreshFailureCalls).toHaveLength(0);
   });
 
   it("shows an accessible loading indicator while retrying", async () => {
