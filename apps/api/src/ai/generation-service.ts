@@ -2,6 +2,7 @@ import type { PlanGenerator } from "./port.js";
 import type { WorkoutPlanRepository } from "../db/repositories/workout-plan.js";
 import type { PlanSpecRepository } from "../db/repositories/plan-spec.js";
 import type { VectorMemoryRecord } from "../db/repositories/vector-memory.js";
+import type { MemoryRetrievalEntitlementPort } from "./memory-retriever.js";
 import type { WsRegistry } from "../ws/registry.js";
 import { mask } from "./mask.js";
 import { assertPlanSpecShape } from "../plan/boundary.js";
@@ -74,7 +75,13 @@ export class PlanGenerationService {
         scope: { tenantId: string; userId: string },
         options: { query: string; limit?: number },
       ): Promise<VectorMemoryRecord[]>;
-    }
+    },
+    /**
+     * Optional 11a billing gate for premium memory retrieval. When present and
+     * the entitlement is denied, retrieval is SKIPPED before any embedding or
+     * vector search — a denial is never used as a technical fail-open fallback.
+     */
+    private memoryEntitlement?: MemoryRetrievalEntitlementPort
   ) {}
 
   /**
@@ -95,20 +102,7 @@ export class PlanGenerationService {
     userId: string,
     planSpecId: string
   ): Promise<{ planId: string; status: "generating" }> {
-    // Step 1: Load confirmed spec — throws 404 if missing or unconfirmed
-    const specRow = await this.specRepo.findConfirmedById(tenantId, userId, planSpecId);
-    if (!specRow) {
-      throw new PlanSpecNotFoundError(planSpecId);
-    }
-
-    // Step 2: Validate spec shape — throws 422 if structurally invalid
-    try {
-      assertPlanSpecShape(specRow.specJson);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new PlanSpecShapeError(message);
-    }
-    const spec = specRow.specJson;
+    const spec = await this.loadValidatedSpec(tenantId, userId, planSpecId);
 
     // Step 3: Create the "generating" row and return planId immediately.
     // #93: thread the user-supplied plan name carried on the confirmed spec into
@@ -127,6 +121,42 @@ export class PlanGenerationService {
     void this.runGenerationTask(tenantId, userId, planId, spec);
 
     return { planId, status: "generating" };
+  }
+
+  /**
+   * Validate a plan spec is generatable WITHOUT starting generation.
+   *
+   * 11a billing: callers (the route) MUST call this BEFORE consuming any
+   * quota, so a 404/422 on a nonexistent/unconfirmed/invalid spec never
+   * spends a unit — only a successful generation start should consume.
+   *
+   * @throws PlanSpecNotFoundError (404) when the spec is missing or unconfirmed
+   * @throws PlanSpecShapeError (422) when the spec fails assertPlanSpecShape
+   */
+  async assertGeneratable(tenantId: string, userId: string, planSpecId: string): Promise<void> {
+    await this.loadValidatedSpec(tenantId, userId, planSpecId);
+  }
+
+  /** Shared load + shape-validate step used by both startGeneration and assertGeneratable. */
+  private async loadValidatedSpec(
+    tenantId: string,
+    userId: string,
+    planSpecId: string
+  ): Promise<import("@kinora/contracts").PlanSpec> {
+    // Step 1: Load confirmed spec — throws 404 if missing or unconfirmed
+    const specRow = await this.specRepo.findConfirmedById(tenantId, userId, planSpecId);
+    if (!specRow) {
+      throw new PlanSpecNotFoundError(planSpecId);
+    }
+
+    // Step 2: Validate spec shape — throws 422 if structurally invalid
+    try {
+      assertPlanSpecShape(specRow.specJson);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new PlanSpecShapeError(message);
+    }
+    return specRow.specJson;
   }
 
   /**
@@ -223,6 +253,34 @@ export class PlanGenerationService {
   ): Promise<import("@kinora/contracts").PlanSpec & { memoryContext?: string[] }> {
     if (!this.memoryRetriever) {
       return spec;
+    }
+
+    // 11a billing: premium retrieval entitlement is a PRODUCT gate. A denial
+    // skips retrieval outright (no embedding, no vector search) and must not be
+    // treated as a technical failure that could fall through to a fallback.
+    // A THROWN/technical failure of the gate itself (e.g. a transient billing
+    // read error) must ALSO fail open — an optional premium enhancement's gate
+    // outage must never abort the user's core plan generation (mirrors the
+    // fail-open posture already applied to retrieve() below).
+    if (this.memoryEntitlement) {
+      let allowed: boolean;
+      try {
+        allowed = (await this.memoryEntitlement.check({ tenantId, userId })).allowed;
+      } catch (error) {
+        console.warn("[generation-service] memory entitlement check failed", {
+          planId,
+          tenantId,
+          errorName: error instanceof Error ? error.name : "unknown",
+        });
+        return spec;
+      }
+      if (!allowed) {
+        console.info("[generation-service] vector memory retrieval skipped (entitlement denied)", {
+          planId,
+          tenantId,
+        });
+        return spec;
+      }
     }
 
     try {

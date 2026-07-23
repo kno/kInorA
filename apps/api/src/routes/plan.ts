@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import { requireAuth } from "../auth/plugin.js";
 import {
@@ -6,8 +7,9 @@ import {
   PLAN_NAME_MAX_LENGTH,
 } from "../plan/boundary.js";
 import { derivePreferenceScores } from "@kinora/domain";
-import type { PlanSpec } from "@kinora/contracts";
+import type { BillingFeature, PlanSpec } from "@kinora/contracts";
 import type { PlanGenerationService } from "../ai/generation-service.js";
+import type { ConsumeDecision } from "../billing/types.js";
 
 /**
  * A workout plan record as returned to the route (structural shape, declared
@@ -74,6 +76,20 @@ export interface PlanRouteRepo {
   findAllPlansByUser(tenantId: string, userId: string): Promise<PlanSummary[]>;
 }
 
+/**
+ * Billing gate for cost-bearing generation (11a). Atomically checks entitlement
+ * and consumes the tenant + member quota for a feature before any expensive work
+ * starts. Injected by app.ts; when absent the route does not gate (test seam —
+ * production always wires the real gate, so production fails closed).
+ */
+export interface PlanBillingGate {
+  checkAndConsume(
+    scope: { tenantId: string; userId: string },
+    feature: BillingFeature,
+    operationKey: string,
+  ): Promise<ConsumeDecision>;
+}
+
 export interface PlanRoutesOptions {
   /**
    * Route port — constructed in app.ts (the sole composition root). Encapsulates
@@ -86,7 +102,13 @@ export interface PlanRoutesOptions {
    * The plugin throws at registration time if this is absent, so misconfiguration
    * is caught at boot, not at the first request.
    */
-  generationService: Pick<PlanGenerationService, "startGeneration">;
+  generationService: Pick<PlanGenerationService, "startGeneration" | "assertGeneratable">;
+  /**
+   * Optional billing gate. When provided, confirm/regenerate check and consume
+   * quota before generation; a denial returns 403 with the denial reason and no
+   * generation work is started.
+   */
+  billing?: PlanBillingGate;
 }
 
 /**
@@ -142,6 +164,19 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   }
 
   const generationService = options.generationService;
+  const billing = options.billing;
+
+  /**
+   * Read a client-supplied idempotency key (Idempotency-Key header), falling
+   * back to a deterministic-or-fresh default. Confirm uses a deterministic key
+   * so a re-confirm of the same spec is idempotent; regenerate uses a fresh key
+   * so each explicit regeneration consumes its own unit.
+   */
+  function resolveOperationKey(request: FastifyRequest, fallback: string): string {
+    const header = request.headers["idempotency-key"];
+    const raw = Array.isArray(header) ? header[0] : header;
+    return raw && raw.trim() !== "" ? raw.trim() : fallback;
+  }
 
   // POST /plan-specs/drafts
   // Body: { step: number; spec: Partial<PlanSpec> }
@@ -264,6 +299,23 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       const { tenantId, userId } = request.authContext!;
       const { id } = request.params as { id: string };
 
+      // 11a billing: validate the spec BEFORE consuming quota. A 404/422 from
+      // an invalid/nonexistent spec must never spend a unit — only a request
+      // that actually reaches generation should consume (fixes a Free-tier
+      // lockout where a bad :id burned the sole monthly unit).
+      await generationService.assertGeneratable(tenantId, userId, id);
+
+      if (billing) {
+        const decision = await billing.checkAndConsume(
+          { tenantId, userId },
+          "plan_generation",
+          resolveOperationKey(request, `plan_generation:${id}`),
+        );
+        if (!decision.allowed) {
+          return reply.code(403).send({ error: decision.reason });
+        }
+      }
+
       const result = await generationService.startGeneration(tenantId, userId, id);
       return reply.code(200).send(result);
     }
@@ -286,6 +338,20 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { tenantId, userId } = request.authContext!;
       const { id } = request.params as { id: string };
+
+      // Same pre-consumption validation as confirm — see comment there.
+      await generationService.assertGeneratable(tenantId, userId, id);
+
+      if (billing) {
+        const decision = await billing.checkAndConsume(
+          { tenantId, userId },
+          "plan_regeneration",
+          resolveOperationKey(request, `plan_regeneration:${id}:${randomUUID()}`),
+        );
+        if (!decision.allowed) {
+          return reply.code(403).send({ error: decision.reason });
+        }
+      }
 
       const result = await generationService.startGeneration(tenantId, userId, id);
       return reply.code(202).send(result);

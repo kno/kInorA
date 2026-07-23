@@ -46,6 +46,19 @@ export interface RetrieveVectorMemoryOptions {
   limit?: number;
 }
 
+/**
+ * Product entitlement gate for premium vector-memory retrieval (11a billing).
+ *
+ * Retrieval is a premium AI capability: on Free tenants the `memory_retrieval`
+ * feature limit is 0, so this gate denies and the caller MUST skip retrieval
+ * entirely. A denial is a product decision and can NEVER be used as a fallback —
+ * only a *technical* retrieval failure after an allowed entitlement fails open.
+ * Kept as a narrow port so the billing use case stays out of the AI layer.
+ */
+export interface MemoryRetrievalEntitlementPort {
+  check(scope: { tenantId: string; userId: string }): Promise<{ allowed: boolean }>;
+}
+
 export class VectorMemoryWriteCoordinator {
   constructor(
     private readonly generator: EmbeddingGenerator,
