@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BillingVisibilityDTO } from "@kinora/contracts";
 import { getBillingVisibility } from "../billing-client";
 
@@ -126,6 +126,87 @@ describe("getBillingVisibility", () => {
     const result = await getBillingVisibility(TOKEN, { ...OPTIONS, fetchImpl });
 
     expect(result).toEqual({ kind: "error", message: "api_unreachable" });
+  });
+
+  // -------------------------------------------------------------------------
+  // #176 — billing-visibility read failures must be observable (structured
+  // server-side log). Previously non-ok / unreachable / invalid-JSON responses
+  // mapped silently to a typed Result with no telemetry. The token is NEVER
+  // included in the logged payload.
+  // -------------------------------------------------------------------------
+  describe("read-failure telemetry (#176)", () => {
+    const FAILURE_EVENT = "billing_visibility_read_failed";
+    let errorSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      errorSpy.mockRestore();
+    });
+
+    function failureCalls() {
+      return errorSpy.mock.calls.filter(
+        ([obj]) => (obj as { event?: string })?.event === FAILURE_EVENT,
+      );
+    }
+
+    it("logs a structured server_error telemetry event on a 5xx response", async () => {
+      const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(503, { error: "upstream_down" }));
+
+      const result = await getBillingVisibility(TOKEN, { ...OPTIONS, fetchImpl });
+
+      expect(result.kind).toBe("error");
+      expect(console.error).toHaveBeenCalledWith(
+        expect.objectContaining({ event: FAILURE_EVENT, kind: "server_error", status: 503 }),
+      );
+    });
+
+    it("logs an api_unreachable telemetry event when fetch throws", async () => {
+      const fetchImpl = vi.fn().mockRejectedValue(new Error("network down"));
+
+      await getBillingVisibility(TOKEN, { ...OPTIONS, fetchImpl });
+
+      expect(console.error).toHaveBeenCalledWith(
+        expect.objectContaining({ event: FAILURE_EVENT, kind: "api_unreachable" }),
+      );
+    });
+
+    it("logs an invalid_response telemetry event when the payload is malformed", async () => {
+      const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { unexpected: true }));
+
+      await getBillingVisibility(TOKEN, { ...OPTIONS, fetchImpl });
+
+      expect(console.error).toHaveBeenCalledWith(
+        expect.objectContaining({ event: FAILURE_EVENT, kind: "invalid_response" }),
+      );
+    });
+
+    it("does NOT log a failure telemetry event on the success path (200)", async () => {
+      const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, VISIBILITY));
+
+      await getBillingVisibility(TOKEN, { ...OPTIONS, fetchImpl });
+
+      expect(failureCalls()).toHaveLength(0);
+    });
+
+    it("does NOT log a failure telemetry event on an expected 4xx business denial (403)", async () => {
+      const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(403, { error: "inactive_membership" }));
+
+      const result = await getBillingVisibility(TOKEN, { ...OPTIONS, fetchImpl });
+
+      expect(result).toEqual({ kind: "error", message: "inactive_membership" });
+      expect(failureCalls()).toHaveLength(0);
+    });
+
+    it("never includes the session token in the logged telemetry payload", async () => {
+      const fetchImpl = vi.fn().mockRejectedValue(new Error("network down"));
+
+      await getBillingVisibility(TOKEN, { ...OPTIONS, fetchImpl });
+
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(TOKEN);
+    });
   });
 
   it("uses API_BASE_URL when no explicit API base is supplied", async () => {
