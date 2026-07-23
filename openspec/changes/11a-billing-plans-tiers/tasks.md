@@ -39,9 +39,9 @@ Chain strategy: stacked-to-main
 
 ## Phase 3: Quota Admin API
 
-- [ ] 3.1 RED: Add failing tests for `Member Quota Administration`, `Quota Privacy Boundary`, `Membership suspension blocks consumption`, and `Cross-tenant billing denied` in `apps/api/src/routes/__tests__/billing.test.ts`.
-- [ ] 3.2 GREEN: Implement `apps/api/src/routes/billing.ts` and privacy-safe request/response DTOs in `packages/contracts/src/index.ts`; authorize owner/trainer, tenant-switch, and suspended-member cases.
-- [ ] 3.3 TRIANGLE: Verify audit events, aggregate-only usage totals, and no access to member memories/prompts/health/private content.
+- [x] 3.1 RED: Add failing tests for `Member Quota Administration`, `Quota Privacy Boundary`, `Membership suspension blocks consumption`, and `Cross-tenant billing denied` in `apps/api/src/routes/__tests__/billing.test.ts`.
+- [x] 3.2 GREEN: Implement `apps/api/src/routes/billing.ts` and privacy-safe request/response DTOs in `packages/contracts/src/index.ts`; authorize owner/trainer, tenant-switch, and suspended-member cases.
+- [x] 3.3 TRIANGLE: Verify audit events, aggregate-only usage totals, and no access to member memories/prompts/health/private content.
 
 ## Phase 4: Web UI / Verification / Rollout
 

@@ -56,8 +56,11 @@ import {
   BillingStateReaderRepository,
   QuotaLedgerRepository,
 } from "./db/repositories/billing-quota.js";
+import { BillingAdminRepository } from "./db/repositories/billing-admin.js";
 import { CheckEntitlement } from "./billing/entitlement.js";
 import { CheckAndConsumeQuota } from "./billing/quota-consumption.js";
+import { SetMemberAllocation, GetTenantUsage } from "./billing/quota-admin.js";
+import { billingRoutes } from "./routes/billing.js";
 
 export interface BuildAppOptions {
   db?: Database;
@@ -302,6 +305,18 @@ export async function buildApp(
     repo: userPreferencesRouteRepo,
   });
   await app.register(userMemoryRoutes, { service: userMemoryService });
+
+  // 11a billing quota-administration routes (Phase 3).
+  // Owner/trainer-only endpoints to set per-member allocations (audited) and
+  // read aggregate/member usage COUNTS. The Drizzle adapter lives in the infra
+  // layer; the pure use cases depend only on its port. Tenant + actor identity
+  // are read from authContext inside the route, so these can only ever touch the
+  // caller's own active tenant, and they never expose member private content.
+  const billingAdminRepo = new BillingAdminRepository(database);
+  await app.register(billingRoutes, {
+    setMemberAllocation: new SetMemberAllocation(billingAdminRepo),
+    getTenantUsage: new GetTenantUsage(billingAdminRepo),
+  });
 
   // WebSocket plugin + authenticated plan-status route.
   // WsRegistry is shared between this route and PlanGenerationService so
