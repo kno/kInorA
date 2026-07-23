@@ -13,6 +13,8 @@ import {
   varchar,
   smallint,
   customType,
+  foreignKey,
+  check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { DefaultVectorMemoryEmbeddingConfig } from "@kinora/contracts";
@@ -90,6 +92,39 @@ export const membershipStatusEnum = pgEnum("membership_status", [
   "suspended",
 ]);
 
+export const billingTierEnum = pgEnum("billing_tier", ["free", "pro"]);
+
+export const billingStatusEnum = pgEnum("billing_status", [
+  "active",
+  "trialing",
+  "expired",
+  "overridden",
+]);
+
+export const billingSourceEnum = pgEnum("billing_source", [
+  "system",
+  "backfill",
+  "admin_override",
+]);
+
+export const billingFeatureEnum = pgEnum("billing_feature", [
+  "plan_generation",
+  "plan_regeneration",
+  "memory_write",
+  "memory_retrieval",
+]);
+
+export const billingDecisionEnum = pgEnum("billing_decision", [
+  "allowed",
+  "denied",
+]);
+
+export const billingAuditActionEnum = pgEnum("billing_audit_action", [
+  "member_allocation_set",
+  "admin_override_created",
+  "admin_override_expired",
+]);
+
 /**
  * Tenants — organizations or personal workspaces that own all user data.
  */
@@ -136,6 +171,228 @@ export const memberships = pgTable(
       table.userId
     ),
   })
+);
+
+export const tenantBillingStates = pgTable(
+  "tenant_billing_states",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .primaryKey()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    tier: billingTierEnum("tier").notNull(),
+    status: billingStatusEnum("status").notNull(),
+    source: billingSourceEnum("source").notNull(),
+    trialStartedAt: timestamp("trial_started_at", { withTimezone: true }),
+    trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    trialWindowCheck: check(
+      "tenant_billing_states_trial_window_chk",
+      sql`${table.trialStartedAt} is null or ${table.trialEndsAt} is null or ${table.trialEndsAt} > ${table.trialStartedAt}`,
+    ),
+  }),
+);
+
+export const tenantBillingOverrides = pgTable(
+  "tenant_billing_overrides",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    tier: billingTierEnum("tier").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    reason: text("reason").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    activeWindowIdx: index("tenant_billing_overrides_active_window_idx").on(
+      table.tenantId,
+      table.startsAt,
+      table.endsAt,
+    ),
+    activeWindowCheck: check(
+      "tenant_billing_overrides_active_window_chk",
+      sql`${table.endsAt} > ${table.startsAt}`,
+    ),
+  }),
+);
+
+export const tenantQuotaCounters = pgTable(
+  "tenant_quota_counters",
+  {
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    feature: billingFeatureEnum("feature").notNull(),
+    period: text("period").notNull(),
+    used: integer("used").notNull().default(0),
+    limit: integer("limit").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    scopeUnique: uniqueIndex("tenant_quota_counters_scope_unique").on(
+      table.tenantId,
+      table.feature,
+      table.period,
+    ),
+    periodIdx: index("tenant_quota_counters_period_idx").on(table.tenantId, table.period),
+    usedNonNegativeCheck: check(
+      "tenant_quota_counters_used_non_negative_chk",
+      sql`${table.used} >= 0`,
+    ),
+    limitNonNegativeCheck: check(
+      "tenant_quota_counters_limit_non_negative_chk",
+      sql`${table.limit} >= 0`,
+    ),
+    usageWithinLimitCheck: check(
+      "tenant_quota_counters_usage_within_limit_chk",
+      sql`${table.used} <= ${table.limit}`,
+    ),
+  }),
+);
+
+export const memberQuotaAllocations = pgTable(
+  "member_quota_allocations",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    feature: billingFeatureEnum("feature").notNull(),
+    period: text("period").notNull(),
+    limit: integer("limit").notNull(),
+    updatedByUserId: uuid("updated_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    membershipFk: foreignKey({
+      name: "member_quota_allocations_tenant_user_memberships_fk",
+      columns: [table.tenantId, table.userId],
+      foreignColumns: [memberships.tenantId, memberships.userId],
+    }).onDelete("cascade"),
+    scopeUnique: uniqueIndex("member_quota_allocations_scope_unique").on(
+      table.tenantId,
+      table.userId,
+      table.feature,
+      table.period,
+    ),
+    limitNonNegativeCheck: check(
+      "member_quota_allocations_limit_non_negative_chk",
+      sql`${table.limit} >= 0`,
+    ),
+  }),
+);
+
+export const memberQuotaCounters = pgTable(
+  "member_quota_counters",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    feature: billingFeatureEnum("feature").notNull(),
+    period: text("period").notNull(),
+    used: integer("used").notNull().default(0),
+    limit: integer("limit").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    membershipFk: foreignKey({
+      name: "member_quota_counters_tenant_user_memberships_fk",
+      columns: [table.tenantId, table.userId],
+      foreignColumns: [memberships.tenantId, memberships.userId],
+    }).onDelete("cascade"),
+    scopeUnique: uniqueIndex("member_quota_counters_scope_unique").on(
+      table.tenantId,
+      table.userId,
+      table.feature,
+      table.period,
+    ),
+    periodIdx: index("member_quota_counters_period_idx").on(
+      table.tenantId,
+      table.userId,
+      table.period,
+    ),
+    usedNonNegativeCheck: check(
+      "member_quota_counters_used_non_negative_chk",
+      sql`${table.used} >= 0`,
+    ),
+    limitNonNegativeCheck: check(
+      "member_quota_counters_limit_non_negative_chk",
+      sql`${table.limit} >= 0`,
+    ),
+    usageWithinLimitCheck: check(
+      "member_quota_counters_usage_within_limit_chk",
+      sql`${table.used} <= ${table.limit}`,
+    ),
+  }),
+);
+
+export const billingUsageLedger = pgTable(
+  "billing_usage_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    feature: billingFeatureEnum("feature").notNull(),
+    period: text("period").notNull(),
+    operationKey: text("operation_key").notNull(),
+    decision: billingDecisionEnum("decision").notNull(),
+    reason: text("reason").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    membershipFk: foreignKey({
+      name: "billing_usage_ledger_tenant_user_memberships_fk",
+      columns: [table.tenantId, table.userId],
+      foreignColumns: [memberships.tenantId, memberships.userId],
+    }).onDelete("cascade"),
+    operationUnique: uniqueIndex("billing_usage_ledger_operation_unique").on(
+      table.tenantId,
+      table.userId,
+      table.feature,
+      table.period,
+      table.operationKey,
+    ),
+    periodIdx: index("billing_usage_ledger_period_idx").on(
+      table.tenantId,
+      table.userId,
+      table.period,
+    ),
+  }),
+);
+
+export const billingAuditEvents = pgTable(
+  "billing_audit_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull(),
+    actorUserId: uuid("actor_user_id").notNull(),
+    subjectUserId: uuid("subject_user_id").references(() => users.id),
+    action: billingAuditActionEnum("action").notNull(),
+    feature: billingFeatureEnum("feature"),
+    period: text("period"),
+    metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    actorMembershipFk: foreignKey({
+      name: "billing_audit_events_tenant_actor_memberships_fk",
+      columns: [table.tenantId, table.actorUserId],
+      foreignColumns: [memberships.tenantId, memberships.userId],
+    }).onDelete("cascade"),
+    tenantCreatedIdx: index("billing_audit_events_tenant_created_idx").on(
+      table.tenantId,
+      table.createdAt,
+    ),
+  }),
 );
 
 /**
