@@ -13,30 +13,138 @@ Store conversational memory as embeddings for retrieval during AI interactions w
 
 ### Requirement: Vector Conversation Memory
 
-The system MUST store eligible conversation context as embeddings in a vector store.
+The system MUST store only opt-in, user-confirmed, eligible durable facts as compact vector memory. Records MUST be tenant-scoped, user-scoped, reviewable, auditable, and tagged with source, provider, model, dimension, and schema version. The system MUST NOT embed raw transcripts, secrets, full plans, or sensitive health data by default.
 
-#### Scenario: Conversation context retrieval
+#### Scenario: Confirmed eligible fact stored
 
-- GIVEN a user previously said they prefer morning workouts
-- WHEN an AI interaction needs scheduling context
-- THEN the relevant memory is retrieved for the LLM context
+- GIVEN vector memory is enabled and the user confirms "prefers morning workouts" as durable
+- WHEN the memory is saved
+- THEN it is embedded with tenant id, user id, source, provider, model, dimension, version, and timestamps
+
+#### Scenario: Ineligible fact rejected
+
+- GIVEN a candidate contains a secret, raw transcript, full plan, or sensitive health detail
+- WHEN eligibility is evaluated
+- THEN vector storage is rejected and non-sensitive audit metadata is recorded
+
+#### Scenario: Duplicate save is idempotent
+
+- GIVEN an equivalent active memory exists for the same tenant and user
+- WHEN the confirmed fact is saved again or retried
+- THEN the system MUST update or return the existing record without creating another active memory
+
+#### Scenario: Provider failure or timeout
+
+- GIVEN embedding generation fails, times out, or is unavailable
+- WHEN saving a confirmed memory
+- THEN the user sees safe failure feedback and the operation emits non-sensitive telemetry
+
+#### Scenario: Dimension mismatch
+
+- GIVEN the embedding dimension differs from configured model dimension
+- WHEN the memory write is validated
+- THEN the vector write is rejected and observable failure metadata is emitted
 
 ### Requirement: Empty Memory Behavior
 
-The AI flow MUST continue safely when no vector memories exist.
+The bounded AI retrieval flow MUST fail open when vector memory is empty, disabled, offline, misconfigured, unavailable, incompatible, or retrieval fails. It MUST continue without memory rather than blocking generation or exposing technical errors.
 
-#### Scenario: Empty conversation history
+#### Scenario: Empty memory fallback
 
-- GIVEN a new user has no conversation history
-- WHEN the AI needs context
-- THEN retrieval returns empty results and the AI uses default behavior
+- GIVEN the user has no active vector memories
+- WHEN the bounded AI flow retrieves context
+- THEN it receives empty memory context and uses default behavior
+
+#### Scenario: Retrieval unavailable fallback
+
+- GIVEN vector search is offline, disabled, timed out, or unavailable
+- WHEN retrieval runs
+- THEN the flow continues without memory and emits operational telemetry
+
+#### Scenario: Compatible memory affects response
+
+- GIVEN a compatible approved memory says the user prefers morning workouts
+- WHEN the bounded plan-related AI flow runs
+- THEN injected context demonstrably influences the response or displayed context
+
+#### Scenario: Incompatible vector excluded
+
+- GIVEN stored vectors use incompatible provider, model, dimension, or version
+- WHEN retrieval runs
+- THEN incompatible records are excluded and the flow continues with compatible or empty context
 
 ### Requirement: Vector Memory Isolation
 
-Vector search MUST filter by tenant id and user id.
+Vector storage, search, update, deletion, disablement, and retention MUST be constrained by tenant id and user id. Explicit deletion MUST immediately remove the memory from user-visible lists and retrievable/searchable context.
 
 #### Scenario: Cross-user embedding excluded
 
-- GIVEN user A has embedded conversation history
-- WHEN user B starts a conversation
-- THEN user A's embeddings are not included in user B's context
+- GIVEN user A has vector memories in tenant T
+- WHEN user B in tenant T retrieves or manages memory
+- THEN user A's memories MUST NOT be returned, changed, or deleted
+
+#### Scenario: Cross-tenant embedding excluded
+
+- GIVEN the same user id exists in tenants A and B
+- WHEN tenant A retrieves or manages memory
+- THEN tenant B memories MUST NOT be searched, returned, changed, or deleted
+
+#### Scenario: Deletion invalidates retrieval
+
+- GIVEN a user deletes a memory
+- WHEN deletion completes
+- THEN the memory is absent from the list and MUST NOT be retrieved in future AI context
+
+#### Scenario: Audit and observability
+
+- GIVEN storage, retrieval, rejection, deletion, disablement, or failure occurs
+- WHEN the operation completes
+- THEN telemetry records outcome, scope, operation, and reason without raw memory content
+
+### Requirement: Memory Management UI
+
+The system MUST provide authenticated memory-management UI/API controls to list, review, delete, and disable vector memories with privacy-safe copy and accessible loading, empty, error, and offline states.
+
+#### Scenario: List and review memories
+
+- GIVEN the user has active memories
+- WHEN they open memory management
+- THEN they can review each memory summary, metadata, and available controls
+
+#### Scenario: Loading empty error offline states
+
+- GIVEN memories are loading, absent, failed, or offline
+- WHEN the screen renders
+- THEN it shows accessible privacy-safe state copy without exposing raw sensitive content
+
+#### Scenario: Disable memory
+
+- GIVEN vector memory is enabled
+- WHEN the user disables it
+- THEN new writes stop and retrieval returns empty context until re-enabled
+
+### Requirement: User Confirmation Flow
+
+The system MUST include one explicit user-confirmation flow that creates an eligible durable memory and visibly confirms success or failure.
+
+#### Scenario: Confirmation success
+
+- GIVEN an eligible durable fact is proposed to the user
+- WHEN the user confirms saving it
+- THEN the memory is created and success is visible in the UI
+
+#### Scenario: Confirmation rejected or failed
+
+- GIVEN the user rejects saving or the save fails
+- WHEN the flow completes
+- THEN no active memory is created and the UI explains the result safely
+
+### Requirement: First-Slice Boundary
+
+The 10b slice MUST deliver memory management, one confirmation flow, and one bounded AI retrieval flow only. Broad chat/voice UX, automatic unconfirmed extraction, provider expansion, sophisticated ranking, and bulk migration MUST remain deferred.
+
+#### Scenario: Deferred scope blocked
+
+- GIVEN implementation proposes broad chat, voice, automatic extraction, or provider expansion
+- WHEN evaluated against 10b
+- THEN it is treated as out of scope unless a later SDD change approves it

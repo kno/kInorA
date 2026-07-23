@@ -1,0 +1,16 @@
+{
+  "schema": "gentle-ai.review-receipt/v2",
+  "lineage_id": "review-10b-user-memory-vector-release2",
+  "generation": 2,
+  "base_tree": "b5a849b39b5d54d04ea4e7193a5330873a4a5778",
+  "initial_review_tree": "b5a849b39b5d54d04ea4e7193a5330873a4a5778",
+  "final_candidate_tree": "b5a849b39b5d54d04ea4e7193a5330873a4a5778",
+  "paths_digest": "sha256:2286a180488f90f2e97062d500a629bc747716d55a34c2861a8309e1b02589a1",
+  "fix_delta_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "policy_hash": "sha256:34fb63d7f29f8613cd4431382b1057398a4816f8a4c20fc34677fffc80a184f6",
+  "evidence_hash": "sha256:fb61a00d5c9debea78d5c355805e80c4a60e08314b8e87ea6c4545426cb09b2d",
+  "risk_level": "low",
+  "selected_lenses": [],
+  "resolved_finding_ids": null,
+  "terminal_state": "approved"
+}
