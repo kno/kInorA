@@ -346,6 +346,13 @@ export const billingUsageLedger = pgTable(
     operationKey: text("operation_key").notNull(),
     decision: billingDecisionEnum("decision").notNull(),
     reason: text("reason").notNull(),
+    // #174 refund symmetry (FIX A): records whether THIS consume incremented
+    // the per-member counter, decided at consume time from allocation
+    // existence at that instant. `refund` MUST reverse based on this recorded
+    // fact — not by re-reading current allocation existence — so an admin
+    // adding/removing a per-member allocation between consume and a
+    // compensating void can never desync the tenant/member mirror.
+    memberCounterCredited: boolean("member_counter_credited").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({

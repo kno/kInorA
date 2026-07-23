@@ -199,22 +199,25 @@ function buildAuditPort() {
 }
 
 type ConsumeDecisionLike =
-  | { allowed: true; tier: "free" | "pro"; source: string; period: string }
+  | { allowed: true; tier: "free" | "pro"; source: string; period: string; replayed?: boolean }
   | { allowed: false; reason: string };
 
 async function buildTestApp(options?: {
   tenantId?: string;
   userId?: string;
   store?: InMemoryVectorMemoryStore;
-  writerResult?: "stored" | "provider_failure" | "timeout";
+  writerResult?: "stored" | "provider_failure" | "timeout" | "throws";
   audit?: ReturnType<typeof buildAuditPort>;
   billingDecision?: ConsumeDecisionLike | (() => Promise<ConsumeDecisionLike>);
+  refundThrows?: boolean;
 }): Promise<{
   app: FastifyInstance;
   store: InMemoryVectorMemoryStore;
   audit: ReturnType<typeof buildAuditPort>;
   writer: { saveConfirmedMemory: ReturnType<typeof vi.fn> };
-  billing: { checkAndConsume: ReturnType<typeof vi.fn> } | undefined;
+  billing:
+    | { checkAndConsume: ReturnType<typeof vi.fn>; refund: ReturnType<typeof vi.fn> }
+    | undefined;
 }> {
   const store = options?.store ?? new InMemoryVectorMemoryStore();
   const audit = options?.audit ?? buildAuditPort();
@@ -226,6 +229,9 @@ async function buildTestApp(options?: {
       }
       if (options?.writerResult === "timeout") {
         return { kind: "failed" as const, reason: "timeout" as const };
+      }
+      if (options?.writerResult === "throws") {
+        throw new Error("vector store outage");
       }
 
       return {
@@ -271,13 +277,20 @@ async function buildTestApp(options?: {
     return reply.code(500).send({ error: "Internal Server Error" });
   });
 
-  let billing: { checkAndConsume: ReturnType<typeof vi.fn> } | undefined;
+  let billing:
+    | { checkAndConsume: ReturnType<typeof vi.fn>; refund: ReturnType<typeof vi.fn> }
+    | undefined;
   if (options?.billingDecision !== undefined) {
     const decide = options.billingDecision;
     billing = {
       checkAndConsume: vi.fn(async () =>
         typeof decide === "function" ? await decide() : decide,
       ),
+      refund: vi.fn(async () => {
+        if (options?.refundThrows) {
+          throw new Error("refund backend unavailable");
+        }
+      }),
     };
   }
 
@@ -812,15 +825,16 @@ describe("userMemoryRoutes", () => {
 
   // Store-failure placement: the consume MUST precede embed+store so a
   // Free/exhausted tenant can never trigger embedding cost (the CRITICAL
-  // invariant). Consequently a provider/store failure has already consumed the
-  // reserved unit — but the deterministic operationKey guarantees a same-fact
-  // retry REPLAYS the allowed decision (no second consume) and completes the
-  // store, so at most one unit is ever consumed per fact. This test pins the
-  // documented ordering: consume runs exactly once, before the failed store.
-  it("consumes exactly once, before embed, then surfaces a store failure as 503", async () => {
+  // invariant). Consuming before embed reserves the unit, so a terminal
+  // provider/store failure would otherwise permanently spend a unit that
+  // stored nothing. #174 compensation: a FRESH consume followed by a terminal
+  // store failure MUST release the reserved unit (refund), so a fact that is
+  // never retried does not leak a unit. Consume still runs exactly once, before
+  // the failed store.
+  it("consumes exactly once before embed, then RELEASES the unit when the store fails (503)", async () => {
     const built = await buildTestApp({
       writerResult: "provider_failure",
-      billingDecision: { allowed: true, tier: "pro", source: "system", period: "2026-07" },
+      billingDecision: { allowed: true, tier: "pro", source: "system", period: "2026-07", replayed: false },
     });
     app = built.app;
 
@@ -838,6 +852,174 @@ describe("userMemoryRoutes", () => {
     expect(response.statusCode).toBe(503);
     expect(response.json()).toEqual({ error: "memory_unavailable" });
     expect(built.billing?.checkAndConsume).toHaveBeenCalledTimes(1);
+    // #174: the freshly consumed unit is compensated because nothing was stored.
+    expect(built.billing?.refund).toHaveBeenCalledTimes(1);
+    // #174 FIX B: refund MUST be called with the DECISION's own resolved
+    // period — never a freshly re-derived one — so a boundary crossing
+    // between consume and void can never leak the OLD period's unit.
+    expect(built.billing?.refund).toHaveBeenCalledWith(
+      { tenantId: TENANT_A, userId: USER_A },
+      "memory_write",
+      expect.any(String),
+      "2026-07",
+    );
     expect(built.store.memories).toHaveLength(0);
+  });
+
+  it("RELEASES the unit when the writer THROWS a terminal outage, then propagates 500", async () => {
+    const built = await buildTestApp({
+      writerResult: "throws",
+      billingDecision: { allowed: true, tier: "pro", source: "system", period: "2026-07", replayed: false },
+    });
+    app = built.app;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/user-memories",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: {
+        factText: "Prefers morning workouts",
+        source: "user_confirmation",
+        idempotencyKey: "idem-store-throw",
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(built.billing?.refund).toHaveBeenCalledTimes(1);
+    expect(built.store.memories).toHaveLength(0);
+  });
+
+  it("does NOT release the unit on a successful store (no spurious refund)", async () => {
+    const built = await buildTestApp({
+      billingDecision: { allowed: true, tier: "pro", source: "system", period: "2026-07", replayed: false },
+    });
+    app = built.app;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/user-memories",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: {
+        factText: "Prefers morning workouts",
+        source: "user_confirmation",
+        idempotencyKey: "idem-success-norefund",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(built.billing?.checkAndConsume).toHaveBeenCalledTimes(1);
+    expect(built.billing?.refund).not.toHaveBeenCalled();
+    expect(built.store.memories).toHaveLength(1);
+  });
+
+  it("does NOT release a REPLAYED decision's unit on store failure (it belongs to another attempt)", async () => {
+    const built = await buildTestApp({
+      writerResult: "provider_failure",
+      // A concurrent/prior attempt already consumed this unit; THIS call only
+      // replayed the allowed decision, so it must never void that unit.
+      billingDecision: { allowed: true, tier: "pro", source: "system", period: "2026-07", replayed: true },
+    });
+    app = built.app;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/user-memories",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: {
+        factText: "Prefers morning workouts",
+        source: "user_confirmation",
+        idempotencyKey: "idem-replayed-fail",
+      },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(built.billing?.checkAndConsume).toHaveBeenCalledTimes(1);
+    expect(built.billing?.refund).not.toHaveBeenCalled();
+    expect(built.store.memories).toHaveLength(0);
+  });
+
+  it("still returns 503 when a best-effort refund itself fails (self-heals via deterministic retry)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const built = await buildTestApp({
+        writerResult: "provider_failure",
+        refundThrows: true,
+        billingDecision: { allowed: true, tier: "pro", source: "system", period: "2026-07", replayed: false },
+      });
+      app = built.app;
+
+      const sensitiveText = "Prefers 5am hot yoga on weekdays";
+      const response = await app.inject({
+        method: "POST",
+        url: "/user-memories",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: {
+          factText: sensitiveText,
+          source: "user_confirmation",
+          idempotencyKey: "idem-refund-fail",
+        },
+      });
+
+      // A failed refund must NOT crash the request: it degrades to the prior
+      // self-healing behavior (the ledger row survives → a retry replays).
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ error: "memory_unavailable" });
+      expect(built.billing?.refund).toHaveBeenCalledTimes(1);
+
+      // #174 FIX C: the failed-void log MUST carry enough scope to find the
+      // un-refunded unit (tenant/user/operationKey/feature/period) — plain
+      // error.name alone is not actionable — and MUST NOT leak the raw fact
+      // text, the auth token, or any other PII.
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const [, meta] = warnSpy.mock.calls[0]!;
+      expect(meta).toMatchObject({
+        tenantId: TENANT_A,
+        userId: USER_A,
+        feature: "memory_write",
+        period: "2026-07",
+        operationKey: expect.any(String),
+      });
+      const serializedLog = JSON.stringify(warnSpy.mock.calls[0]);
+      expect(serializedLog).not.toContain(sensitiveText);
+      expect(serializedLog).not.toContain(VALID_TOKEN);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("logs a structured success entry when a compensating void completes (reconciliation)", async () => {
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const built = await buildTestApp({
+        writerResult: "provider_failure",
+        billingDecision: { allowed: true, tier: "pro", source: "system", period: "2026-07", replayed: false },
+      });
+      app = built.app;
+
+      await app.inject({
+        method: "POST",
+        url: "/user-memories",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: {
+          factText: "Prefers early evening sessions",
+          source: "user_confirmation",
+          idempotencyKey: "idem-refund-success-log",
+        },
+      });
+
+      const voidLog = infoSpy.mock.calls.find(
+        (call) => typeof call[0] === "string" && call[0].includes("memory_write void"),
+      );
+      expect(voidLog).toBeDefined();
+      expect(voidLog?.[1]).toMatchObject({
+        tenantId: TENANT_A,
+        userId: USER_A,
+        feature: "memory_write",
+        period: "2026-07",
+        operationKey: expect.any(String),
+      });
+    } finally {
+      infoSpy.mockRestore();
+    }
   });
 });

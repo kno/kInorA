@@ -23,7 +23,14 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { createDbClient } from "../../client.js";
-import { billingUsageLedger, memberships, tenants, users } from "../../schema.js";
+import {
+  billingUsageLedger,
+  memberQuotaAllocations,
+  memberQuotaCounters,
+  memberships,
+  tenants,
+  users,
+} from "../../schema.js";
 import { QuotaLedgerRepository } from "../billing-quota.js";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -234,6 +241,357 @@ describe.skipIf(!hasDb)("QuotaLedgerRepository (real Postgres)", () => {
 
     // used=1 already >= the freshly-resolved Free limit of 1 → must deny.
     expect(freeConsume).toEqual({ outcome: "denied", reason: "tenant_quota_exhausted" });
+  });
+
+  // #174 memory_write compensation: a terminal embed/store failure after a
+  // FRESH consume must NOT permanently spend a unit. `refund` reverses exactly
+  // what a single consume did — atomically deletes the idempotency ledger row
+  // and decrements the counters — so the unit is released.
+  describe("refund (memory_write compensation)", () => {
+    it("atomically releases a freshly consumed unit: counter back to zero, ledger row gone", async () => {
+      const { tenantId, userId } = await seedActiveTenant();
+      const scope = { tenantId, userId };
+      const operationKey = "memory_write:fact-refund";
+
+      const consumed = await repo.consume({
+        scope,
+        feature: "memory_write",
+        period: PERIOD,
+        operationKey,
+        tenantLimit: 1_000_000,
+      });
+      expect(consumed.outcome).toBe("consumed");
+
+      const refund = await repo.refund({ scope, feature: "memory_write", period: PERIOD, operationKey });
+      expect(refund).toEqual({ outcome: "refunded" });
+
+      const [counter] = await db.query.tenantQuotaCounters.findMany({
+        where: (t, { and: andOp, eq: eqOp }) =>
+          andOp(eqOp(t.tenantId, tenantId), eqOp(t.feature, "memory_write")),
+      });
+      expect(counter?.used).toBe(0);
+
+      const ledgerRows = await db
+        .select()
+        .from(billingUsageLedger)
+        .where(
+          and(
+            eq(billingUsageLedger.tenantId, tenantId),
+            eq(billingUsageLedger.userId, userId),
+            eq(billingUsageLedger.operationKey, operationKey),
+          ),
+        );
+      expect(ledgerRows).toHaveLength(0);
+    });
+
+    it("lets a later attempt for the SAME fact re-consume and store — net exactly one unit", async () => {
+      const { tenantId, userId } = await seedActiveTenant();
+      const scope = { tenantId, userId };
+      const operationKey = "memory_write:fact-retry";
+
+      await repo.consume({ scope, feature: "memory_write", period: PERIOD, operationKey, tenantLimit: 5 });
+      await repo.refund({ scope, feature: "memory_write", period: PERIOD, operationKey });
+
+      // The voided ledger row means this is a FRESH consume again, not a replay.
+      const retry = await repo.consume({
+        scope,
+        feature: "memory_write",
+        period: PERIOD,
+        operationKey,
+        tenantLimit: 5,
+      });
+      expect(retry.outcome).toBe("consumed");
+
+      const [counter] = await db.query.tenantQuotaCounters.findMany({
+        where: (t, { and: andOp, eq: eqOp }) =>
+          andOp(eqOp(t.tenantId, tenantId), eqOp(t.feature, "memory_write")),
+      });
+      expect(counter?.used).toBe(1);
+    });
+
+    it("is a no-op for a never-consumed operation key and never drives the counter negative", async () => {
+      const { tenantId, userId } = await seedActiveTenant();
+      const scope = { tenantId, userId };
+
+      const refund = await repo.refund({
+        scope,
+        feature: "memory_write",
+        period: PERIOD,
+        operationKey: "memory_write:never",
+      });
+      expect(refund).toEqual({ outcome: "noop" });
+
+      const counters = await db.query.tenantQuotaCounters.findMany({
+        where: (t, { and: andOp, eq: eqOp }) =>
+          andOp(eqOp(t.tenantId, tenantId), eqOp(t.feature, "memory_write")),
+      });
+      // No consume happened, so no counter row should have been created either.
+      expect(counters).toHaveLength(0);
+    });
+
+    it("guards double-refund: the second refund is a no-op and the counter never goes negative", async () => {
+      const { tenantId, userId } = await seedActiveTenant();
+      const scope = { tenantId, userId };
+      const operationKey = "memory_write:double";
+
+      await repo.consume({ scope, feature: "memory_write", period: PERIOD, operationKey, tenantLimit: 5 });
+      const first = await repo.refund({ scope, feature: "memory_write", period: PERIOD, operationKey });
+      const second = await repo.refund({ scope, feature: "memory_write", period: PERIOD, operationKey });
+
+      expect(first).toEqual({ outcome: "refunded" });
+      expect(second).toEqual({ outcome: "noop" });
+
+      const [counter] = await db.query.tenantQuotaCounters.findMany({
+        where: (t, { and: andOp, eq: eqOp }) =>
+          andOp(eqOp(t.tenantId, tenantId), eqOp(t.feature, "memory_write")),
+      });
+      expect(counter?.used).toBe(0);
+    });
+
+    it("also decrements the per-member allocation counter, mirroring consume", async () => {
+      const { tenantId, userId } = await seedActiveTenant();
+      const scope = { tenantId, userId };
+      const operationKey = "memory_write:alloc";
+
+      await db.insert(memberQuotaAllocations).values({
+        tenantId,
+        userId,
+        feature: "memory_write",
+        period: PERIOD,
+        limit: 5,
+        updatedByUserId: userId,
+      });
+
+      await repo.consume({ scope, feature: "memory_write", period: PERIOD, operationKey, tenantLimit: 1_000_000 });
+      const [beforeMember] = await db
+        .select()
+        .from(memberQuotaCounters)
+        .where(
+          and(
+            eq(memberQuotaCounters.tenantId, tenantId),
+            eq(memberQuotaCounters.userId, userId),
+            eq(memberQuotaCounters.feature, "memory_write"),
+          ),
+        );
+      expect(beforeMember?.used).toBe(1);
+
+      await repo.refund({ scope, feature: "memory_write", period: PERIOD, operationKey });
+
+      const [afterMember] = await db
+        .select()
+        .from(memberQuotaCounters)
+        .where(
+          and(
+            eq(memberQuotaCounters.tenantId, tenantId),
+            eq(memberQuotaCounters.userId, userId),
+            eq(memberQuotaCounters.feature, "memory_write"),
+          ),
+        );
+      expect(afterMember?.used).toBe(0);
+
+      const [tenantCounter] = await db.query.tenantQuotaCounters.findMany({
+        where: (t, { and: andOp, eq: eqOp }) =>
+          andOp(eqOp(t.tenantId, tenantId), eqOp(t.feature, "memory_write")),
+      });
+      expect(tenantCounter?.used).toBe(0);
+    });
+
+    it("concurrent same-key consume yields one fresh unit; a single refund releases exactly it", async () => {
+      const { tenantId, userId } = await seedActiveTenant();
+      const scope = { tenantId, userId };
+      const operationKey = "memory_write:concurrent";
+
+      const [first, second] = await Promise.all([
+        repo.consume({ scope, feature: "memory_write", period: PERIOD, operationKey, tenantLimit: 1_000_000 }),
+        repo.consume({ scope, feature: "memory_write", period: PERIOD, operationKey, tenantLimit: 1_000_000 }),
+      ]);
+      expect([first.outcome, second.outcome].sort()).toEqual(["consumed", "replayed"]);
+
+      const [afterConsume] = await db.query.tenantQuotaCounters.findMany({
+        where: (t, { and: andOp, eq: eqOp }) =>
+          andOp(eqOp(t.tenantId, tenantId), eqOp(t.feature, "memory_write")),
+      });
+      expect(afterConsume?.used).toBe(1);
+
+      // Only the fresh consumer compensates; a single refund brings it to zero
+      // and a redundant refund is a no-op (never negative).
+      const refund = await repo.refund({ scope, feature: "memory_write", period: PERIOD, operationKey });
+      expect(refund).toEqual({ outcome: "refunded" });
+      const redundant = await repo.refund({ scope, feature: "memory_write", period: PERIOD, operationKey });
+      expect(redundant).toEqual({ outcome: "noop" });
+
+      const [afterRefund] = await db.query.tenantQuotaCounters.findMany({
+        where: (t, { and: andOp, eq: eqOp }) =>
+          andOp(eqOp(t.tenantId, tenantId), eqOp(t.feature, "memory_write")),
+      });
+      expect(afterRefund?.used).toBe(0);
+    });
+
+    // #174 FIX A: consume decides whether to touch the MEMBER counter based on
+    // allocation existence AT CONSUME TIME. The void MUST reverse based on
+    // that SAME recorded fact — never by re-reading current allocation
+    // existence — or an admin changing the allocation between consume and
+    // void desyncs the mirror.
+    it("FIX A: an allocation ADDED after a no-allocation consume must NOT make the void decrement a counter this op never touched", async () => {
+      const { tenantId, userId } = await seedActiveTenant();
+      const scope = { tenantId, userId };
+      const opNoAlloc = "memory_write:fixA-add-alloc-op1";
+      const opWithAlloc = "memory_write:fixA-add-alloc-op2";
+
+      // op1 consumes with NO allocation in effect — member counter untouched.
+      const op1 = await repo.consume({
+        scope,
+        feature: "memory_write",
+        period: PERIOD,
+        operationKey: opNoAlloc,
+        tenantLimit: 1_000_000,
+      });
+      expect(op1.outcome).toBe("consumed");
+
+      // An admin adds a per-member allocation AFTER op1's consume.
+      await db.insert(memberQuotaAllocations).values({
+        tenantId,
+        userId,
+        feature: "memory_write",
+        period: PERIOD,
+        limit: 1,
+        updatedByUserId: userId,
+      });
+
+      // op2 consumes WITH the allocation now in effect — spends the sole
+      // member unit. This models "another operation's real usage" that a
+      // buggy void of op1 must never corrupt.
+      const op2 = await repo.consume({
+        scope,
+        feature: "memory_write",
+        period: PERIOD,
+        operationKey: opWithAlloc,
+        tenantLimit: 1_000_000,
+      });
+      expect(op2.outcome).toBe("consumed");
+
+      const [memberBefore] = await db
+        .select()
+        .from(memberQuotaCounters)
+        .where(
+          and(
+            eq(memberQuotaCounters.tenantId, tenantId),
+            eq(memberQuotaCounters.userId, userId),
+            eq(memberQuotaCounters.feature, "memory_write"),
+          ),
+        );
+      expect(memberBefore?.used).toBe(1);
+
+      // Void op1 (never touched the member counter). A buggy void that
+      // re-reads CURRENT allocation existence would wrongly decrement op2's
+      // real usage here. The fix must leave the member counter untouched.
+      const refundOp1 = await repo.refund({
+        scope,
+        feature: "memory_write",
+        period: PERIOD,
+        operationKey: opNoAlloc,
+      });
+      expect(refundOp1).toEqual({ outcome: "refunded" });
+
+      const [memberAfter] = await db
+        .select()
+        .from(memberQuotaCounters)
+        .where(
+          and(
+            eq(memberQuotaCounters.tenantId, tenantId),
+            eq(memberQuotaCounters.userId, userId),
+            eq(memberQuotaCounters.feature, "memory_write"),
+          ),
+        );
+      // Op2's real usage must survive op1's void untouched.
+      expect(memberAfter?.used).toBe(1);
+
+      // The tenant aggregate DOES reflect op1's own reversal (2 consumed - 1 voided = 1).
+      const [tenantCounter] = await db.query.tenantQuotaCounters.findMany({
+        where: (t, { and: andOp, eq: eqOp }) =>
+          andOp(eqOp(t.tenantId, tenantId), eqOp(t.feature, "memory_write")),
+      });
+      expect(tenantCounter?.used).toBe(1);
+
+      // Proves the allocation is still correctly enforced at exactly 1: a
+      // third consume attempt must be denied (member_allocation_exhausted),
+      // not silently allowed because a buggy void freed capacity op1 never held.
+      const op3 = await repo.consume({
+        scope,
+        feature: "memory_write",
+        period: PERIOD,
+        operationKey: "memory_write:fixA-add-alloc-op3",
+        tenantLimit: 1_000_000,
+      });
+      expect(op3).toEqual({ outcome: "denied", reason: "member_allocation_exhausted" });
+    });
+
+    it("FIX A: an allocation REMOVED after a with-allocation consume must still let the void release the member unit it incremented (no leak)", async () => {
+      const { tenantId, userId } = await seedActiveTenant();
+      const scope = { tenantId, userId };
+      const operationKey = "memory_write:fixA-remove-alloc";
+
+      await db.insert(memberQuotaAllocations).values({
+        tenantId,
+        userId,
+        feature: "memory_write",
+        period: PERIOD,
+        limit: 5,
+        updatedByUserId: userId,
+      });
+
+      const consumed = await repo.consume({
+        scope,
+        feature: "memory_write",
+        period: PERIOD,
+        operationKey,
+        tenantLimit: 1_000_000,
+      });
+      expect(consumed.outcome).toBe("consumed");
+
+      const [memberBefore] = await db
+        .select()
+        .from(memberQuotaCounters)
+        .where(
+          and(
+            eq(memberQuotaCounters.tenantId, tenantId),
+            eq(memberQuotaCounters.userId, userId),
+            eq(memberQuotaCounters.feature, "memory_write"),
+          ),
+        );
+      expect(memberBefore?.used).toBe(1);
+
+      // Admin REMOVES the per-member allocation before the compensating void.
+      await db
+        .delete(memberQuotaAllocations)
+        .where(
+          and(
+            eq(memberQuotaAllocations.tenantId, tenantId),
+            eq(memberQuotaAllocations.userId, userId),
+            eq(memberQuotaAllocations.feature, "memory_write"),
+            eq(memberQuotaAllocations.period, PERIOD),
+          ),
+        );
+
+      // A buggy void that re-reads CURRENT allocation existence would find
+      // none and skip the decrement — leaking the member unit forever.
+      const refund = await repo.refund({ scope, feature: "memory_write", period: PERIOD, operationKey });
+      expect(refund).toEqual({ outcome: "refunded" });
+
+      const [memberAfter] = await db
+        .select()
+        .from(memberQuotaCounters)
+        .where(
+          and(
+            eq(memberQuotaCounters.tenantId, tenantId),
+            eq(memberQuotaCounters.userId, userId),
+            eq(memberQuotaCounters.feature, "memory_write"),
+          ),
+        );
+      // The member counter row still exists (allocation row deletion doesn't
+      // cascade to it) and must be correctly reversed to 0 — no leak.
+      expect(memberAfter?.used).toBe(0);
+    });
   });
 });
 
