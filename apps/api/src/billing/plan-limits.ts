@@ -30,6 +30,23 @@ export function resolveTenantFeatureLimit(tier: BillingTier, feature: BillingFea
 }
 
 /**
+ * Canonical calendar-month period key pattern (`YYYY-MM`, UTC). The month
+ * segment is constrained to `01`–`12` so an impossible month like `2026-13`
+ * or `2026-00` is rejected — such a period can never match
+ * {@link currentBillingPeriod} and would otherwise persist as dead allocation
+ * data. This is the SINGLE source of truth: the routes and the quota-admin use
+ * case both import it instead of redefining the regex.
+ */
+export const PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/**
+ * True when `period` is a well-formed, in-range `YYYY-MM` billing period key.
+ */
+export function isValidPeriod(period: string): boolean {
+  return PERIOD_PATTERN.test(period);
+}
+
+/**
  * The calendar-month billing period key (`YYYY-MM`, UTC) used to scope quota
  * counters and the idempotency ledger. Usage resets naturally each month by
  * writing to a new period row.

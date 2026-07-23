@@ -6,7 +6,7 @@ import type {
   TenantQuotaUsageDTO,
 } from "@kinora/contracts";
 import type { BillingScope } from "./types.js";
-import { resolveTenantFeatureLimit } from "./plan-limits.js";
+import { PERIOD_PATTERN, resolveTenantFeatureLimit } from "./plan-limits.js";
 
 /**
  * Membership view needed for quota-admin authorization: the actor/subject role
@@ -74,7 +74,16 @@ export type GetTenantUsageOutcome =
   | { ok: true; tenantUsage: TenantQuotaUsageDTO[]; memberUsage: MemberQuotaUsageDTO[] }
   | { ok: false; reason: BillingDenialReason };
 
-const PERIOD_PATTERN = /^\d{4}-\d{2}$/;
+/**
+ * Input to read tenant + per-member usage counts. Named (mirrors
+ * {@link SetMemberAllocationInput}) so the route options and the use case share
+ * one shape instead of duplicating an anonymous object type.
+ */
+export interface GetTenantUsageInput {
+  tenantId: string;
+  actorUserId: string;
+  period: string;
+}
 
 /**
  * True when the actor is an ACTIVE OWNER of the tenant. Fail-closed: a missing
@@ -163,11 +172,7 @@ export class SetMemberAllocation {
 export class GetTenantUsage {
   constructor(private readonly port: QuotaAdminPort) {}
 
-  async execute(input: {
-    tenantId: string;
-    actorUserId: string;
-    period: string;
-  }): Promise<GetTenantUsageOutcome> {
+  async execute(input: GetTenantUsageInput): Promise<GetTenantUsageOutcome> {
     const actor = await this.port.loadActorMembership({
       tenantId: input.tenantId,
       userId: input.actorUserId,

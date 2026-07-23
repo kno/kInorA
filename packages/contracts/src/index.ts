@@ -392,11 +392,19 @@ export type BillingStatus = "active" | "trialing" | "expired" | "overridden";
 
 export type BillingSource = "system" | "backfill" | "admin_override";
 
-export type BillingFeature =
-  | "plan_generation"
-  | "plan_regeneration"
-  | "memory_write"
-  | "memory_retrieval";
+/**
+ * The billing-metered features. SINGLE source of truth: the `BillingFeature`
+ * union is derived from this const array so runtime validation (e.g. the route
+ * allow-list) and the compile-time type can never drift when a feature is added.
+ */
+export const BILLING_FEATURES = [
+  "plan_generation",
+  "plan_regeneration",
+  "memory_write",
+  "memory_retrieval",
+] as const;
+
+export type BillingFeature = (typeof BILLING_FEATURES)[number];
 
 export type BillingDenialReason =
   | "operation_key_required"
