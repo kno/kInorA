@@ -44,9 +44,12 @@ describe("shared contracts boundary", () => {
     // .withStructuredOutput(WorkoutProgramSchema) in the OpenRouter adapter.
     // MUSCLE_GROUPS (09c-v1-progress-dashboard-stats) is the settled 10-group
     // taxonomy const — see design.md "Muscle-group taxonomy".
+    // BILLING_FEATURES (#181 billing-correctness) is the single source of truth
+    // for the BillingFeature union — routes/billing.ts imports it directly.
     expect(Object.keys(contracts)).toEqual([
       "WorkoutProgramSchema",
       "DEFAULT_VECTOR_MEMORY_EMBEDDING_CONFIG",
+      "BILLING_FEATURES",
       "MUSCLE_GROUPS",
     ]);
   });

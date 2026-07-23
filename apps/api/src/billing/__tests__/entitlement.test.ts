@@ -74,6 +74,26 @@ describe("resolveEffectiveTier", () => {
       trialExpired: false,
     });
   });
+
+  it("reconciles a lapsed override (status='overridden', no active override row) to the Free baseline, not the stored tier (#172)", () => {
+    // A future override-write path could persist tier='pro' + status='overridden'.
+    // Once the override window lapses there is NO active override row, so the
+    // stored tier must NOT be trusted — the tenant reconciles to Free.
+    const ctx: EntitlementContext = {
+      membershipStatus: "active",
+      billing: {
+        tier: "pro",
+        status: "overridden",
+        source: "admin_override",
+        trialStartedAt: null,
+        trialEndsAt: null,
+      },
+      activeOverrideTier: null,
+    };
+    const eff = resolveEffectiveTier(ctx, NOW);
+    expect(eff.tier).toBe("free");
+    expect(eff.trialExpired).toBe(false);
+  });
 });
 
 describe("CheckEntitlement", () => {
@@ -124,5 +144,22 @@ describe("CheckEntitlement", () => {
     const uc = new CheckEntitlement(reader(ctx));
     const decision = await uc.check(SCOPE, "memory_retrieval", NOW);
     expect(decision).toEqual({ allowed: true, tier: "pro", source: "admin_override" });
+  });
+
+  it("denies a premium feature for a lapsed override (status='overridden', no active override) — no durable pro (#172)", async () => {
+    const ctx: EntitlementContext = {
+      membershipStatus: "active",
+      billing: {
+        tier: "pro",
+        status: "overridden",
+        source: "admin_override",
+        trialStartedAt: null,
+        trialEndsAt: null,
+      },
+      activeOverrideTier: null,
+    };
+    const uc = new CheckEntitlement(reader(ctx));
+    const decision = await uc.check(SCOPE, "memory_retrieval", NOW);
+    expect(decision).toEqual({ allowed: false, reason: "premium_required" });
   });
 });

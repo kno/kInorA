@@ -21,6 +21,13 @@ import type {
 import type { BillingScope } from "../../billing/types.js";
 
 /**
+ * The transaction handle Drizzle passes to a `db.transaction(cb)` callback.
+ * Extracted as a named alias so the doubly-nested `Parameters<...>` type is
+ * declared once and reused wherever a `tx` is threaded through a helper.
+ */
+type BillingTx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/**
  * Drizzle adapter for the entitlement reader port. Lives under `db/` because
  * `.dependency-cruiser.cjs` forbids importing drizzle/pg outside the infra
  * layer; the pure use cases in `billing/` depend only on this port interface.
@@ -139,13 +146,19 @@ export class QuotaLedgerRepository implements QuotaLedgerPort {
         };
       }
 
-      // 3. Fail-closed membership re-check.
+      // 3. Fail-closed membership re-check. `inactive_membership` is a TRANSIENT
+      // denial, exactly like the capacity denials below: a suspended member can
+      // be reactivated mid-period, so the denial reflects only the state at this
+      // instant. It is therefore NOT persisted to the idempotency ledger —
+      // persisting it would replay the stale 403 under the deterministic
+      // operation key forever, locking a reactivated member out for the rest of
+      // the period. No counter advanced, so there is nothing to make idempotent;
+      // the retry is safely re-evaluated against current membership.
       const [membershipRow] = await tx
         .select({ status: memberships.status })
         .from(memberships)
         .where(and(eq(memberships.tenantId, scope.tenantId), eq(memberships.userId, scope.userId)));
       if (!membershipRow || membershipRow.status !== "active") {
-        await this.writeLedger(tx, input, "denied", "inactive_membership");
         return { outcome: "denied", reason: "inactive_membership" };
       }
 
@@ -207,8 +220,10 @@ export class QuotaLedgerRepository implements QuotaLedgerPort {
       // tenant is entitled, locking the actor out for the rest of the period
       // under the deterministic confirm key. No counter advanced, so there is
       // nothing to make idempotent; the retry is safely re-evaluated against
-      // current entitlement/quota. Terminal denials (inactive_membership) still
-      // persist below — they are fail-closed and intentionally sticky.
+      // current entitlement/quota. inactive_membership is treated the same way
+      // (fail-closed deny, not persisted) so a reactivated member is
+      // re-evaluated on retry rather than locked out by a replayed 403. Only
+      // 'allowed' decisions are written to the idempotency ledger.
       const tenantUsed = tenantCounter?.used ?? 0;
       if (tenantUsed >= tenantLimit) {
         return { outcome: "denied", reason: "tenant_quota_exhausted" };
@@ -251,7 +266,7 @@ export class QuotaLedgerRepository implements QuotaLedgerPort {
   }
 
   private async writeLedger(
-    tx: Parameters<Parameters<Database["transaction"]>[0]>[0],
+    tx: BillingTx,
     input: QuotaLedgerConsumeInput,
     decision: "allowed" | "denied",
     reason: string,

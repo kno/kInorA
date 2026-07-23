@@ -7,9 +7,11 @@ import type {
   TenantUsageReportDTO,
   UserId,
 } from "@kinora/contracts";
+import { BILLING_FEATURES } from "@kinora/contracts";
 import { requireAuth } from "../auth/plugin.js";
-import { currentBillingPeriod } from "../billing/plan-limits.js";
+import { PERIOD_PATTERN, currentBillingPeriod } from "../billing/plan-limits.js";
 import type {
+  GetTenantUsageInput,
   GetTenantUsageOutcome,
   SetMemberAllocationInput,
   SetMemberAllocationOutcome,
@@ -41,11 +43,7 @@ export interface BillingRoutesOptions {
     execute(input: SetMemberAllocationInput): Promise<SetMemberAllocationOutcome>;
   };
   getTenantUsage: {
-    execute(input: {
-      tenantId: string;
-      actorUserId: string;
-      period: string;
-    }): Promise<GetTenantUsageOutcome>;
+    execute(input: GetTenantUsageInput): Promise<GetTenantUsageOutcome>;
   };
   getBillingVisibility: {
     execute(
@@ -54,15 +52,6 @@ export interface BillingRoutesOptions {
     ): Promise<GetBillingVisibilityOutcome>;
   };
 }
-
-const VALID_FEATURES: readonly BillingFeature[] = [
-  "plan_generation",
-  "plan_regeneration",
-  "memory_write",
-  "memory_retrieval",
-];
-
-const PERIOD_PATTERN = /^\d{4}-\d{2}$/;
 
 /**
  * Map a use-case denial reason to an HTTP status. Fail-closed: an authorization
@@ -133,7 +122,7 @@ export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
         typeof body.userId !== "string" ||
         body.userId.trim() === "" ||
         typeof body.feature !== "string" ||
-        !VALID_FEATURES.includes(body.feature as BillingFeature) ||
+        !(BILLING_FEATURES as readonly string[]).includes(body.feature) ||
         typeof body.period !== "string" ||
         !PERIOD_PATTERN.test(body.period) ||
         typeof body.limit !== "number" ||
