@@ -11,7 +11,8 @@
     "test:coverage": "vitest run --coverage",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:backfill-muscle-group": "tsx src/db/backfill-muscle-group.ts"
+    "db:backfill-muscle-group": "tsx src/db/backfill-muscle-group.ts",
+    "db:backfill-billing-plans": "tsx src/db/backfill-billing-plans.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
