@@ -26,8 +26,31 @@ export type QuotaLedgerConsumeResult =
   | { outcome: "denied"; reason: BillingDenialReason }
   | { outcome: "replayed"; prior: "allowed" | "denied"; reason?: BillingDenialReason };
 
+/**
+ * Input for the compensation (void) of a prior FRESH `allowed` consume. Keyed
+ * identically to the consume it reverses; `tenantLimit` is irrelevant to a
+ * void, so it is intentionally absent.
+ */
+export interface QuotaLedgerRefundInput {
+  scope: BillingScope;
+  feature: BillingFeature;
+  period: string;
+  operationKey: string;
+}
+
+/**
+ * Outcome of a void:
+ *   - `refunded` — an `allowed` ledger row existed; it was deleted and BOTH
+ *      counters were decremented (all-or-nothing, same transaction)
+ *   - `noop`     — no `allowed` ledger row for the key (never consumed, already
+ *      voided, or a non-allowed/denied row): nothing to reverse. This makes a
+ *      double-void safe and guarantees a counter is never driven negative.
+ */
+export type QuotaLedgerRefundResult = { outcome: "refunded" | "noop" };
+
 export interface QuotaLedgerPort {
   consume(input: QuotaLedgerConsumeInput): Promise<QuotaLedgerConsumeResult>;
+  refund(input: QuotaLedgerRefundInput): Promise<QuotaLedgerRefundResult>;
 }
 
 interface EntitlementChecker {
@@ -75,15 +98,47 @@ export class CheckAndConsumeQuota {
     });
 
     if (result.outcome === "consumed") {
-      return { allowed: true, tier: entitlement.tier, source: entitlement.source, period };
+      return { allowed: true, tier: entitlement.tier, source: entitlement.source, period, replayed: false };
     }
 
     if (result.outcome === "replayed") {
       return result.prior === "allowed"
-        ? { allowed: true, tier: entitlement.tier, source: entitlement.source, period }
+        ? { allowed: true, tier: entitlement.tier, source: entitlement.source, period, replayed: true }
         : { allowed: false, reason: result.reason ?? "tenant_quota_exhausted" };
     }
 
     return { allowed: false, reason: result.reason };
+  }
+
+  /**
+   * Compensation for the memory_write path (#174): release a unit that a FRESH
+   * consume reserved but whose downstream operation (embed+store) failed
+   * terminally, so a fact that is never retried does not leak a unit forever.
+   *
+   * Callers MUST invoke this only for a decision whose `replayed` was `false`
+   * (a fresh consume), and MUST pass the `period` from THAT SAME decision —
+   * never a freshly re-derived one (#174 FIX B). Re-deriving from the current
+   * wall clock is wrong: if the request crosses a billing-period boundary
+   * between the consume and this compensating void, re-deriving would target
+   * the NEW period, find no ledger row there, return `noop`, and leak the
+   * OLD period's unit forever — reintroducing exactly the bug #174 exists to
+   * fix, in that boundary window. Threading the decision's own `period`
+   * guarantees the void always targets the period that was actually charged.
+   *
+   * Otherwise independent of entitlement — voiding never needs to re-resolve
+   * a tier — and the ledger enforces atomicity plus a no-op guard so a
+   * double-void or a never-consumed key cannot corrupt the counters.
+   */
+  async refund(
+    scope: BillingScope,
+    feature: BillingFeature,
+    operationKey: string,
+    period: string,
+  ): Promise<QuotaLedgerRefundResult> {
+    if (!operationKey || operationKey.trim() === "") {
+      return { outcome: "noop" };
+    }
+
+    return this.ledger.refund({ scope, feature, period, operationKey });
   }
 }

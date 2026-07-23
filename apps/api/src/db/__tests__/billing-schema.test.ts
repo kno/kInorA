@@ -108,6 +108,9 @@ describe("billing schema shape", () => {
     expect(ledgerCols.operationKey?.columnType).toBe("PgText");
     expect(ledgerCols.decision?.columnType).toBe("PgEnumColumn");
     expect(ledgerCols.reason?.columnType).toBe("PgText");
+    // #174 FIX A: recorded at consume time so a compensating void reverses
+    // exactly what THIS operation incremented, never current allocation state.
+    expect(ledgerCols.memberCounterCredited?.columnType).toBe("PgBoolean");
 
     const auditCols = getTableColumns(billingAuditEvents);
     expect(auditCols.id?.columnType).toBe("PgUUID");
@@ -132,7 +135,13 @@ describe("billing migration", () => {
         );
       }
     });
-    expect(migrationJournal.entries.at(-1)?.when).toBe(BILLING_MIGRATION_CUTOFF_MS);
+    // Pinned to the migration that introduced the 11a billing tables — NOT
+    // `.at(-1)`, so a later additive migration (e.g. #174's
+    // `member_counter_credited` column) never breaks this assertion.
+    const billingMigrationEntry = migrationJournal.entries.find(
+      (entry) => entry.tag === "0011_billing_plans_tiers",
+    );
+    expect(billingMigrationEntry?.when).toBe(BILLING_MIGRATION_CUTOFF_MS);
   });
 
   it("creates the additive 11a billing tables and enums", () => {
