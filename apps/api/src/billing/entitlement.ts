@@ -68,7 +68,17 @@ export function resolveEffectiveTier(ctx: EntitlementContext, now: Date): Effect
     return { tier: "free", source: billing.source, trialExpired: true };
   }
 
-  // active | overridden-without-active-override → the stored tier stands.
+  if (billing.status === "overridden") {
+    // Reached only when NO active override is in effect (an active override is
+    // resolved at the top of this function). A stored `overridden` status with a
+    // lapsed window means the override tier can no longer be trusted — reconcile
+    // to the Free baseline rather than granting a durable, never-expiring Pro.
+    // Defensive: no code path currently writes `overridden`; this guards a future
+    // override-write path from leaving a tenant permanently premium.
+    return { tier: "free", source: billing.source, trialExpired: false };
+  }
+
+  // active → the stored tier stands.
   return { tier: billing.tier, source: billing.source, trialExpired: false };
 }
 
