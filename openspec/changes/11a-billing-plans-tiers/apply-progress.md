@@ -367,3 +367,109 @@ Round-1 re-judgment (both judges) confirmed FIX 1 and FIX 2 RESOLVED, and found 
 ### Residual risk
 
 - Documented single-unit reservation on an abandoned embed/store failure (self-healing on retry via the deterministic key). Accepted for the cost-safety reason above.
+
+---
+
+# Apply Progress: 11a-billing-plans-tiers — Slice 3
+
+**Batch**: Slice 3 / Phase 3 — owner/trainer quota-administration API + privacy-safe DTOs
+**Delivery**: chained PR slice (`stacked-to-main`), stacked on Slice 2
+**Mode**: Strict TDD
+**Status**: Slice 3 complete — Phase 3 tasks 3.1, 3.2, 3.3 are `[x]`
+
+---
+
+## Key design decision — "trainer" maps to the tenant `owner` role
+
+The schema `membership_role` enum is `["owner", "member"]` — there is **no distinct
+`trainer` role**, and `provisioning.ts` creates the tenant creator as `owner`. The spec
+scenario text confirms this: "GIVEN trainer O **owns** tenant T". Therefore an authorized
+quota administrator is an **active owner** (`role === "owner" && status === "active"`); a
+`member` (or any non-active membership) is denied `unauthorized_quota_admin` and fails
+closed. This is determined by schema + scenario text, not a guess.
+
+Privacy boundary (also fully specified, not guessed): the design says "return only
+tenant/member counts" and the pre-defined contract DTOs (`TenantQuotaUsageDTO`,
+`MemberQuotaUsageDTO`) carry only integers/enums. The boundary is about **content**
+(memories/prompts/health/generated private data), never about usage counts. Per-member
+usage COUNTS are non-sensitive aggregates and are explicitly allowed to an administering
+owner. The `QuotaAdminPort` type surface exposes ONLY count-returning reads — there is no
+method that could surface member content — enforcing the boundary structurally.
+
+## TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 3.1 | `apps/api/src/routes/__tests__/billing.test.ts` | Unit (route + use case via fake port) | ✅ Full API suite baseline (894 pre-slice) | ✅ First run → billing.test.ts failed to resolve (`../billing.js`, `../../billing/quota-admin.js` did not exist) — the run aborted on the target module | ✅ After implementation → `billing.test.ts` **14/14 passed** | ✅ Authorized-owner allocation + audit-actor assertion, non-owner 403, suspended-actor 401 + use-case fail-closed, owner-may-set-suspended-member, cross-tenant subject 403, body-tenantId-ignored, out-of-bounds 422, malformed 422, privacy count-only shape, port-surface-is-counts-only | ✅ Extracted `isActiveOwner` guard + `PERIOD_PATTERN`; use cases pure/port-only; Drizzle isolated to `db/` |
+| 3.2 | same + `apps/api/src/db/repositories/__tests__/billing-admin.integration.test.ts` | Unit + real-Postgres integration | ✅ Same baseline | ✅ Tests referenced not-yet-existing route/use-case/adapter modules | ✅ Implemented `billing/quota-admin.ts` (`SetMemberAllocation`, `GetTenantUsage`, `QuotaAdminPort`), `db/repositories/billing-admin.ts` (Drizzle adapter), `routes/billing.ts`, contract DTOs, and `app.ts` wiring → focused suite green | ✅ Owner-only authz proven at route; body `tenantId` ignored (scope from authContext); allocation upsert idempotent | ✅ Route decoupled from DB; adapter reuses `resolveEffectiveTier` for bounds |
+| 3.3 | `apps/api/src/db/repositories/__tests__/billing-admin.integration.test.ts` (real Postgres) | Integration | ✅ Same baseline | ✅ Audit-row/aggregate-read assertions written before adapter existed | ✅ Real-Postgres run (`DATABASE_URL` → pgvector:pg17) → **4 passed / 1 skipped**: allocation + `member_allocation_set` audit row written atomically; second write upserts limit + appends a second audit row; `readTenantUsage`/`readMemberUsage` return count-only rows scoped to the tenant; `loadTenantTier` resolves the effective tier | ✅ Audit actor/subject/feature/period/metadata all asserted; member-usage shape asserted to carry only count keys | ✅ Opt-in via `DATABASE_URL` (skipped hermetically), mirroring Slice 2 integration pattern |
+
+## Test Summary
+
+- **Total tests written**: 18 new (14 hermetic route/use-case in `billing.test.ts` + 4 real-Postgres in `billing-admin.integration.test.ts`; +1 skipped placeholder)
+- **Total tests passing**: full API suite `912 passed | 2 skipped (914)` with `DATABASE_URL` wired (65 files)
+- **Layers used**: Unit (route + use case via faithful fake port) + real-Postgres integration (audit write + aggregate reads)
+- **Approval tests**: None — additive slice
+- **Pure functions/use cases created**: `SetMemberAllocation`, `GetTenantUsage` (pure, port-only) + `isActiveOwner` guard
+
+## Work Unit Evidence
+
+| Evidence | Exact result |
+|---|---|
+| Focused test command and exact result | `pnpm --filter api test src/routes/__tests__/billing.test.ts src/routes/__tests__/auth.test.ts` → **PASS** (`Test Files 2 passed`, `Tests 24 passed`) |
+| Runtime harness command/scenario and exact result | `podman run pgvector/pgvector:pg17` (port 55434) → `DATABASE_URL=… pnpm --filter api db:migrate` → `DATABASE_URL=… pnpm --filter api test src/db/repositories/__tests__/billing-admin.integration.test.ts` → **PASS** (`4 passed | 1 skipped`). Proved a real `billing_audit_events` row (`action=member_allocation_set`, `actor_user_id`=owner, `subject_user_id`=member, `metadata={limit}`) is written in the SAME transaction as the `member_quota_allocations` upsert, and that the usage reads return tenant-scoped count-only rows. Container torn down after (`podman rm -f kinora-billing-p3-test`). |
+| Rollback boundary | Delete `apps/api/src/routes/billing.ts`, `apps/api/src/billing/quota-admin.ts`, `apps/api/src/db/repositories/billing-admin.ts`, and the two new test files; revert the `billingRoutes` registration + imports in `apps/api/src/app.ts`; revert the added DTOs (`MemberAllocationDTO`, `SetMemberAllocationResponse`, `TenantUsageReportDTO`) in `packages/contracts/src/index.ts`. This removes the quota-admin API without touching Slice 1/2 schema, entitlement, consume, or gating behavior, or any Phase 4 web/Stripe work.
+
+## Completed Tasks
+
+- [x] 3.1 RED — Added failing route + use-case tests for `Member Quota Administration`, `Quota Privacy Boundary`, `Membership suspension blocks consumption/management`, and `Cross-tenant billing denied`.
+- [x] 3.2 GREEN — Implemented the owner/trainer quota-admin API (`routes/billing.ts`), pure use cases (`billing/quota-admin.ts`), Drizzle adapter (`db/repositories/billing-admin.ts`), privacy-safe contract DTOs, and `app.ts` wiring.
+- [x] 3.3 TRIANGLE — Proved `billing_audit_events` are written for admin actions (real Postgres), usage totals are aggregate/count-only, and no member memory/prompt/health/private content is reachable through these endpoints (enforced by the port's type surface + response-shape assertions).
+
+## Files Changed
+
+| File | Action | What changed |
+|------|--------|--------------|
+| `apps/api/src/billing/quota-admin.ts` | Created | Pure `SetMemberAllocation` / `GetTenantUsage` use cases + `QuotaAdminPort`; owner-only fail-closed authz, plan-bounds validation, cross-tenant subject guard. |
+| `apps/api/src/db/repositories/billing-admin.ts` | Created | Drizzle adapter: membership/tenant-tier reads, atomic allocation upsert + `member_allocation_set` audit write in one tx, tenant/member usage count reads (no content columns). |
+| `apps/api/src/routes/billing.ts` | Created | `GET /billing/usage` (owner-only counts) + `PUT /billing/allocations` (owner-only, audited); tenant/actor from authContext only; denial→HTTP mapping (403 authz, 422 out-of-bounds/invalid). |
+| `apps/api/src/app.ts` | Modified | Composed `BillingAdminRepository` + use cases and registered `billingRoutes`. |
+| `packages/contracts/src/index.ts` | Modified | Added `MemberAllocationDTO`, `SetMemberAllocationResponse`, `TenantUsageReportDTO` (count-only, no Stripe/payment/content fields). |
+| `apps/api/src/routes/__tests__/billing.test.ts` | Created | 14 hermetic route + use-case tests for the 4 Phase-3 scenarios. |
+| `apps/api/src/db/repositories/__tests__/billing-admin.integration.test.ts` | Created | Real-Postgres audit-write + aggregate-read proof (opt-in via `DATABASE_URL`, skipped hermetically). |
+| `openspec/changes/11a-billing-plans-tiers/tasks.md` | Modified | Marked Phase 3 tasks complete. |
+
+## Verification Results
+
+- Focused work-unit-3 command — `pnpm --filter api test src/routes/__tests__/billing.test.ts src/routes/__tests__/auth.test.ts` → **PASS** (`2 files`, `24 tests`).
+- Full API suite (`DATABASE_URL` → pgvector:pg17) — `pnpm --filter api test` → **PASS** (`Test Files 65 passed`, `Tests 912 passed | 2 skipped (914)`).
+- `pnpm type-check` → **PASS** (all workspaces; fixed one branded-`UserId` boundary cast in `routes/billing.ts`).
+- `pnpm deps-guard` → **PASS**.
+- `pnpm architecture` → **PASS** (`no dependency violations found`, negative guard passed).
+- `pnpm build` → **PASS**.
+
+## Endpoint Shapes (as implemented)
+
+- `GET /billing/usage?period=YYYY-MM` → 200 `{ tenantUsage: TenantQuotaUsageDTO[], memberUsage: MemberQuotaUsageDTO[] }` (owner-only; period defaults to current billing period). 403 `unauthorized_quota_admin` for non-owners; 401 for suspended/no-session.
+- `PUT /billing/allocations` body `SetMemberAllocationRequest { userId, feature, period, limit }` → 200 `{ allocation: MemberAllocationDTO }`. 403 `unauthorized_quota_admin` (non-owner / cross-tenant subject); 422 `allocation_out_of_bounds` (limit > tenant plan cap); 422 `invalid_allocation_request` (malformed body); 401 (suspended/no-session).
+
+## Deviations from Design
+
+- The design File Changes table lists a single `apps/api/src/billing/*` location and mentions `CreateAdminOverride`. Consistent with the Slice 2 deviation (and the `api-no-db-outside-infra` dependency-cruiser rule), the Drizzle adapter lives in `apps/api/src/db/repositories/billing-admin.ts` while the pure use cases stay in `apps/api/src/billing/quota-admin.ts`. `CreateAdminOverride` is **out of Phase-3 scope** (the assigned scenarios are the four named ones; admin overrides belong to the separate "Admin Overrides" requirement) and is intentionally not implemented here.
+- Endpoint naming (`GET /billing/usage`, `PUT /billing/allocations`) was not fixed by the spec; chosen to be RESTful and to reuse the existing `SetMemberAllocationRequest` DTO (userId in body). Tenant id is never accepted from the client — always from authContext.
+
+## Issues Found
+
+- None functionally. One TS branded-type mismatch (`MemberAllocationDTO.userId` is the branded `UserId`, the use case works in plain strings) was fixed by a boundary cast in `routes/billing.ts` — a no-op at runtime.
+- The initial privacy test used a too-broad substring scan that false-matched the legitimate `memory_write` feature enum value; corrected to inspect object KEYS (allowed count keys vs. forbidden content keys) instead of raw serialized substrings.
+
+## Remaining Tasks
+
+- [ ] 4.1–4.3 Web billing UI + i18n + final verify/rollout.
+
+## Workload / PR Boundary
+
+- **Mode**: stacked PR slice (PR3)
+- **Current work unit**: Unit 3 — Trainer/owner quota API + privacy-safe DTOs
+- **Boundary**: Starts after Slice 2 (entitlement/consume/gating) and ends before the Phase 4 web UI/i18n and any Stripe/payment work. No Slice 1/2 schema, entitlement, consume, or gating code changed.
+- **Estimated review budget impact**: New authored production code ~370 lines (use cases + adapter + route + DTOs + app wiring) plus ~440 test lines; within the planned PR3 slice.
