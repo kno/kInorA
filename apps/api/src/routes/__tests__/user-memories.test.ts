@@ -198,17 +198,23 @@ function buildAuditPort() {
   return { port, events };
 }
 
+type ConsumeDecisionLike =
+  | { allowed: true; tier: "free" | "pro"; source: string; period: string }
+  | { allowed: false; reason: string };
+
 async function buildTestApp(options?: {
   tenantId?: string;
   userId?: string;
   store?: InMemoryVectorMemoryStore;
   writerResult?: "stored" | "provider_failure" | "timeout";
   audit?: ReturnType<typeof buildAuditPort>;
+  billingDecision?: ConsumeDecisionLike | (() => Promise<ConsumeDecisionLike>);
 }): Promise<{
   app: FastifyInstance;
   store: InMemoryVectorMemoryStore;
   audit: ReturnType<typeof buildAuditPort>;
   writer: { saveConfirmedMemory: ReturnType<typeof vi.fn> };
+  billing: { checkAndConsume: ReturnType<typeof vi.fn> } | undefined;
 }> {
   const store = options?.store ?? new InMemoryVectorMemoryStore();
   const audit = options?.audit ?? buildAuditPort();
@@ -265,14 +271,29 @@ async function buildTestApp(options?: {
     return reply.code(500).send({ error: "Internal Server Error" });
   });
 
+  let billing: { checkAndConsume: ReturnType<typeof vi.fn> } | undefined;
+  if (options?.billingDecision !== undefined) {
+    const decide = options.billingDecision;
+    billing = {
+      checkAndConsume: vi.fn(async () =>
+        typeof decide === "function" ? await decide() : decide,
+      ),
+    };
+  }
+
   await app.register(authPlugin, {
     db: authDb(options?.tenantId, options?.userId),
   });
   await app.register(userMemoryRoutes, {
-    service: new UserMemoryLifecycleService(store as never, writer as never, audit.port),
+    service: new UserMemoryLifecycleService(
+      store as never,
+      writer as never,
+      audit.port,
+      billing as never,
+    ),
   });
 
-  return { app, store, audit, writer };
+  return { app, store, audit, writer, billing };
 }
 
 describe("userMemoryRoutes", () => {
@@ -606,5 +627,217 @@ describe("userMemoryRoutes", () => {
         { query: "morning workouts", limit: 3 },
       ),
     ).resolves.toEqual([]);
+  });
+
+  // 11a billing — premium memory WRITE gating. The write embeds (provider cost)
+  // and stores a vector row, so it MUST be entitlement/quota-gated BEFORE any
+  // embedding, exactly like plan generation. A denial returns 403 and creates
+  // NO memory row and triggers NO embedding.
+  it("denies a Free-tier memory write with 403 and never embeds or persists", async () => {
+    const built = await buildTestApp({
+      billingDecision: { allowed: false, reason: "premium_required" },
+    });
+    app = built.app;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/user-memories",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: {
+        factText: "Prefers morning workouts",
+        source: "user_confirmation",
+        idempotencyKey: "idem-free",
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: "premium_required" });
+    expect(built.billing?.checkAndConsume).toHaveBeenCalledWith(
+      { tenantId: TENANT_A, userId: USER_A },
+      "memory_write",
+      expect.any(String),
+    );
+    expect(built.writer.saveConfirmedMemory).not.toHaveBeenCalled();
+    expect(built.store.memories).toHaveLength(0);
+  });
+
+  it("denies an expired-trial memory write with 403 (trial_expired) and never embeds", async () => {
+    const built = await buildTestApp({
+      billingDecision: { allowed: false, reason: "trial_expired" },
+    });
+    app = built.app;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/user-memories",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: {
+        factText: "Prefers morning workouts",
+        source: "user_confirmation",
+        idempotencyKey: "idem-trial",
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: "trial_expired" });
+    expect(built.writer.saveConfirmedMemory).not.toHaveBeenCalled();
+    expect(built.store.memories).toHaveLength(0);
+  });
+
+  it("denies a suspended membership memory write with 403 (fail-closed) and never embeds", async () => {
+    const built = await buildTestApp({
+      billingDecision: { allowed: false, reason: "inactive_membership" },
+    });
+    app = built.app;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/user-memories",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: {
+        factText: "Prefers morning workouts",
+        source: "user_confirmation",
+        idempotencyKey: "idem-suspended",
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: "inactive_membership" });
+    expect(built.writer.saveConfirmedMemory).not.toHaveBeenCalled();
+    expect(built.store.memories).toHaveLength(0);
+  });
+
+  it("fails closed (no embed, no row) when the write billing gate throws", async () => {
+    const built = await buildTestApp({
+      billingDecision: async () => {
+        throw new Error("billing backend unavailable");
+      },
+    });
+    app = built.app;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/user-memories",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: {
+        factText: "Prefers morning workouts",
+        source: "user_confirmation",
+        idempotencyKey: "idem-gate-error",
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(built.writer.saveConfirmedMemory).not.toHaveBeenCalled();
+    expect(built.store.memories).toHaveLength(0);
+  });
+
+  it("allows an entitled (Pro) memory write to embed, store, and return 200", async () => {
+    const built = await buildTestApp({
+      billingDecision: { allowed: true, tier: "pro", source: "system", period: "2026-07" },
+    });
+    app = built.app;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/user-memories",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: {
+        factText: "Prefers morning workouts",
+        source: "user_confirmation",
+        idempotencyKey: "idem-pro",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().memory.summary).toBe("Prefers morning workouts");
+    expect(built.billing?.checkAndConsume).toHaveBeenCalledTimes(1);
+    expect(built.writer.saveConfirmedMemory).toHaveBeenCalledTimes(1);
+    expect(built.store.memories).toHaveLength(1);
+  });
+
+  // 11a billing (Round 2) — the memory_write unit must be consumed ONLY for a
+  // write that actually reaches embed+store. Eligibility and disabled-settings
+  // checks precede the consume, so a rejected/disabled write consumes NOTHING.
+  it("does NOT consume a memory_write unit when content is ineligible (eligibility precedes billing)", async () => {
+    const built = await buildTestApp({
+      billingDecision: { allowed: true, tier: "pro", source: "system", period: "2026-07" },
+    });
+    app = built.app;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/user-memories",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: {
+        factText: "I have diabetes",
+        source: "user_confirmation",
+        idempotencyKey: "idem-inelig",
+      },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toEqual({ error: "memory_ineligible", reason: "sensitive_health" });
+    // The unit must NOT be spent on content that stores nothing.
+    expect(built.billing?.checkAndConsume).not.toHaveBeenCalled();
+    expect(built.writer.saveConfirmedMemory).not.toHaveBeenCalled();
+    expect(built.store.memories).toHaveLength(0);
+  });
+
+  it("does NOT consume a memory_write unit when memory is disabled (enabled-check precedes billing)", async () => {
+    const store = new InMemoryVectorMemoryStore();
+    store.settings.set(`${TENANT_A}:${USER_A}`, settingsRow({ enabled: false }));
+    const built = await buildTestApp({
+      store,
+      billingDecision: { allowed: true, tier: "pro", source: "system", period: "2026-07" },
+    });
+    app = built.app;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/user-memories",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: {
+        factText: "Prefers morning workouts",
+        source: "user_confirmation",
+        idempotencyKey: "idem-disabled-billing",
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ error: "memory_disabled" });
+    expect(built.billing?.checkAndConsume).not.toHaveBeenCalled();
+    expect(built.writer.saveConfirmedMemory).not.toHaveBeenCalled();
+    expect(built.store.memories).toHaveLength(0);
+  });
+
+  // Store-failure placement: the consume MUST precede embed+store so a
+  // Free/exhausted tenant can never trigger embedding cost (the CRITICAL
+  // invariant). Consequently a provider/store failure has already consumed the
+  // reserved unit — but the deterministic operationKey guarantees a same-fact
+  // retry REPLAYS the allowed decision (no second consume) and completes the
+  // store, so at most one unit is ever consumed per fact. This test pins the
+  // documented ordering: consume runs exactly once, before the failed store.
+  it("consumes exactly once, before embed, then surfaces a store failure as 503", async () => {
+    const built = await buildTestApp({
+      writerResult: "provider_failure",
+      billingDecision: { allowed: true, tier: "pro", source: "system", period: "2026-07" },
+    });
+    app = built.app;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/user-memories",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: {
+        factText: "Prefers morning workouts",
+        source: "user_confirmation",
+        idempotencyKey: "idem-store-fail",
+      },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ error: "memory_unavailable" });
+    expect(built.billing?.checkAndConsume).toHaveBeenCalledTimes(1);
+    expect(built.store.memories).toHaveLength(0);
   });
 });

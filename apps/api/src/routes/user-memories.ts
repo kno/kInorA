@@ -48,12 +48,21 @@ export const userMemoryRoutes: FastifyPluginAsync<UserMemoryRoutesOptions> = asy
         return reply.code(422).send({ error: "invalid_user_memory_request" });
       }
 
+      // 11a billing: the premium `memory_write` gate lives INSIDE
+      // createConfirmed — it consumes the unit after eligibility + enabled pass
+      // and just before embed+store, so an entitlement/quota denial still blocks
+      // before any embedding cost while a rejected/disabled write spends
+      // nothing. A denial surfaces here as a 403 (kind "denied"); a gate
+      // technical error propagates as a 500 (fail-closed).
       const result = await service.createConfirmed(authScope(request), body);
       if (result.kind === "stored") {
         return reply.code(200).send({ memory: result.memory });
       }
       if (result.kind === "rejected") {
         return reply.code(422).send({ error: "memory_ineligible", reason: result.reason });
+      }
+      if (result.kind === "denied") {
+        return reply.code(403).send({ error: result.reason });
       }
       if (result.reason === "disabled") {
         return reply.code(409).send({ error: "memory_disabled" });
