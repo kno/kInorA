@@ -1,0 +1,1 @@
+ALTER TABLE "billing_usage_ledger" ADD COLUMN "member_counter_credited" boolean DEFAULT false NOT NULL;

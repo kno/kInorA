@@ -6,6 +6,8 @@ import {
   type QuotaLedgerConsumeInput,
   type QuotaLedgerConsumeResult,
   type QuotaLedgerPort,
+  type QuotaLedgerRefundInput,
+  type QuotaLedgerRefundResult,
 } from "../quota-consumption.js";
 
 const NOW = new Date("2026-07-23T12:00:00.000Z");
@@ -28,14 +30,17 @@ class FakeLedger implements QuotaLedgerPort {
   memberAllocations = new Map<string, number>();
   private memberUsed = new Map<string, number>();
   consumeSpy = vi.fn();
+  refundSpy = vi.fn();
 
-  private tenantKey(i: QuotaLedgerConsumeInput) {
+  private tenantKey(i: Pick<QuotaLedgerConsumeInput, "scope" | "feature" | "period">) {
     return `${i.scope.tenantId}:${i.feature}:${i.period}`;
   }
-  private memberKey(i: QuotaLedgerConsumeInput) {
+  private memberKey(i: Pick<QuotaLedgerConsumeInput, "scope" | "feature" | "period">) {
     return `${i.scope.tenantId}:${i.scope.userId}:${i.feature}:${i.period}`;
   }
-  private opKey(i: QuotaLedgerConsumeInput) {
+  private opKey(
+    i: Pick<QuotaLedgerConsumeInput, "scope" | "feature" | "period" | "operationKey">,
+  ) {
     return `${this.memberKey(i)}:${i.operationKey}`;
   }
 
@@ -83,6 +88,29 @@ class FakeLedger implements QuotaLedgerPort {
     this.ledger.set(opKey, { decision: "allowed" });
     return { outcome: "consumed" };
     // --- end atomic critical section ---
+  }
+
+  /**
+   * Compensation: reverse a prior FRESH `allowed` consume. Mirrors the
+   * production transaction — delete the idempotency ledger row and decrement
+   * both counters (guarded at 0). A non-existent or non-`allowed` row is a
+   * no-op, which also makes a double-refund safe.
+   */
+  async refund(input: QuotaLedgerRefundInput): Promise<QuotaLedgerRefundResult> {
+    this.refundSpy(input);
+    const opKey = this.opKey(input);
+    const existing = this.ledger.get(opKey);
+    if (!existing || existing.decision !== "allowed") {
+      return { outcome: "noop" };
+    }
+    this.ledger.delete(opKey);
+    const tKey = this.tenantKey(input);
+    const mKey = this.memberKey(input);
+    this.tenantUsed.set(tKey, Math.max((this.tenantUsed.get(tKey) ?? 0) - 1, 0));
+    if (this.memberAllocations.has(mKey)) {
+      this.memberUsed.set(mKey, Math.max((this.memberUsed.get(mKey) ?? 0) - 1, 0));
+    }
+    return { outcome: "refunded" };
   }
 }
 
@@ -191,6 +219,120 @@ describe("CheckAndConsumeQuota", () => {
     expect(specBRetry).toMatchObject({ allowed: true, tier: "pro" });
     // specA + the re-evaluated specB.
     expect(ledger.tenantUsage("t", "plan_generation", PERIOD)).toBe(2);
+  });
+
+  it("marks a fresh consume with replayed=false and an idempotent replay with replayed=true", async () => {
+    const ledger = new FakeLedger();
+    const uc = new CheckAndConsumeQuota(allowEntitlement("pro"), ledger);
+
+    const fresh = await uc.checkAndConsume({ tenantId: "t", userId: "u" }, "memory_write", "op-R", NOW);
+    const replay = await uc.checkAndConsume({ tenantId: "t", userId: "u" }, "memory_write", "op-R", NOW);
+
+    // The service uses this discriminator to compensate ONLY what THIS call
+    // freshly consumed — a replay's unit belongs to the prior attempt.
+    expect(fresh).toMatchObject({ allowed: true, replayed: false });
+    expect(replay).toMatchObject({ allowed: true, replayed: true });
+  });
+
+  describe("refund (memory_write compensation, #174)", () => {
+    it("releases a freshly consumed unit so a later same-key attempt can consume again (net one)", async () => {
+      const ledger = new FakeLedger();
+      const uc = new CheckAndConsumeQuota(allowEntitlement("pro"), ledger);
+      const scope = { tenantId: "t", userId: "u" };
+
+      const consumed = await uc.checkAndConsume(scope, "memory_write", "mw:fact-1", NOW);
+      expect(consumed).toMatchObject({ allowed: true, replayed: false, period: PERIOD });
+      expect(ledger.tenantUsage("t", "memory_write", PERIOD)).toBe(1);
+
+      // Terminal store failure after a FRESH consume → compensate, threading
+      // the DECISION's own period (#174 FIX B) — never a re-derived one.
+      const refund = await uc.refund(scope, "memory_write", "mw:fact-1", (consumed as { period: string }).period);
+      expect(refund).toEqual({ outcome: "refunded" });
+      expect(ledger.tenantUsage("t", "memory_write", PERIOD)).toBe(0);
+
+      // A later attempt for the SAME fact re-consumes (the ledger row was voided)
+      // and succeeds → exactly one unit per stored memory.
+      const retry = await uc.checkAndConsume(scope, "memory_write", "mw:fact-1", NOW);
+      expect(retry).toMatchObject({ allowed: true, replayed: false });
+      expect(ledger.tenantUsage("t", "memory_write", PERIOD)).toBe(1);
+    });
+
+    it("is a safe no-op when the operation key was never consumed (nothing to release)", async () => {
+      const ledger = new FakeLedger();
+      const uc = new CheckAndConsumeQuota(allowEntitlement("pro"), ledger);
+
+      const refund = await uc.refund({ tenantId: "t", userId: "u" }, "memory_write", "mw:never", PERIOD);
+
+      expect(refund).toEqual({ outcome: "noop" });
+      expect(ledger.tenantUsage("t", "memory_write", PERIOD)).toBe(0);
+    });
+
+    it("guards against double-refund (second refund is a no-op, counter never goes negative)", async () => {
+      const ledger = new FakeLedger();
+      const uc = new CheckAndConsumeQuota(allowEntitlement("pro"), ledger);
+      const scope = { tenantId: "t", userId: "u" };
+
+      await uc.checkAndConsume(scope, "memory_write", "mw:dbl", NOW);
+      const first = await uc.refund(scope, "memory_write", "mw:dbl", PERIOD);
+      const second = await uc.refund(scope, "memory_write", "mw:dbl", PERIOD);
+
+      expect(first).toEqual({ outcome: "refunded" });
+      expect(second).toEqual({ outcome: "noop" });
+      expect(ledger.tenantUsage("t", "memory_write", PERIOD)).toBe(0);
+    });
+
+    it("rejects an empty operation key without touching the ledger", async () => {
+      const ledger = new FakeLedger();
+      const uc = new CheckAndConsumeQuota(allowEntitlement("pro"), ledger);
+
+      const refund = await uc.refund({ tenantId: "t", userId: "u" }, "memory_write", "  ", PERIOD);
+
+      expect(refund).toEqual({ outcome: "noop" });
+      expect(ledger.refundSpy).not.toHaveBeenCalled();
+    });
+
+    it("also releases the per-member allocation counter, not only the tenant aggregate", async () => {
+      const ledger = new FakeLedger();
+      ledger.setMemberAllocation("t", "u", "memory_write", PERIOD, 5);
+      const uc = new CheckAndConsumeQuota(allowEntitlement("pro"), ledger);
+      const scope = { tenantId: "t", userId: "u" };
+
+      await uc.checkAndConsume(scope, "memory_write", "mw:alloc", NOW);
+      expect(ledger.tenantUsage("t", "memory_write", PERIOD)).toBe(1);
+      expect(ledger.memberUsage("t", "u", "memory_write", PERIOD)).toBe(1);
+
+      await uc.refund(scope, "memory_write", "mw:alloc", PERIOD);
+      expect(ledger.tenantUsage("t", "memory_write", PERIOD)).toBe(0);
+      expect(ledger.memberUsage("t", "u", "memory_write", PERIOD)).toBe(0);
+    });
+
+    // #174 FIX B: the void MUST target the period the consume actually
+    // charged — threaded from the decision — never a period re-derived from
+    // whatever "now" happens to be when the void runs. Otherwise a request
+    // that crosses a billing-period boundary between consume and the
+    // compensating void would target the WRONG (new) period, find nothing to
+    // reverse, and leak the OLD period's unit forever.
+    it("targets the EXACT period threaded by the caller — a wrong/boundary-crossed period is a safe no-op, never a cross-period leak", async () => {
+      const ledger = new FakeLedger();
+      const uc = new CheckAndConsumeQuota(allowEntitlement("pro"), ledger);
+      const scope = { tenantId: "t", userId: "u" };
+
+      const consumed = await uc.checkAndConsume(scope, "memory_write", "mw:boundary", NOW);
+      expect(consumed).toMatchObject({ allowed: true, period: PERIOD });
+      expect(ledger.tenantUsage("t", "memory_write", PERIOD)).toBe(1);
+
+      // Simulates the request handler running the void AFTER a month
+      // boundary: passing a freshly-derived "next period" instead of the
+      // decision's own period must NOT release the unit reserved in PERIOD.
+      const wrongPeriodRefund = await uc.refund(scope, "memory_write", "mw:boundary", "2026-08");
+      expect(wrongPeriodRefund).toEqual({ outcome: "noop" });
+      expect(ledger.tenantUsage("t", "memory_write", PERIOD)).toBe(1);
+
+      // Threading the decision's OWN period releases it correctly.
+      const correctPeriodRefund = await uc.refund(scope, "memory_write", "mw:boundary", PERIOD);
+      expect(correctPeriodRefund).toEqual({ outcome: "refunded" });
+      expect(ledger.tenantUsage("t", "memory_write", PERIOD)).toBe(0);
+    });
   });
 
   it("is race-safe: two members contending for the final tenant unit yield exactly one success", async () => {
