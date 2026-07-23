@@ -296,3 +296,74 @@ None — implementation matches the approved Slice 1 design boundary.
 
 - [x] RED — new tests reproduce both WARNING findings against pre-fix code (isolated via `git stash`).
 - [x] GREEN — both fixes applied; focused tests, full API suite, type-check, architecture, deps-guard, and build all pass; cumulative correction changed-line count (148) confirmed under the 200-line budget.
+
+---
+
+## Judgment Day — Round 1 Correction
+
+Two authorized findings fixed under Strict TDD (RED → GREEN). Branch `feat/11a-billing-plans-tiers-slice2`, HEAD `d49a26c`, PR #167. No commit/push performed.
+
+### FIX 1 (CRITICAL) — Premium `memory_write` was entirely ungated
+
+**Defect**: `POST /user-memories` called `UserMemoryLifecycleService.createConfirmed` with NO billing gate. The `memoryEntitlement` gate was wired only into `PlanGenerationService` retrieval (`memory_retrieval`), never the write path. A Free-tier tenant (`memory_write=0`), an expired-trial tenant, or a suspended member could store a vector memory and incur embedding-provider cost with no entitlement/quota check — directly violating the spec scenarios "Expired trial blocks premium memory write" and "Suspended membership blocks memory write".
+
+**Fix**: Injected a `MemoryBillingGate` into the write route (mirrors `PlanBillingGate`). `POST /user-memories` now calls `checkAndConsume(scope, "memory_write", operationKey)` AFTER body-shape validation and BEFORE `createConfirmed` (which owns embed + store), so a denial creates no row and triggers no embedding. Denial → HTTP 403 `{ error: <reason> }`. A gate technical error propagates (→ 500) rather than being swallowed — the write path fails CLOSED. Wired through the `app.ts` composition root against the shared `checkAndConsumeQuota`.
+
+- **operationKey strategy**: prefer the `Idempotency-Key` header; deterministic fallback `memory_write:${body.idempotencyKey}`. The request already carries a required non-empty `idempotencyKey`, so a re-confirm of the same fact consumes at most one `memory_write` unit — consistent with the confirm route's deterministic-key contract.
+- **Files**: `apps/api/src/routes/user-memories.ts` (gate + `MemoryBillingGate` type + `resolveOperationKey`), `apps/api/src/app.ts` (composition-root wiring).
+- **RED**: `apps/api/src/routes/__tests__/user-memories.test.ts` — 5 new failing assertions (Free 403 + no embed/row; expired-trial 403; suspended fail-closed 403; gate-throws → 500 fail-closed; entitled Pro write succeeds). RED output: `expected 200 to be 403` ×3, `expected 200 to be 500`, `spy called 0 times`.
+- **GREEN**: `pnpm --filter api test src/routes/__tests__/user-memories.test.ts` → 45 passed.
+
+### FIX 2 (WARNING) — Cached capacity-exhaustion denial locked out a later-entitled retry
+
+**Defect**: `QuotaLedgerRepository.consume` persisted `denied` ledger rows for `tenant_quota_exhausted` / `member_allocation_exhausted`, and the in-transaction idempotency re-check replayed ANY prior row. Under the deterministic confirm key `plan_generation:<id>`, a mid-period upgrade/override could not clear the stale 403 — the retry replayed the old denial for the rest of the period.
+
+**Fix**: Capacity-exhaustion denials are TRANSIENT (they reflect current period usage vs. currently-resolved limit, both of which change mid-period) and consume nothing, so they are no longer written to the idempotency ledger. A same-key retry after an upgrade is re-evaluated against current entitlement/quota. Terminal `inactive_membership` denials remain persisted/sticky (fail-closed), as authorized. The two proven invariants are preserved: (i) a concurrent duplicate of an ALLOWED consume still replays exactly once (allowed rows are still written), and (ii) empty-key rejection and fail-closed membership checks are untouched.
+
+- **Files**: `apps/api/src/db/repositories/billing-quota.ts` (drop `writeLedger` for the two capacity denials).
+- **RED**: `apps/api/src/db/repositories/__tests__/billing-quota.integration.test.ts` — new real-Postgres test: Free exhausts `plan_generation` on spec A, spec B denied, upgrade to Pro, same-key retry of spec B. RED output: `expected 'replayed' to be 'consumed'`. Companion hermetic unit test added in `apps/api/src/billing/__tests__/quota-consumption.test.ts` (FakeLedger kept faithful to production).
+- **GREEN**: integration suite → 4 passed / 1 skipped (incl. both preserved invariants: concurrent same-key exactly-once, mid-period downgrade denial); `quota-consumption.test.ts` → 8 passed.
+
+### Gate results (post-fix)
+
+- Full API suite (`pnpm --filter api test`, `DATABASE_URL` wired to pgvector:pg17): **891 passed, 1 skipped**.
+- `pnpm type-check`: **pass** (6 projects). `pnpm architecture`: **pass** (no violations; negative guard passed). `pnpm deps-guard`: **pass**. `pnpm build`: **pass**.
+
+### Changed-line count
+
+Production: `user-memories.ts` +56/-3, `app.ts` +10/-1, `billing-quota.ts` +11/-2 = ~76 changed production lines. Including tests + `tasks.md`: ~292 insertions across 7 files. Both fixes are independently reversible (route/app wiring for FIX 1; a single ledger-adapter change for FIX 2).
+
+---
+
+## Judgment Day — Round 2 Correction
+
+Round-1 re-judgment (both judges) confirmed FIX 1 and FIX 2 RESOLVED, and found ONE fix-caused WARNING (corroborated by both judges). Fixed here under Strict TDD (RED → GREEN). No commit/push.
+
+### FIX (fix-caused WARNING) — `memory_write` was consumed before eligibility/enabled/store
+
+**Defect (introduced by Round-1 FIX 1)**: the Round-1 gate ran in the POST route BEFORE `createConfirmed`. Eligibility classification (422), disabled-settings (409), and embed/store all happen INSIDE `createConfirmed`, AFTER the consume. So a Pro tenant submitting ineligible content or with memory disabled consumed a `memory_write` unit that stored nothing; because the operation key is deterministic, a retry replayed `allowed` and the unit stayed spent.
+
+**Fix**: Moved the gate OUT of the route and INTO `UserMemoryLifecycleService.createConfirmed`, injected via the service constructor. The consume now runs AFTER the eligibility + enabled checks pass and JUST BEFORE `writer.saveConfirmedMemory` (the embed+store step). A denial returns a new `{ kind: "denied"; reason }` outcome that the route maps to the same 403. A gate technical error propagates (→ 500): the write still fails CLOSED. The operation key remains deterministic (`memory_write:${idempotencyKey}`), built inside the service (the HTTP `Idempotency-Key` header override was dropped — the service is HTTP-agnostic and the body key already gives at-most-once consume).
+
+**Consume placement chosen**: single-phase, consume-before-embed (the delegate's preferred approach). This is REQUIRED by the Round-1 CRITICAL invariant — consuming before embedding is the only way to guarantee a Free/expired/suspended/exhausted tenant never triggers embedding cost. Consequence: a provider/store failure has already consumed the reserved unit. This is a deliberate, documented cost tradeoff and is self-healing: the deterministic key makes a same-fact retry REPLAY the prior `allowed` decision (no second consume) and complete the store, so at most one unit is ever consumed per fact; only a fact that fails embedding AND is never retried leaves one unit spent. The alternative (entitlement-check pre-embed + consume post-store) was rejected because a concurrent capacity race could store a row while "denying", which is a worse regression against the CRITICAL no-row-on-denial guarantee.
+
+- **Error-precedence change (expected/accepted)**: a Free tenant submitting ineligible content now returns 422 (eligibility) rather than 403 (billing), because eligibility precedes the consume. Tests assert this ordering.
+- **Files**: `apps/api/src/user-memory/service.ts` (+48: `MemoryWriteBillingGate` port, `denied` outcome + audit outcome, constructor gate, consume call), `apps/api/src/routes/user-memories.ts` (removed route gate/`MemoryBillingGate`/`resolveOperationKey`; added `kind === "denied"` → 403), `apps/api/src/app.ts` (gate moved from route registration to service constructor). ~66 net changed production lines (round-2 delta; the route is now leaner than round-1).
+- **RED**: `apps/api/src/routes/__tests__/user-memories.test.ts` — new tests: (1) Pro + ineligible → 422 and `checkAndConsume` NOT called; (2) Pro + disabled → 409 and NOT called. Both RED against the route-gated code (`checkAndConsume` was called once). Store-failure guard: consume runs exactly once before the failed store → 503.
+- **GREEN**: `pnpm --filter api test src/routes/__tests__/user-memories.test.ts` → 48 passed (incl. preserved Round-1 regressions: Free/expired-trial/suspended still denied 403 before embedding with no row; entitled eligible write still succeeds and consumes exactly once).
+
+### Hard-constraint verification (no regressions)
+
+- CRITICAL still resolved: entitlement/quota denial returns before `saveConfirmedMemory`, so no embedding and no `vector_memory` row for Free (limit 0) / expired-trial / suspended-membership. Verified by the Round-1 tests (still green) plus the new placement (consume is immediately before embed).
+- Fail-closed on gate technical error preserved (throw → 500, before embed/store).
+- Deterministic operation key preserved → same-fact retry consumes at most once; a rejected/ineligible/disabled write now consumes NOTHING, so its retry is re-evaluated (not replayed).
+- Round-1 FIX 2 (capacity-denial non-persistence) and `billing-quota.ts` consume/idempotency/limit logic untouched.
+
+### Gate results (post-fix)
+
+- Full API suite (`DATABASE_URL` → pgvector:pg17): **894 passed, 1 skipped**.
+- `pnpm type-check`: **pass**. `pnpm architecture`: **pass** (service→`billing/types` import allowed by the guard). `pnpm deps-guard`: **pass**. `pnpm build`: **pass**.
+
+### Residual risk
+
+- Documented single-unit reservation on an abandoned embed/store failure (self-healing on retry via the deterministic key). Accepted for the cost-safety reason above.

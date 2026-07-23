@@ -64,13 +64,15 @@ class FakeLedger implements QuotaLedgerPort {
     const allocation = this.memberAllocations.get(mKey);
     const mUsed = this.memberUsed.get(mKey) ?? 0;
 
+    // Capacity-exhaustion denials are TRANSIENT and are NOT persisted to the
+    // idempotency ledger (mirrors QuotaLedgerRepository.consume): nothing was
+    // consumed, so a same-key retry after an upgrade/allocation bump is safely
+    // re-evaluated against current entitlement instead of replaying a stale 403.
     if (tUsed >= input.tenantLimit) {
-      this.ledger.set(opKey, { decision: "denied", reason: "tenant_quota_exhausted" });
       return { outcome: "denied", reason: "tenant_quota_exhausted" };
     }
     if (allocation !== undefined && mUsed >= allocation) {
       // member cap reached — tenant counter MUST NOT move (all-or-nothing)
-      this.ledger.set(opKey, { decision: "denied", reason: "member_allocation_exhausted" });
       return { outcome: "denied", reason: "member_allocation_exhausted" };
     }
 
@@ -167,6 +169,28 @@ describe("CheckAndConsumeQuota", () => {
     // Atomicity: the denied attempt did NOT advance the tenant aggregate beyond the allowed one.
     expect(ledger.tenantUsage("t", "memory_write", PERIOD)).toBe(1);
     expect(ledger.memberUsage("t", "u", "memory_write", PERIOD)).toBe(1);
+  });
+
+  it("does not cache a capacity-exhaustion denial: a same-key retry after an upgrade is re-evaluated and consumes", async () => {
+    const ledger = new FakeLedger();
+    // Free tenant with a plan_generation pool of 1.
+    const free = new CheckAndConsumeQuota(allowEntitlement("free"), ledger);
+
+    // Spec A consumes the sole Free unit; spec B is denied (pool exhausted).
+    const specA = await free.checkAndConsume({ tenantId: "t", userId: "u" }, "plan_generation", "plan_generation:A", NOW);
+    const specBDenied = await free.checkAndConsume({ tenantId: "t", userId: "u" }, "plan_generation", "plan_generation:B", NOW);
+    expect(specA).toMatchObject({ allowed: true });
+    expect(specBDenied).toEqual({ allowed: false, reason: "tenant_quota_exhausted" });
+
+    // Mid-period upgrade to Pro over the SAME ledger. Retrying spec B with the
+    // SAME deterministic key must be re-evaluated (Pro pool has room) and
+    // consume — NOT replay the stale capacity denial.
+    const pro = new CheckAndConsumeQuota(allowEntitlement("pro"), ledger);
+    const specBRetry = await pro.checkAndConsume({ tenantId: "t", userId: "u" }, "plan_generation", "plan_generation:B", NOW);
+
+    expect(specBRetry).toMatchObject({ allowed: true, tier: "pro" });
+    // specA + the re-evaluated specB.
+    expect(ledger.tenantUsage("t", "plan_generation", PERIOD)).toBe(2);
   });
 
   it("is race-safe: two members contending for the final tenant unit yield exactly one success", async () => {

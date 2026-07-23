@@ -215,7 +215,15 @@ export async function buildApp(
   const userMemoryService = new UserMemoryLifecycleService(
     vectorMemoryRepo,
     vectorMemoryWriter,
-    consoleUserMemoryAuditPort
+    consoleUserMemoryAuditPort,
+    // Premium write gate: check + consume `memory_write` after eligibility +
+    // enabled pass and just before embed+store. A denial (Free tier limit 0,
+    // expired trial, suspended membership) blocks before any embedding and
+    // returns 403; production always wires this, so the write fails closed.
+    {
+      checkAndConsume: (scope, feature, operationKey) =>
+        checkAndConsumeQuota.checkAndConsume(scope, feature, operationKey),
+    }
   );
 
   // Plan wizard + generation routes (draft, promote, confirm, regenerate, fetch).

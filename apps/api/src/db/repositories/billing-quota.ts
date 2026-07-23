@@ -198,13 +198,22 @@ export class QuotaLedgerRepository implements QuotaLedgerPort {
       // (CheckAndConsumeQuota) always re-resolves tenantLimit from the
       // current entitlement on every call, so comparing against it here
       // fixes CRITICAL 2.
+      // Capacity-exhaustion denials (`tenant_quota_exhausted`,
+      // `member_allocation_exhausted`) are TRANSIENT: they reflect the current
+      // period usage against the currently-resolved limit, both of which can
+      // change mid-period (upgrade, admin override, per-member allocation bump).
+      // They are therefore NOT persisted to the idempotency ledger — persisting
+      // them would replay the stale 403 on a legitimate retry even after the
+      // tenant is entitled, locking the actor out for the rest of the period
+      // under the deterministic confirm key. No counter advanced, so there is
+      // nothing to make idempotent; the retry is safely re-evaluated against
+      // current entitlement/quota. Terminal denials (inactive_membership) still
+      // persist below — they are fail-closed and intentionally sticky.
       const tenantUsed = tenantCounter?.used ?? 0;
       if (tenantUsed >= tenantLimit) {
-        await this.writeLedger(tx, input, "denied", "tenant_quota_exhausted");
         return { outcome: "denied", reason: "tenant_quota_exhausted" };
       }
       if (allocationLimit !== null && memberCounterUsed >= allocationLimit) {
-        await this.writeLedger(tx, input, "denied", "member_allocation_exhausted");
         return { outcome: "denied", reason: "member_allocation_exhausted" };
       }
 
