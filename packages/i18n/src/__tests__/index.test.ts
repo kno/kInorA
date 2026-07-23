@@ -100,8 +100,35 @@ describe("@kinora/i18n package assembly", () => {
     // + 5 `wizard.preferences.*` keys authored in 10a Slice 5 for the
     // defaults step title/labels and preferences-save error feedback.
     // + 39 `memory.*` keys authored in 10b for the memory-management surface.
+    //
+    // NOTE (review correction, 11a Phase 4 / Slice 4): this whole-catalog
+    // magic total is intentionally FROZEN at 609 (its value before the
+    // `billing.*` namespace was added) by excluding `billing.*` keys from
+    // this count, rather than bumping the total again. A global total that
+    // every future namespace addition must edit is exactly the brittleness
+    // flagged in review — it breaks on ANY unrelated key addition, not just
+    // regressions. New namespaces from here on should add their OWN scoped
+    // count test (see "the billing namespace is present with EN+ES parity"
+    // below, mirroring the mobileTracker pattern) and exclude themselves
+    // here, instead of bumping this number.
     const flat = flattenMessages(catalogs.en);
-    expect(Object.keys(flat)).toHaveLength(609);
+    const nonBillingKeys = Object.keys(flat).filter((key) => !key.startsWith("billing."));
+    expect(nonBillingKeys).toHaveLength(609);
+  });
+
+  it("the billing namespace is present with EN+ES parity (11a Phase 4 / Slice 4)", () => {
+    expect(catalogs.en.billing).toBeDefined();
+    expect(catalogs.es.billing).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+
+    const en = flattenMessages(catalogs.en);
+    const es = flattenMessages(catalogs.es);
+    const billingKeys = Object.keys(en).filter((key) => key.startsWith("billing."));
+    expect(billingKeys).toHaveLength(34);
+    expect(en["billing.tier.free"]).toBe("Free");
+    expect(es["billing.tier.free"]).toBe("Gratis");
   });
 
   it("ships the accepted profile + wizard preference keys in both catalogs", () => {

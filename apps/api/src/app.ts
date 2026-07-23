@@ -57,9 +57,11 @@ import {
   QuotaLedgerRepository,
 } from "./db/repositories/billing-quota.js";
 import { BillingAdminRepository } from "./db/repositories/billing-admin.js";
+import { BillingVisibilityRepository } from "./db/repositories/billing-visibility.js";
 import { CheckEntitlement } from "./billing/entitlement.js";
 import { CheckAndConsumeQuota } from "./billing/quota-consumption.js";
 import { SetMemberAllocation, GetTenantUsage } from "./billing/quota-admin.js";
+import { GetBillingVisibility } from "./billing/billing-visibility.js";
 import { billingRoutes } from "./routes/billing.js";
 
 export interface BuildAppOptions {
@@ -306,16 +308,20 @@ export async function buildApp(
   });
   await app.register(userMemoryRoutes, { service: userMemoryService });
 
-  // 11a billing quota-administration routes (Phase 3).
-  // Owner/trainer-only endpoints to set per-member allocations (audited) and
-  // read aggregate/member usage COUNTS. The Drizzle adapter lives in the infra
-  // layer; the pure use cases depend only on its port. Tenant + actor identity
-  // are read from authContext inside the route, so these can only ever touch the
-  // caller's own active tenant, and they never expose member private content.
+  // 11a billing routes (Phase 3 quota administration + Phase 4 member
+  // visibility). Owner-only endpoints set per-member allocations (audited)
+  // and read aggregate/member usage COUNTS; the visibility endpoint is open
+  // to ANY active member and returns tenant billing state + the requester's
+  // OWN usage only. Drizzle adapters live in the infra layer; the pure use
+  // cases depend only on their ports. Tenant + actor identity are read from
+  // authContext inside the route, so these can only ever touch the caller's
+  // own active tenant, and they never expose member private content.
   const billingAdminRepo = new BillingAdminRepository(database);
+  const billingVisibilityRepo = new BillingVisibilityRepository(database);
   await app.register(billingRoutes, {
     setMemberAllocation: new SetMemberAllocation(billingAdminRepo),
     getTenantUsage: new GetTenantUsage(billingAdminRepo),
+    getBillingVisibility: new GetBillingVisibility(billingVisibilityRepo),
   });
 
   // WebSocket plugin + authenticated plan-status route.

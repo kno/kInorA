@@ -473,3 +473,246 @@ method that could surface member content — enforcing the boundary structurally
 - **Current work unit**: Unit 3 — Trainer/owner quota API + privacy-safe DTOs
 - **Boundary**: Starts after Slice 2 (entitlement/consume/gating) and ends before the Phase 4 web UI/i18n and any Stripe/payment work. No Slice 1/2 schema, entitlement, consume, or gating code changed.
 - **Estimated review budget impact**: New authored production code ~370 lines (use cases + adapter + route + DTOs + app wiring) plus ~440 test lines; within the planned PR3 slice.
+
+---
+
+# Apply Progress: 11a-billing-plans-tiers — Slice 4
+
+**Batch**: Slice 4 / Phase 4 — web billing UI + i18n + member-facing visibility endpoint
+**Delivery**: chained PR slice (`stacked-to-main`), stacked on Slice 3
+**Mode**: Strict TDD
+**Status**: Slice 4 complete — Phase 4 tasks 4.1, 4.2, 4.3 are `[x]`
+
+---
+
+## Scope-gap resolution — member-facing `GET /billing/visibility` added under Phase 4
+
+The pre-implementation scope check found that Slice 3 shipped only an OWNER-ONLY,
+counts-only `GET /billing/usage`. The spec `Billing State Visibility` requirement
+(`specs/11a-v1-billing-plans-tiers/spec.md:69-71`) explicitly says **"The UI AND API
+SHOULD expose tenant tier, status, trial end, active override end, denial reason,
+upgrade prompt destination, tenant usage total, and requesting member allocation
+usage"** — i.e. the member-facing read is itself part of this Phase 4 requirement, not
+a new/invented backend endpoint. `BillingVisibilityDTO` / `TenantBillingStateDTO`
+already existed in `packages/contracts/src/index.ts` (Slice 1) but were unwired by any
+route. The orchestrator confirmed this reading and authorized wiring it as part of
+Phase 4. Implemented BOTH parts below in one Strict-TDD batch.
+
+## TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 4.1 (API) | `apps/api/src/routes/__tests__/billing-visibility.test.ts` | Unit (route + use case via fake port) | ✅ Full API suite baseline (912 passed / 8 skipped pre-slice) | ✅ First run → `Cannot find module '../../billing/billing-visibility.js'` — the target module did not exist | ✅ After implementing `GetBillingVisibility` (pure use case), `BillingVisibilityRepository` (Drizzle adapter), and the `GET /billing/visibility` route → **6/6 passed** | ✅ Own-usage-only privacy (second member never sees the first member's usage), suspended-member 401 (auth re-check) + `loadContext` never called, trial-badge fields present, backfilled-Free deterministic state + upgrade prompt, no-session 401 | ✅ Reused `resolveEffectiveTier` from `entitlement.ts`; kept `readOwnMemberUsage` structurally scoped to the caller's own `userId` |
+| 4.1 (i18n) | `packages/i18n/src/__tests__/index.test.ts` (updated), `apps/web/src/app/(app)/billing/__tests__/*` | Unit | ✅ i18n suite baseline (29 passed) | ✅ Web tests referenced not-yet-existing `billing-client.ts`/`page.tsx`/`BillingPageClient.tsx` — module-not-found RED; i18n key-count assertion updated in the SAME commit as the new keys (parity guard would fail on mismatched EN/ES key sets) | ✅ Added 34 `billing.*` keys to BOTH `en.json`/`es.json`; i18n suite **29/29 passed**, key count **643** | ✅ `validateCatalogParity` passes for the full catalog including ICU placeholder parity on `billing.trial.badge` ({daysRemaining} plural) and `billing.usage.row` ({feature}/{used}/{limit}) | ✅ Namespace mirrors the existing `memory.*` structure (loading/states/controls-equivalent groups) |
+| 4.2 (web) | `apps/web/src/app/(app)/billing/__tests__/{billing-client,page,BillingPageClient}.test.tsx` | Unit (server-only client, server component, client component w/ real EN catalog via `renderWithIntl`) | ✅ Full web suite baseline (856 passed pre-slice, includes existing memory/page suites) | ✅ 3 RED files: module-not-found for `../billing-client`, `../page`, `../BillingPageClient.js` | ✅ Implemented `billing-client.ts` (server-only fetch + DTO guard), `actions.ts` (Server Action reading `SESSION_COOKIE`), `page.tsx` (server component), `BillingPageClient.tsx` (tier/status/trial badge, usage rows, upgrade prompt, loading/empty/error/offline states), `loading.tsx` → **17/17 new tests passed** (7 client-fetch + 2 page + 8 client-component) | ✅ Own-tenant-only usage rendering, empty-usage state, upgrade-link presence/absence gated on `denialReason`, accessible retry-focus on error/offline, `progressbar`/`status` roles on loading, tenant-switch refresh via `window.focus`/`visibilitychange` replacing (never merging) state | ✅ Mirrors `apps/web/src/app/(app)/memory/*` file layout and offline/online-detection pattern exactly |
+| 4.3 (verify) | full suites + gates + runtime smoke + real-Postgres integration | Integration/system | ✅ See Verification Results below | ✅ N/A (verification-only task) | ✅ All gates green | ✅ Production `next start` smoke against an unreachable API proved the real (non-jsdom) offline/error path renders correctly; podman pgvector:pg17 proved `BillingVisibilityRepository` for real (override resolution + own-usage-only isolation across two real members) | ✅ N/A |
+
+## Test Summary
+
+- **Total tests written**: 6 (API `billing-visibility.test.ts`) + 4 real-Postgres (`billing-visibility.integration.test.ts`, +1 skip-placeholder) + 7 (`billing-client.test.ts`) + 2 (`page.test.tsx`) + 8 (`BillingPageClient.test.tsx`) = 27 new tests, plus 1 updated i18n key-count assertion and 2 files (`billing.test.ts`, `app.ts` billing route options) adjusted to satisfy the new required `getBillingVisibility` option without changing Slice 3 behavior
+- **Total tests passing**: Full API suite with `DATABASE_URL` wired (podman pgvector:pg17) — `922 passed | 3 skipped` (67 files); full web suite `856 passed` (100 files); i18n suite `29 passed` (5 files)
+- **Layers used**: Unit (API route + use case via fake port; web server-only client; web server component; web client component with the REAL EN catalog via `renderWithIntl`) + real-Postgres integration (`BillingVisibilityRepository`) + a real (non-jsdom) production Next.js runtime smoke
+- **Approval tests**: None — additive slice
+- **Pure functions/use cases created**: `GetBillingVisibility` (pure, port-only)
+
+## Work Unit Evidence
+
+| Evidence | Exact result |
+|---|---|
+| Focused test command and exact result | `pnpm --filter api test src/routes/__tests__/billing-visibility.test.ts src/routes/__tests__/billing.test.ts src/routes/__tests__/auth.test.ts` → **PASS** (`Test Files 3 passed`, `Tests 30 passed`). `pnpm --filter web test -- "src/app/(app)/billing/__tests__"` → **PASS** (`Test Files 100 passed`, `Tests 856 passed` — full web suite, since the web vitest config runs per-project). `pnpm --filter @kinora/i18n test` → **PASS** (`Test Files 5 passed`, `Tests 29 passed`). |
+| Runtime harness command/scenario and exact result | `podman run -d -p 55435:5432 pgvector/pgvector:pg17` (name `kinora-billing-p4-test`) → `DATABASE_URL=postgres://kinora:kinora@localhost:55435/kinora pnpm --filter api db:migrate` → `DATABASE_URL=… pnpm --filter api test src/db/repositories/__tests__/billing-visibility.integration.test.ts` → **PASS** (`4 passed \| 1 skipped`): proved `loadContext` resolves the tenant billing row with no override, resolves an ACTIVE admin override's tier AND `endsAt` correctly, `readOwnMemberUsage` returns ONLY the requested member's row across two real seeded members in the same tenant/period (structural privacy proof against real rows, not fakes), and `readTenantUsage` returns tenant-scoped aggregate counts. Then `DATABASE_URL=… pnpm --filter api test` → **PASS** (`67 files`, `922 passed \| 3 skipped`) — full suite green with the new adapter wired against real Postgres. Container torn down after (`podman rm -f kinora-billing-p4-test`). Separately, `pnpm --filter web build` succeeded (listed `/billing` as a registered route) and `pnpm --filter web start` (port 4173, `API_BASE_URL` pointed at an unreachable host) was smoke-tested with `curl http://127.0.0.1:4173/billing` → **HTTP 200**, page body contains `"We could not load your billing"` (the real, non-jsdom error-state render) and `kin-page` (the page shell), proving the SSR fetch-failure → error-state path works in a genuine Next.js runtime. The tenant-switch/focus-refresh and loading/offline/a11y paths are covered by jsdom + real-EN-catalog `BillingPageClient.test.tsx` (`renderWithIntl`); a live two-server (api+web) browser session was not additionally run since the SSR path and the client behavior are each proven at their own real boundary. |
+| Rollback boundary | Delete `apps/api/src/billing/billing-visibility.ts`, `apps/api/src/db/repositories/billing-visibility.ts`, `apps/api/src/routes/__tests__/billing-visibility.test.ts`, `apps/api/src/db/repositories/__tests__/billing-visibility.integration.test.ts`, and `apps/web/src/app/(app)/billing/` (page.tsx, BillingPageClient.tsx, billing-client.ts, actions.ts, loading.tsx, `__tests__/`); revert the `getBillingVisibility` option/route addition + import in `apps/api/src/routes/billing.ts` and its wiring in `apps/api/src/app.ts`; revert the `getBillingVisibility` stub addition in `apps/api/src/routes/__tests__/billing.test.ts`; revert the `billing.*` namespace in `packages/i18n/src/messages/{en,es}.json` and the key-count assertion in `packages/i18n/src/__tests__/index.test.ts`. This removes Phase 4 (visibility endpoint + web UI + i18n) without touching Slice 1/2/3 schema, entitlement, consume, gating, or quota-admin behavior. |
+
+## Completed Tasks
+
+- [x] 4.1 RED — Added failing API tests (`billing-visibility.test.ts`) for the member-facing visibility endpoint and failing web/i18n tests (`billing-client.test.ts`, `page.test.tsx`, `BillingPageClient.test.tsx`) for loading/empty/error/offline states, a11y, and EN/ES parity (34 new `billing.*` keys, key-count assertion updated).
+- [x] 4.2 GREEN — Implemented `GetBillingVisibility` (pure use case) + `BillingVisibilityRepository` (Drizzle adapter) + `GET /billing/visibility` route (API); `apps/web/src/app/(app)/billing/page.tsx` + `BillingPageClient.tsx` + `billing-client.ts` + `actions.ts` + `loading.tsx` (web) rendering tier/status/trial badge, tenant + own usage, and an upgrade prompt, refreshing on tab focus/visibility (tenant switch).
+- [x] 4.3 TRIANGLE — Ran full API/web/i18n suites + all repo quality gates + a real production-build runtime smoke of `/billing`'s offline/error path; documented rollout/rollback below and in `verify-report.md`.
+
+## Files Changed
+
+| File | Action | What changed |
+|------|--------|--------------|
+| `apps/api/src/billing/billing-visibility.ts` | Created | Pure `GetBillingVisibility` use case + `BillingVisibilityPort`/`BillingVisibilityContext`; fail-closed on inactive membership / missing billing state; reuses `resolveEffectiveTier` for tier/source/trial-expiry resolution; premium-gate check via `memory_write` limit for `denialReason`/`upgradePromptPath`. |
+| `apps/api/src/db/repositories/billing-visibility.ts` | Created | Drizzle adapter: membership/billing-state/active-override reads (incl. `updatedAt`/override `endsAt`), tenant aggregate usage read, and `readOwnMemberUsage` scoped to the caller's own `(tenantId,userId)` — structurally cannot read another member's counters. |
+| `apps/api/src/routes/billing.ts` | Modified | Added `GET /billing/visibility` (ANY active member, unlike the owner-only `GET /billing/usage`); added `getBillingVisibility` to `BillingRoutesOptions` + the plugin's required-options guard. |
+| `apps/api/src/app.ts` | Modified | Composed `BillingVisibilityRepository` + `GetBillingVisibility` and passed `getBillingVisibility` into the existing `billingRoutes` registration. |
+| `apps/api/src/routes/__tests__/billing.test.ts` | Modified | Added a stub `getBillingVisibility` (unused by this suite) to satisfy the now-required `BillingRoutesOptions` field in both `buildTestApp` and the standalone no-session app builder — Slice 3 assertions unchanged. |
+| `apps/api/src/routes/__tests__/billing-visibility.test.ts` | Created | 6 hermetic route + use-case tests for `Billing State Visibility` (own-usage-only privacy, suspended-member denial, trial badge, backfilled-Free state, no-session). |
+| `apps/api/src/db/repositories/__tests__/billing-visibility.integration.test.ts` | Created | 4 real-Postgres tests (opt-in via `DATABASE_URL`, mirroring `billing-admin.integration.test.ts`): override tier+`endsAt` resolution, no-override baseline, own-usage-only isolation across two REAL seeded members, tenant aggregate usage. |
+| `apps/web/src/app/(app)/billing/page.tsx` | Created | Server component: reads `SESSION_COOKIE`, calls `getBillingVisibility`, renders title/description + `BillingPageClient`. |
+| `apps/web/src/app/(app)/billing/BillingPageClient.tsx` | Created | Client component: tier/status/trial badge, tenant + own usage rows, upgrade prompt (gated on `denialReason`), loading/empty/error/offline states, a11y roles (`progressbar`, `status`, retry-focus), tab-focus/visibility-driven refresh that REPLACES (never merges) state for tenant switching. |
+| `apps/web/src/app/(app)/billing/billing-client.ts` | Created | `server-only` fetch client (`getBillingVisibility`) mirroring `memory-client.ts`'s `Result`-union/DTO-guard pattern. |
+| `apps/web/src/app/(app)/billing/actions.ts` | Created | Server Action (`getBillingVisibilityAction`) reading the current session cookie on every call — a tenant switch's new session naturally returns that tenant's state only. |
+| `apps/web/src/app/(app)/billing/loading.tsx` | Created | Next.js route loading state, mirroring `memory/loading.tsx`. |
+| `apps/web/src/app/(app)/billing/__tests__/{billing-client,page,BillingPageClient}.test.tsx` | Created | 7 + 2 + 8 tests covering fetch/DTO-guard, server-component data flow, and client rendering/a11y/tenant-switch-refresh. |
+| `packages/i18n/src/messages/en.json`, `packages/i18n/src/messages/es.json` | Modified | Added the `billing.*` namespace (34 keys: title/description, loading, states, tier, status, trial, usage incl. empty state, feature labels, upgrade) with full EN/ES parity and matching ICU placeholders. |
+| `packages/i18n/src/__tests__/index.test.ts` | Modified | Updated the full-catalog leaf-key-count assertion from 609 to 643 (+34 `billing.*` keys) with a dated comment. |
+| `openspec/changes/11a-billing-plans-tiers/tasks.md` | Modified | Marked Phase 4 tasks 4.1/4.2/4.3 `[x]`. |
+
+## Verification Results
+
+- Focused work-unit-4 API command — `pnpm --filter api test src/routes/__tests__/billing-visibility.test.ts src/routes/__tests__/billing.test.ts src/routes/__tests__/auth.test.ts` → **PASS** (`3 files`, `30 tests`).
+- Focused work-unit-4 web command — `pnpm --filter web test -- "src/app/(app)/billing/__tests__"` → **PASS** (`100 files`, `856 tests` — web vitest runs the whole project per invocation; all 3 new billing test files are included and green).
+- i18n suite — `pnpm --filter @kinora/i18n test` → **PASS** (`5 files`, `29 tests`, including the updated 643-key-count and full EN/ES parity/ICU-arg guard).
+- Real-Postgres integration — `podman run pgvector/pgvector:pg17` (port 55435) → `pnpm --filter api db:migrate` → `pnpm --filter api test src/db/repositories/__tests__/billing-visibility.integration.test.ts` → **PASS** (`4 passed | 1 skipped`).
+- Full API suite with `DATABASE_URL` wired — `pnpm --filter api test` → **PASS** (`67 files`, `922 passed | 3 skipped`; container torn down after).
+- Full API suite (hermetic, no `DATABASE_URL`) — `pnpm --filter api test` → **PASS** (`66 files`, `912 passed | 8 skipped` — real-Postgres integration tests from prior slices + this slice skip cleanly; no regressions).
+- Full web suite — `pnpm --filter web test` → **PASS** (`100 files`, `856 tests`).
+- `pnpm type-check` → **PASS** (all workspaces).
+- `pnpm architecture` → **PASS** (`no dependency violations found (1600 modules, 4648 dependencies cruised)`; negative guard passed — confirms `billing-visibility.ts`'s Drizzle adapter correctly lives under `db/repositories/`, not `billing/`).
+- `pnpm deps-guard` → **PASS**.
+- `pnpm build` → **PASS** (`pnpm deps-guard && pnpm ui-api-guard && pnpm architecture && pnpm -r build`; `apps/web build` lists `/billing` as a registered dynamic route).
+- Runtime smoke — production `pnpm --filter web start` + `curl /billing` against an unreachable API → **HTTP 200**, real (non-jsdom) error-state copy rendered (see Work Unit Evidence).
+
+## Endpoint Shapes (as implemented)
+
+- `GET /billing/visibility?period=YYYY-MM` → 200 `BillingVisibilityDTO { billing: TenantBillingStateDTO, tenantUsage: TenantQuotaUsageDTO[], memberUsage: MemberQuotaUsageDTO[], denialReason?, upgradePromptPath? }` — ANY active member of the caller's own tenant (tenant/user always from `authContext`); period defaults to the current billing period. `memberUsage` contains ONLY the requesting member's own rows. 403 `inactive_membership`/`billing_state_unavailable` on denial; 401 for suspended/no-session.
+- `upgradePromptPath` is always `"/billing"` when `denialReason` is present — 11a has no Stripe/checkout page (explicitly out of scope), so the prompt destination is the billing page itself, which surfaces the upgrade CTA. This is a resolved product-ambiguity call, not a spec-fixed value.
+- `denialReason` uses `memory_write`'s resolved limit as the representative premium-gate check (0 for Free/expired-trial tiers), mirroring the SAME denial `CheckEntitlement` would produce for any premium AI action right now — chosen so the UI shows one consistent upgrade prompt without duplicating per-feature gate logic. This is also a resolved implementation call, not spec-fixed.
+
+## Deviations from Design
+
+- The design's File Changes table does not separately list a member-facing visibility endpoint or use case — Slice 3 (owner-only `GetTenantUsage`) was the only billing read case named. Per the orchestrator's explicit authorization (see "Scope-gap resolution" above) and the spec's `Billing State Visibility` requirement text (which is UI-AND-API scoped), `GetBillingVisibility` + `GET /billing/visibility` were added in this Phase 4 batch, wiring the ALREADY-DEFINED `BillingVisibilityDTO`/`TenantBillingStateDTO` contracts (Slice 1) rather than inventing a new contract shape.
+- Consistent with Slices 2/3's established pattern (and the `api-no-db-outside-infra` dependency-cruiser rule), the Drizzle adapter lives in `apps/api/src/db/repositories/billing-visibility.ts` while the pure use case stays in `apps/api/src/billing/billing-visibility.ts`.
+- No dedicated tenant-switcher UI exists anywhere in the web app yet (confirmed by a repo-wide search — `AppShell`/`SidebarNav`/`MobileNav` carry no tenant-switch affordance). "Tenant switching refreshes billing... from the new tenant only" is satisfied by: (a) the server component always reading the CURRENT session cookie on every navigation, and (b) the client refetching (and REPLACING, never merging, state) on `window.focus`/`visibilitychange`, so a tenant switch effected elsewhere (new session/tab) is picked up without a full reload. This is a resolved product-ambiguity call given no existing tenant-switcher component to hook into, not an invented requirement.
+
+## Issues Found
+
+- None functionally. `billing.test.ts`'s `buildTestApp` and its standalone no-session app builder both needed a stub `getBillingVisibility` added to satisfy the now-3-field `BillingRoutesOptions`; this is test-plumbing only and does not change any Slice 3 assertion or behavior.
+
+## Remaining Tasks
+
+- None for 11a Phase 4. 11a is feature-complete per `tasks.md` (all Phase 1–4 tasks `[x]`); Stripe/payment-provider integration is explicitly out of 11a's scope (11b).
+
+## Workload / PR Boundary
+
+- **Mode**: stacked PR slice (PR4)
+- **Current work unit**: Unit 4 — Web billing UI + i18n + member-facing visibility endpoint + final verify/rollout
+- **Boundary**: Starts after Slice 3 (owner/trainer quota-admin API) and ends 11a's scope entirely (no Stripe/payment-provider work; that is 11b). No Slice 1/2/3 schema, entitlement, consume, gating, or quota-admin behavior changed.
+- **Estimated review budget impact**: New authored production code ~340 lines (API: use case ~95 + adapter ~95 + route/app-wiring ~50; web: page/client/actions/client-fetch/loading ~230) plus ~370 test lines (API ~215 + web ~340) plus ~104 i18n lines (52 EN + 52 ES); within the planned PR4 slice, though likely near/over the 400-line authored-code budget when API+web+tests+i18n are combined into one PR — flagging for the orchestrator's judgment on whether PR4 should be sliced further (e.g. API-visibility-endpoint PR vs. web-UI PR) given the `stacked-to-main` chain strategy already assumed one PR per phase.
+
+## Residual Risk
+
+- A live two-server `pnpm dev` (api+web) browser session exercising a REAL tenant switch (two sessions/tenants, focus-triggered refresh) was not run — the focus/visibility refresh behavior is proven in jsdom against a mocked Server Action (`BillingPageClient.test.tsx`), and the SSR fetch path is proven against a real production server (curl smoke); the two were not combined into one live end-to-end browser session in this sandboxed environment. Low risk: the refresh mechanism is a thin `window.focus`/`visibilitychange` listener calling the SAME `getBillingVisibilityAction` already proven at the HTTP+adapter boundary.
+- `upgradePromptPath` and the `memory_write`-as-representative-premium-feature choice for `denialReason` (see Endpoint Shapes) are resolved implementation calls, not spec-fixed values — flagging for product review once 11b (Stripe) introduces a real checkout destination.
+
+---
+
+## Phase 4 — Review Correction
+
+**Trigger**: 4R review of Slice 4 found 0 CRITICAL, 6 real findings (2 RELIABILITY near-mandatory/mandatory, 2 RESILIENCE, 2 SUGGESTION-cheap). All 6 applied in one bounded correction batch, Strict TDD (RED first where the finding was independently observable as a failing/reproducible test), no commit/push.
+
+### FIX 1 (RELIABILITY, near-mandatory) — trial-badge test was a wall-clock time bomb
+
+- **Bug**: `billing-visibility.test.ts` "shows trial badge fields" asserted `tier==='pro'` against `TRIALING_CONTEXT.trialEndsAt = 2026-07-28`, but the route's `getBillingVisibility.execute(scope, period)` call has no injectable `now` — it always resolves against the REAL wall clock. On/after 2026-07-28 the test silently starts failing with zero code change (CI breaks ~5 days out).
+- **RED (proved the bomb is real)**: temporarily froze the system clock to `2026-08-01` (past `trialEndsAt`) with the test otherwise unchanged → `expected 'free' to be 'pro'` — confirmed the exact failure mode the review predicted.
+- **Fix**: wrapped the test body in `vi.useFakeTimers()` / `vi.setSystemTime(new Date("2026-07-01T00:00:00.000Z"))` (a fixed instant BEFORE `trialEndsAt`) with `vi.useRealTimers()` in a `finally`. No assertion weakened.
+- **GREEN**: reverted the frozen date to `2026-07-01` → `billing-visibility.test.ts` 6/6 passed, deterministically, regardless of real run date.
+- **Sibling scan**: grepped every billing test file for `trialEndsAt`/wall-clock comparisons. `apps/api/src/billing/__tests__/entitlement.test.ts` already passes an explicit fixed `NOW` to `resolveEffectiveTier`/`CheckEntitlement.check` — not a time bomb. `billing-backfill.test.ts`'s fixed dates compute a trial window from a tenant-creation timestamp (not compared against real "now" for pass/fail) — not a time bomb. No other sibling found.
+
+### FIX 2 (RELIABILITY) — expired-trial DTO rendered contradictory UI
+
+- **Bug**: `BillingPageClient.tsx` gated the "Pro trial — N days left" badge on `billing.status === 'trialing'` alone. The API never flips the STORED status to `'expired'` (only `resolveEffectiveTier` downgrades the EFFECTIVE tier dynamically) — so a DTO with `status:'trialing'`, a past `trialEndsAt`, and `denialReason:'trial_expired'` rendered BOTH the active-trial badge AND the "Your Pro trial has ended" block simultaneously.
+- **RED**: added `EXPIRED_TRIALING` fixture (`status:'trialing'`, `trialEndsAt` in the past, `tier:'free'`, `denialReason:'trial_expired'`) and a new test asserting only the "ended" copy shows. Ran against the unfixed component → failed exactly as predicted: `expected <span>Pro trial — 0 days left</span> to be null`.
+- **Fix**: gated the badge on `isActiveUnexpiredTrial = status==='trialing' && denialReason!=='trial_expired' && trialEndsAt!==null && new Date(trialEndsAt).getTime() > Date.now()`.
+- **GREEN**: new test passes; all 3 prior trial-badge/upgrade-prompt tests (active trial, Free+upgrade-prompt, no-upgrade-while-trialing) still pass unchanged.
+
+### FIX 3 (RESILIENCE) — focus+visibilitychange refetch storm / race
+
+- **Bug**: both `focus` and `visibilitychange` listeners called `refresh()` independently with no in-flight guard — a real tab activation fires both near-simultaneously, causing two concurrent fetches (and worse on rapid toggling), with the later response able to race/overwrite the earlier one.
+- **RED**: added a test dispatching `focus` and `visibilitychange` in the same tick against a controllable (unresolved) mock and asserting `getBillingVisibilityAction` was called exactly once. Ran against the unfixed component → `expected "spy" to be called 1 times, but got 2 times`.
+- **Fix**: added `inFlightRef` (skip a new `refresh()` call while one is pending — collapses a single activation to at most one fetch) and `requestIdRef` (belt-and-suspenders "latest wins": a response is only applied if no newer refresh has started since). Replace-not-merge and last-good-state-on-error behavior preserved unchanged.
+- **GREEN**: new test passes (called exactly once, both before and after the pending fetch resolves); the existing tenant-switch-on-focus test still passes.
+
+### FIX 4 (RESILIENCE) — SSR fetch had no timeout
+
+- **Bug**: `billing-client.ts`'s server-side fetch had `cache:'no-store'` but no abort/timeout, so a hung API could stall the billing render up to undici's ~300s default instead of degrading to the existing `api_unreachable` → retry-card path.
+- **RED**: added a test asserting the fetch call's `init.signal` is an `AbortSignal` instance. Ran against the unfixed client → `expected undefined to be an instance of AbortSignal`.
+- **Fix**: added `signal: AbortSignal.timeout(5_000)` to the fetch call (`FETCH_TIMEOUT_MS = 5_000`).
+- **GREEN**: signal test passes; added a second test mapping a `DOMException("...", "TimeoutError")` rejection to `{ kind: "error", message: "api_unreachable" }` — passes via the existing catch-all (no new branch needed, since `AbortSignal.timeout`'s rejection is just another thrown error).
+
+### FIX 5 (SUGGESTION, cheap) — brittle whole-catalog magic-number test
+
+- **Issue**: my Phase-4 edit bumped `packages/i18n/src/__tests__/index.test.ts`'s global leaf-key-count assertion `609 → 643`, perpetuating a pattern where ANY future namespace addition (unrelated to billing) must also edit this number.
+- **Fix**: reverted the global assertion to stay accurate WITHOUT bumping the raw number — it now asserts `Object.keys(flat).filter(k => !k.startsWith("billing."))` has length `609` (frozen, decoupled from billing). Added a NEW scoped test "the billing namespace is present with EN+ES parity" mirroring the existing `mobileTracker` pattern: presence in both catalogs, `validateCatalogParity` (already the authoritative EN/ES parity check), and `billing.*` key count `=== 34` plus one spot-checked EN/ES pair.
+- **GREEN**: i18n suite `5 files, 30 tests` (was 29) — all pass.
+
+### FIX 6 (SUGGESTION, cheap) — shallow DTO validation let malformed rows through
+
+- **Issue**: `billing-client.ts`'s `isBillingVisibilityDTO` only checked `tenantUsage`/`memberUsage` were arrays, not element shape — a malformed/partial row would pass validation and render as `"undefined/undefined used"`.
+- **RED**: added two tests — a `tenantUsage` row missing fields, and a `memberUsage` row with a wrong-typed field (`used: "1"` instead of a number) — both asserting `invalid_response`. Ran against the unfixed client → both failed (returned `{ kind: "ok", ... }` with the malformed row passed through).
+- **Fix**: added `isUsageRowShape`/`isMemberUsageRowShape` validators (checks `feature`/`period`: string, `used`/`limit`: number, plus `userId`: string for member rows) and required every row in both arrays to pass (`.every(...)`).
+- **GREEN**: both new tests pass; all 6 pre-existing `billing-client.test.ts` tests still pass.
+
+### Out of scope (left as documented follow-ups, per instruction — NOT implemented)
+
+- Wiring `billing.navLabel` into the app nav — product decision.
+- Failure telemetry/logging on billing fetch/refresh errors — observability infra.
+
+### RED → GREEN Evidence Summary
+
+| Fix | RED (before) | GREEN (after) |
+|---|---|---|
+| 1 | Simulated post-expiry clock → `expected 'free' to be 'pro'` | `billing-visibility.test.ts` 6/6 pass, deterministic at any real run date |
+| 2 | Expired-trial fixture → stale badge rendered alongside "ended" copy | New test passes; badge and "ended" copy are mutually exclusive |
+| 3 | Same-tick focus+visibilitychange → 2 calls | Same-tick double-activation → exactly 1 call, both pre- and post-resolution |
+| 4 | `init.signal` was `undefined` | `init.signal` is an `AbortSignal`; timeout/abort maps to `api_unreachable` |
+| 5 | N/A (design/practice fix, not a failing-test bug) | Global count decoupled from billing (`609`, filtered); new scoped billing-count test (`34`) added |
+| 6 | Malformed tenant/member usage rows → `{ kind: "ok" }` (silently accepted) | Both malformed-row shapes → `{ kind: "error", message: "invalid_response" }` |
+
+### Files Changed (this correction)
+
+| File | What changed |
+|---|---|
+| `apps/api/src/routes/__tests__/billing-visibility.test.ts` | FIX 1 — froze the system clock in the trial-badge test. |
+| `apps/web/src/app/(app)/billing/BillingPageClient.tsx` | FIX 2 — gated the trial badge on an active+unexpired trial; FIX 3 — added `inFlightRef`/`requestIdRef` guards around `refresh()`. |
+| `apps/web/src/app/(app)/billing/__tests__/BillingPageClient.test.tsx` | FIX 2 — added `EXPIRED_TRIALING` fixture + test; FIX 3 — added the double-activation-collapses-to-one-fetch test. |
+| `apps/web/src/app/(app)/billing/billing-client.ts` | FIX 4 — added `AbortSignal.timeout(5_000)` to the fetch call; FIX 6 — added per-row DTO shape validation. |
+| `apps/web/src/app/(app)/billing/__tests__/billing-client.test.ts` | FIX 4 — added signal + abort-mapping tests; FIX 6 — added malformed-row tests. |
+| `packages/i18n/src/__tests__/index.test.ts` | FIX 5 — decoupled the global leaf-key count from `billing.*`; added the scoped billing parity/count test. |
+
+### Verification Results (this correction)
+
+- Focused API — `pnpm --filter api test src/routes/__tests__/billing-visibility.test.ts src/routes/__tests__/billing.test.ts src/routes/__tests__/auth.test.ts` → **PASS** (`3 files`, `30 tests`).
+- Focused web — `pnpm --filter web test -- "src/app/(app)/billing/__tests__"` → **PASS** (`100 files`, `862 tests` — up from 856; +2 BillingPageClient + +4 billing-client tests, minus none removed).
+- i18n — `pnpm --filter @kinora/i18n test` → **PASS** (`5 files`, `30 tests` — up from 29).
+- Full API suite (hermetic) — `pnpm --filter api test` → **PASS** (`67 files`, `913 passed | 12 skipped`).
+- Full web suite — `pnpm --filter web test` → **PASS** (`100 files`, `862 tests`).
+- `pnpm type-check` → **PASS** (all 6 workspaces).
+- `pnpm architecture` → **PASS** (`no dependency violations found (1601 modules, 4652 dependencies cruised)`).
+- `pnpm deps-guard` → **PASS**.
+- `pnpm build` → **PASS** (`/billing` still a registered route).
+
+### Changed-Line Count
+
+Estimated **~194 authored lines** added/changed across the 6 files above in this correction batch (manual tally of each edit's net delta — the underlying Slice 4 work was never committed, so no clean git baseline exists to diff this batch alone against; the figure excludes incidental re-indentation). Within the 200-line budget for this correction.
+
+### Residual Risk (this correction)
+
+- None new. The FIX 3 in-flight/latest-wins guard is a thin, well-tested addition over the already-proven refresh path; no additional real-Postgres or production-build smoke was re-run for this correction since none of the 6 fixes touch the API adapter, route wiring, or SSR page — only the client-side gating/guard logic and one test-file's clock/assertions/validation, all covered by the suites above.
+
+---
+
+## Coverage-Closure Note (post-correction, pre-push gate)
+
+**Trigger**: the pre-push coverage gate failed — global FUNCTION coverage 89.76% < 90% threshold, dragged by `apps/web/src/app/(app)/billing` at 84.21% funcs. Closed with genuine behavior tests (no coverage-theater), no production-code changes, no threshold lowered.
+
+**Root cause**: three real, previously-untested code paths in the billing directory:
+1. `loading.tsx` had ZERO tests (0% across the board).
+2. `BillingPageClient.tsx`'s `handleOnline`/`handleOffline` window-event listeners (added for the offline-state feature) were never triggered by any test — only the INITIAL `navigator.onLine` value was exercised, never a LIVE connectivity change.
+3. The bootstrap "no data, no error yet" empty-state branch, and a retry-that-itself-fails path, were also unexercised.
+
+**Tests added**:
+- `apps/web/src/app/(app)/billing/__tests__/loading.test.tsx` (new, 1 test) — mirrors `memory/__tests__/loading.test.tsx`: renders `BillingLoading`, asserts the `status`/`progressbar` a11y output and copy.
+- `apps/web/src/app/(app)/billing/__tests__/BillingPageClient.test.tsx` (+4 tests):
+  - "switches from error to offline (and back) when the browser's connectivity changes live" — dispatches real `offline`/`online` window events and asserts the UI actually flips between the error card and the offline card (genuinely exercises `handleOnline`/`handleOffline`, not just their initial-state proxy).
+  - "shows the bootstrap empty state when there is no data and no error yet" — `initialData={null}` with no error, asserting the `billing.states.emptyTitle`/`emptyDescription` copy.
+  - "re-shows the error state when a retry itself fails" — mocks `getBillingVisibilityAction` to resolve with `{ kind: "error" }` and asserts the error state persists (no fabricated data).
+
+**Re-verification**:
+- `pnpm --filter web test:coverage` → billing dir row: `100% stmts | 89.32% branch | 94.73% funcs | 100% lines` (funcs up from 84.21%). Global: `94.35% stmts | 86.55% branch | 90.28% funcs | 94.35% lines`. Command exited `0` — the `ERROR: Coverage for functions (...) does not meet global threshold (90%)` message is GONE.
+- Full web suite — `pnpm --filter web test` → **PASS** (`101 files`, `866 tests` — up from 100/862).
+- `pnpm type-check` → **PASS** (no output, clean).
+
+No production code was touched — all 3 gaps were genuinely testable as written; no untestable-function report needed.
