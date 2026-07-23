@@ -205,8 +205,8 @@ describe("provisionTenantForUser", () => {
               if (n === 1) return Promise.resolve([{ id: "t-1" }]);
               if (n === 2) return Promise.resolve([{ id: "u-1" }]);
               if (n === 3) return Promise.resolve([{ id: "m-1" }]);
-              // Profile insert (4th) carries no .returning() call — its values
-              // chain is awaited directly. This branch is unreachable but kept
+              // Billing/profile inserts carry no .returning() call — their values
+              // chains are awaited directly. This branch is unreachable but kept
               // for shape symmetry with the shared mock.
               return Promise.resolve([]);
             }),
@@ -232,9 +232,23 @@ describe("provisionTenantForUser", () => {
       membershipId: "m-1",
     });
 
-    // Exactly four inserts in order: tenants, users, memberships, userProfiles.
-    expect(capturedPayloads).toHaveLength(4);
-    const profilePayload = capturedPayloads[3]!.payload as Record<string, unknown>;
+    // Exactly five inserts in order: tenants, users, memberships,
+    // tenantBillingStates, userProfiles.
+    expect(capturedPayloads).toHaveLength(5);
+    const billingPayload = capturedPayloads[3]!.payload as Record<string, unknown>;
+    expect(billingPayload).toMatchObject({
+      tenantId: "t-1",
+      tier: "pro",
+      status: "trialing",
+      source: "system",
+    });
+    expect(billingPayload.trialStartedAt).toBeInstanceOf(Date);
+    expect(billingPayload.trialEndsAt).toBeInstanceOf(Date);
+    expect(
+      (billingPayload.trialEndsAt as Date).getTime() -
+        (billingPayload.trialStartedAt as Date).getTime(),
+    ).toBe(30 * 24 * 60 * 60 * 1000);
+    const profilePayload = capturedPayloads[4]!.payload as Record<string, unknown>;
     expect(profilePayload).toMatchObject({
       userId: "u-1",
       name: "admin",
@@ -271,8 +285,52 @@ describe("provisionTenantForUser", () => {
       userEmail: "@acme.com", // empty local part
     });
 
-    const profilePayload = capturedPayloads[3]!.payload as Record<string, unknown>;
+    const profilePayload = capturedPayloads[4]!.payload as Record<string, unknown>;
     expect(profilePayload.name).toBe("user");
+  });
+
+  it("writes the tenant trial row at the exact creation boundary without granting retroactive backfill semantics", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-23T00:00:00.000Z"));
+
+    const capturedPayloads: unknown[] = [];
+    const mockTx = {
+      insert: vi.fn().mockImplementation(() => ({
+        values: vi.fn().mockImplementation((payload: unknown) => {
+          capturedPayloads.push(payload);
+          return {
+            returning: vi.fn().mockImplementation(() => {
+              const n = capturedPayloads.length;
+              if (n === 1) return Promise.resolve([{ id: "t-1" }]);
+              if (n === 2) return Promise.resolve([{ id: "u-1" }]);
+              if (n === 3) return Promise.resolve([{ id: "m-1" }]);
+              return Promise.resolve([]);
+            }),
+          };
+        }),
+      })),
+    };
+
+    const mockDb = {
+      transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn(mockTx)),
+    } as unknown as Parameters<typeof provisionTenantForUser>[0];
+
+    await provisionTenantForUser(mockDb, {
+      tenantName: "Acme Corp",
+      userEmail: "admin@acme.com",
+    });
+
+    const billingPayload = capturedPayloads[3] as Record<string, unknown>;
+    expect(billingPayload.source).toBe("system");
+    expect(billingPayload.status).toBe("trialing");
+    expect((billingPayload.trialStartedAt as Date).toISOString()).toBe(
+      "2026-07-23T00:00:00.000Z",
+    );
+    expect((billingPayload.trialEndsAt as Date).toISOString()).toBe(
+      "2026-08-22T00:00:00.000Z",
+    );
+
+    vi.useRealTimers();
   });
 
   it("provisions only ONE profile row per registration — the profile insert is part of the single provisioning transaction (no duplicate path)", async () => {
@@ -307,9 +365,9 @@ describe("provisionTenantForUser", () => {
       userEmail: "solo@example.com",
     });
 
-    // Exactly one of the four captured payloads is a userProfile-shaped row
+    // Exactly one of the five captured payloads is a userProfile-shaped row
     // ({ userId, name, goal, experienceLevel }) — the others are tenant/user/
-    // membership rows which do NOT carry `goal`/`experienceLevel`.
+    // membership/billing rows which do NOT carry `goal`/`experienceLevel`.
     const profileRows = capturedPayloads.filter(
       (p): p is Record<string, unknown> =>
         typeof p === "object" && p !== null && "goal" in p && "experienceLevel" in p

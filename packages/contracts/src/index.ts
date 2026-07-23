@@ -386,6 +386,77 @@ export type MembershipRole = "owner" | "member";
  */
 export type MembershipStatus = "invited" | "active" | "suspended";
 
+export type BillingTier = "free" | "pro";
+
+export type BillingStatus = "active" | "trialing" | "expired" | "overridden";
+
+export type BillingSource = "system" | "backfill" | "admin_override";
+
+export type BillingFeature =
+  | "plan_generation"
+  | "plan_regeneration"
+  | "memory_write"
+  | "memory_retrieval";
+
+export type BillingDenialReason =
+  | "operation_key_required"
+  | "inactive_membership"
+  | "billing_state_unavailable"
+  | "premium_required"
+  | "trial_expired"
+  | "tenant_quota_exhausted"
+  | "member_allocation_exhausted"
+  | "allocation_out_of_bounds"
+  | "unauthorized_quota_admin";
+
+export interface TenantBillingStateDTO {
+  tenantId: TenantId;
+  tier: BillingTier;
+  status: BillingStatus;
+  source: BillingSource;
+  trialStartedAt: string | null;
+  trialEndsAt: string | null;
+  activeOverrideEndsAt: string | null;
+  updatedAt: string;
+}
+
+export interface TenantQuotaUsageDTO {
+  feature: BillingFeature;
+  period: string;
+  used: number;
+  limit: number;
+}
+
+export interface MemberQuotaUsageDTO {
+  userId: UserId;
+  feature: BillingFeature;
+  period: string;
+  used: number;
+  limit: number;
+}
+
+export interface BillingVisibilityDTO {
+  billing: TenantBillingStateDTO;
+  tenantUsage: TenantQuotaUsageDTO[];
+  memberUsage: MemberQuotaUsageDTO[];
+  denialReason?: BillingDenialReason;
+  upgradePromptPath?: string;
+}
+
+export interface SetMemberAllocationRequest {
+  userId: UserId;
+  feature: BillingFeature;
+  period: string;
+  limit: number;
+}
+
+export interface CreateAdminOverrideRequest {
+  tier: BillingTier;
+  startsAt: string;
+  endsAt: string;
+  reason: string;
+}
+
 // ---------------------------------------------------------------------------
 // Auth contract types — session identity and auth request/response DTOs
 // These types cross app boundaries without leaking database schema details.

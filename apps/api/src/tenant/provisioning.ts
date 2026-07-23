@@ -1,5 +1,6 @@
 import type { Database } from "../db/client.js";
-import { tenants, users, memberships, oauth_accounts, userProfiles } from "../db/schema.js";
+import { tenants, users, memberships, oauth_accounts, tenantBillingStates, userProfiles } from "../db/schema.js";
+import { buildTrialBillingState } from "../db/repositories/billing-backfill.js";
 
 /**
  * Input for the tenant provisioning primitive.
@@ -87,6 +88,8 @@ export async function provisionTenantForUser(
     if (!membershipRow) {
       throw new Error("Failed to create membership: no rows returned");
     }
+
+    await tx.insert(tenantBillingStates).values(buildTrialBillingState(tenantRow.id, new Date()));
 
     // 10a-user-memory-structured Slice 3 — auto-provision a default
     // user_profiles row in the SAME transaction. name = email local part
