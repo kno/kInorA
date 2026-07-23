@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import type {
+  BillingDenialReason,
+  BillingFeature,
   CreateUserMemoryRequest,
   ListUserMemoriesResponse,
   MemorySettings,
   UserMemory,
 } from "@kinora/contracts";
 import type { EmbeddingFailureReason } from "../ai/embedding-port.js";
+import type { ConsumeDecision } from "../billing/types.js";
 import type {
   PersistVectorMemoryInput,
   PersistVectorMemoryResult,
@@ -13,6 +16,23 @@ import type {
 import { classifyMemoryEligibility } from "./eligibility.js";
 
 type MemoryScope = { tenantId: string; userId: string };
+
+/**
+ * Billing gate for the cost-bearing premium memory WRITE (11a). Injected into
+ * the lifecycle service so the `memory_write` unit is checked+consumed at the
+ * exact point a write becomes cost-bearing: AFTER eligibility + enabled pass
+ * and JUST BEFORE embed+store. This guarantees (a) an entitlement/quota denial
+ * still blocks before any embedding cost, and (b) an ineligible or disabled
+ * write — which stores nothing — never consumes a unit. Optional: when absent
+ * the service does not gate (test seam; production always wires the real gate).
+ */
+export interface MemoryWriteBillingGate {
+  checkAndConsume(
+    scope: MemoryScope,
+    feature: BillingFeature,
+    operationKey: string,
+  ): Promise<ConsumeDecision>;
+}
 
 type UserMemoryRepositoryPort = {
   listByOwner(scope: MemoryScope): Promise<unknown[]>;
@@ -35,6 +55,7 @@ export interface UserMemoryAuditEvent {
     | "stored"
     | "rejected"
     | "failed"
+    | "denied"
     | "deleted"
     | "not_found"
     | "enabled"
@@ -53,6 +74,7 @@ export interface UserMemoryAuditPort {
 export type UserMemoryCreateOutcome =
   | { kind: "stored"; memory: UserMemory }
   | { kind: "rejected"; reason: UserMemory["eligibility"] }
+  | { kind: "denied"; reason: BillingDenialReason }
   | { kind: "failed"; reason: EmbeddingFailureReason | "disabled" };
 
 const SCHEMA_VERSION = "1";
@@ -61,6 +83,7 @@ export class UserMemoryLifecycleService {
     private readonly repo: UserMemoryRepositoryPort,
     private readonly writer: UserMemoryWriterPort,
     private readonly audit: UserMemoryAuditPort,
+    private readonly billing?: MemoryWriteBillingGate,
   ) {}
 
   async listForOwner(scope: MemoryScope): Promise<ListUserMemoriesResponse> {
@@ -112,6 +135,31 @@ export class UserMemoryLifecycleService {
         reason: "disabled",
       });
       return { kind: "failed", reason: "disabled" };
+    }
+
+    // 11a billing: consume the `memory_write` unit HERE — after eligibility +
+    // enabled pass (so a rejected/disabled write, which stores nothing, spends
+    // nothing) and JUST BEFORE embed+store (so an entitlement/quota denial still
+    // blocks before any embedding cost). A gate technical error propagates
+    // (→ 500): the write path fails CLOSED, never bypassing the check. The
+    // operation key is the request's own idempotency key, so a legitimate
+    // same-fact retry replays the prior decision and consumes at most once.
+    if (this.billing) {
+      const decision = await this.billing.checkAndConsume(
+        scope,
+        "memory_write",
+        `memory_write:${request.idempotencyKey.trim()}`,
+      );
+      if (!decision.allowed) {
+        await this.audit.record({
+          operation: "create",
+          outcome: "denied",
+          tenantId: scope.tenantId,
+          userId: scope.userId,
+          reason: decision.reason,
+        });
+        return { kind: "denied", reason: decision.reason };
+      }
     }
 
     const result = await this.writer.saveConfirmedMemory(scope, {
