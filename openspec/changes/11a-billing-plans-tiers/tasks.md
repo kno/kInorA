@@ -45,6 +45,6 @@ Chain strategy: stacked-to-main
 
 ## Phase 4: Web UI / Verification / Rollout
 
-- [ ] 4.1 RED: Add failing web/i18n tests for `Billing State Visibility`, loading/empty/error/offline states, a11y, and EN/ES parity in `packages/i18n/src/messages/en.json` + `es.json`.
-- [ ] 4.2 GREEN: Build `apps/web/src/app/(app)/billing/page.tsx` + client/actions to render tier/trial/usage/upgrade prompts and refresh on tenant switch.
-- [ ] 4.3 TRIANGLE: Run runtime smoke + integration/concurrency proof, then write rollout/rollback notes and final evidence in `openspec/changes/11a-billing-plans-tiers/verify-report.md`.
+- [x] 4.1 RED: Add failing web/i18n tests for `Billing State Visibility`, loading/empty/error/offline states, a11y, and EN/ES parity in `packages/i18n/src/messages/en.json` + `es.json`.
+- [x] 4.2 GREEN: Build `apps/web/src/app/(app)/billing/page.tsx` + client/actions to render tier/trial/usage/upgrade prompts and refresh on tenant switch.
+- [x] 4.3 TRIANGLE: Run runtime smoke + integration/concurrency proof, then write rollout/rollback notes and final evidence in `openspec/changes/11a-billing-plans-tiers/verify-report.md`.
