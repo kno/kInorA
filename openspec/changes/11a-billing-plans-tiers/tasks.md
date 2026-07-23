@@ -34,7 +34,7 @@ Chain strategy: stacked-to-main
 ## Phase 2: Core Billing / Gating
 
 - [x] 2.1 RED: Add failing tests for `Hybrid Tenant Quotas`, `Generation Metering`, `Idempotent quota consumption retry`, `Empty operation key rejected`, and `Denied entitlement skips retrieval`.
-- [x] 2.2 GREEN: Implement `apps/api/src/billing/*.ts` use cases and wire checks into `apps/api/src/routes/plan.ts`, `apps/api/src/ai/generation-service.ts`, `apps/api/src/ai/memory-retriever.ts`, and `apps/api/src/app.ts`.
+- [x] 2.2 GREEN: Implement `apps/api/src/billing/*.ts` use cases and wire checks into `apps/api/src/routes/plan.ts`, `apps/api/src/ai/generation-service.ts`, `apps/api/src/ai/memory-retriever.ts`, `apps/api/src/routes/user-memories.ts` (premium `memory_write` gate — added in Judgment Day Round 1 correction; was missing at first apply), and `apps/api/src/app.ts`.
 - [x] 2.3 TRIANGLE: Prove atomic tenant+member consume, concurrency race safety, retry idempotency, and fail-closed denial without provider/embed/search work.
 
 ## Phase 3: Quota Admin API

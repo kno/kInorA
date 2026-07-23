@@ -102,6 +102,51 @@ describe.skipIf(!hasDb)("QuotaLedgerRepository (real Postgres)", () => {
     expect(counter?.used).toBe(1);
   });
 
+  it("a capacity-exhaustion denial is NOT cached: a same-key retry after an upgrade is re-evaluated and consumes", async () => {
+    const { tenantId, userId } = await seedActiveTenant();
+    const scope = { tenantId, userId };
+
+    // Spec A consumes the sole Free plan_generation unit.
+    const specA = await repo.consume({
+      scope,
+      feature: "plan_generation",
+      period: PERIOD,
+      operationKey: "plan_generation:spec-A",
+      tenantLimit: 1,
+    });
+    expect(specA.outcome).toBe("consumed");
+
+    // Spec B is denied — the Free tenant pool is exhausted. The confirm route
+    // uses a DETERMINISTIC operation key (`plan_generation:<specId>`), so this
+    // denial must NOT be cached as an idempotent outcome.
+    const specBDenied = await repo.consume({
+      scope,
+      feature: "plan_generation",
+      period: PERIOD,
+      operationKey: "plan_generation:spec-B",
+      tenantLimit: 1,
+    });
+    expect(specBDenied).toEqual({ outcome: "denied", reason: "tenant_quota_exhausted" });
+
+    // Mid-period upgrade to Pro → a fresh, higher tenantLimit. Retrying spec B
+    // with the SAME deterministic key must now be RE-EVALUATED against current
+    // entitlement and consume — not replay the stale capacity denial.
+    const specBRetry = await repo.consume({
+      scope,
+      feature: "plan_generation",
+      period: PERIOD,
+      operationKey: "plan_generation:spec-B",
+      tenantLimit: 1_000_000,
+    });
+    expect(specBRetry.outcome).toBe("consumed");
+
+    const [counter] = await db.query.tenantQuotaCounters.findMany({
+      where: (t, { and: andOp, eq: eqOp }) => andOp(eqOp(t.tenantId, tenantId), eqOp(t.feature, "plan_generation")),
+    });
+    // specA + the re-evaluated specB = 2 consumed units.
+    expect(counter?.used).toBe(2);
+  });
+
   it("CRITICAL 2: a mid-period tier downgrade (fresh lower tenantLimit) is enforced, not the stale stored limit", async () => {
     const { tenantId, userId } = await seedActiveTenant();
     const scope = { tenantId, userId };
