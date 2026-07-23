@@ -124,3 +124,169 @@ production adapter.
 (now) live-Postgres runtime level. No CRITICAL issues; the one WARNING is a
 tracked deferral that does not affect any required Phase 2 scenario. Safe to
 proceed to review/PR for PR2, then Phase 3 (quota admin API).
+
+---
+
+# Verify Report: 11a-billing-plans-tiers — Slice 3 / PR3
+
+**Phase**: 3 (Quota Admin API) — tasks 3.1 / 3.2 / 3.3
+**Branch**: `feat/11a-billing-plans-tiers-slice3` (uncommitted working tree)
+**Mode**: Strict TDD | Full artifacts (proposal + spec + design + tasks + apply-progress)
+**Verdict**: **PASS**
+
+---
+
+## Executive Summary
+
+All four Phase-3 spec scenarios have real, asserting tests that pass at runtime.
+Tasks 3.1/3.2/3.3 are genuinely satisfied (RED→GREEN→TRIANGLE) with no scope leak
+into Phase 4 (no web UI) or into Stripe/payment/provider work, and no
+`CreateAdminOverride` implementation (correctly out of scope). The privacy
+boundary is enforced structurally at three independent layers (response DTOs,
+port type surface, SQL column selection). All repo quality gates pass, and the
+billing-admin integration test (atomic audit write + aggregate-only reads)
+passes against real Postgres (pgvector:pg17).
+
+CRITICAL: 0 | WARNING: 0 | SUGGESTION: 2
+
+---
+
+## Spec Scenario Compliance Matrix
+
+Requirement **Member Quota Administration** (spec `11a-v1-billing-plans-tiers`),
+plus the task-named Cross-tenant guard:
+
+| Scenario | Covering test | Real assert? | Result |
+|---|---|---|---|
+| Authorized trainer changes allocation (owner sets within bounds → allocation changes + audit written) | `routes/__tests__/billing.test.ts` "owner (trainer) sets an active member's allocation within bounds → 200 and writes it" + "passes the acting owner as the auditor to the atomic write" + integration "writeMemberAllocation persists the allocation AND a member_allocation_set audit row atomically" | Yes | PASS |
+| Unauthorized member quota edit rejected | "rejects a non-owner member editing an allocation → 403 unauthorized_quota_admin, no write" | Yes | PASS |
+| Trainer privacy boundaries (aggregate counts only; no memories/prompts/health/private content) | "owner sees tenant aggregate + per-member usage as COUNTS only" (asserts exact allowed key set + explicit forbidden-key absence) + "only ever asks the port for count reads — never for member content" | Yes | PASS |
+| Inactive membership blocks management (Membership suspension) | "a suspended actor never reaches the route (auth re-check) → 401" + "the use case fails closed for a suspended actor (defense in depth)" + "an owner MAY still set a suspended member's allocation … but it grants no consumption" | Yes | PASS |
+| Cross-tenant billing denied | "tenant scope always comes from authContext — a body tenantId is ignored" + "denies setting an allocation for a user who is NOT a member of the actor's tenant → 403" | Yes | PASS |
+
+No placeholder / `.skip` / `.todo` tests among the covering tests. The 14
+hermetic route+use-case tests and the 4 real-Postgres integration tests are all
+genuinely asserting.
+
+## Privacy Boundary Assessment (CRITICAL check) — PASS
+
+Traced end to end; the boundary is enforced at three layers, defense in depth:
+
+1. **Response DTOs** (`packages/contracts/src/index.ts`): `TenantUsageReportDTO`
+   = `{ tenantUsage: TenantQuotaUsageDTO[], memberUsage: MemberQuotaUsageDTO[] }`;
+   `SetMemberAllocationResponse` = `{ allocation: MemberAllocationDTO }`. Every
+   field is an integer/enum/id (`feature`, `period`, `used`, `limit`, `userId`).
+   No field can carry memory text, prompt, health data, or generated content.
+2. **Port type surface** (`QuotaAdminPort` in `billing/quota-admin.ts`): the only
+   reads are `readTenantUsage`/`readMemberUsage` (count DTOs) and membership/tier
+   metadata. There is **no method** capable of returning member content — this is
+   structurally impossible, and a test asserts the exact method set.
+3. **SQL column selection** (`db/repositories/billing-admin.ts`): `readTenantUsage`
+   selects only `feature/period/used/limit` from `tenant_quota_counters`;
+   `readMemberUsage` selects only `userId/feature/period/used/limit` from
+   `member_quota_counters`. It never touches memory/prompt/health/plan-content
+   tables.
+
+**Tenant isolation**: every query is scoped by `tenant_id` (and `user_id` for
+member reads). Tenant + actor identity come from `request.authContext` only — a
+body `tenantId` is ignored (tested). A subject who is not a member of the actor's
+tenant is denied `unauthorized_quota_admin` with no other-tenant data read
+(tested). **Fail-closed authorization**: `isActiveOwner` requires a non-null,
+`active`, `owner` membership; missing / non-owner / non-active is denied. The
+auth plugin additionally re-checks tenant-scoped membership status per request
+(`membership.status !== "active"` → 401) before any handler runs — verified in
+`auth/plugin.ts`.
+
+## Owner-only vs "trainer" decision — CORRECT / ACCEPTABLE (not a gap)
+
+The spec text says "owners/trainers" and "GIVEN trainer O **owns** tenant T". The
+`membership_role` pgEnum is `["owner","member"]` — there is no distinct `trainer`
+role, and `provisioning.ts` creates the tenant creator as `owner`. In a
+trainer-managed tenant, the "trainer" **is** the tenant owner. Therefore
+resolving the authorized quota administrator as an **active owner** is the
+faithful, schema-backed reading of the spec, not a shortcut: the scenario's own
+wording ("owns tenant T") maps exactly to `role === "owner"`. This is a correct
+resolution — no trainer role needs to be added and no spec change is required for
+11a. (SUGGESTION below: add a one-line spec clarification so future readers do
+not mistake "trainer" for a separate role.)
+
+## Audit + aggregate-only verification
+
+- **Audit events written for admin actions**: proven on real Postgres — a
+  `member_allocation_set` row (with `actorUserId`=owner, `subjectUserId`=member,
+  `feature`, `period`, `metadata={limit}`) is written in the **same transaction**
+  as the `member_quota_allocations` upsert; a second write upserts the limit and
+  appends a **second** audit row (two writes → two rows).
+- **Usage totals aggregate/count-only**: `readTenantUsage`/`readMemberUsage`
+  return only count/limit columns; integration test asserts exact shapes and the
+  key set carries no content field.
+
+## Task Completion (RED→GREEN→TRIANGLE)
+
+- 3.1 RED — failing route+use-case tests added first (target modules unresolved on first run). Satisfied.
+- 3.2 GREEN — `billing/quota-admin.ts` (`SetMemberAllocation`, `GetTenantUsage`, `QuotaAdminPort`), `db/repositories/billing-admin.ts` adapter, `routes/billing.ts`, contract DTOs, `app.ts` wiring. Satisfied.
+- 3.3 TRIANGLE — audit rows written (real Postgres), aggregate/count-only reads, no member content reachable (port surface + response-shape asserts). Satisfied.
+
+Tasks 3.1/3.2/3.3 are `[x]` in `tasks.md` and match the code state. Phase 4
+(4.1–4.3) remains `[ ]` — intentionally out of PR3 scope.
+
+## Scope Leak Check
+
+- No `apps/web/**` changes (`git status` clean for web) — no Phase-4 UI leak.
+- No Stripe/checkout/webhook/invoice/payment_method/coupon strings in
+  `routes/billing.ts`, `billing/quota-admin.ts`, or `db/repositories/billing-admin.ts` — grep clean.
+- `CreateAdminOverride` not implemented (grep confirms absent) — correct, out of scope.
+- Slice 1/2 schema, entitlement, consume, and gating code unchanged. Changed
+  files are exactly: `app.ts`, `contracts/src/index.ts`, `apply-progress.md`,
+  `tasks.md` (modified) + `quota-admin.ts`, `billing-admin.ts`, `routes/billing.ts`,
+  `billing.test.ts`, `billing-admin.integration.test.ts` (new).
+
+## Gate Results (exact)
+
+| Gate | Command | Result |
+|---|---|---|
+| Focused (work unit 3) | `pnpm --filter api test src/routes/__tests__/billing.test.ts src/routes/__tests__/auth.test.ts` | PASS — `Test Files 2 passed (2)`, `Tests 24 passed (24)` |
+| Full API suite (hermetic) | `pnpm --filter api test` | PASS — `Test Files 65 passed (65)`, `Tests 906 passed | 8 skipped (914)` |
+| Type-check | `pnpm type-check` | PASS — all 6 workspaces `Done` |
+| Architecture | `pnpm architecture` | PASS — `no dependency violations found (1597 modules, 4627 dependencies cruised)`; negative guard passed |
+| Deps-guard | `pnpm deps-guard` | PASS — no prohibited dependencies (6 package.json) |
+| Build | `pnpm build` | PASS — all workspaces built; web routes emitted, no `/billing` |
+
+## Runtime Smoke (real Postgres) — DONE
+
+Harness: `podman run pgvector/pgvector:pg17` on port 55434 →
+`DATABASE_URL=… pnpm --filter api db:migrate` (migrations applied) →
+`DATABASE_URL=… pnpm --filter api test src/db/repositories/__tests__/billing-admin.integration.test.ts`.
+Container removed after run; no artifacts left in the tree.
+
+| Check | Result |
+|---|---|
+| `writeMemberAllocation` persists allocation + `member_allocation_set` audit row atomically | PASS |
+| Upsert: second write updates the limit and appends a second audit row (2 rows) | PASS |
+| `readTenantUsage` / `readMemberUsage` return tenant-scoped aggregate COUNTS only (no content field) | PASS |
+| `loadTenantTier` resolves the effective tier from billing state | PASS |
+
+**SMOKE RESULT: 4 passed, 1 skipped (0 failed).** The atomic allocation+audit
+transaction and the count-only aggregate reads behave correctly against real
+Postgres.
+
+## Deviations from Design
+
+1. (Accepted) Drizzle adapter in `db/repositories/billing-admin.ts` rather than `billing/*` — required by `.dependency-cruiser.cjs` (`api-no-db-outside-infra`); pure use cases stay port-only in `billing/quota-admin.ts`. Consistent with Slice 2. Architecture gate passes.
+2. (Accepted) Endpoint naming (`GET /billing/usage`, `PUT /billing/allocations`) is not fixed by the spec; RESTful choice; tenant id is never accepted from the client (always authContext).
+3. (Accepted) `CreateAdminOverride` (listed in the design use-case set) is out of Phase-3 scope — it belongs to the separate "Admin Overrides" requirement and is intentionally not implemented in this slice.
+
+## Issues
+
+- **SUGGESTION** — Add a one-line clarification to the "Member Quota Administration" spec requirement that "trainer" denotes the `owner` of a trainer-managed tenant (no distinct `trainer` role in 11a), so future readers do not treat owner-only enforcement as a gap. Non-blocking.
+- **SUGGESTION** — The Slice-3 test "an owner MAY set a suspended member's allocation … grants no consumption" asserts the management-side (write succeeds) but does not itself assert the consumption block; that block is correctly the responsibility of `CheckEntitlement` (`inactive_membership`) and is tested in Slice 2. Behavior is covered end to end; noted only for traceability. Non-blocking.
+
+## Verdict
+
+**PASS.** Phase 3 is spec-compliant and proven at unit and live-Postgres runtime
+level. Zero CRITICAL, zero WARNING; two non-blocking SUGGESTIONs. The privacy
+boundary is structurally enforced, tenant isolation and fail-closed authorization
+are verified, admin actions are audited, and usage exposure is aggregate/count
+only. The owner-only resolution of the spec's "trainer" wording is correct. No
+scope leak into Phase 4 or Stripe. Safe to proceed to review/PR for PR3, then
+Phase 4 (web billing UI + final verify/rollout).
