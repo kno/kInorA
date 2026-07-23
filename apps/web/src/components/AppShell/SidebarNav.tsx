@@ -11,7 +11,7 @@ import styles from "./SidebarNav.module.css";
 interface NavItem {
   label: string;
   href: string;
-  icon: "home" | "plan" | "stats" | "history" | "create" | "exercises" | "memory";
+  icon: "home" | "plan" | "stats" | "history" | "create" | "exercises" | "memory" | "billing";
 }
 
 /** Minimal identity shape for the sidebar user area. */
@@ -48,9 +48,11 @@ const NAV_ITEMS: NavItem[] = [
 export function SidebarNav({
   user,
   memoryNavLabel,
+  billingNavLabel,
 }: {
   user?: SidebarUser;
   memoryNavLabel?: string;
+  billingNavLabel?: string;
 } = {}) {
   const pathname = usePathname();
   const identity = user ?? FALLBACK_USER;
@@ -58,6 +60,9 @@ export function SidebarNav({
     ...NAV_ITEMS,
     ...(memoryNavLabel
       ? [{ label: memoryNavLabel, href: "/memory", icon: "memory" as const }]
+      : []),
+    ...(billingNavLabel
+      ? [{ label: billingNavLabel, href: "/billing", icon: "billing" as const }]
       : []),
   ];
 
@@ -140,5 +145,7 @@ function NavIcon({ name }: { name: NavItem["icon"] }) {
       return <ExercisesIcon className={styles.icon} size={20} />;
     case "memory":
       return <HistoryIcon className={styles.icon} size={20} />;
+    case "billing":
+      return <StatsIcon className={styles.icon} size={20} />;
   }
 }

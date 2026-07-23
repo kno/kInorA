@@ -37,5 +37,13 @@ export default async function AppLayout({
     }
   }
 
-  return <AppShell user={user} memoryNavLabel={t("memory.navLabel")}>{children}</AppShell>;
+  return (
+    <AppShell
+      user={user}
+      memoryNavLabel={t("memory.navLabel")}
+      billingNavLabel={t("billing.navLabel")}
+    >
+      {children}
+    </AppShell>
+  );
 }

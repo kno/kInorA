@@ -93,6 +93,31 @@ describe("MobileNav", () => {
     }
   });
 
+  it("renders a billing tab with the translated label and /billing link when billingNavLabel is provided", () => {
+    const html = renderToString(MobileNav({ billingNavLabel: "Billing" }));
+
+    expect(html).toContain('href="/billing"');
+    const billingLink = html.match(/<a[^>]*href="\/billing"[^>]*>[\s\S]*?<\/a>/);
+    expect(billingLink).toBeTruthy();
+    expect(billingLink![0]).toContain("Billing");
+  });
+
+  it("renders BOTH the memory and billing tabs when both labels are provided", () => {
+    // Regression guard: with 8 tabs the right-group slice must not drop the
+    // last trailing tab (billing sits at index 7).
+    const html = renderToString(
+      MobileNav({ memoryNavLabel: "Memory", billingNavLabel: "Billing" }),
+    );
+
+    expect(html).toContain('href="/memory"');
+    expect(html).toContain('href="/billing"');
+  });
+
+  it("omits the billing tab when billingNavLabel is not provided", () => {
+    const html = renderToString(MobileNav());
+    expect(html).not.toContain('href="/billing"');
+  });
+
   it("renders the FAB as a separate element from the tab bar", () => {
     const html = renderToString(MobileNav());
 
