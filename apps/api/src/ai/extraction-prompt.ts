@@ -6,17 +6,34 @@ import { sanitizeMemoryContext } from "./prompt.js";
  * Builds the extraction prompt for one conversational create-plan turn
  * (12-interactive-text-chat, S1).
  *
- * Pure function — no network, no side effects. Mirrors `buildPlanPrompt`:
- * it assembles the prompt string and then applies the SAME masking discipline
- * before returning, so health/limitation text never reaches the LLM or
- * observability verbatim.
+ * Pure function — no network, no side effects. Mirrors `buildPlanPrompt`'s
+ * masking call shape, but the guarantee it provides is NARROWER — see below.
  *
- * Masking discipline:
- * - Limitation/health terms from the current draft are redacted from the WHOLE
- *   assembled prompt via `mask()` — this also scrubs the same terms if the user
- *   repeated them in this turn's message.
+ * ACCURATE masking guarantee (do NOT overstate this):
+ * - Limitation/health terms ALREADY KNOWN in `currentDraft.limitations` are
+ *   redacted from the WHOLE assembled prompt via `mask()` — this also scrubs
+ *   a repeat of the SAME known term if the user mentions it again this turn.
+ * - A user's NEWLY INTRODUCED (first-mention) health/limitation text in
+ *   `message` is NOT masked here and is necessarily visible to the extractor
+ *   this turn — extraction cannot read a field it cannot see. This is
+ *   unavoidable and intentional, not a leak: raw health text reaching the
+ *   extraction LLM call for a first mention is the expected, minimal
+ *   necessary exposure for the feature to work.
  * - Approved memory context is scrubbed of prompt-injection / medical-advice
  *   patterns via `sanitizeMemoryContext()` before inclusion.
+ *
+ * The DURABLE privacy guarantees for chat/extraction live elsewhere, not in
+ * this function:
+ * (a) chat transcripts are NEVER embedded into the vector store (raw-transcript
+ *     embedding is out of scope for this feature entirely);
+ * (b) observability/tracing (Langfuse) masking for the extraction LLM call —
+ *     TODO(S2b): the extraction adapter (`extraction-adapter.ts`, S2b) MUST
+ *     mask health/limitation text in its Langfuse trace metadata/inputs the
+ *     same way `invokeChain` does for plan generation, even though the model
+ *     input necessarily contains a first-mention phrase this function cannot
+ *     redact;
+ * (c) `buildPlanPrompt` (plan GENERATION, a separate call after promote/confirm)
+ *     masks the full, by-then-known limitations list before generation.
  *
  * The prompt asks the model to extract ONLY the six wizard input fields plus an
  * optional name, and to never diagnose or give medical advice.
@@ -89,6 +106,16 @@ ${missingSection}
 USER MESSAGE:
 ${message}${memorySection}`.trim();
 
+  // Masks only ALREADY-KNOWN limitation terms (see docstring above) — a
+  // first-mention health phrase in `message` is NOT covered by this call and
+  // reaches the returned prompt verbatim; that phrase is what the extractor
+  // needs to see to populate `limitations` on this turn.
+  //
+  // TODO(S2b): apps/api/src/ai/extraction-adapter.ts MUST mask the equivalent
+  // health/limitation text before it reaches Langfuse/observability for the
+  // extraction call, mirroring `invokeChain`'s masked-trace discipline — the
+  // model input can legitimately contain a first-mention phrase, but the
+  // trace/observability payload MUST NOT.
   const limitationTerms = (currentDraft.limitations ?? []).map((l) => l.text);
   return mask(rawPrompt, limitationTerms);
 }

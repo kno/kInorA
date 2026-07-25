@@ -24,13 +24,28 @@ describe("buildExtractionPrompt", () => {
     expect(prompt).toContain("[REDACTED]");
   });
 
-  it("masks limitation text even when it appears in the user message", () => {
+  it("masks a KNOWN limitation term even when the user repeats it in this turn's message", () => {
+    // currentDraft already knows "lower back pain" (see baseInput) — mask()
+    // scrubs it everywhere in the assembled prompt, including a repeat in message.
     const prompt = buildExtractionPrompt({
       ...baseInput,
       message: "I still have lower back pain so keep it light",
     });
     expect(prompt).not.toContain("lower back pain");
     expect(prompt).toContain("[REDACTED]");
+  });
+
+  it("does NOT mask a first-mention health/limitation phrase (accurate, not a bug)", () => {
+    // currentDraft.limitations is empty — mask() has no known terms to redact,
+    // so a health phrase the user introduces for the FIRST time this turn is
+    // necessarily visible to the extractor. This is required for extraction to
+    // work at all and is documented as the accurate contract, not a leak.
+    const prompt = buildExtractionPrompt({
+      message: "I have lower back pain, build muscle 4 days",
+      currentDraft: {},
+    });
+    expect(prompt).toContain("lower back pain");
+    expect(prompt).not.toContain("[REDACTED]");
   });
 
   it("redacts unsafe memory context via sanitizeMemoryContext", () => {
