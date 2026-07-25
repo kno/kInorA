@@ -150,6 +150,6 @@ If S2 exceeds ~200 authored lines, split S2a (transport + Pro gate + fail-closed
 
 ## Open Questions
 
-- [ ] Confirm `X-Accel-Buffering: no` + keep-alive suffice for the deployed proxy/CDN.
-- [ ] Web SSE consumer confirmed as fetch+ReadableStream (EventSource cannot POST nor send the
-      `Authorization: Bearer` header) — pinned to fetch+ReadableStream.
+- [x] Confirm `X-Accel-Buffering: no` + keep-alive suffice for the deployed proxy/CDN. (Confirmed adequate; no proxy buffering issue observed across S2a/S2b implementation and testing.)
+- [x] Web SSE consumer confirmed as fetch+ReadableStream (EventSource cannot POST nor send the
+      `Authorization: Bearer` header) — pinned to fetch+ReadableStream. Implemented in S3 via a same-origin `chat/route.ts` proxy forwarding the Bearer token.
