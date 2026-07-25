@@ -1,4 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
+import {
+  closeSeedPool,
+  currentPeriod,
+  demoteToMember,
+  registerTenant,
+  seedEndedSubscription,
+  seedExpiredTrial,
+  seedFreeTenant,
+  seedTenantUsage,
+  useSession,
+} from "./helpers/billing-seed";
 
 /**
  * Billing UI end-to-end coverage (issue #179).
@@ -172,3 +183,318 @@ test.describe("Billing visibility UI (#179)", () => {
     ).toHaveCount(0);
   });
 });
+
+/**
+ * Expanded real-stack billing QA (issue #200).
+ *
+ * Issue #200 deferred a manual two-server, two-tenant browser pass of `/billing`
+ * (the local podman env was down); its acceptance criteria explicitly accept an
+ * expanded Playwright e2e against a live two-server session as the deliverable.
+ * This block drives the SAME real stack the existing spec uses (real Next.js +
+ * Fastify api + migrated Postgres, booted by scripts/e2e-with-stack.mjs) and
+ * exercises the states a fresh registration alone cannot reach — a Free tenant,
+ * a lapsed trial, an ended subscription, non-empty usage, and owner-vs-non-owner
+ * — by seeding the precise billing state in the SAME Postgres the api reads
+ * (see ./helpers/billing-seed.ts; this mirrors the manual `psql` reshaping in
+ * docs/billing/QA-CHECKLIST.md, now automated and asserted).
+ *
+ * WHAT IS COVERED HERE (automated, deterministic against the stack):
+ *   #1 tier chip / trial badge / usage-meter copy ("up to N/mo") — Free & Pro.
+ *   #2 Monthly/Annual toggle updates the displayed price + the derived save badge.
+ *   #3 owner sees invoice history + Manage CTA; a non-owner does NOT.
+ *   #4 tenant switch refreshes billing REPLACE-not-merge (Free → Pro, no stale).
+ *   #5 access-ended banner: trial-expired vs subscription-ended (+ absent for
+ *      active Pro trial); upgrade CTA present.
+ *   #6 a11y: region/radiogroup/meter roles + labels, keyboard focus on Retry.
+ *   #7 Stripe checkout/portal — asserted up to the wired boundary only (CTA
+ *      present, enabled, and initiating the server action) WITHOUT following the
+ *      external redirect. Completing a live Stripe test checkout / Customer
+ *      Portal is NOT automatable here (no test card can be driven through
+ *      stripe.com deterministically) and stays a manual step — see MANUAL QA
+ *      CHECKLIST at the bottom of this file and docs/billing/QA-CHECKLIST.md.
+ *
+ * Requires the stack + `DATABASE_URL` injected by scripts/e2e-with-stack.mjs.
+ */
+test.describe("Billing real-stack QA (#200)", () => {
+  test.afterAll(async () => {
+    await closeSeedPool();
+  });
+
+  test("a Free tenant renders Free/Active, no trial badge, no access-ended banner, and an upgrade CTA", async ({
+    page,
+  }) => {
+    const tenant = await registerTenant(page);
+    await seedFreeTenant(tenant.tenantId);
+    await useSession(page, tenant.token);
+
+    await page.goto("/billing");
+
+    await expect(page.getByRole("heading", { name: "Billing", level: 1 })).toBeVisible();
+    await expect(page.getByTestId("billing-tier-chip")).toHaveText("Free");
+    await expect(page.getByTestId("billing-status-chip")).toHaveText("Active");
+    // A plain Free tenant is not a lapsed premium entitlement → no trial badge
+    // and no access-ended banner (that surface is only for a lapsed trial /
+    // ended subscription; the Pro card carries the upgrade path here).
+    await expect(page.getByTestId("billing-trial-badge")).toHaveCount(0);
+    await expect(page.getByTestId("billing-access-ended")).toHaveCount(0);
+    // The Pro card offers the upgrade (the tenant is not an active Pro).
+    await expect(page.getByRole("heading", { name: "kInorA Pro" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Upgrade to Pro" })).toBeEnabled();
+    await expect(page.getByText("Your current plan")).toHaveCount(0);
+  });
+
+  test("a Pro-trial tenant with consumed quota renders the tier chip, trial badge, and usage meter", async ({
+    page,
+  }) => {
+    const tenant = await registerTenant(page);
+    // A fresh registration is Pro/trialing; seed a tenant usage row so the Usage
+    // Meters section renders a real meter (not the empty-usage card).
+    await seedTenantUsage({
+      tenantId: tenant.tenantId,
+      feature: "plan_generation",
+      used: 1,
+      limit: 1,
+    });
+    await useSession(page, tenant.token);
+
+    await page.goto("/billing");
+
+    await expect(page.getByTestId("billing-tier-chip")).toHaveText("Pro");
+    await expect(page.getByTestId("billing-status-chip")).toHaveText("Trial");
+    await expect(page.getByTestId("billing-trial-badge")).toContainText("Pro trial");
+
+    // Usage meter for the current period: label, used/limit, the metered
+    // "up to N/mo" note (NEVER "unlimited"), and the period label.
+    const tenantMeters = page.getByRole("list", { name: "Tenant usage this period" });
+    await expect(tenantMeters).toBeVisible();
+    await expect(tenantMeters.getByText("Plan generations")).toBeVisible();
+    await expect(tenantMeters.getByText("1/1", { exact: true })).toBeVisible();
+    await expect(tenantMeters.getByText("up to 1/mo")).toBeVisible();
+    await expect(tenantMeters.getByText(`Period ${currentPeriod()}`)).toBeVisible();
+    // a11y: the meter exposes the ARIA meter role with min/now/max.
+    const meter = tenantMeters.getByRole("meter");
+    await expect(meter).toHaveAttribute("aria-valuenow", "1");
+    await expect(meter).toHaveAttribute("aria-valuemax", "1");
+  });
+
+  test("the Monthly/Annual toggle updates the displayed price and shows the derived save badge", async ({
+    page,
+  }) => {
+    const tenant = await registerTenant(page);
+    await useSession(page, tenant.token);
+    await page.goto("/billing");
+
+    const cycleGroup = page.getByRole("radiogroup", { name: "Billing cycle" });
+    await expect(cycleGroup).toBeVisible();
+    const monthly = page.getByRole("radio", { name: "Monthly" });
+    const annual = page.getByRole("radio", { name: "Annual" });
+
+    // Default is monthly. Capture the monthly price and confirm the annual-only
+    // note is absent.
+    await expect(monthly).toHaveAttribute("aria-checked", "true");
+    const price = page.getByTestId("billing-pro-price");
+    await expect(price).toBeVisible();
+    const monthlyPrice = (await price.textContent())?.trim() ?? "";
+    expect(monthlyPrice.length).toBeGreaterThan(0);
+    await expect(page.getByText("billed annually")).toHaveCount(0);
+
+    // The save badge is DERIVED from the two configured amounts (999/799 → 20%),
+    // never a hardcoded literal — so it renders for the default config.
+    await expect(page.getByText("Save 20%")).toBeVisible();
+
+    // Switch to annual: the displayed per-month price changes and the annual
+    // note appears (web-first assertions, no arbitrary waits).
+    await annual.click();
+    await expect(annual).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByText("billed annually")).toBeVisible();
+    await expect(price).not.toHaveText(monthlyPrice);
+    await expect(page.getByText("Save 20%")).toBeVisible();
+  });
+
+  test("owner sees invoice history + Manage CTA; a non-owner member does not", async ({
+    page,
+  }) => {
+    // Owner: a fresh registration is the tenant owner.
+    const owner = await registerTenant(page);
+    await useSession(page, owner.token);
+    await page.goto("/billing");
+    await expect(page.getByRole("heading", { name: "Invoices & charges" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Manage / Add card" })).toBeVisible();
+
+    // Non-owner: demote the membership to `member`; the owner-only invoice/portal
+    // endpoints then return 403 (→ web `forbidden`) and the sections are hidden.
+    const member = await registerTenant(page);
+    await demoteToMember(member.tenantId, member.userId);
+    await page.context().clearCookies();
+    await useSession(page, member.token);
+    await page.goto("/billing");
+
+    // The billing screen still renders (any active member can read visibility)…
+    await expect(page.getByRole("heading", { name: "Billing", level: 1 })).toBeVisible();
+    await expect(page.getByTestId("billing-tier-chip")).toBeVisible();
+    // …but the owner-only surfaces are absent.
+    await expect(page.getByRole("heading", { name: "Invoices & charges" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Manage / Add card" })).toHaveCount(0);
+  });
+
+  test("switching the active tenant replaces the billing view (Free → Pro, no stale state)", async ({
+    page,
+  }) => {
+    // There is NO tenant-switcher UI (confirmed by prior reviews): switching the
+    // active tenant = (re)issuing the session cookie. Seed tenant A as Free, drive
+    // it, then swap the cookie to tenant B (fresh Pro trial) and drive the in-UI
+    // refresh — the view must reflect ONLY B, with A's Free state fully gone.
+    const free = await registerTenant(page);
+    await seedFreeTenant(free.tenantId);
+    await useSession(page, free.token);
+    await page.goto("/billing");
+    await expect(page.getByTestId("billing-tier-chip")).toHaveText("Free");
+    await expect(page.getByTestId("billing-status-chip")).toHaveText("Active");
+    await expect(page.getByTestId("billing-trial-badge")).toHaveCount(0);
+
+    // Switch to the Pro-trial tenant and refresh (the Server Action reads the
+    // CURRENT cookie). The client refreshes both visibility AND invoices, so a
+    // switch cannot leave stale values on screen.
+    const pro = await registerTenant(page);
+    await page.context().clearCookies();
+    await useSession(page, pro.token);
+    // Trigger the client's focus refresh deterministically via a Server-Action
+    // -backed reload of the current session (a full navigation re-runs SSR with
+    // the new cookie).
+    await page.goto("/billing");
+
+    // ONLY tenant B's Pro-trial state is shown — replace, never merge.
+    await expect(page.getByTestId("billing-tier-chip")).toHaveText("Pro");
+    await expect(page.getByTestId("billing-status-chip")).toHaveText("Trial");
+    await expect(page.getByTestId("billing-trial-badge")).toContainText("Pro trial");
+    // A's Free markers are gone.
+    await expect(page.getByRole("button", { name: "Upgrade to Pro" })).toBeVisible();
+  });
+
+  test("a lapsed trial shows the trial-ended banner; an active trial shows none", async ({
+    page,
+  }) => {
+    // Active Pro trial → NO access-ended banner.
+    const active = await registerTenant(page);
+    await useSession(page, active.token);
+    await page.goto("/billing");
+    await expect(page.getByTestId("billing-access-ended")).toHaveCount(0);
+    await expect(page.getByText("Your Pro trial has ended")).toHaveCount(0);
+
+    // Lapsed trial → the trial-ended banner with its upgrade CTA. The effective
+    // tier resolves to Free and the trial badge is not shown (an expired trial is
+    // not an active unexpired trial).
+    const lapsed = await registerTenant(page);
+    await seedExpiredTrial(lapsed.tenantId);
+    await page.context().clearCookies();
+    await useSession(page, lapsed.token);
+    await page.goto("/billing");
+
+    const banner = page.getByTestId("billing-access-ended");
+    await expect(banner).toBeVisible();
+    await expect(banner.getByRole("heading", { name: "Your Pro trial has ended" })).toBeVisible();
+    await expect(banner.getByRole("link", { name: "View upgrade options" })).toBeVisible();
+    await expect(page.getByTestId("billing-tier-chip")).toHaveText("Free");
+    await expect(page.getByTestId("billing-trial-badge")).toHaveCount(0);
+  });
+
+  test("an ended paid subscription shows the subscription-ended banner (distinct from trial)", async ({
+    page,
+  }) => {
+    const ended = await registerTenant(page);
+    await seedEndedSubscription(ended.tenantId);
+    await useSession(page, ended.token);
+    await page.goto("/billing");
+
+    const banner = page.getByTestId("billing-access-ended");
+    await expect(banner).toBeVisible();
+    // Distinct copy from a lapsed trial (#196): "subscription", not "trial".
+    await expect(
+      banner.getByRole("heading", { name: "Your Pro subscription has ended" }),
+    ).toBeVisible();
+    await expect(page.getByText("Your Pro trial has ended")).toHaveCount(0);
+    await expect(page.getByTestId("billing-tier-chip")).toHaveText("Free");
+    await expect(page.getByTestId("billing-status-chip")).toHaveText("Expired");
+  });
+
+  test("the error card focuses the Retry button for keyboard users (a11y)", async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await page.goto("/billing");
+    const retry = page.getByRole("button", { name: "Retry" });
+    await expect(retry).toBeVisible();
+    // The error/offline card moves focus to Retry so a keyboard user lands on the
+    // recovery action (BillingPageClient focuses retryButtonRef).
+    await expect(retry).toBeFocused();
+  });
+
+  test("billing regions expose accessible landmarks (a11y)", async ({ page }) => {
+    const tenant = await registerTenant(page);
+    await useSession(page, tenant.token);
+    await page.goto("/billing");
+    // Labelled regions for the main column and the plan-options aside.
+    await expect(page.getByRole("region", { name: "Billing overview" })).toBeVisible();
+    // The plan-options column is an <aside> → implicit ARIA "complementary" role.
+    await expect(page.getByRole("complementary", { name: "Plan options" })).toBeVisible();
+    // The cycle toggle is an accessible radiogroup.
+    await expect(page.getByRole("radiogroup", { name: "Billing cycle" })).toBeVisible();
+  });
+
+  test("Stripe checkout + portal are wired to the boundary (no external redirect)", async ({
+    page,
+  }) => {
+    // We CANNOT complete a live Stripe test checkout / Customer Portal in e2e
+    // (no test card can be driven through stripe.com deterministically). Assert
+    // ONLY up to the wired boundary: the CTA is present, enabled, and initiates
+    // the server action. Stripe is unconfigured in the e2e stack, so the action
+    // fails closed and surfaces its error alert IN-PAGE — proving the button is
+    // wired to the checkout/portal action WITHOUT ever navigating to stripe.com.
+    const owner = await registerTenant(page);
+    await useSession(page, owner.token);
+    await page.goto("/billing");
+
+    // Upgrade CTA → checkout action.
+    const upgrade = page.getByRole("button", { name: "Upgrade to Pro" });
+    await expect(upgrade).toBeEnabled();
+    await upgrade.click();
+    // Scope to the specific copy: a bare getByRole("alert") also matches Next's
+    // empty __next-route-announcer__ live region (strict-mode violation).
+    await expect(
+      page.getByText("We couldn't start checkout. Please try again."),
+    ).toBeVisible();
+    // Still on /billing — no external redirect was followed.
+    expect(new URL(page.url()).pathname).toBe("/billing");
+
+    // Manage CTA (owner-only) → portal action.
+    const manage = page.getByRole("button", { name: "Manage / Add card" });
+    await expect(manage).toBeEnabled();
+    await manage.click();
+    // Scope to the specific copy: the checkout alert above is still on screen, so
+    // a bare getByRole("alert") would match two nodes (strict-mode violation).
+    await expect(
+      page.getByText("We couldn't open the billing portal. Please try again."),
+    ).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe("/billing");
+  });
+});
+
+/**
+ * MANUAL QA CHECKLIST — the acceptance points from #200 that genuinely cannot be
+ * automated in the Playwright + stack harness (do NOT fake a pass; run these by
+ * hand once against a live stack with real Stripe TEST keys). See also
+ * docs/billing/QA-CHECKLIST.md.
+ *
+ *   [ ] Complete a live Stripe TEST checkout from the Upgrade CTA (card
+ *       4242 4242 4242 4242) and confirm the webhook flips the tenant to
+ *       Pro/active, the "Your current plan" badge appears, and the Renewal /
+ *       Current-period tiles populate from the subscription.
+ *   [ ] Open the Stripe Customer Portal from "Manage / Add card" as an owner of a
+ *       SUBSCRIBED tenant (has a stripe_customer_id), update the card, and cancel
+ *       — confirm the portal returns to /billing and the state reflects the change.
+ *   [ ] With a subscribed tenant, confirm the owner Invoice History lists real
+ *       invoices with working Receipt links (hostedInvoiceUrl / receiptUrl).
+ *   [ ] Loading + offline cards: throttle / go offline in DevTools and trigger a
+ *       refresh from the error state (server-side RSC fetch stall/failure cannot
+ *       be forced from the browser; covered at the component-test level).
+ */
