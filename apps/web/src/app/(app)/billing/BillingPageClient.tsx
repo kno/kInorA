@@ -203,10 +203,19 @@ function BillingScreen({
           <p className="kin-text kin-muted">{t("billing.subtitle")}</p>
         </div>
         <div className={styles.chips}>
-          <span className={styles.tierChip}>{t(`billing.tier.${billing.tier}`)}</span>
-          <span className={styles.statusChip}>{t(`billing.status.${billing.status}`)}</span>
+          {/* data-testid: stable e2e/component targets — the tier word ("Pro")
+              also renders as the PlanHero title below, so `getByText("Pro")`
+              alone is ambiguous (Playwright strict-mode). Prefer these testids
+              over text locators for tier/status/trial (see
+              tests/e2e/billing-visibility.spec.ts). */}
+          <span className={styles.tierChip} data-testid="billing-tier-chip">
+            {t(`billing.tier.${billing.tier}`)}
+          </span>
+          <span className={styles.statusChip} data-testid="billing-status-chip">
+            {t(`billing.status.${billing.status}`)}
+          </span>
           {trialDaysRemaining !== null ? (
-            <span className={styles.trialChip}>
+            <span className={styles.trialChip} data-testid="billing-trial-badge">
               {t("billing.trial.badge", { daysRemaining: trialDaysRemaining })}
             </span>
           ) : null}
@@ -283,7 +292,7 @@ function PlanHero({
       : t("billing.plan.valueNotSet"));
 
   return (
-    <section className={styles.card}>
+    <section className={styles.card} data-testid="billing-plan-hero">
       <span className={styles.eyebrow}>{t("billing.plan.currentLabel")}</span>
       <h2 className={styles.planName}>{t(`billing.tier.${billing.tier}`)}</h2>
       <p className="kin-text kin-muted">
