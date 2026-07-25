@@ -1,4 +1,5 @@
 import type {
+  BillingCycle,
   BillingDenialReason,
   BillingSource,
   BillingStatus,
@@ -31,6 +32,15 @@ export interface BillingVisibilityContext {
     trialStartedAt: Date | null;
     trialEndsAt: Date | null;
     updatedAt: Date;
+    /**
+     * Stripe subscription DISPLAY metadata (11b) — surfaced to the UI Price /
+     * Renewal tiles. Pure display data: NEVER read by `resolveEffectiveTier`.
+     * `billingCycle`/`currentPeriodEnd` are null when there is no paid Stripe
+     * subscription; `cancelAtPeriodEnd` defaults to false.
+     */
+    billingCycle: BillingCycle | null;
+    currentPeriodEnd: Date | null;
+    cancelAtPeriodEnd: boolean;
   } | null;
   activeOverrideTier: BillingTier | null;
   /** `endsAt` of the currently active override, or null when none is active. */
@@ -110,6 +120,12 @@ export class GetBillingVisibility {
       trialEndsAt: ctx.billing?.trialEndsAt?.toISOString() ?? null,
       activeOverrideEndsAt: ctx.activeOverrideEndsAt?.toISOString() ?? null,
       updatedAt: (ctx.billing?.updatedAt ?? now).toISOString(),
+      // Stripe display metadata (11b): projected so the web PlanHero Price /
+      // Renewal tiles populate. Null when there is no paid Stripe subscription;
+      // NOT read by tier resolution (see resolveEffectiveTier).
+      billingCycle: ctx.billing?.billingCycle ?? null,
+      currentPeriodEnd: ctx.billing?.currentPeriodEnd?.toISOString() ?? null,
+      cancelAtPeriodEnd: ctx.billing?.cancelAtPeriodEnd ?? false,
     };
 
     return {

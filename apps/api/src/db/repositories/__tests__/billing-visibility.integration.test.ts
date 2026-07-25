@@ -78,6 +78,31 @@ describe.skipIf(!hasDb)("BillingVisibilityRepository (real Postgres)", () => {
     expect(ctx.activeOverrideEndsAt).toBeNull();
   });
 
+  it("loadContext carries a paying Pro tenant's billing_cycle + current_period_end (renewal) through", async () => {
+    // Real-PG proof of the visibility seam: a Stripe-backed Pro row persists
+    // billing_cycle + current_period_end, and loadContext MUST surface them so
+    // the web PlanHero Price/Renewal tiles populate (they were previously
+    // dropped by the SELECT). Runs in the CI billing-integration job.
+    const { tenantId, memberAId } = await seedTenant();
+    const periodEnd = new Date("2026-08-25T00:00:00.000Z");
+    await db.insert(tenantBillingStates).values({
+      tenantId,
+      tier: "pro",
+      status: "active",
+      source: "stripe",
+      billingCycle: "monthly",
+      currentPeriodEnd: periodEnd,
+      cancelAtPeriodEnd: false,
+    });
+
+    const ctx = await repo.loadContext({ tenantId, userId: memberAId });
+
+    expect(ctx.billing).toMatchObject({ tier: "pro", status: "active", source: "stripe" });
+    expect(ctx.billing?.billingCycle).toBe("monthly");
+    expect(ctx.billing?.currentPeriodEnd?.getTime()).toBe(periodEnd.getTime());
+    expect(ctx.billing?.cancelAtPeriodEnd).toBe(false);
+  });
+
   it("loadContext resolves an active admin override and its endsAt", async () => {
     const { tenantId, memberAId } = await seedTenant();
     await db.insert(tenantBillingStates).values({

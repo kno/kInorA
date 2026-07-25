@@ -116,3 +116,109 @@ export function buildBillingPricing(
     annualSavePercent: annualSavePercent(monthlyPerMonth, annualPerMonth),
   };
 }
+
+/**
+ * FIX 2 (display/charge drift guard). The DISPLAY amounts
+ * (`STRIPE_PRICE_MONTHLY_AMOUNT` / `STRIPE_PRICE_ANNUAL_AMOUNT`) are read from
+ * env INDEPENDENTLY of the Stripe Price IDs (`STRIPE_PRICE_MONTHLY` /
+ * `STRIPE_PRICE_ANNUAL`) that `create-checkout` actually charges. If they
+ * drift, the UI shows one price while Stripe charges another.
+ *
+ * This is a PURE, network-free config check (no boot-time Stripe call — that
+ * would break hermetic tests / CI-without-Stripe and slow startup). It returns
+ * a stable list of issue codes so an operator misconfiguration is caught at
+ * config-load time:
+ *   - a display amount env set without its corresponding Price-ID env (or
+ *     a Price-ID env set without its display amount) — the strongest drift
+ *     signal we can detect offline;
+ *   - a non-positive display amount;
+ *   - an annual once-a-year charge that is NOT cheaper than 12x the monthly
+ *     price (nonsensical — annual is meant to save money).
+ *
+ * NOTE: display amounts MUST be kept in sync with the Stripe Price objects.
+ * Sourcing them from the Stripe Price API is a possible future follow-up; this
+ * guard deliberately stays offline and pure.
+ */
+/**
+ * The subset of {@link collectBillingPricingIssues} codes that are genuinely
+ * broken / nonsensical and therefore fail-fast (THROW) in production:
+ *   - a display amount set WITHOUT its charged Price-ID (the display shows a
+ *     price nothing charges);
+ *   - a non-positive display amount;
+ *   - an annual once-a-year charge NOT cheaper than 12x monthly.
+ *
+ * DELIBERATELY EXCLUDED: `*_price_id_without_amount`. A prod deploy MUST set
+ * the Price IDs (checkout reads them); leaving the display `*_AMOUNT` envs
+ * unset is valid — `buildBillingPricing` then uses the documented defaults
+ * (999/799). Throwing there would crash a previously-healthy deploy, so it is
+ * only a WARN.
+ */
+export const BILLING_PRICING_ERROR_ISSUES: readonly string[] = [
+  "monthly_amount_without_price_id",
+  "annual_amount_without_price_id",
+  "non_positive_monthly_amount",
+  "non_positive_annual_amount",
+  "annual_not_cheaper_than_monthly",
+];
+
+export function collectBillingPricingIssues(
+  env: Record<string, string | undefined> = process.env,
+): string[] {
+  const issues: string[] = [];
+  const isSet = (raw: string | undefined): boolean => raw !== undefined && raw.trim() !== "";
+
+  const monthlyAmountSet = isSet(env.STRIPE_PRICE_MONTHLY_AMOUNT);
+  const annualAmountSet = isSet(env.STRIPE_PRICE_ANNUAL_AMOUNT);
+  const monthlyIdSet = isSet(env.STRIPE_PRICE_MONTHLY);
+  const annualIdSet = isSet(env.STRIPE_PRICE_ANNUAL);
+
+  if (monthlyAmountSet && !monthlyIdSet) issues.push("monthly_amount_without_price_id");
+  if (monthlyIdSet && !monthlyAmountSet) issues.push("monthly_price_id_without_amount");
+  if (annualAmountSet && !annualIdSet) issues.push("annual_amount_without_price_id");
+  if (annualIdSet && !annualAmountSet) issues.push("annual_price_id_without_amount");
+
+  const pricing = buildBillingPricing(env);
+  if (pricing.monthly.amountPerMonth <= 0) issues.push("non_positive_monthly_amount");
+  if (pricing.annual.amountPerMonth <= 0) issues.push("non_positive_annual_amount");
+  // Annual once-a-year charge must be strictly cheaper than paying monthly for
+  // twelve months; otherwise the "annual saves N%" story is broken/misleading.
+  if (pricing.annual.amountPerInterval >= pricing.monthly.amountPerMonth * MONTHS_PER_YEAR) {
+    issues.push("annual_not_cheaper_than_monthly");
+  }
+
+  return issues;
+}
+
+/** Options for {@link validateBillingPricingConfig}. */
+export interface ValidateBillingPricingOptions {
+  /** Fail-fast (throw) when true; otherwise emit a structured warning. */
+  production?: boolean;
+  /** Warning sink (defaults to `console.warn`) — injectable for tests. */
+  warn?: (message: string) => void;
+}
+
+/**
+ * Surface pricing-config drift at config-load time. In production an
+ * ERROR-level issue (see {@link BILLING_PRICING_ERROR_ISSUES}) THROWS
+ * (fail-fast) so a genuinely-broken misconfiguration is caught at boot; a
+ * WARN-level issue (Price ID set but display `*_AMOUNT` unset → valid defaults)
+ * only warns so a healthy deploy still boots. Outside production ALL issues
+ * warn and NOTHING throws. A consistent config is a no-op. Pure + network-free
+ * (see {@link collectBillingPricingIssues}).
+ */
+export function validateBillingPricingConfig(
+  env: Record<string, string | undefined> = process.env,
+  options: ValidateBillingPricingOptions = {},
+): void {
+  const issues = collectBillingPricingIssues(env);
+  if (issues.length === 0) return;
+
+  const message = `Inconsistent billing pricing config: ${issues.join(", ")}. Display amounts (STRIPE_PRICE_*_AMOUNT) MUST be kept in sync with the charged Stripe Price IDs (STRIPE_PRICE_*).`;
+
+  const hasErrorLevel = issues.some((code) => BILLING_PRICING_ERROR_ISSUES.includes(code));
+
+  if (options.production && hasErrorLevel) {
+    throw new Error(message);
+  }
+  (options.warn ?? console.warn)(message);
+}
