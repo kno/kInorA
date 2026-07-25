@@ -186,6 +186,15 @@ function BillingScreen({
   const t = useTranslations();
   const { billing, tenantUsage, memberUsage, denialReason } = data;
 
+  // "Access ended → upgrade" surface (#198): only a LAPSED premium entitlement
+  // (an expired trial or a canceled/ended paid subscription) shows the banner.
+  // A plain Free tenant (`premium_required`) or an active plan shows nothing —
+  // the Pro card already carries the upgrade path for those.
+  const accessEndedReason =
+    denialReason === "trial_expired" || denialReason === "subscription_ended"
+      ? denialReason
+      : null;
+
   const isActiveUnexpiredTrial =
     billing.status === "trialing" &&
     denialReason !== "trial_expired" &&
@@ -224,6 +233,7 @@ function BillingScreen({
 
       <div className={styles.grid}>
         <div role="region" aria-label={t("billing.regions.main")} className={styles.mainCol}>
+          {accessEndedReason ? <AccessEndedBanner reason={accessEndedReason} /> : null}
           <PlanHero
             billing={billing}
             pricing={pricing}
@@ -240,6 +250,41 @@ function BillingScreen({
         </aside>
       </div>
     </div>
+  );
+}
+
+/**
+ * Access-ended upgrade banner (#198). Rendered only when a previously-premium
+ * entitlement lapsed. The copy is reason-specific — a lapsed trial vs a
+ * canceled paid subscription must NOT show the same "trial ended" message
+ * (#196 keys the denial reason so these two states are distinguishable). The
+ * CTA anchors to the in-page Pro card, which carries the real checkout flow.
+ */
+function AccessEndedBanner({ reason }: { reason: "trial_expired" | "subscription_ended" }) {
+  const t = useTranslations();
+  const title =
+    reason === "subscription_ended"
+      ? t("billing.subscription.endedTitle")
+      : t("billing.trial.expiredTitle");
+  const description =
+    reason === "subscription_ended"
+      ? t("billing.subscription.endedDescription")
+      : t("billing.trial.expiredDescription");
+
+  return (
+    <section
+      className={`${styles.card} ${styles.accessEnded}`}
+      data-testid="billing-access-ended"
+      role="region"
+      aria-label={title}
+    >
+      <h2 className={styles.cardTitle}>{title}</h2>
+      <p className="kin-text kin-muted">{description}</p>
+      <p className="kin-text">{t("billing.upgrade.description")}</p>
+      <a href="#pro-card" className="kin-btn kin-btn--primary">
+        {t("billing.upgrade.cta")}
+      </a>
+    </section>
   );
 }
 
@@ -512,7 +557,7 @@ function ProCard({
   const priceForCycle = pricing ? pricing[cycle] : null;
 
   return (
-    <section className={`${styles.card} ${styles.proCard}`}>
+    <section id="pro-card" className={`${styles.card} ${styles.proCard}`}>
       <span className={styles.eyebrow}>{t("billing.pro.eyebrow")}</span>
       <h3 className={styles.cardTitle}>{t("billing.pro.title")}</h3>
 
