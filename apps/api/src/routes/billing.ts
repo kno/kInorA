@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import type {
   BillingFeature,
+  CheckoutSessionRequest,
+  CheckoutSessionResponse,
   BillingVisibilityDTO,
   SetMemberAllocationRequest,
   SetMemberAllocationResponse,
@@ -18,6 +20,9 @@ import type {
 } from "../billing/quota-admin.js";
 import type { GetBillingVisibilityOutcome } from "../billing/billing-visibility.js";
 import type { ProcessWebhookResult } from "../billing/process-webhook.js";
+import type { CreateCheckoutInput } from "../billing/create-checkout.js";
+import { InvalidPromotionCodeError } from "../billing/create-checkout.js";
+import type { CheckoutSession } from "../billing/stripe-gateway.js";
 
 /**
  * Billing routes (11a, Phase 3 + Phase 4).
@@ -51,6 +56,9 @@ export interface BillingRoutesOptions {
       scope: { tenantId: string; userId: string },
       period: string,
     ): Promise<GetBillingVisibilityOutcome>;
+  };
+  createCheckout: {
+    execute(input: CreateCheckoutInput): Promise<CheckoutSession>;
   };
 }
 
@@ -97,11 +105,11 @@ export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
   fastify,
   options,
 ) => {
-  const { setMemberAllocation, getTenantUsage, getBillingVisibility } = options;
+  const { setMemberAllocation, getTenantUsage, getBillingVisibility, createCheckout } = options;
 
-  if (!setMemberAllocation || !getTenantUsage || !getBillingVisibility) {
+  if (!setMemberAllocation || !getTenantUsage || !getBillingVisibility || !createCheckout) {
     throw new Error(
-      "billingRoutes requires setMemberAllocation, getTenantUsage, and getBillingVisibility use cases",
+      "billingRoutes requires setMemberAllocation, getTenantUsage, getBillingVisibility, and createCheckout use cases",
     );
   }
 
@@ -222,6 +230,50 @@ export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
       }
 
       return reply.code(200).send(result.visibility satisfies BillingVisibilityDTO);
+    },
+  );
+
+  // POST /billing/checkout
+  // Start a Stripe-hosted checkout for a Pro upgrade. Authenticated: only an
+  // active member of the caller's own tenant may open checkout. The tenant is
+  // read from authContext and stamped as the Stripe client_reference_id /
+  // subscription metadata — a `tenantId` (or any tenant field) in the request
+  // body is IGNORED, so a spoofed tenant can never be billed or upgraded.
+  // Body: CheckoutSessionRequest { cycle: 'monthly'|'annual', promotionCode? }.
+  fastify.post(
+    "/billing/checkout",
+    { preHandler: requireAuth() },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { tenantId } = request.authContext!;
+      const body = request.body as Partial<CheckoutSessionRequest> | null;
+
+      const cycle = body?.cycle;
+      if (cycle !== "monthly" && cycle !== "annual") {
+        return reply.code(422).send({ error: "invalid_billing_cycle" });
+      }
+
+      const promotionCode =
+        typeof body?.promotionCode === "string" && body.promotionCode.trim() !== ""
+          ? body.promotionCode.trim()
+          : undefined;
+
+      try {
+        // tenantId comes ONLY from authContext — never from the body.
+        const session = await createCheckout.execute({ tenantId, cycle, promotionCode });
+        // Deliberately 200 { url }, NOT a 303 redirect (4R FIX 3): the SPA web
+        // client performs the redirect itself (window.location = url). Do NOT
+        // "fix" this into a server-side redirect — that would break the
+        // client's fetch-then-navigate contract (CheckoutSessionResponse).
+        return reply.code(200).send({ url: session.url } satisfies CheckoutSessionResponse);
+      } catch (error) {
+        if (error instanceof InvalidPromotionCodeError) {
+          // Our controlled coupon rejection — no session was created.
+          return reply.code(422).send({ error: "invalid_promotion_code" });
+        }
+        // Any other failure (e.g. Stripe unconfigured/unreachable) propagates to
+        // the global 500 handler; no partial billing state is exposed.
+        throw error;
+      }
     },
   );
 };

@@ -109,3 +109,67 @@ export interface StripeGateway {
     signature: string | undefined,
   ): StripeWebhookEvent;
 }
+
+// ---------------------------------------------------------------------------
+// Checkout + coupon port (11b-v1-billing-stripe-integration, Slice 3).
+//
+// Interface-segregated from {@link StripeGateway}: the checkout use case needs
+// ONLY these methods, and keeping the webhook port narrow means the Slice 2
+// `FakeStripeGateway` (bare `{ verifyAndParseEvent }`) still satisfies its
+// contract. The SINGLE SDK adapter (`db/repositories/stripe-gateway.ts`)
+// implements BOTH ports, so all `stripe` imports stay confined to that one file.
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of a SERVER-SIDE promotion-code validation. `promotionCodeId` is the
+ * Stripe `promotion_code` id to attach to the session, present ONLY when the
+ * code validates. An invalid/expired code yields `{ valid: false, promotionCodeId: null }`.
+ */
+export interface PromotionCodeValidation {
+  valid: boolean;
+  promotionCodeId: string | null;
+}
+
+/**
+ * Input to open a Stripe-hosted checkout session for a Pro upgrade. `tenantId`
+ * is resolved SERVER-SIDE from `authContext` by the route and becomes the
+ * session `client_reference_id` + subscription metadata `tenantId` — the same
+ * key the webhook reads back to grant Pro. It is NEVER taken from client input.
+ * `priceId` is the config-driven Stripe Price for the requested cycle;
+ * `promotionCodeId` is a pre-validated Stripe promotion-code id or null.
+ */
+export interface CreateCheckoutSessionInput {
+  tenantId: string;
+  cycle: BillingCycle;
+  priceId: string;
+  promotionCodeId: string | null;
+}
+
+/** The Stripe-hosted checkout session URL to redirect the buyer to. */
+export interface CheckoutSession {
+  url: string;
+}
+
+/**
+ * Thrown by the checkout use case when a supplied promotion code is invalid or
+ * expired. It is OUR OWN controlled error: the route maps it to a 422 and NO
+ * Stripe checkout session is created (fail-closed on the payments hot path).
+ * The message NEVER contains the raw code or any secret.
+ */
+export class InvalidPromotionCodeError extends Error {
+  constructor(message = "invalid or expired promotion code") {
+    super(message);
+    this.name = "InvalidPromotionCodeError";
+  }
+}
+
+/**
+ * The checkout/coupon port the pure `CreateCheckout` use case depends on. The
+ * infra adapter calls the Stripe SDK (`checkout.sessions.create`,
+ * `promotionCodes.list`) and never leaks a secret. Segregated from
+ * {@link StripeGateway} so each pure use case depends only on the methods it uses.
+ */
+export interface CheckoutGateway {
+  validatePromotionCode(code: string): Promise<PromotionCodeValidation>;
+  createCheckoutSession(input: CreateCheckoutSessionInput): Promise<CheckoutSession>;
+}

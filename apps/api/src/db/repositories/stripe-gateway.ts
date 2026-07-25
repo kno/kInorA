@@ -4,6 +4,10 @@ import {
   STRIPE_SUBSCRIPTION_STATUSES,
   StripeGatewayUnconfiguredError,
   StripeSignatureError,
+  type CheckoutGateway,
+  type CheckoutSession,
+  type CreateCheckoutSessionInput,
+  type PromotionCodeValidation,
   type StripeGateway,
   type StripeSubscriptionSnapshot,
   type StripeSubscriptionStatus,
@@ -23,16 +27,31 @@ import {
  * surfaced as a {@link StripeSignatureError} whose message carries no payload
  * and no secret.
  */
-export class StripeApiGateway implements StripeGateway {
+export class StripeApiGateway implements StripeGateway, CheckoutGateway {
   private readonly stripe: Stripe;
 
   constructor(
     secretKey: string,
     private readonly webhookSecret: string,
+    /**
+     * Base web URL the Stripe-hosted checkout redirects back to on
+     * success/cancel (e.g. `WEB_PUBLIC_ORIGIN`). Kept out of the signed webhook
+     * path; used only by {@link createCheckoutSession}.
+     */
+    private readonly returnUrl: string = "",
     stripeClient?: Stripe,
   ) {
     // Injectable client for hermetic tests; production constructs from the key.
-    this.stripe = stripeClient ?? new Stripe(secretKey);
+    // Bounded timeout + limited retries (4R FIX 1, resilience): the SDK default
+    // has no request timeout, and neither the checkout nor the coupon call
+    // passes an AbortSignal, so a Stripe brownout (reachable but slow) would
+    // stall a POST /billing/checkout for the SDK's own ~80s ceiling — the
+    // first synchronous outbound Stripe call on a request path (webhook
+    // verification is local). `timeout: 10_000` + `maxNetworkRetries: 1` makes
+    // a degraded Stripe fail fast to a clean 5xx (Fastify has no default
+    // request timeout, so unbounded stalls would otherwise pile up
+    // concurrent attempts) instead of hanging for tens of seconds.
+    this.stripe = stripeClient ?? new Stripe(secretKey, { timeout: 10_000, maxNetworkRetries: 1 });
   }
 
   verifyAndParseEvent(
@@ -52,20 +71,82 @@ export class StripeApiGateway implements StripeGateway {
     }
     return normalizeEvent(event);
   }
+
+  /**
+   * Validate a promotion code SERVER-SIDE (11b Slice 3). We own the invalid-code
+   * decision: an inactive/absent code, or one whose coupon is no longer valid
+   * (expired / usage-exhausted), returns `{ valid: false }` so the use case
+   * rejects it WITHOUT opening a checkout session. The raw code is sent only to
+   * Stripe for lookup and is never logged.
+   */
+  async validatePromotionCode(code: string): Promise<PromotionCodeValidation> {
+    const list = await this.stripe.promotionCodes.list({ code, active: true, limit: 1 });
+    const promo = list.data[0];
+    if (!promo || !promo.active) {
+      return { valid: false, promotionCodeId: null };
+    }
+    // A promotion code can be active while its underlying coupon has expired or
+    // hit its redemption cap; Stripe flags that on `coupon.valid`. Read it
+    // defensively — the expanded coupon is optional on the SDK list shape.
+    const coupon = (promo as { coupon?: { valid?: boolean } }).coupon;
+    if (coupon && coupon.valid === false) {
+      return { valid: false, promotionCodeId: null };
+    }
+    return { valid: true, promotionCodeId: promo.id };
+  }
+
+  /**
+   * Open a Stripe-hosted subscription checkout session (11b Slice 3). The tenant
+   * (resolved SERVER-SIDE by the route from `authContext`) is stamped as both
+   * `client_reference_id` and the subscription metadata `tenantId` — the exact
+   * key the webhook reads back to grant Pro to the right tenant. No secret or
+   * card data is logged; only the hosted URL is returned.
+   */
+  async createCheckoutSession(input: CreateCheckoutSessionInput): Promise<CheckoutSession> {
+    const session = await this.stripe.checkout.sessions.create({
+      mode: "subscription",
+      line_items: [{ price: input.priceId, quantity: 1 }],
+      client_reference_id: input.tenantId,
+      subscription_data: { metadata: { tenantId: input.tenantId, cycle: input.cycle } },
+      metadata: { tenantId: input.tenantId },
+      // A validated promotion code is attached explicitly; otherwise the buyer
+      // may still enter one on the hosted page.
+      ...(input.promotionCodeId
+        ? { discounts: [{ promotion_code: input.promotionCodeId }] }
+        : { allow_promotion_codes: true }),
+      // American spelling ("canceled") to match the rest of this module's
+      // billing vocabulary (see STRIPE_SUBSCRIPTION_STATUSES's "canceled"
+      // above) — the Slice-5 web client string-matches this query param, so a
+      // British/American mismatch here would leave that UI state unreachable
+      // (4R FIX 2, readability).
+      success_url: `${this.returnUrl}/billing?checkout=success`,
+      cancel_url: `${this.returnUrl}/billing?checkout=canceled`,
+    });
+    if (!session.url) {
+      throw new Error("stripe checkout session did not return a url");
+    }
+    return { url: session.url };
+  }
 }
 
 /**
  * Create the real gateway from env, or return null when the Stripe env is not
  * configured (so the API still boots cleanly, mirroring the optional AI stack).
- * A null gateway means the webhook route fails closed (every event → 400).
+ * A null gateway means the webhook route fails closed (every event → 400) and
+ * the checkout route fails closed (→ 5xx) until Stripe is configured.
+ *
+ * Returns the CONCRETE {@link StripeApiGateway} (which implements BOTH the
+ * webhook {@link StripeGateway} and the {@link CheckoutGateway} ports) so the
+ * composition root can wire one adapter instance into both routes.
  */
 export function createStripeGatewayFromEnv(
   env: NodeJS.ProcessEnv = process.env,
-): StripeGateway | null {
+): StripeApiGateway | null {
   const secretKey = env.STRIPE_SECRET_KEY;
   const webhookSecret = env.STRIPE_WEBHOOK_SECRET;
   if (!secretKey || !webhookSecret) return null;
-  return new StripeApiGateway(secretKey, webhookSecret);
+  const returnUrl = (env.WEB_PUBLIC_ORIGIN ?? "").trim();
+  return new StripeApiGateway(secretKey, webhookSecret, returnUrl);
 }
 
 /**
@@ -80,6 +161,21 @@ export function createStripeGatewayFromEnv(
  */
 export class UnconfiguredStripeGateway implements StripeGateway {
   verifyAndParseEvent(): StripeWebhookEvent {
+    throw new StripeGatewayUnconfiguredError();
+  }
+}
+
+/**
+ * Fail-closed checkout gateway used when Stripe env is unconfigured (11b Slice
+ * 3). Every checkout/coupon call throws {@link StripeGatewayUnconfiguredError}
+ * so the route returns 5xx rather than silently opening (or pretending to open)
+ * a checkout against a missing Stripe configuration. Never logs a secret.
+ */
+export class UnconfiguredCheckoutGateway implements CheckoutGateway {
+  async validatePromotionCode(): Promise<PromotionCodeValidation> {
+    throw new StripeGatewayUnconfiguredError();
+  }
+  async createCheckoutSession(): Promise<CheckoutSession> {
     throw new StripeGatewayUnconfiguredError();
   }
 }

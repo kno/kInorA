@@ -9,6 +9,12 @@ import {
   type AdminMembershipView,
 } from "../../billing/quota-admin.js";
 import { GetBillingVisibility, type BillingVisibilityPort } from "../../billing/billing-visibility.js";
+import { CreateCheckout } from "../../billing/create-checkout.js";
+import type {
+  CheckoutGateway,
+  CreateCheckoutSessionInput,
+  PromotionCodeValidation,
+} from "../../billing/stripe-gateway.js";
 import {
   VALID_TOKEN,
   createAuthMockDb,
@@ -90,6 +96,7 @@ async function buildTestApp(
     role: "owner",
   }),
   logger?: SpyLogger,
+  createCheckout: CreateCheckout = buildUnusedCheckout(),
 ): Promise<FastifyInstance> {
   const db = buildMockDb(authMembershipRow) as never;
 
@@ -114,9 +121,39 @@ async function buildTestApp(
     // in billing-visibility.test.ts. Provided only to satisfy the shared
     // billingRoutes plugin's required options.
     getBillingVisibility: new GetBillingVisibility(buildUnusedVisibilityPort()),
+    createCheckout,
   });
 
   return app;
+}
+
+// --- Checkout fakes (11b Slice 3) -------------------------------------------
+
+interface CheckoutFake {
+  gateway: CheckoutGateway;
+  createSpy: ReturnType<typeof vi.fn>;
+  validateSpy: ReturnType<typeof vi.fn>;
+  useCase: CreateCheckout;
+}
+
+const CHECKOUT_PRICING = { priceMonthly: "price_monthly_cfg", priceAnnual: "price_annual_cfg" };
+
+function buildCheckout(
+  validation: PromotionCodeValidation = { valid: true, promotionCodeId: "promo_ok" },
+): CheckoutFake {
+  const createSpy = vi.fn(
+    async (input: CreateCheckoutSessionInput) => ({ url: `https://checkout.stripe.test/s?p=${input.priceId}` }),
+  );
+  const validateSpy = vi.fn(async (): Promise<PromotionCodeValidation> => validation);
+  const gateway: CheckoutGateway = {
+    createCheckoutSession: createSpy as CheckoutGateway["createCheckoutSession"],
+    validatePromotionCode: validateSpy as CheckoutGateway["validatePromotionCode"],
+  };
+  return { gateway, createSpy, validateSpy, useCase: new CreateCheckout(gateway, CHECKOUT_PRICING) };
+}
+
+function buildUnusedCheckout(): CreateCheckout {
+  return buildCheckout().useCase;
 }
 
 // A minimal pino-compatible spy logger. Fastify v5 accepts a pre-built logger
@@ -253,6 +290,7 @@ describe("PUT /billing/allocations — Member Quota Administration", () => {
       setMemberAllocation: new SetMemberAllocation(port),
       getTenantUsage: new GetTenantUsage(port),
       getBillingVisibility: new GetBillingVisibility(buildUnusedVisibilityPort()),
+      createCheckout: buildUnusedCheckout(),
     });
     app = app0;
 
@@ -756,5 +794,158 @@ describe("Denied quota-admin attempts are observable (#175)", () => {
     const serialized = JSON.stringify(denialCalls);
     expect(serialized).not.toContain(VALID_TOKEN);
     expect(serialized.toLowerCase()).not.toContain("authorization");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scenario: POST /billing/checkout — Stripe checkout (11b Slice 3, TRIANGLE)
+//
+// Payments hot path. The tenant is resolved ONLY from authContext and stamped
+// as the Stripe client_reference_id / subscription metadata (a spoofed tenant
+// in the body is ignored); the config-driven Price is selected by cycle; an
+// invalid coupon is rejected server-side (422, no session); no secret/price/
+// coupon is ever written to the logs; and NO live Stripe key is needed (the
+// gateway is a FakeStripeGateway).
+// ---------------------------------------------------------------------------
+
+describe("POST /billing/checkout — Stripe checkout (11b Slice 3)", () => {
+  let app: FastifyInstance;
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("opens a monthly checkout with the config Price and returns the hosted URL", async () => {
+    const checkout = buildCheckout();
+    app = await buildTestApp(buildFakePort(), undefined, undefined, checkout.useCase);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers: auth,
+      payload: { cycle: "monthly" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ url: "https://checkout.stripe.test/s?p=price_monthly_cfg" });
+    expect(checkout.createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ cycle: "monthly", priceId: "price_monthly_cfg" }),
+    );
+  });
+
+  it("selects the ANNUAL config Price for an annual checkout", async () => {
+    const checkout = buildCheckout();
+    app = await buildTestApp(buildFakePort(), undefined, undefined, checkout.useCase);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers: auth,
+      payload: { cycle: "annual" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(checkout.createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ cycle: "annual", priceId: "price_annual_cfg" }),
+    );
+  });
+
+  it("IGNORES a spoofed tenantId in the body — the checkout tenant comes only from authContext (cross-tenant prevented)", async () => {
+    const checkout = buildCheckout();
+    app = await buildTestApp(buildFakePort(), undefined, undefined, checkout.useCase);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers: auth,
+      // Attempt to bill/upgrade a foreign tenant — must be ignored.
+      payload: { cycle: "monthly", tenantId: "ffffffff-0000-0000-0000-000000000009" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    // The session is stamped with the SESSION tenant (TENANT_A), never the body value.
+    expect(checkout.createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: TENANT_A }),
+    );
+    const passed = checkout.createSpy.mock.calls[0]![0] as CreateCheckoutSessionInput;
+    expect(passed.tenantId).not.toBe("ffffffff-0000-0000-0000-000000000009");
+  });
+
+  it("rejects an unauthenticated checkout attempt → 401, no session created", async () => {
+    const checkout = buildCheckout();
+    app = await buildTestApp(buildFakePort(), undefined, undefined, checkout.useCase);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      payload: { cycle: "monthly" },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(checkout.createSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid billing cycle → 422, no session created", async () => {
+    const checkout = buildCheckout();
+    app = await buildTestApp(buildFakePort(), undefined, undefined, checkout.useCase);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers: auth,
+      payload: { cycle: "weekly" },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toEqual({ error: "invalid_billing_cycle" });
+    expect(checkout.createSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid coupon server-side → 422 invalid_promotion_code, NO session created", async () => {
+    const checkout = buildCheckout({ valid: false, promotionCodeId: null });
+    app = await buildTestApp(buildFakePort(), undefined, undefined, checkout.useCase);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers: auth,
+      payload: { cycle: "monthly", promotionCode: "BOGUS" },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toEqual({ error: "invalid_promotion_code" });
+    expect(checkout.validateSpy).toHaveBeenCalledWith("BOGUS");
+    expect(checkout.createSpy).not.toHaveBeenCalled();
+  });
+
+  it("our checkout code emits NO application log line carrying the coupon code or session token (secret hygiene)", async () => {
+    const log = createSpyLogger();
+    const checkout = buildCheckout();
+    app = await buildTestApp(buildFakePort(), undefined, log, checkout.useCase);
+
+    await app.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers: auth,
+      payload: { cycle: "annual", promotionCode: "SECRET-COUPON-XYZ" },
+    });
+
+    // Exclude Fastify's framework-level automatic request/response logging (its
+    // "incoming request"/"request completed" lines carry the raw req object,
+    // including the body — a framework/pino-redaction concern, not this route's).
+    // Assert that OUR code adds no application log line leaking the coupon or
+    // the session token: the checkout path deliberately logs nothing itself.
+    const appLogCalls = [
+      ...log.warn.mock.calls,
+      ...log.info.mock.calls,
+      ...log.error.mock.calls,
+      ...log.debug.mock.calls,
+    ].filter(([first]) => {
+      const obj = first as Record<string, unknown> | undefined;
+      return !obj || (!("req" in obj) && !("res" in obj));
+    });
+
+    const serialized = JSON.stringify(appLogCalls);
+    expect(serialized).not.toContain("SECRET-COUPON-XYZ");
+    expect(serialized).not.toContain(VALID_TOKEN);
   });
 });

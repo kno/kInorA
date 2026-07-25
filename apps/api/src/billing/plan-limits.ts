@@ -1,12 +1,5 @@
 import type { BillingFeature, BillingTier } from "@kinora/contracts";
-
-/**
- * Provisional Pro aggregate cap per feature/period. 11a is provider-independent
- * and does not model pricing tiers, so Pro is treated as a generous finite pool
- * (kept well within a 32-bit integer column). Exact Pro pricing/limits arrive in
- * 11b; the per-member `member_quota_allocations` still bound individual members.
- */
-export const PRO_FEATURE_LIMIT = 1_000_000;
+import { PRO_TIER_LIMITS } from "./pricing-config.js";
 
 /**
  * Free tier limits per calendar month (see spec `Plan Tiers`):
@@ -22,11 +15,16 @@ const FREE_TIER_LIMITS: Record<BillingFeature, number> = {
 };
 
 /**
- * The tenant aggregate limit for a `(tier, feature)` pair. Free uses the fixed
- * monthly allowances; Pro uses the provisional aggregate cap.
+ * The tenant aggregate limit for a `(tier, feature)` pair (11b Slice 3). Free
+ * uses the fixed monthly allowances; Pro uses the config-driven, per-feature
+ * {@link PRO_TIER_LIMITS} from `pricing-config.ts`. This is the point Pro
+ * becomes REALLY metered — the provisional `1_000_000` blanket cap is gone, so
+ * an over-cap Pro consumption is denied with `tenant_quota_exhausted` exactly
+ * like a Free tenant over its allowance. Entitlement/tier RESOLUTION
+ * (`resolveEffectiveTier`) is untouched; only the LIMIT resolution changed.
  */
 export function resolveTenantFeatureLimit(tier: BillingTier, feature: BillingFeature): number {
-  return tier === "pro" ? PRO_FEATURE_LIMIT : FREE_TIER_LIMITS[feature];
+  return tier === "pro" ? PRO_TIER_LIMITS[feature] : FREE_TIER_LIMITS[feature];
 }
 
 /**

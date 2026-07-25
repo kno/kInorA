@@ -1,12 +1,11 @@
 import type { BillingFeature } from "@kinora/contracts";
 
 /**
- * Config-driven Stripe pricing (11b-v1-billing-stripe-integration, Slice 1).
+ * Config-driven Stripe pricing (11b-v1-billing-stripe-integration).
  *
- * EXPORT-ONLY in this slice: nothing here is wired into `plan-limits.ts` yet
- * (that swap is Slice 3), so the provisional `PRO_FEATURE_LIMIT = 1_000_000`
- * still governs live Pro caps and this slice keeps a provable zero-behavior
- * change. Secrets are read from env and NEVER logged.
+ * Since Slice 3, `PRO_TIER_LIMITS` is imported by `plan-limits.ts` and governs
+ * the REAL, per-feature Pro caps (the provisional `1_000_000` blanket cap was
+ * dropped). Secrets are read from env and NEVER logged.
  */
 
 /** Environment-shaped Stripe configuration, resolved from env/secret. */
@@ -47,7 +46,7 @@ export function loadStripeConfig(
 }
 
 /**
- * Finite, high per-feature monthly Pro caps that replace the provisional
+ * Finite, high per-feature monthly Pro caps that replaced the provisional
  * `1_000_000` placeholder (wired into `plan-limits.ts` in Slice 3). Values fit
  * the 32-bit `integer` counter columns and read as generous vs Free (1/1/0/0).
  */

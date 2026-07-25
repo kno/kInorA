@@ -8,6 +8,8 @@ import {
   type BillingVisibilityContext,
   type BillingVisibilityPort,
 } from "../../billing/billing-visibility.js";
+import { CreateCheckout } from "../../billing/create-checkout.js";
+import type { CheckoutGateway, PromotionCodeValidation } from "../../billing/stripe-gateway.js";
 import {
   VALID_TOKEN,
   createAuthMockDb,
@@ -92,6 +94,17 @@ function buildUnusedAdminPort(): QuotaAdminPort {
   };
 }
 
+// Unused-but-required checkout use case (Slice 3 endpoints have their own suite).
+function buildUnusedCheckout(): CreateCheckout {
+  const gateway: CheckoutGateway = {
+    validatePromotionCode: vi.fn(
+      async (): Promise<PromotionCodeValidation> => ({ valid: true, promotionCodeId: "promo" }),
+    ) as CheckoutGateway["validatePromotionCode"],
+    createCheckoutSession: vi.fn(async () => ({ url: "https://checkout.stripe.test/unused" })) as CheckoutGateway["createCheckoutSession"],
+  };
+  return new CreateCheckout(gateway, { priceMonthly: "price_m", priceAnnual: "price_a" });
+}
+
 function buildMockDb(membershipRow: unknown, userId: string) {
   const session = buildSessionRow({ tokenHash: "hash-of-token", tenantId: TENANT_A, userId });
   return createAuthMockDb({
@@ -114,6 +127,7 @@ async function buildTestApp(
     setMemberAllocation: new SetMemberAllocation(adminPort),
     getTenantUsage: new GetTenantUsage(adminPort),
     getBillingVisibility: new GetBillingVisibility(visibilityPort),
+    createCheckout: buildUnusedCheckout(),
   });
 
   return app;
@@ -270,6 +284,7 @@ describe("GET /billing/visibility — Billing State Visibility", () => {
       setMemberAllocation: new SetMemberAllocation(buildUnusedAdminPort()),
       getTenantUsage: new GetTenantUsage(buildUnusedAdminPort()),
       getBillingVisibility: new GetBillingVisibility(port),
+      createCheckout: buildUnusedCheckout(),
     });
     app = app0;
 
