@@ -102,13 +102,15 @@ describe("stripe billing DTO contracts (11b Slice 1)", () => {
   });
 
   it("does NOT add any new runtime export to the contracts surface (type-only slice)", () => {
-    // Slice 1 contracts additions are all type-only; the runtime surface guard
-    // in contracts.test.ts must stay unchanged.
+    // The 11b billing Slice 1 additions are all type-only; this asserts they added
+    // no runtime export. PlanSpecDraftSchema (12-interactive-text-chat) is the only
+    // runtime export added after this slice and stays in sync with contracts.test.ts.
     expect(Object.keys(contracts)).toEqual([
       "WorkoutProgramSchema",
       "DEFAULT_VECTOR_MEMORY_EMBEDDING_CONFIG",
       "BILLING_FEATURES",
       "MUSCLE_GROUPS",
+      "PlanSpecDraftSchema",
     ]);
   });
 });
