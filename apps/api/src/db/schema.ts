@@ -209,6 +209,12 @@ export const tenantBillingStates = pgTable(
     currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
     cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
     billingCycle: billingCycleEnum("billing_cycle"),
+    // 11b-v1 Slice 2: per-tenant high-water mark for the webhook out-of-order
+    // guard. The webhook applies a subscription write only when the incoming
+    // Stripe event timestamp is >= this stored value, so a stale, reordered
+    // delivery can never overwrite newer state. Additive + nullable (null until
+    // the first Stripe event is applied); never read by `resolveEffectiveTier`.
+    stripeEventTs: timestamp("stripe_event_ts", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

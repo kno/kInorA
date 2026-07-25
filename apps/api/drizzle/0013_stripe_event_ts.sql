@@ -1,0 +1,1 @@
+ALTER TABLE "tenant_billing_states" ADD COLUMN "stripe_event_ts" timestamp with time zone;

@@ -77,3 +77,179 @@ None blocking. Test infra note: the temporary podman Postgres (`kinora-pg`, port
 ### Status
 
 9/9 Slice-1 tasks complete. Ready for verify. NOT committed/pushed/reviewed per instructions.
+
+---
+
+## Slice 2 — Webhook + Subscription Lifecycle (hottest) — COMPLETE
+
+**Mode**: Strict TDD (RED → GREEN → TRIANGLE). Branch: `sdd/11b-slice2-webhook` (stacked-to-main, off main with Slice 1 merged). PR boundary: PR2 of the auto-chain.
+**Boundary**: adds the raw-body webhook route + signature verify + idempotent, out-of-order-safe, fail-closed subscription→billing-state mapping (both cycles) + grace payment-failure. `resolveEffectiveTier` (`entitlement.ts`) is UNTOUCHED — the webhook is the FIRST real writer to `tenant_billing_states` and writes only `status`/`tier` (+ additive Stripe metadata); the overrides table is never touched, so an active admin override still wins at read time (#172).
+**Rollback**: drop the webhook plugin + `process-webhook.ts` + `stripe-events.ts` + real adapter + `0013` migration + the `stripe` dep + guard edits.
+
+### Completed Tasks
+- [x] 2.1 RED unit + route signature tests
+- [x] 2.2 GREEN pure port + use case + drizzle store adapter
+- [x] 2.3 GREEN encapsulated raw-body webhook plugin + `app.ts` wiring (injectable gateway seam)
+- [x] 2.4 TRIANGLE real-PG integration test + CI wiring + guard bump (25→28)
+
+### Files Changed
+| File | Action | What |
+|------|--------|------|
+| `apps/api/src/billing/stripe-gateway.ts` | Created | Pure `StripeGateway` PORT + SDK-free domain types (`StripeWebhookEvent`, `StripeSubscriptionSnapshot`, `StripeSubscriptionStatus`) + `StripeSignatureError`. No `stripe` import. |
+| `apps/api/src/billing/process-webhook.ts` | Created | Pure use case `ProcessStripeWebhook` + pure `resolveBillingStatus`/`mapSubscriptionToWrite`; `StripeEventStorePort`. Grace (`past_due`→keep Pro), cancel-at-period-end→expire-at-period-end, deletion/terminal/unknown→expired (fail-closed). |
+| `apps/api/src/db/repositories/stripe-gateway.ts` | Created | The ONLY `stripe` SDK importer: `StripeApiGateway` (`constructEvent` verify + normalize), `createStripeGatewayFromEnv`, fail-closed `UnconfiguredStripeGateway`. Secret-free error surface. |
+| `apps/api/src/db/repositories/stripe-events.ts` | Created | Drizzle store adapter: one `db.transaction` = idempotency insert-on-conflict → out-of-order guard (per-tenant `stripe_event_ts` high-water mark, `FOR UPDATE`) → billing-state upsert. Mirrors 11a `billing-quota.ts`. |
+| `apps/api/src/routes/billing.ts` | Modified | Added encapsulated `stripeWebhookRoutes` plugin: scoped `addContentTypeParser('application/json',{parseAs:'buffer'})` (raw body in THIS scope only) + UNAUTHENTICATED `POST /billing/webhook` (signature is auth; invalid→400, error→500 fail-closed). |
+| `apps/api/src/app.ts` | Modified | Wired the webhook: injectable `stripeGateway` seam (tests) → real env gateway → `UnconfiguredStripeGateway` fallback; `StripeEventStoreRepository` + `ProcessStripeWebhook`. |
+| `apps/api/src/db/schema.ts` | Modified | Additive nullable `stripe_event_ts` column on `tenant_billing_states` (per-tenant out-of-order high-water mark). |
+| `apps/api/drizzle/0013_stripe_event_ts.sql` + `_journal.json` | Created/Modified | Additive `ADD COLUMN stripe_event_ts`; journal idx 13. |
+| `apps/api/package.json` + `pnpm-lock.yaml` | Modified | Added `stripe@22.3.2` (exact pin) — needed for `constructEvent`/`generateTestHeaderString`. |
+| `scripts/deps-guard.mjs` | Modified | Moved `stripe` out of PROHIBITED_EVERYWHERE into apps/api-only `STRIPE_PATTERNS`/`STRIPE_ALLOWED_WORKSPACES`. |
+| `.dependency-cruiser.cjs` | Modified | New `api-no-stripe-outside-infra` rule: `stripe` importable ONLY from `db/`+`tenant/` (tests exempt); pure use cases stay SDK-free (probe-verified). |
+| `.github/workflows/ci-cd.yml` | Modified | `billing-integration` job runs `stripe-webhook.integration.test.ts`; false-green MIN 25→28 (5 placeholders skipped when DB absent). |
+| `apps/api/src/billing/__tests__/process-webhook.test.ts` | Created | 19 hermetic unit tests (mapping + orchestration + Threat Matrix). |
+| `apps/api/src/routes/__tests__/billing-webhook.test.ts` | Created | 5 hermetic route tests — REAL `StripeApiGateway` + `generateTestHeaderString` (signed/annual/tampered/no-sig/forged). |
+| `apps/api/src/db/repositories/__tests__/stripe-webhook.integration.test.ts` | Created | 3 real-PG tests (exactly-once+out-of-order, subscription→state, #172 override-wins) + 1 skip placeholder. |
+
+### TDD Cycle Evidence
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 2.1/2.2 | `billing/__tests__/process-webhook.test.ts` | Unit | N/A (new) | ✅ `Cannot find module ../process-webhook.js` | ✅ 19/19 | ✅ 19 cases (both cycles, grace, cancel/period-end, deletion, dup, stale, fail-closed×2, no-tenant) | ✅ Clean |
+| 2.1/2.3 | `routes/__tests__/billing-webhook.test.ts` | Route (hermetic, real gateway) | N/A (new) | ✅ `Cannot find module ../../db/repositories/stripe-gateway.js` | ✅ 5/5 | ✅ 5 cases (active/annual/tampered/no-sig/forged) | ✅ Clean |
+| 2.4 | `db/repositories/__tests__/stripe-webhook.integration.test.ts` | Integration (real PG) | N/A (new) | ✅ module-not-found then DB-absent placeholder | ⏳ CI-validated (local podman down) | ✅ 3 cases | ✅ Clean |
+
+### Work Unit Evidence
+| Evidence | Value |
+|---|---|
+| Focused test command | `pnpm --filter api exec vitest run src/billing/__tests__/process-webhook.test.ts src/routes/__tests__/billing-webhook.test.ts` → 24 passed / 0 failed |
+| Runtime harness | Real-PG `stripe-webhook.integration.test.ts` — NOT run locally (podman/krunkit crashing). Loads clean DB-absent: 1 placeholder passed / 3 real skipped. Will be validated by CI `billing-integration` job (real pgvector:pg17), exactly as Slice 1 was. NOT faked. |
+| Rollback boundary | Drop webhook plugin + `process-webhook.ts` + `stripe-events.ts` + `db/repositories/stripe-gateway.ts` + `0013` migration + `stripe` dep + guard edits; `resolveEffectiveTier`/`plan-limits.ts` untouched. |
+
+### Hermetic Gate Results (exact)
+- `pnpm --filter api type-check` (tsc --noEmit): PASS
+- `pnpm type-check` (all 6 packages): PASS
+- `pnpm deps-guard`: PASS (all 6 workspaces clean; `stripe` allowed only in apps/api)
+- `pnpm architecture` (depcruise + negative test): PASS — no violations (1806 modules); `stripe` probe from `billing/` correctly rejected by `api-no-stripe-outside-infra`
+- `pnpm build` (deps-guard + ui-api-guard + architecture + all tsc + web build): PASS
+- `pnpm -r --if-present test:coverage`: PASS — contracts 58, domain 255, i18n 30, web 881, api 979 passed / 0 failed (api 28 skipped = real-PG integration, DB-absent)
+
+### Stripe SDK dependency
+Added `stripe@22.3.2` (exact pin, matching repo style for `fastify`/`vitest`). Required for `webhooks.constructEvent` (verify) and `webhooks.generateTestHeaderString` (hermetic route signing). ALL SDK usage confined to `apps/api/src/db/repositories/stripe-gateway.ts`.
+
+### Deviations / additions beyond the literal task file list
+1. **New additive column `stripe_event_ts` on `tenant_billing_states` + migration `0013`.** The out-of-order guard needs a per-tenant high-water mark ("apply only when incoming ts >= the stored one", design decision). Slice 1 put `stripe_event_ts` only on `stripe_processed_events` (per-event, no tenant/subscription linkage), so it cannot serve as the per-tenant mark. Additive + nullable + never read by `resolveEffectiveTier`. Rollback = drop column.
+2. **Guard edits (`deps-guard.mjs`, `.dependency-cruiser.cjs`).** `stripe` was in PROHIBITED_EVERYWHERE and had no api-layer rule. Rescoped to apps/api-only (like DB/AI) + a new infra-only depcruise rule so the SDK cannot leak into pure use cases. No existing guard weakened for other packages.
+3. **`UnconfiguredStripeGateway` fallback** so the API boots cleanly without Stripe env (mirrors the optional AI stack); an unconfigured deploy fails closed (every webhook → 400), never granting Pro.
+
+### Known limitation (noted for verify/4R)
+A webhook for a non-existent `tenantId` (from signed metadata) would fail the FK insert → rollback → 5xx → Stripe retries. In practice `tenantId` comes from our own checkout metadata (an existing tenant), so this is fail-closed and acceptable for Slice 2.
+
+### Status
+4/4 Slice-2 tasks complete. Ready for verify. NOT committed/pushed/reviewed per instructions.
+
+---
+
+## Slice 2 — 4R Follow-Up Fixes (post-review) — COMPLETE
+
+**Mode**: Strict TDD (RED → GREEN) for the behavioral fixes (1, 2, 3); direct refactor + safety-net rerun for the readability fixes (4, 5). Branch: `sdd/11b-slice2-webhook`. Same PR2 boundary — no new files/routes, corrections to the Slice 2 diff only.
+
+The 4R review of Slice 2 passed `review-risk` clean; `review-resilience` + `review-reliability` corroborated two real defects in the out-of-order guard plus one operational fail-safe gap, and `review-readability` flagged two items. All five fixed.
+
+### FIX 1 (WARNING, resilience+reliability — out-of-order guard bypass on first insert)
+**File**: `apps/api/src/db/repositories/stripe-events.ts`
+**Defect**: `SELECT ... FOR UPDATE` locks nothing when the tenant has no `tenant_billing_states` row yet. Two concurrent FIRST-time deliveries both read `current === undefined`, both skipped the stale check, and an older event committing last could win, regressing the stored `stripe_event_ts`.
+**Fix**: moved the guard entirely into the `INSERT ... ON CONFLICT DO UPDATE` statement's `setWhere` clause (Postgres evaluates it atomically against the conflicting row's already-committed values; the second concurrent inserter blocks on Postgres's own conflict-resolution lock until the first commits). The initial insert branch (no pre-existing row) is never gated by `WHERE` and always applies. Removed the now-redundant `SELECT ... FOR UPDATE` (justified in-code: the conditional upsert fully subsumes its correctness and it added an extra round trip). Detect "guard rejected" via `.returning()` — Postgres excludes a row from `RETURNING` when a `DO UPDATE ... WHERE` evaluates false — and treat an empty result as `outcome: "stale"` (still 200).
+**Exact SQL** (drizzle `setWhere`, evaluated against the conflicting row `tenant_billing_states` vs the proposed `excluded` row):
+```sql
+(
+  tenant_billing_states.stripe_event_ts IS NULL
+  OR tenant_billing_states.stripe_event_ts < excluded.stripe_event_ts
+  OR (
+    tenant_billing_states.stripe_event_ts = excluded.stripe_event_ts
+    AND NOT (tenant_billing_states.status = 'expired' AND excluded.status = 'active')
+  )
+)
+```
+
+### FIX 2 (WARNING, reliability — same-second timestamp tie restores stale state)
+**Files**: `apps/api/src/db/repositories/stripe-events.ts`, `apps/api/src/billing/process-webhook.ts`
+**Defect**: Stripe's `created` is second-granularity; the OLD guard's `<=` semantics let a later-ARRIVING but same-second non-terminal write overwrite an existing terminal (`expired`) state.
+**Fix**: same `setWhere` clause above encodes the tie-break in the third `OR` branch — at an EQUAL `stripe_event_ts`, reject ONLY a non-terminal (`active`) write over an existing terminal (`expired`) state; every other equal-timestamp pairing (same-status idempotent rewrite, or a terminal write over a non-terminal one) still applies. Added a pure, unit-tested predicate `shouldAcceptStoreWrite` in `process-webhook.ts` that mirrors this exact SQL semantics (kept in sync manually; the real-Postgres integration suite asserts the SQL reproduces it end-to-end) — this makes the decision rules independently testable without a live Postgres.
+
+### FIX 3 (SUGGESTION→real fail-safe, resilience — unconfigured deploy drops events)
+**Files**: `apps/api/src/billing/stripe-gateway.ts` (new `StripeGatewayUnconfiguredError`), `apps/api/src/db/repositories/stripe-gateway.ts` (`UnconfiguredStripeGateway` now throws it instead of `StripeSignatureError`)
+**Defect**: a deploy missing `STRIPE_WEBHOOK_SECRET` threw `StripeSignatureError` → `process-webhook.ts` mapped it to `invalid_signature` → route returned 400 → Stripe stops retrying → real billing events silently dropped for the whole misconfiguration window.
+**Fix**: `StripeGatewayUnconfiguredError` is a distinct class, deliberately NOT a subclass of `StripeSignatureError`. `ProcessStripeWebhook.process` only catches `StripeSignatureError`; the new error propagates uncaught, and since the webhook route installs no custom error handler, Fastify's default handler returns 500 for it — a RETRYABLE fail-closed response — while a genuinely invalid/forged signature still returns 400 (regression-tested).
+
+### FIX 4 (WARNING, readability — status union/Set drift)
+**File**: `apps/api/src/billing/stripe-gateway.ts` (new `STRIPE_SUBSCRIPTION_STATUSES` const tuple), `apps/api/src/db/repositories/stripe-gateway.ts` (`KNOWN_STATUSES` now derived from it)
+**Fix**: `StripeSubscriptionStatus` is now `(typeof STRIPE_SUBSCRIPTION_STATUSES)[number]` derived from a single canonical `as const` tuple; the infra adapter's runtime `KNOWN_STATUSES` Set is built directly from that same tuple (`new Set<string>(STRIPE_SUBSCRIPTION_STATUSES)`), eliminating the previous hand-duplicated, compile-time-disconnected list.
+
+### FIX 5 (SUGGESTION, readability)
+**File**: `apps/api/src/billing/process-webhook.ts`
+**Fix**: `BillingStateWrite.status` changed from the no-op `Extract<"active" | "expired", string>` to the plain union `"active" | "expired"`.
+
+### TDD Cycle Evidence (behavioral fixes 1–3)
+| Fix | Test File | Layer | RED | GREEN | TRIANGULATE |
+|-----|-----------|-------|-----|-------|-------------|
+| 1 (guard predicate) | `billing/__tests__/process-webhook.test.ts` (`shouldAcceptStoreWrite` suite) | Unit | ✅ `TypeError: shouldAcceptStoreWrite is not a function` | ✅ 8/8 | ✅ null-row, null-ts, older, newer, equal×4 cases |
+| 1 (real guard, concurrent first-delivery) | `db/repositories/__tests__/stripe-webhook.integration.test.ts` | Integration (real PG) | N/A (new test; behavior is CI-validated — local PG down) | ⏳ CI-validated | ✅ single concurrent-race case, asserts newer always wins |
+| 2 (tie-break unit) | `billing/__tests__/process-webhook.test.ts` (`shouldAcceptStoreWrite` equal-ts cases + orchestration "same-second tie-break" test) | Unit | ✅ same TypeError above (shared RED) | ✅ 30/30 (full file) | ✅ both arrival orders |
+| 2 (tie-break real guard, both orders) | `db/repositories/__tests__/stripe-webhook.integration.test.ts` | Integration (real PG) | N/A (new; CI-validated) | ⏳ CI-validated | ✅ delete-then-update AND update-then-delete |
+| 3 (error propagation) | `billing/__tests__/process-webhook.test.ts` + `routes/__tests__/billing-webhook.test.ts` | Unit + Route (hermetic) | ✅ `TypeError: StripeGatewayUnconfiguredError is not a constructor` | ✅ unit 30/30, route 7/7 | ✅ regression test proves invalid-signature path still 400 |
+| 4/5 (readability) | Safety net: full existing suites rerun | N/A (structural refactor) | N/A | ✅ all pre-existing + new tests still pass | N/A |
+
+### Exact gate results (post-fix)
+- Focused: `pnpm --filter api exec vitest run src/billing/__tests__/process-webhook.test.ts src/routes/__tests__/billing-webhook.test.ts` → **37 passed / 0 failed** (30 unit incl. 8 `shouldAcceptStoreWrite` cases + 2 new fail-safe/tie-break orchestration tests; 7 route incl. 2 new FIX-3 tests)
+- `pnpm --filter api exec vitest run` (full api suite): **992 passed / 0 failed / 30 skipped** (up from 979/28 — +13 new tests: 11 unit/route + 2 real-PG integration cases counted as skipped locally)
+- `pnpm type-check` (all 6 packages): PASS
+- `pnpm deps-guard`: PASS
+- `pnpm architecture` (depcruise + negative test): PASS — no violations (1803 modules)
+- `pnpm build`: PASS
+- `pnpm -r --if-present test:coverage`: PASS — contracts 58, domain 255, i18n 30, web 881, api 992 passed / 0 failed
+- Real-PG integration (`stripe-webhook.integration.test.ts`, now 5 real tests + 1 placeholder): **NOT run locally** (podman/krunkit still down) — loads clean (1 placeholder passed / 5 real skipped). CI `billing-integration` job will validate (MIN bumped 28→30 in `.github/workflows/ci-cd.yml`; placeholder count unchanged at 5). NOT faked.
+
+### Files changed (this fix batch)
+| File | Action | What |
+|------|--------|------|
+| `apps/api/src/billing/stripe-gateway.ts` | Modified | `STRIPE_SUBSCRIPTION_STATUSES` canonical tuple (FIX 4); `StripeGatewayUnconfiguredError` (FIX 3) |
+| `apps/api/src/billing/process-webhook.ts` | Modified | `shouldAcceptStoreWrite` pure guard predicate (FIX 1/2); `BillingStateWrite.status` plain union (FIX 5); doc updates distinguishing signature vs unconfigured errors (FIX 3) |
+| `apps/api/src/db/repositories/stripe-gateway.ts` | Modified | `UnconfiguredStripeGateway` throws `StripeGatewayUnconfiguredError` (FIX 3); `KNOWN_STATUSES` derived from the canonical tuple (FIX 4) |
+| `apps/api/src/db/repositories/stripe-events.ts` | Modified | Atomic `setWhere` conditional upsert replaces the `SELECT ... FOR UPDATE` guard (FIX 1/2); `eq` import removed (unused), `sql` import added |
+| `apps/api/src/billing/__tests__/process-webhook.test.ts` | Modified | +15 tests: `shouldAcceptStoreWrite` suite (8), unconfigured-error propagation (2), same-second tie-break orchestration (1); `fakeStore()` rewritten to use the real predicate |
+| `apps/api/src/routes/__tests__/billing-webhook.test.ts` | Modified | +2 tests: unconfigured-gateway → 5xx, invalid-signature-still-400 regression guard; `buildWebhookAppWithGateway` helper added |
+| `apps/api/src/db/repositories/__tests__/stripe-webhook.integration.test.ts` | Modified | +2 real-PG tests: FIX 1 concurrent first-delivery race, FIX 2 same-second tie-break (both orders) |
+| `.github/workflows/ci-cd.yml` | Modified | false-green MIN bumped 28→30 (stripe-webhook file now has 5 real tests, was 3) |
+
+### Residual risk
+None blocking. The `setWhere` SQL and the pure `shouldAcceptStoreWrite` predicate are kept in sync MANUALLY (drizzle/Postgres cannot literally execute the TS function) — a future edit to one without the other would silently reintroduce drift; the real-Postgres integration suite is the authoritative cross-check and MUST be re-verified whenever either changes. The concurrent-first-delivery and same-second tie-break integration tests are unverified locally (podman/krunkit down) — CI `billing-integration` job is authoritative.
+
+### Status
+All 5 review-corroborated fixes complete. Ready for re-review / verify. NOT committed/pushed per instructions.
+
+---
+
+## Slice 2 — Flaky Test Fix (post re-confirmation review) — COMPLETE
+
+**File**: `apps/api/src/db/repositories/__tests__/stripe-webhook.integration.test.ts` — FIX 1 concurrent first-delivery test.
+
+**Problem**: `expect([olderResult.outcome, newerResult.outcome].sort()).toEqual(["processed", "stale"])` assumed the OLDER tx always loses the insert race. But `Promise.all` gives no commit-order guarantee: if the NEWER tx commits first, the older is rejected → `[processed, stale]` (assertion held); if the OLDER tx commits first, the newer's `setWhere` (`olderTs < newerTs`) evaluates true and it is ACCEPTED too → `[processed, processed]` (assertion threw). This made the test flaky (~50% red on correct code) and would intermittently red the payments-critical `billing-integration` CI job.
+
+**Fix**: replaced the exact-multiset assertion with only what the guard deterministically guarantees, independent of which tx wins the race:
+```ts
+const outcomes = [olderResult.outcome, newerResult.outcome];
+expect(outcomes).toContain("processed");
+expect(outcomes.every((outcome) => outcome === "processed" || outcome === "stale")).toBe(true);
+```
+The meaningful, order-independent invariant — the final `tenant_billing_states` row always converges on the NEWER event (`status: "active"`, `stripeSubscriptionStatus: "active"`, `stripeEventTs === newerTs`) — was NOT weakened; it already held in both orderings and remains asserted unchanged.
+
+Verified the sibling FIX 2 same-second tie-break test does NOT have the same issue: it calls `recordEventAndApply` sequentially (`await`, not `Promise.all`) in each explicit order and asserts only the final `status`, which is fully deterministic in both orderings — no change needed there.
+
+**Gate results (post-fix)**:
+- `stripe-webhook.integration.test.ts` loads clean locally (DB-absent): 1 placeholder passed / 5 real skipped — unchanged shape, confirms no load/compile regression. Real-PG concurrency assertion itself is CI-validated only (local podman/krunkit down).
+- Focused hermetic (`process-webhook.test.ts` + `billing-webhook.test.ts`): **37 passed / 0 failed**
+- `pnpm type-check` (all 6 packages): PASS
+- `pnpm -r --if-present test:coverage`: PASS — contracts 58, domain 255, i18n 30, api 992 (30 skipped), web 881 — all passed / 0 failed
+
+### Status
+Flaky-test fix complete. NOT committed/pushed per instructions.
