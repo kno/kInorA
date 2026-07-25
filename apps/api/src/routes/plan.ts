@@ -7,7 +7,8 @@ import {
   PLAN_NAME_MAX_LENGTH,
 } from "../plan/boundary.js";
 import { derivePreferenceScores } from "@kinora/domain";
-import type { BillingFeature, PlanSpec } from "@kinora/contracts";
+import { mergePlanSpecDraft } from "@kinora/domain/plan";
+import type { BillingFeature, PlanSpec, PlanSpecDraft } from "@kinora/contracts";
 import type { PlanGenerationService } from "../ai/generation-service.js";
 import type { ConsumeDecision } from "../billing/types.js";
 import type { ChatEntitlementPort } from "../billing/chat-entitlement.js";
@@ -119,12 +120,45 @@ export interface PlanRoutesOptions {
    */
   chatEntitlement?: ChatEntitlementPort;
   /**
-   * Token source for the chat endpoint's streamed assistant prose (12, S2a).
-   * S2a wires a deterministic stub/Mock extractor; the real LangChain-backed
-   * adapter arrives in S2b. Only `streamReply` is used here — the terminal
-   * `extract()`/draft-commit path is S2b. This route NEVER imports LangChain.
+   * Extractor for the chat endpoint (12, S2b). Both passes are used now:
+   * `streamReply` for the assistant prose and `extract` for the terminal
+   * structured `Partial<PlanSpec>`. The route depends ONLY on this port — the
+   * LangChain dependency lives entirely inside the injected adapter
+   * (`ai/extraction-adapter.ts`), so the route never imports LangChain.
    */
-  chatExtractor?: Pick<PlanSpecExtractor, "streamReply">;
+  chatExtractor?: PlanSpecExtractor;
+  /**
+   * Wall-clock deadline (ms) for a single chat turn (12, S2b). If Pass 1/Pass 2
+   * do not complete within this budget the turn is aborted (LLM stream cancelled
+   * via the shared AbortSignal), a terminal `error` event is emitted, and the
+   * socket is closed cleanly with NO draft write. Defaults to 60s. Injected
+   * small in tests for deterministic timeout coverage.
+   */
+  chatStreamTimeoutMs?: number;
+}
+
+/** Default per-turn chat stream deadline (ms). */
+const DEFAULT_CHAT_STREAM_TIMEOUT_MS = 60_000;
+
+/**
+ * Structurally compare two drafts over the allow-listed fields to decide whether
+ * the merge actually changed anything. A turn that extracts nothing (or only
+ * invalid values dropped by `mergePlanSpecDraft`) MUST NOT write the draft —
+ * this keeps an empty/no-op turn from touching `plan_drafts` at all.
+ */
+function draftChanged(next: PlanSpecDraft, prev: PlanSpecDraft): boolean {
+  const fields = [
+    "goal",
+    "daysPerWeek",
+    "sessionDurationMinutes",
+    "location",
+    "equipment",
+    "limitations",
+    "name",
+  ] as const;
+  return fields.some(
+    (f) => JSON.stringify(next[f] ?? null) !== JSON.stringify(prev[f] ?? null),
+  );
 }
 
 /**
@@ -482,28 +516,42 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
     }
   );
 
-  // POST /plan-specs/chat  (12-interactive-text-chat, Slice 2a)
+  // POST /plan-specs/chat  (12-interactive-text-chat, Slice 2b)
   //
-  // Streaming SSE endpoint for the Asistente. S2a ships the TRANSPORT + the
-  // Pro gate + the fail-closed disconnect lifecycle only, backed by a stub token
-  // source. The terminal structured extraction, masking, and draft commit are
-  // S2b — this handler NEVER writes a draft and NEVER imports LangChain.
+  // Streaming SSE endpoint for the Asistente. S2b completes the turn: it streams
+  // the assistant prose (Pass 1), runs the terminal structured extraction
+  // (Pass 2), merges the result onto the SHARED `plan_drafts` draft via the pure
+  // `mergePlanSpecDraft`, commits the draft ONLY on the terminal event, and emits
+  // a terminal `draft { draftSpec, missingFields, assistantMessage }`. Any
+  // mid-stream failure emits a terminal `error` and leaves the draft untouched.
+  // The route depends ONLY on the `PlanSpecExtractor` port — LangChain lives in
+  // the injected adapter, never here (deps-guard/architecture confinement).
   //
   // Order of operations (fail-closed):
   //   1. requireAuth        — 401 if no session (authContext is the ONLY identity)
   //   2. ChatEntitlementPort — 403 { error: reason } if not Pro, BEFORE any
   //                            streaming/LLM work or reply.hijack()
   //   3. reply.hijack() + SSE headers on reply.raw
-  //   4. stream `token` deltas from the injected extractor, then a terminal
-  //      `done` event (S2b replaces `done` with `draft`/`error`)
+  //   4. read the current shared draft (tenant/user scoped, from authContext)
+  //   5. empty/whitespace message → NO LLM work; a clarifying terminal `draft`
+  //      carrying the UNCHANGED draft (no write)
+  //   6. otherwise Pass 1 stream `token` deltas → Pass 2 `extract` → merge →
+  //      commit-if-changed → terminal `draft`
   //
-  // Client disconnect: `request.raw` "close" fires an AbortController; the
-  // extractor stops (it honors the signal) and the response ends — no orphaned
-  // work, no draft write. Chat consumes NO billing quota.
+  // Resilience: a shared AbortController is fired by (a) client disconnect
+  // (`close` on request/response), (b) a socket-level error (ECONNRESET), and
+  // (c) a wall-clock timeout. On disconnect/error NO terminal event is written
+  // (the client is gone); on timeout a terminal `error` is written to the still
+  // open socket. `writeFrame` honors backpressure: when the kernel buffer is
+  // full (`raw.write()` returns false) it awaits `drain` before continuing so no
+  // token is dropped. Chat consumes NO billing quota and performs NO vector
+  // embedding of the transcript.
   //
   // Registered only when BOTH the gate and the extractor are wired (they are, in
   // app.ts). Absent them the wizard routes above are entirely unaffected.
   if (chatEntitlement && chatExtractor) {
+    const chatExtractorPort = chatExtractor;
+    const timeoutMs = options.chatStreamTimeoutMs ?? DEFAULT_CHAT_STREAM_TIMEOUT_MS;
     fastify.post(
       "/plan-specs/chat",
       { schema: chatTurnSchema, preHandler: requireAuth() },
@@ -530,57 +578,177 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
           "X-Accel-Buffering": "no",
         });
 
-        // Client disconnect → abort the extractor and stop emitting. Listen on
-        // BOTH the request and the response raw sockets: depending on the client
-        // and keep-alive, a mid-stream disconnect surfaces as a "close" on the
-        // response socket (the SSE body) and/or the request. AbortController is
-        // idempotent, so a double-fire is harmless; listeners are removed in
-        // `finally`.
+        // Client disconnect → abort the extractor and stop emitting. `clientGone`
+        // gates the terminal write: once the client has disconnected (or the
+        // socket errored) we must NOT attempt any further write. `timedOut`
+        // records a wall-clock deadline breach so we DO emit a terminal `error`
+        // on the still-open socket. Listen on BOTH request and response sockets.
         const controller = new AbortController();
-        const onClose = () => controller.abort();
+        let clientGone = false;
+        let timedOut = false;
+        const onClose = () => {
+          clientGone = true;
+          controller.abort();
+        };
         request.raw.on("close", onClose);
         raw.on("close", onClose);
 
         // CRITICAL: a mid-stream socket-level failure (e.g. a client TCP RESET
         // → ECONNRESET) fires an 'error' event on the hijacked `reply.raw` (and
-        // possibly its underlying socket). Node re-throws an unhandled 'error'
-        // event as an UNCAUGHT EXCEPTION that crashes the ENTIRE process — every
-        // tenant, not just this request. Treat it exactly like a disconnect:
-        // log it, abort, and never rethrow. Listen on both the response object
-        // and its socket since either can be the emitter depending on where the
-        // failure originates.
+        // possibly its underlying socket). An unhandled 'error' event crashes the
+        // ENTIRE process. Treat it as a disconnect: log, mark the client gone,
+        // abort, and never rethrow.
         const onError = (err: unknown) => {
           request.log.error({ err, tenantId, userId }, "chat stream socket error");
+          clientGone = true;
           controller.abort();
         };
         raw.on("error", onError);
         raw.socket?.on("error", onError);
 
-        const write = (event: string, data: unknown): void => {
-          // Never write to an aborted/ended socket — that throws ERR_STREAM_*.
-          if (controller.signal.aborted || raw.writableEnded) return;
-          raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        // Wall-clock deadline: on breach abort the LLM stream and mark timedOut so
+        // a terminal `error` is emitted before the clean close.
+        const timer = setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, timeoutMs);
+
+        // Backpressure-aware write. When `raw.write()` returns false the kernel
+        // send buffer is full — await 'drain' before continuing so no token is
+        // lost. `clientGone` (not `signal.aborted`) gates the INITIAL write so a
+        // timeout can still flush its terminal `error` to the open socket.
+        //
+        // HANG FIX: the drain wait previously escaped ONLY via `abort`. Two gaps:
+        // (a) if the signal was ALREADY aborted before this call (e.g. the
+        //     timeout's own terminal-error write), the `addEventListener("abort")`
+        //     listener never fires because the event already happened — bail
+        //     immediately instead of registering a listener that will never see
+        //     the transition. (b) if 'drain' never arrives (a stalled/dead
+        //     socket — the very condition that caused the timeout) and nothing
+        //     else escapes, the promise hangs forever, leaking the handler and
+        //     the socket (it never reaches `finally`/`raw.end()`). Race 'drain'
+        //     against 'close'/'error' on `raw` as well as `abort`, and always
+        //     remove every listener on settle.
+        const writeFrame = (event: string, data: unknown): Promise<void> => {
+          if (clientGone || raw.writableEnded) return Promise.resolve();
+          const ok = raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+          if (ok) return Promise.resolve();
+          // Already aborted by the time we'd wait — bail without registering a
+          // listener for an event that already fired.
+          if (controller.signal.aborted) return Promise.resolve();
+          return new Promise<void>((resolve) => {
+            const cleanup = () => {
+              raw.removeListener("drain", settle);
+              raw.removeListener("close", settle);
+              raw.removeListener("error", settle);
+              controller.signal.removeEventListener("abort", settle);
+            };
+            const settle = () => {
+              cleanup();
+              resolve();
+            };
+            raw.once("drain", settle);
+            raw.once("close", settle);
+            raw.once("error", settle);
+            controller.signal.addEventListener("abort", settle, { once: true });
+          });
         };
 
         try {
-          // S2a stub: currentDraft is empty — the shared-draft read/merge is S2b.
-          const input = { message, currentDraft: {} };
-          for await (const token of chatExtractor.streamReply(input, controller.signal)) {
-            if (controller.signal.aborted) break;
-            write("token", { delta: token });
+          // Shared draft: read the tenant/user-scoped `plan_drafts` state (never
+          // the body). A missing draft is an empty draft.
+          //
+          // TODO(S3): two concurrent/overlapping chat turns for the same
+          // tenant+user (e.g. a fast double-submit) can both read the SAME
+          // `currentDraft` here and the second commit's `upsertDraft` can
+          // overwrite the first turn's merged fields (a lost update — WARNING,
+          // not fixed in S2b). Mitigation lands in S3 by serializing chat turns
+          // client-side (disable submit while a turn is in flight); no
+          // server-side locking is added here.
+          const currentRow = await repo.findCurrentDraft(tenantId, userId);
+          const currentDraft = (currentRow?.specJson ?? {}) as PlanSpecDraft;
+          const step = currentRow?.step ?? 1;
+
+          // Empty/whitespace message → NO LLM work (spec: draft unchanged, a
+          // clarifying prompt only). Emit the current draft + its missingFields
+          // as the terminal event without any extractor call or draft write.
+          if (message.trim() === "") {
+            const { draft, missingFields } = mergePlanSpecDraft(currentDraft, {});
+            await writeFrame("draft", {
+              draftSpec: draft,
+              missingFields,
+              assistantMessage:
+                "Tell me about the plan you want — your goal, how many days per week, session length, where you train, and any equipment.",
+            });
+            return;
           }
-          // Terminal stub event. S2b emits `draft` (with the merged spec) or
-          // `error` here; S2a has no extraction/merge/commit yet.
-          write("done", {});
+
+          // Compute the still-missing input fields from the CURRENT draft
+          // (reusing the same canonical merge logic against an empty
+          // extraction) so the extractor can steer its prose/extraction toward
+          // a deterministic clarifying question, exactly like S1's
+          // `buildExtractionPrompt` was designed to receive.
+          const { missingFields: currentMissingFields } = mergePlanSpecDraft(currentDraft, {});
+          const input = { message, currentDraft, missingFields: currentMissingFields };
+
+          // Pass 1 — stream the assistant prose token-by-token, accumulating it
+          // for the terminal event.
+          let assistantMessage = "";
+          for await (const token of chatExtractorPort.streamReply(input, controller.signal)) {
+            if (controller.signal.aborted) break;
+            assistantMessage += token;
+            await writeFrame("token", { delta: token });
+          }
+
+          // Aborted mid Pass 1: client disconnect → silent; timeout → terminal error.
+          if (controller.signal.aborted) {
+            if (timedOut) await writeFrame("error", { error: "chat_stream_timeout" });
+            return;
+          }
+
+          // Pass 2 — terminal structured extraction (non-streamed). Threads the
+          // SAME AbortSignal so a timeout/disconnect firing during this call
+          // cancels the in-flight structured-output request (HIGH fix — Pass 2
+          // was previously uncancellable).
+          const extracted = await chatExtractorPort.extract(input, controller.signal);
+
+          if (controller.signal.aborted) {
+            if (timedOut) await writeFrame("error", { error: "chat_stream_timeout" });
+            return;
+          }
+
+          // Merge (pure domain, re-validates every field) and compute missing.
+          const { draft: mergedDraft, missingFields } = mergePlanSpecDraft(currentDraft, extracted);
+
+          // Commit ONLY here, ONLY when the turn actually changed the draft. A
+          // no-op/empty extraction never touches `plan_drafts`.
+          if (draftChanged(mergedDraft, currentDraft)) {
+            await repo.upsertDraft(tenantId, userId, step, mergedDraft);
+          }
+
+          await writeFrame("draft", {
+            draftSpec: mergedDraft,
+            missingFields,
+            assistantMessage,
+          });
         } catch (error) {
-          // A stub-source failure is surfaced as a terminal `error`; no draft is
-          // ever written in S2a regardless. Log with tenant/user correlation
-          // (from authContext, never the body) so a failing stream is
-          // diagnosable in prod — the client-facing event stays generic (no
-          // stack/internal detail).
+          // Any Pass 1/Pass 2 failure fails CLOSED: terminal `error`, draft
+          // untouched (upsertDraft is only reached on the success path above).
+          // A client-gone stream gets no terminal write. Log with tenant/user
+          // correlation (authContext, never the body); the client event stays
+          // generic (no stack/internal detail).
+          //
+          // A timed-out Pass 2 rejects (its signal aborted mid-`await`) and
+          // lands HERE rather than at the post-await `controller.signal.aborted`
+          // check below Pass 2 — surface it as the same `chat_stream_timeout`
+          // terminal, not the generic `chat_stream_failed`.
           request.log.error({ err: error, tenantId, userId }, "chat stream failed");
-          write("error", { error: "chat_stream_failed" });
+          if (!clientGone) {
+            const reason = timedOut ? "chat_stream_timeout" : "chat_stream_failed";
+            await writeFrame("error", { error: reason });
+          }
         } finally {
+          clearTimeout(timer);
           request.raw.removeListener("close", onClose);
           raw.removeListener("close", onClose);
           raw.removeListener("error", onError);
