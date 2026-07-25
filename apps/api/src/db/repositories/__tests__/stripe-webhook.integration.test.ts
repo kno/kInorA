@@ -42,6 +42,7 @@ import { StripeEventStoreRepository } from "../stripe-events.js";
 import { BillingStateReaderRepository } from "../billing-quota.js";
 import { ProcessStripeWebhook } from "../../../billing/process-webhook.js";
 import { resolveEffectiveTier } from "../../../billing/entitlement.js";
+import { GUARD_MATRIX, type GuardTsRelation } from "../../../billing/__tests__/stripe-webhook-guard-matrix.fixture.js";
 import type {
   StripeGateway,
   StripeSubscriptionSnapshot,
@@ -314,6 +315,100 @@ describe.skipIf(!hasDb)("StripeEventStoreRepository / ProcessStripeWebhook (real
     const effective = resolveEffectiveTier(ctx, new Date("2026-07-25T12:00:00.000Z"));
     expect(effective.tier).toBe("pro");
     expect(effective.source).toBe("admin_override");
+  });
+});
+
+// #201: drift guard between the pure `shouldAcceptStoreWrite` predicate
+// (`billing/process-webhook.ts`) and the real `INSERT ... ON CONFLICT DO
+// UPDATE ... WHERE` clause it mirrors (`stripe-events.ts`). This suite drives
+// the SAME `GUARD_MATRIX` fixture the pure-unit suite
+// (`billing/__tests__/process-webhook.test.ts`) uses through the actual DB
+// upsert, and asserts the real accept/reject outcome matches the fixture's
+// expectation for every row — a one-sided edit to either predicate
+// deterministically fails one of the two suites instead of silently drifting.
+describe.skipIf(!hasDb)("StripeEventStoreRepository — GUARD_MATRIX vs. real Postgres setWhere (#201)", () => {
+  const { db, pool } = createDbClient();
+  const store = new StripeEventStoreRepository(db);
+
+  afterAll(async () => {
+    await pool.end();
+  });
+
+  const INCOMING_TS = new Date("2026-07-25T10:00:00.000Z");
+  const EARLIER_TS = new Date("2026-07-24T10:00:00.000Z");
+  const LATER_TS = new Date("2026-07-26T10:00:00.000Z");
+
+  function existingTsFor(relation: GuardTsRelation): Date | null {
+    switch (relation) {
+      case "none":
+      case "null":
+        return null;
+      case "earlier":
+        return EARLIER_TS;
+      case "equal":
+        return INCOMING_TS;
+      case "later":
+        return LATER_TS;
+    }
+  }
+
+  async function seedTenant(): Promise<string> {
+    const [tenant] = await db
+      .insert(tenants)
+      .values({ name: `guard-matrix-${Date.now()}-${Math.random()}` })
+      .returning({ id: tenants.id });
+    return tenant!.id;
+  }
+
+  async function seedExistingRow(tenantId: string, tsRelation: GuardTsRelation, status: "active" | "expired") {
+    if (tsRelation === "none") return; // no pre-existing row for this case
+    await db.insert(tenantBillingStates).values({
+      tenantId,
+      tier: "pro",
+      status,
+      source: "stripe",
+      stripeEventTs: existingTsFor(tsRelation),
+    });
+  }
+
+  it.each(GUARD_MATRIX)("$name", async (testCase) => {
+    const tenantId = await seedTenant();
+    await seedExistingRow(tenantId, testCase.tsRelation, testCase.existingStatus ?? "active");
+
+    const write = {
+      tenantId,
+      tier: "pro" as const,
+      status: testCase.incomingStatus,
+      source: "stripe" as const,
+      stripeCustomerId: "cus_matrix",
+      stripeSubscriptionId: "sub_matrix",
+      stripeSubscriptionStatus: testCase.incomingStatus === "active" ? "active" : "canceled",
+      billingCycle: testCase.incomingStatus === "active" ? ("monthly" as const) : null,
+      currentPeriodEnd: testCase.incomingStatus === "active" ? new Date("2026-08-25T00:00:00.000Z") : null,
+      cancelAtPeriodEnd: false,
+    };
+
+    const result = await store.recordEventAndApply({
+      eventId: `evt_matrix_${tenantId}`,
+      type: "customer.subscription.updated",
+      eventTs: INCOMING_TS,
+      write,
+    });
+
+    // The real upsert's accept/reject decision must equal the fixture's
+    // expectation — the same expectation the pure predicate is asserted
+    // against in the unit suite.
+    const accepted = result.outcome === "processed";
+    expect(accepted).toBe(testCase.expectAccept);
+
+    const [row] = await db.select().from(tenantBillingStates).where(eq(tenantBillingStates.tenantId, tenantId));
+    if (testCase.expectAccept) {
+      expect(row?.status).toBe(testCase.incomingStatus);
+      expect(row?.stripeEventTs?.toISOString()).toBe(INCOMING_TS.toISOString());
+    } else {
+      // Rejected: the existing row (if any) must be left untouched.
+      expect(row?.status).toBe(testCase.existingStatus);
+    }
   });
 });
 
