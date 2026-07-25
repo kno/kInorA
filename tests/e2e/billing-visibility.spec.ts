@@ -104,10 +104,17 @@ test.describe("Billing visibility UI (#179)", () => {
     ).toBeVisible();
 
     // A fresh tenant is provisioned Pro / trialing for 30 days.
-    await expect(page.getByText("Pro", { exact: true })).toBeVisible();
-    await expect(page.getByText("Trial", { exact: true })).toBeVisible();
+    //
+    // The OD billing redesign (11b Slice 5) renders "Pro" in MULTIPLE places
+    // (the topbar tier chip AND the PlanHero title), so a bare
+    // `getByText("Pro", { exact: true })` is a Playwright strict-mode
+    // violation (2+ matches). Target the stable `data-testid` the component
+    // exposes on the topbar chips instead (see BillingPageClient.tsx) — this
+    // is also robust against future copy/layout changes.
+    await expect(page.getByTestId("billing-tier-chip")).toHaveText("Pro");
+    await expect(page.getByTestId("billing-status-chip")).toHaveText("Trial");
     // Trial-days badge — assert on the stable prefix, not the exact day count.
-    await expect(page.getByText(/Pro trial/)).toBeVisible();
+    await expect(page.getByTestId("billing-trial-badge")).toContainText("Pro trial");
 
     // No quota consumed yet → the empty-usage card, not the usage lists.
     await expect(page.getByText("No usage recorded yet")).toBeVisible();
@@ -154,10 +161,12 @@ test.describe("Billing visibility UI (#179)", () => {
     // this surfaces the newly-active tenant's billing state.
     await page.getByRole("button", { name: "Retry" }).click();
 
-    // The error card is cleared and the current session's billing state renders.
-    await expect(page.getByText("Pro", { exact: true })).toBeVisible();
-    await expect(page.getByText("Trial", { exact: true })).toBeVisible();
-    await expect(page.getByText(/Pro trial/)).toBeVisible();
+    // The error card is cleared and the current session's billing state
+    // renders. Same testid locators as the first test — unambiguous against
+    // the OD layout's multiple "Pro" text nodes (topbar chip + PlanHero title).
+    await expect(page.getByTestId("billing-tier-chip")).toHaveText("Pro");
+    await expect(page.getByTestId("billing-status-chip")).toHaveText("Trial");
+    await expect(page.getByTestId("billing-trial-badge")).toContainText("Pro trial");
     await expect(
       page.getByText("We could not load your billing."),
     ).toHaveCount(0);

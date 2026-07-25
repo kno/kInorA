@@ -855,6 +855,7 @@
     "navLabel": "Facturación",
     "title": "Facturación",
     "description": "Revisa tu plan, el estado de prueba y el uso de esta cuenta.",
+    "subtitle": "Gestiona tu plan, tu uso y tu método de pago.",
     "loading": {
       "title": "Cargando tu facturación…",
       "description": "Estamos obteniendo los detalles de tu plan, prueba y uso.",
@@ -868,6 +869,10 @@
       "offlineTitle": "Estás sin conexión",
       "offlineDescription": "Vuelve a conectarte para cargar los detalles de facturación.",
       "retry": "Reintentar"
+    },
+    "regions": {
+      "main": "Resumen de facturación",
+      "aside": "Opciones de plan"
     },
     "tier": {
       "free": "Gratis",
@@ -884,12 +889,30 @@
       "expiredTitle": "Tu prueba Pro ha terminado",
       "expiredDescription": "Ahora estás en el plan Gratis. Mejora tu plan para conservar las funciones premium."
     },
+    "plan": {
+      "currentLabel": "Plan actual",
+      "descriptionFree": "Estás en el plan Gratis con límites mensuales básicos.",
+      "descriptionPro": "Estás en Pro con límites mensuales amplios en todas las funciones.",
+      "metaPrice": "Precio",
+      "metaRenewal": "Renovación",
+      "metaPeriod": "Periodo actual",
+      "metaPayment": "Método de pago",
+      "valueNotSet": "—",
+      "renewalNone": "Sin renovación",
+      "comparePlans": "Comparar planes",
+      "priceFree": "Gratis",
+      "periodTrialEndsOn": "La prueba termina el {date}"
+    },
     "usage": {
       "tenantTitle": "Uso de la cuenta este periodo",
       "memberTitle": "Tu uso este periodo",
       "row": "{feature} — {used}/{limit} usados",
       "emptyTitle": "Aún no hay uso registrado",
-      "emptyDescription": "El uso de este periodo de facturación aparecerá aquí en cuanto comience."
+      "emptyDescription": "El uso de este periodo de facturación aparecerá aquí en cuanto comience.",
+      "periodLabel": "Periodo {period}",
+      "limitNote": "hasta {limit}/mes",
+      "footer": "Amplía tus límites con Pro",
+      "meterAria": "{feature}: {used} de {limit} usados"
     },
     "feature": {
       "plan_generation": "Generaciones de plan",
@@ -897,9 +920,50 @@
       "memory_write": "Escrituras de memoria",
       "memory_retrieval": "Recuperaciones de memoria"
     },
+    "history": {
+      "title": "Facturas y cargos",
+      "empty": "Aún no hay cargos",
+      "emptyDescription": "Tus facturas y recibos aparecerán aquí tras tu primer pago.",
+      "download": "Recibo",
+      "invoiceAria": "Recibo de la factura {date}, {amount}, {status}",
+      "errorTitle": "No pudimos cargar tus facturas.",
+      "errorDescription": "Inténtalo de nuevo en un momento."
+    },
+    "pro": {
+      "eyebrow": "Recomendado",
+      "title": "kInorA Pro",
+      "cycleAria": "Ciclo de facturación",
+      "cycleMonthly": "Mensual",
+      "cycleAnnual": "Anual",
+      "priceSuffix": "/mes",
+      "annualBilled": "facturado anualmente",
+      "saveBadge": "Ahorra {percent}%",
+      "benefitGenerations": "Amplias generaciones y regeneraciones de plan al mes",
+      "benefitMemory": "Escrituras y recuperaciones de memoria premium",
+      "benefitSupport": "Soporte prioritario",
+      "cta": "Mejorar a Pro",
+      "currentBadge": "Tu plan actual",
+      "noCommitment": "Sin permanencia · Cancela en un clic"
+    },
+    "payment": {
+      "title": "Método de pago",
+      "description": "Gestiona tu tarjeta de forma segura en el portal de Stripe.",
+      "manageCta": "Gestionar / Añadir tarjeta"
+    },
+    "support": {
+      "title": "¿Necesitas ayuda?",
+      "description": "Encuentra respuestas a las preguntas frecuentes de facturación.",
+      "faqCta": "Ver preguntas frecuentes"
+    },
+    "actions": {
+      "checkoutError": "No pudimos iniciar el pago. Inténtalo de nuevo.",
+      "portalError": "No pudimos abrir el portal de facturación. Inténtalo de nuevo.",
+      "invalidPromotion": "Ese código promocional no es válido.",
+      "redirecting": "Redirigiendo…"
+    },
     "upgrade": {
       "title": "Desbloquea las funciones Pro",
-      "description": "Mejora a Pro para generaciones de plan ilimitadas y memoria premium.",
+      "description": "Mejora a Pro para obtener límites mensuales amplios en generación de planes y memoria premium.",
       "cta": "Ver opciones de mejora"
     }
   },
