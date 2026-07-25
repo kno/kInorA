@@ -101,7 +101,7 @@ No unbounded local E2E suite was run. E2E safety was verified through `scripts/_
 | Separate profile/preferences tables | ✅ Yes | Implemented as additive Drizzle tables with dedicated repositories. |
 | PUT with partial merge | ✅ Yes | Profile nullable enum values and preference fields preserve omitted values. |
 | Repository per table | ✅ Yes | Route layer depends on ports; app composition wires concrete repositories. |
-| Registration default profile | ✅ Yes | `provisionTenantForUser` inserts the default profile inside the existing transaction. |
+| Registration default profile | ✅ Yes | `provisionTenantForUser` inserts the default profile row inside the existing transaction. |
 | Wizard pre-fill + preferences step | ✅ Yes | Seven-step wizard flow includes the preferences step and persisted defaults. |
 | Profile loading indicator | ✅ Yes | Remediation added a Next route-segment loading fallback without changing the server-fetch page boundary. |
 
