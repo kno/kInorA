@@ -1036,6 +1036,57 @@
     },
     "retry": "Retry"
   },
+  "chat": {
+    "coachName": "kInorA Coach",
+    "coachStatus": "AI · Available now",
+    "greeting": "Hi! I'm your personal kInorA coach. Tell me about the plan you want — your goal, how many days per week, session length, where you train, and any equipment — and I'll draft it for you.",
+    "inputPlaceholder": "Type your message…",
+    "inputAria": "Chat message",
+    "send": "Send",
+    "sendAria": "Send message",
+    "streaming": "Thinking…",
+    "retry": "Retry",
+    "threadAria": "Conversation with the kInorA coach",
+    "error": {
+      "chat_stream_failed": "Something went wrong. Please try again.",
+      "chat_stream_timeout": "That took too long. Please try again.",
+      "generic": "Something went wrong. Please try again."
+    },
+    "panel": {
+      "title": "Extracted data",
+      "empty": "Your plan details will appear here as we chat.",
+      "editAria": "Edit {field}",
+      "notSet": "—",
+      "generate": "Generate plan",
+      "generateError": "We couldn't generate your plan. Please try again."
+    },
+    "field": {
+      "goal": "Goal",
+      "daysPerWeek": "Days / week",
+      "sessionDuration": "Session length",
+      "location": "Location",
+      "equipment": "Equipment",
+      "limitations": "Limitations",
+      "level": "Level"
+    },
+    "value": {
+      "daysPerWeek": "{n, plural, one {# day} other {# days}}",
+      "sessionDuration": "{n} min",
+      "equipmentCount": "{n, plural, =0 {None} one {# item} other {# items}}",
+      "limitationsCount": "{n, plural, =0 {None} one {# note} other {# notes}}"
+    },
+    "teaser": {
+      "eyebrow": "Pro",
+      "title": "Create your plan by chatting",
+      "description": "Describe your goal in your own words and let the kInorA coach draft your plan for you — a Pro feature.",
+      "cta": "Upgrade to Pro"
+    },
+    "mode": {
+      "assistant": "Assistant",
+      "formulario": "Form",
+      "toggleAria": "Creation mode"
+    }
+  },
   "sidebar": {
     "logout": "Log out",
     "logoutLabel": "Log out",

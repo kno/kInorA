@@ -1036,6 +1036,57 @@
     },
     "retry": "Reintentar"
   },
+  "chat": {
+    "coachName": "Entrenador kInorA",
+    "coachStatus": "IA · Disponible ahora",
+    "greeting": "¡Hola! Soy tu entrenador personal de kInorA. Contame qué plan querés — tu objetivo, cuántos días por semana, la duración de cada sesión, dónde entrenás y qué equipo tenés — y lo diseño para vos.",
+    "inputPlaceholder": "Escribe tu mensaje…",
+    "inputAria": "Mensaje del chat",
+    "send": "Enviar",
+    "sendAria": "Enviar mensaje",
+    "streaming": "Pensando…",
+    "retry": "Reintentar",
+    "threadAria": "Conversación con el entrenador kInorA",
+    "error": {
+      "chat_stream_failed": "Algo salió mal. Intentá de nuevo.",
+      "chat_stream_timeout": "Tardó demasiado. Intentá de nuevo.",
+      "generic": "Algo salió mal. Intentá de nuevo."
+    },
+    "panel": {
+      "title": "Datos extraídos",
+      "empty": "Los detalles de tu plan aparecerán aquí mientras conversamos.",
+      "editAria": "Editar {field}",
+      "notSet": "—",
+      "generate": "Generar plan",
+      "generateError": "No pudimos generar tu plan. Intentá de nuevo."
+    },
+    "field": {
+      "goal": "Objetivo",
+      "daysPerWeek": "Días / semana",
+      "sessionDuration": "Duración de sesión",
+      "location": "Lugar",
+      "equipment": "Equipo",
+      "limitations": "Limitaciones",
+      "level": "Nivel"
+    },
+    "value": {
+      "daysPerWeek": "{n, plural, one {# día} other {# días}}",
+      "sessionDuration": "{n} min",
+      "equipmentCount": "{n, plural, =0 {Ninguno} one {# elemento} other {# elementos}}",
+      "limitationsCount": "{n, plural, =0 {Ninguna} one {# nota} other {# notas}}"
+    },
+    "teaser": {
+      "eyebrow": "Pro",
+      "title": "Crea tu plan conversando",
+      "description": "Describí tu objetivo con tus palabras y dejá que el entrenador kInorA diseñe tu plan — una función Pro.",
+      "cta": "Mejora a Pro"
+    },
+    "mode": {
+      "assistant": "Asistente",
+      "formulario": "Formulario",
+      "toggleAria": "Modo de creación"
+    }
+  },
   "sidebar": {
     "logout": "Cerrar sesión",
     "logoutLabel": "Cerrar sesión",
