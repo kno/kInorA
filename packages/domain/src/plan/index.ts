@@ -25,3 +25,9 @@ export type { RpeValidation } from "./rpe.js";
 export { applyEquipmentSubstitutions } from "./equipment-substitution.js";
 export { injectLimitationWarnings } from "./limitation-warnings.js";
 export { assertNoDiagnosticLanguage } from "./diagnostic-guard.js";
+
+export {
+  mergePlanSpecDraft,
+  PLAN_SPEC_DRAFT_INPUT_FIELDS,
+} from "./merge-plan-spec-draft.js";
+export type { MergePlanSpecDraftResult } from "./merge-plan-spec-draft.js";
