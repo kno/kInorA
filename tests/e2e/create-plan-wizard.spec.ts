@@ -40,6 +40,26 @@ async function registerFreshUser(page: Page) {
 }
 
 /**
+ * Switch the create-plan screen to Formulario mode via the CreatePlanShell
+ * mode toggle (12-v1.1-interactive-text-chat Slice 3).
+ *
+ * A freshly-registered tenant is on a 30-day Pro trial (effective tier
+ * "pro"), and Pro's DEFAULT mode is now Asistente, not Formulario — the
+ * wizard this spec drives is no longer what renders on load. The wizard
+ * itself is unchanged; it is just reached through the `#btn-formulario`
+ * toggle (`chat.mode.formulario`, inside the `chat.mode.toggleAria`-labeled
+ * group) instead of being the default. Selected by CSS id (not accessible
+ * name/text) since it is the single stable, non-copy-dependent locator
+ * `CreatePlanShell` gives this button.
+ */
+async function switchToFormulario(page: Page) {
+  const formularioToggle = page.locator("#btn-formulario");
+  await expect(formularioToggle).toBeVisible();
+  await formularioToggle.click();
+  await expect(formularioToggle).toHaveAttribute("aria-pressed", "true");
+}
+
+/**
  * Click a single-choice option card. Goal (1), location (2), frequency (4)
  * and a duration PRESET (5) all auto-advance on selection (issues #52/#53),
  * so no explicit Continue click is needed or wanted.
@@ -65,6 +85,11 @@ test.describe("Create-plan wizard (07)", () => {
 
     await page.goto("/create-plan");
 
+    // This fresh tenant is on a Pro trial, so Asistente is the default mode —
+    // switch to Formulario before driving the wizard (the wizard itself is
+    // unchanged; it is just no longer shown by default for Pro).
+    await switchToFormulario(page);
+
     // Step 1 — goal (auto-advances on selection, no Continue needed)
     await expect(page.getByText("1 / 7")).toBeVisible();
     await chooseAutoAdvance(page, /Strength/i);
@@ -89,8 +114,10 @@ test.describe("Create-plan wizard (07)", () => {
     await page.goto("/dashboard");
 
     // Re-enter — the wizard resumes from the server-persisted draft at step 5
-    // with the prior answers intact.
+    // with the prior answers intact. Re-select Formulario: the screen reloads
+    // to its Pro default (Asistente) on every fresh navigation.
     await page.goto("/create-plan");
+    await switchToFormulario(page);
     await expect(page.getByText("5 / 7")).toBeVisible();
     // Going back to frequency shows the previously chosen 3-days still pressed.
     await page.getByRole("button", { name: /Back/i }).click();

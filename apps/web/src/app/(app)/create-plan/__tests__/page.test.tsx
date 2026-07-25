@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement, ReactNode } from "react";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
@@ -10,6 +10,7 @@ const loadCurrentDraft = vi.fn();
 const getTranslations = vi.fn();
 const fetchUserProfile = vi.fn();
 const fetchUserPreferences = vi.fn();
+const getBillingVisibility = vi.fn();
 
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({ get: cookieGet })),
@@ -40,10 +41,14 @@ vi.mock("../preferences-client", () => ({
   fetchUserPreferences: (...args: unknown[]) => fetchUserPreferences(...args),
 }));
 
-// Stub StepperShell so the page test asserts wiring, not the shell internals.
-vi.mock("../StepperShell", () => ({
-  StepperShell: (props: AnyProps) => ({
-    type: "StepperShell",
+vi.mock("../../billing/billing-client", () => ({
+  getBillingVisibility: (...args: unknown[]) => getBillingVisibility(...args),
+}));
+
+// Stub CreatePlanShell so the page test asserts wiring, not the shell internals.
+vi.mock("../CreatePlanShell", () => ({
+  CreatePlanShell: (props: AnyProps) => ({
+    type: "CreatePlanShell",
     props,
     key: null,
   }) as unknown as ReactElement,
@@ -51,9 +56,21 @@ vi.mock("../StepperShell", () => ({
 
 import CreatePlanPage from "../page";
 
+beforeEach(() => {
+  // Default: no Pro entitlement resolved → Free (Formulario) unless overridden.
+  getBillingVisibility.mockResolvedValue({ kind: "error", message: "no_session" });
+});
+
 afterEach(() => {
   vi.clearAllMocks();
 });
+
+function proVisibility() {
+  return { kind: "ok", data: { billing: { tier: "pro" } } };
+}
+function freeVisibility() {
+  return { kind: "ok", data: { billing: { tier: "free" } } };
+}
 
 function mockUserMemorySuccess() {
   fetchUserProfile.mockResolvedValue({
@@ -136,5 +153,46 @@ describe("CreatePlanPage", () => {
     await CreatePlanPage();
 
     expect(loadCurrentDraft).toHaveBeenCalledWith(undefined);
+  });
+
+  it("defaults a Pro tenant to Asistente (tier resolved server-side)", async () => {
+    cookieGet.mockReturnValue({ value: "tok-pro" });
+    loadCurrentDraft.mockResolvedValue(null);
+    mockUserMemorySuccess();
+    getTranslations.mockResolvedValue(() => "");
+    getBillingVisibility.mockResolvedValue(proVisibility());
+
+    const page = (await CreatePlanPage()) as AnyElement;
+
+    expect(getBillingVisibility).toHaveBeenCalledWith("tok-pro");
+    expect(page.props.isPro).toBe(true);
+    expect(page.props.defaultMode).toBe("asistente");
+    expect(page.props.upgradePath).toBe("/billing#pro-card");
+  });
+
+  it("defaults a Free tenant to Formulario with the teaser flag", async () => {
+    cookieGet.mockReturnValue({ value: "tok-free" });
+    loadCurrentDraft.mockResolvedValue(null);
+    mockUserMemorySuccess();
+    getTranslations.mockResolvedValue(() => "");
+    getBillingVisibility.mockResolvedValue(freeVisibility());
+
+    const page = (await CreatePlanPage()) as AnyElement;
+
+    expect(page.props.isPro).toBe(false);
+    expect(page.props.defaultMode).toBe("formulario");
+  });
+
+  it("fails closed to Free when the billing read errors", async () => {
+    cookieGet.mockReturnValue({ value: "tok-err" });
+    loadCurrentDraft.mockResolvedValue(null);
+    mockUserMemorySuccess();
+    getTranslations.mockResolvedValue(() => "");
+    getBillingVisibility.mockResolvedValue({ kind: "error", message: "api_unreachable" });
+
+    const page = (await CreatePlanPage()) as AnyElement;
+
+    expect(page.props.isPro).toBe(false);
+    expect(page.props.defaultMode).toBe("formulario");
   });
 });

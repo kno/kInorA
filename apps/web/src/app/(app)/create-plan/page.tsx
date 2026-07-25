@@ -2,7 +2,8 @@ import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { fetchUserProfile } from "../profile/profile-form-client";
-import { StepperShell } from "./StepperShell";
+import { getBillingVisibility } from "../billing/billing-client";
+import { CreatePlanShell } from "./CreatePlanShell";
 import { loadCurrentDraft } from "./plan-draft-client";
 import { fetchUserPreferences } from "./preferences-client";
 import {
@@ -28,14 +29,25 @@ export default async function CreatePlanPage() {
 
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
-  const [draft, profileResult, preferencesResult] = await Promise.all([
+  const [draft, profileResult, preferencesResult, visibility] = await Promise.all([
     loadCurrentDraft(token),
     fetchUserProfile(token),
     fetchUserPreferences(token),
+    getBillingVisibility(token),
   ]);
 
+  // Effective tier is resolved SERVER-SIDE (reusing the 11b billing-visibility
+  // read, whose `billing.tier` is already the `resolveEffectiveTier` result) —
+  // never trusted from the client. Pro defaults to Asistente; Free to the
+  // Formulario wizard + an Asistente teaser. The default is cosmetic: the API's
+  // 403 Pro gate is the real enforcement.
+  const isPro = visibility.kind === "ok" && visibility.data.billing.tier === "pro";
+
   return (
-    <StepperShell
+    <CreatePlanShell
+      defaultMode={isPro ? "asistente" : "formulario"}
+      isPro={isPro}
+      upgradePath="/billing#pro-card"
       initialDraft={draft ?? undefined}
       initialProfile={profileResult.kind === "ok" ? profileResult.profile : null}
       initialPreferences={preferencesResult.kind === "ok" ? preferencesResult.preferences : null}
