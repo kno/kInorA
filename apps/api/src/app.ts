@@ -76,6 +76,7 @@ import {
   type BillingCustomerReaderPort,
 } from "./billing/create-portal-session.js";
 import { ListInvoices } from "./billing/list-invoices.js";
+import { validateBillingPricingConfig } from "./billing/pricing-config.js";
 import { StripeEventStoreRepository } from "./db/repositories/stripe-events.js";
 import { BillingCustomerRepository } from "./db/repositories/billing-customer.js";
 import {
@@ -399,6 +400,15 @@ export async function buildApp(
   const resolvedCheckoutPricing: CheckoutPriceConfig =
     checkoutPricing ?? resolveCheckoutPricing();
   const createCheckout = new CreateCheckout(resolvedCheckoutGateway, resolvedCheckoutPricing);
+
+  // FIX 2 (display/charge drift guard): surface a pricing-config
+  // inconsistency at boot. Pure + network-free — throws in production
+  // (fail-fast on operator misconfiguration), warns otherwise. The displayed
+  // price MUST stay in sync with the charged Stripe Price IDs.
+  validateBillingPricingConfig(process.env, {
+    production: process.env.NODE_ENV === "production",
+    warn: (message) => app.log.warn(message),
+  });
 
   // 11b Slice 4 — Customer Portal + invoices. The tenant's Stripe customer id is
   // resolved SERVER-SIDE from OUR DB (BillingCustomerRepository) keyed by the
