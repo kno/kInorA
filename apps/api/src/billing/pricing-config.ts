@@ -1,4 +1,4 @@
-import type { BillingFeature } from "@kinora/contracts";
+import type { BillingFeature, BillingPricingDTO } from "@kinora/contracts";
 
 /**
  * Config-driven Stripe pricing (11b-v1-billing-stripe-integration).
@@ -66,4 +66,53 @@ export const PRO_TIER_LIMITS: Record<BillingFeature, number> = {
 export function annualSavePercent(monthlyAmount: number, annualPerMonthAmount: number): number {
   if (monthlyAmount <= 0) return 0;
   return Math.round((1 - annualPerMonthAmount / monthlyAmount) * 100);
+}
+
+/**
+ * Default per-month display amounts (minor units) + currency, matching the
+ * spec's initial configured values (9,99 €/mo monthly, 7,99 €/mo annual). These
+ * are backoffice-ready via env overrides — never hardcoded in the web bundle.
+ */
+const DEFAULT_MONTHLY_AMOUNT = 999;
+const DEFAULT_ANNUAL_PER_MONTH_AMOUNT = 799;
+const DEFAULT_CURRENCY = "eur";
+const MONTHS_PER_YEAR = 12;
+
+/** Parse a minor-unit amount env var, falling back to `fallback` when blank/non-numeric. */
+function readAmount(raw: string | undefined, fallback: number): number {
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/**
+ * Build the config-driven display pricing surfaced to the web billing screen
+ * (11b Slice 5). Amounts + currency come from env (`STRIPE_PRICE_MONTHLY_AMOUNT`,
+ * `STRIPE_PRICE_ANNUAL_AMOUNT`, `STRIPE_PRICE_CURRENCY`), and the save badge is
+ * DERIVED from the two amounts — so the web never hardcodes prices or the save %.
+ */
+export function buildBillingPricing(
+  env: Record<string, string | undefined> = process.env,
+): BillingPricingDTO {
+  const monthlyPerMonth = readAmount(env.STRIPE_PRICE_MONTHLY_AMOUNT, DEFAULT_MONTHLY_AMOUNT);
+  const annualPerMonth = readAmount(
+    env.STRIPE_PRICE_ANNUAL_AMOUNT,
+    DEFAULT_ANNUAL_PER_MONTH_AMOUNT,
+  );
+  const currency = (env.STRIPE_PRICE_CURRENCY ?? DEFAULT_CURRENCY).toLowerCase();
+
+  return {
+    currency,
+    monthly: {
+      cycle: "monthly",
+      amountPerMonth: monthlyPerMonth,
+      amountPerInterval: monthlyPerMonth,
+    },
+    annual: {
+      cycle: "annual",
+      amountPerMonth: annualPerMonth,
+      amountPerInterval: annualPerMonth * MONTHS_PER_YEAR,
+    },
+    annualSavePercent: annualSavePercent(monthlyPerMonth, annualPerMonth),
+  };
 }

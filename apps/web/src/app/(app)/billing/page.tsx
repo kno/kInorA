@@ -1,25 +1,34 @@
 import { cookies } from "next/headers";
-import { getTranslations } from "next-intl/server";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { BillingPageClient } from "./BillingPageClient";
-import { getBillingVisibility } from "./billing-client";
+import { getBillingInvoices, getBillingPricing, getBillingVisibility } from "./billing-client";
 
 export default async function BillingPage() {
-  const t = await getTranslations();
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
 
-  const result = await getBillingVisibility(token);
-  const initialData = result.kind === "ok" ? result.data : null;
-  const initialError = result.kind === "error" ? result.message : null;
+  // Server-side fetch of every billing surface in parallel. Prices come from
+  // config (GET /billing/pricing) and invoices/ownership from the owner-only
+  // GET /billing/invoices (a 403 → `forbidden` = non-owner). The session token
+  // is read here and never crosses into the client bundle.
+  const [visibility, pricing, invoices] = await Promise.all([
+    getBillingVisibility(token),
+    getBillingPricing(token),
+    getBillingInvoices(token),
+  ]);
+
+  const initialData = visibility.kind === "ok" ? visibility.data : null;
+  const initialError = visibility.kind === "error" ? visibility.message : null;
+  const initialPricing = pricing.kind === "ok" ? pricing.data : null;
 
   return (
-    <main className="kin-page">
-      <h1 className="kin-title">{t("billing.title")}</h1>
-      <p className="kin-text kin-muted" style={{ marginBottom: "1.5rem" }}>
-        {t("billing.description")}
-      </p>
-      <BillingPageClient initialData={initialData} initialError={initialError} />
-    </main>
+    <div className="kin-billing-page" style={{ width: "100%", padding: "1.5rem 1rem" }}>
+      <BillingPageClient
+        initialData={initialData}
+        initialError={initialError}
+        pricing={initialPricing}
+        initialInvoices={invoices}
+      />
+    </div>
   );
 }
