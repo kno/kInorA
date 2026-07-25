@@ -4,6 +4,8 @@ import type {
   CheckoutSessionRequest,
   CheckoutSessionResponse,
   BillingVisibilityDTO,
+  InvoiceDTO,
+  PortalSessionResponse,
   SetMemberAllocationRequest,
   SetMemberAllocationResponse,
   TenantUsageReportDTO,
@@ -13,16 +15,21 @@ import { BILLING_FEATURES } from "@kinora/contracts";
 import { requireAuth } from "../auth/plugin.js";
 import { PERIOD_PATTERN, currentBillingPeriod } from "../billing/plan-limits.js";
 import type {
+  AdminMembershipView,
   GetTenantUsageInput,
   GetTenantUsageOutcome,
   SetMemberAllocationInput,
   SetMemberAllocationOutcome,
 } from "../billing/quota-admin.js";
+import { isActiveOwner } from "../billing/quota-admin.js";
 import type { GetBillingVisibilityOutcome } from "../billing/billing-visibility.js";
 import type { ProcessWebhookResult } from "../billing/process-webhook.js";
 import type { CreateCheckoutInput } from "../billing/create-checkout.js";
 import { InvalidPromotionCodeError } from "../billing/create-checkout.js";
-import type { CheckoutSession } from "../billing/stripe-gateway.js";
+import type { CreatePortalSessionInput } from "../billing/create-portal-session.js";
+import { NoStripeCustomerError } from "../billing/create-portal-session.js";
+import type { ListInvoicesInput } from "../billing/list-invoices.js";
+import type { CheckoutSession, PortalSession } from "../billing/stripe-gateway.js";
 
 /**
  * Billing routes (11a, Phase 3 + Phase 4).
@@ -43,6 +50,18 @@ import type { CheckoutSession } from "../billing/stripe-gateway.js";
  *   GET /billing/visibility    → ANY active member: tenant billing state +
  *                                 tenant usage + the requester's OWN usage
  *                                 (spec `Billing State Visibility`, Phase 4)
+ *   POST /billing/portal       → owner-only Stripe Customer Portal session
+ *                                 (11b Slice 4 4R FIX 1 — see below)
+ *   GET /billing/invoices      → owner-only invoice history
+ *                                 (11b Slice 4 4R FIX 1 — see below)
+ *
+ * Portal + invoices are OWNER-ONLY (11b-v1 Slice 4, 4R FIX 1), broader than the
+ * plain "any active member" gate on GET /billing/visibility: the Customer
+ * Portal lets the caller change the payment method AND CANCEL THE TENANT'S
+ * SUBSCRIPTION, and invoices expose long-lived `hostedInvoiceUrl`/`receiptUrl`
+ * links whose PDFs carry the tenant's billing name/address (owner PII). Both
+ * are gated with the SAME `isActiveOwner` check the quota-admin use cases use
+ * (apps/api/src/billing/quota-admin.ts), resolved via `checkBillingOwnership`.
  */
 export interface BillingRoutesOptions {
   setMemberAllocation: {
@@ -59,6 +78,26 @@ export interface BillingRoutesOptions {
   };
   createCheckout: {
     execute(input: CreateCheckoutInput): Promise<CheckoutSession>;
+  };
+  createPortalSession: {
+    execute(input: CreatePortalSessionInput): Promise<PortalSession>;
+  };
+  listInvoices: {
+    execute(input: ListInvoicesInput): Promise<InvoiceDTO[]>;
+  };
+  /**
+   * Owner-only authorization port for the Customer Portal + invoice endpoints
+   * (11b Slice 4 4R FIX 1). Reuses the EXACT SAME shape as
+   * `QuotaAdminPort.loadActorMembership` (see `billing/quota-admin.ts`) so the
+   * composition root can wire the SAME `BillingAdminRepository` instance
+   * already used for `setMemberAllocation`/`getTenantUsage` — one owner check,
+   * one repository, no duplicated authorization logic.
+   */
+  checkBillingOwnership: {
+    loadActorMembership(scope: {
+      tenantId: string;
+      userId: string;
+    }): Promise<AdminMembershipView | null>;
   };
 }
 
@@ -105,12 +144,57 @@ export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
   fastify,
   options,
 ) => {
-  const { setMemberAllocation, getTenantUsage, getBillingVisibility, createCheckout } = options;
+  const {
+    setMemberAllocation,
+    getTenantUsage,
+    getBillingVisibility,
+    createCheckout,
+    createPortalSession,
+    listInvoices,
+    checkBillingOwnership,
+  } = options;
 
-  if (!setMemberAllocation || !getTenantUsage || !getBillingVisibility || !createCheckout) {
+  if (
+    !setMemberAllocation ||
+    !getTenantUsage ||
+    !getBillingVisibility ||
+    !createCheckout ||
+    !createPortalSession ||
+    !listInvoices ||
+    !checkBillingOwnership
+  ) {
     throw new Error(
-      "billingRoutes requires setMemberAllocation, getTenantUsage, getBillingVisibility, and createCheckout use cases",
+      "billingRoutes requires setMemberAllocation, getTenantUsage, getBillingVisibility, createCheckout, createPortalSession, listInvoices, and checkBillingOwnership",
     );
+  }
+
+  /**
+   * Owner-only guard for the Customer Portal + invoice endpoints (11b Slice 4
+   * 4R FIX 1). Resolves the actor's membership via `checkBillingOwnership`
+   * (the SAME `QuotaAdminPort.loadActorMembership` shape) and denies a
+   * non-owner with the SAME `unauthorized_quota_admin` reason/403 the
+   * quota-admin endpoints use — fail-closed: a missing membership, non-owner
+   * role, or non-active status is never authorized. Logs the denial via the
+   * same `logDeniedQuotaAdmin` structured-log convention as #175.
+   */
+  async function requireBillingOwner(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    route: string,
+  ): Promise<{ tenantId: string; userId: string } | null> {
+    const { tenantId, userId } = request.authContext!;
+    const actor = await checkBillingOwnership.loadActorMembership({ tenantId, userId });
+    if (!isActiveOwner(actor)) {
+      logDeniedQuotaAdmin(request, {
+        route,
+        tenantId,
+        actorUserId: userId,
+        reason: "unauthorized_quota_admin",
+      });
+      reply.code(403).send({ error: "unauthorized_quota_admin" });
+      return null;
+    }
+    return { tenantId, userId };
   }
 
   // GET /billing/usage?period=YYYY-MM
@@ -274,6 +358,62 @@ export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
         // the global 500 handler; no partial billing state is exposed.
         throw error;
       }
+    },
+  );
+
+  // POST /billing/portal
+  // Open the Stripe-hosted Customer Portal for the caller's tenant. OWNER-ONLY
+  // (11b Slice 4 4R FIX 1): the portal lets the caller change the payment
+  // method AND CANCEL THE TENANT'S SUBSCRIPTION, so a non-owner active member
+  // is denied 403 before any customer resolution or Stripe call. The tenant is
+  // read from authContext and the tenant's stripe_customer_id is resolved
+  // SERVER-SIDE from OUR DB — a customerId/tenantId in the request body is
+  // IGNORED, so a caller can never open another tenant's portal. A tenant that
+  // never subscribed (no stripe_customer_id) gets a clean 409, NOT a 500/crash:
+  // a portal cannot exist without a Stripe customer.
+  fastify.post(
+    "/billing/portal",
+    { preHandler: requireAuth() },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const owner = await requireBillingOwner(request, reply, "POST /billing/portal");
+      if (!owner) return; // 403 already sent by the guard.
+
+      try {
+        // tenantId comes ONLY from authContext — never from the body.
+        const session = await createPortalSession.execute({ tenantId: owner.tenantId });
+        return reply.code(200).send({ url: session.url } satisfies PortalSessionResponse);
+      } catch (error) {
+        if (error instanceof NoStripeCustomerError) {
+          // Never subscribed → no customer → cannot open a portal. Clean 4xx.
+          return reply.code(409).send({ error: "no_stripe_customer" });
+        }
+        // Any other failure (e.g. Stripe unconfigured/unreachable) propagates to
+        // the global 500 handler; no partial billing state is exposed.
+        throw error;
+      }
+    },
+  );
+
+  // GET /billing/invoices
+  // List the caller's tenant's invoices, read LIVE from Stripe (no local store)
+  // and mapped to privacy-safe InvoiceDTOs (no card PAN). OWNER-ONLY (11b Slice
+  // 4 4R FIX 1): invoices expose long-lived `hostedInvoiceUrl`/`receiptUrl`
+  // links whose PDFs carry the tenant's billing name/address (owner PII), so a
+  // non-owner active member is denied 403 before any customer resolution or
+  // Stripe call. The tenant is read from authContext and the stripe_customer_id
+  // is resolved SERVER-SIDE — any customerId/tenantId in the query is IGNORED,
+  // so a caller can only ever see their own tenant's invoices. A tenant that
+  // never subscribed returns [] (empty state), NOT an error.
+  fastify.get(
+    "/billing/invoices",
+    { preHandler: requireAuth() },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const owner = await requireBillingOwner(request, reply, "GET /billing/invoices");
+      if (!owner) return; // 403 already sent by the guard.
+
+      // tenantId comes ONLY from authContext — never from the query.
+      const invoices = await listInvoices.execute({ tenantId: owner.tenantId });
+      return reply.code(200).send(invoices satisfies InvoiceDTO[]);
     },
   );
 };
