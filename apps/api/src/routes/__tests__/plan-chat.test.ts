@@ -695,4 +695,169 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     expect(repo.upsertDraft).toHaveBeenCalledTimes(1);
     expect(repo.promoteDraftToSpec).not.toHaveBeenCalled();
   });
+
+  // --- Review fixes: missingFields steering, Pass-2 abort, drain-no-hang ---
+
+  it("threads the CURRENT draft's missingFields into the extractor input so the prompt is steered", async () => {
+    // WARNING fix: missingFields was never populated on ChatExtractInput, so
+    // buildExtractionPrompt always rendered "STILL MISSING: (none)". An empty
+    // currentDraft must yield all six missing fields on BOTH streamReply and
+    // extract's input.
+    let capturedStreamInput: ChatExtractInput | undefined;
+    let capturedExtractInput: ChatExtractInput | undefined;
+    const extractor: PlanSpecExtractor = {
+      async *streamReply(input, signal) {
+        capturedStreamInput = input;
+        if (signal.aborted) return;
+        yield "ok";
+      },
+      extract: vi.fn(async (input: ChatExtractInput) => {
+        capturedExtractInput = input;
+        return { goal: "hypertrophy" };
+      }),
+    };
+    const repo = buildPlanRepo();
+    repo.findCurrentDraft.mockResolvedValue(null);
+
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      chatEntitlement: allowGate(),
+      chatExtractor: extractor,
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/plan-specs/chat",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { message: "build muscle" },
+    });
+
+    const expectedMissing = [
+      "goal",
+      "daysPerWeek",
+      "sessionDurationMinutes",
+      "location",
+      "equipment",
+      "limitations",
+    ];
+    expect(capturedStreamInput?.missingFields).toEqual(expectedMissing);
+    expect(capturedExtractInput?.missingFields).toEqual(expectedMissing);
+  });
+
+  it("aborts an in-flight Pass 2 (extract) on timeout instead of blocking on it, and emits the terminal error promptly", async () => {
+    // HIGH fix: previously extract() had no signal parameter at all, so a
+    // timeout firing DURING Pass 2 could not cancel it — the handler would
+    // block until the (possibly never-resolving) call settled on its own.
+    let extractSignal: AbortSignal | undefined;
+    let extractSawAbort = false;
+    const extractor: PlanSpecExtractor = {
+      async *streamReply() {
+        yield "ok";
+      },
+      extract: (_input, signal) =>
+        new Promise((_resolve, reject) => {
+          extractSignal = signal;
+          signal?.addEventListener(
+            "abort",
+            () => {
+              extractSawAbort = true;
+              reject(new Error("aborted"));
+            },
+            { once: true },
+          );
+          // Deliberately never resolves on its own — only an abort settles it.
+        }),
+    };
+    const repo = buildPlanRepo();
+
+    const start = Date.now();
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      chatEntitlement: allowGate(),
+      chatExtractor: extractor,
+      chatStreamTimeoutMs: 40,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/chat",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { message: "build muscle" },
+    });
+    const elapsedMs = Date.now() - start;
+
+    const frames = parseSse(res.payload);
+    expect(frames.at(-1)?.event).toBe("error");
+    expect(JSON.parse(frames.at(-1)!.data)).toEqual({ error: "chat_stream_timeout" });
+    // The route passed a real signal into extract() and that signal aborted.
+    expect(extractSignal).toBeInstanceOf(AbortSignal);
+    expect(extractSawAbort).toBe(true);
+    // Resolved promptly (well within a generous bound), not after some much
+    // longer/never-resolving wait — proves Pass 2 was actually cancelled.
+    expect(elapsedMs).toBeLessThan(2000);
+    expect(repo.upsertDraft).not.toHaveBeenCalled();
+  });
+
+  it("writeFrame does not hang when the signal is ALREADY aborted and write() returns false", async () => {
+    // HIGH fix: the drain-wait escaped ONLY via a NEW `abort` event listener; if
+    // the signal was already aborted before the wait started (e.g. the
+    // timeout's own terminal-error write racing an abort that just fired), that
+    // listener would never see the transition and the promise hung forever,
+    // leaking the handler and socket.
+    const originalWrite = http.ServerResponse.prototype.write;
+    http.ServerResponse.prototype.write = function (
+      this: ServerResponse,
+      ...args: Parameters<ServerResponse["write"]>
+    ) {
+      // Always report backpressure — never actually flush 'drain' from here.
+      originalWrite.apply(this, args);
+      return false;
+    } as typeof originalWrite;
+
+    try {
+      const extractor: PlanSpecExtractor = {
+        async *streamReply(_input, signal) {
+          for (let i = 0; i < 20; i++) {
+            if (signal.aborted) return;
+            yield `tok${i} `;
+            await new Promise((r) => setTimeout(r, 5));
+          }
+        },
+        extract: vi.fn().mockResolvedValue({} as PlanSpecDraft),
+      };
+      const repo = buildPlanRepo();
+
+      app = await buildTestApp({
+        db: buildSessionDb(),
+        repo,
+        chatEntitlement: allowGate(),
+        chatExtractor: extractor,
+        // Very short deadline: the handler must still reach `finally`/`raw.end()`
+        // promptly even though every write() reports backpressure and 'drain'
+        // never naturally fires (simulating a stalled/dead client — the very
+        // condition that causes a timeout in the first place).
+        chatStreamTimeoutMs: 30,
+      });
+
+      const injectPromise = app.inject({
+        method: "POST",
+        url: "/plan-specs/chat",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: { message: "build muscle" },
+      });
+
+      const res = await Promise.race([
+        injectPromise,
+        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 2000)),
+      ]);
+
+      // The handler MUST have completed (reached finally/raw.end()) — a hang
+      // would leave `res` undefined after the 2s race timeout.
+      expect(res).toBeDefined();
+    } finally {
+      http.ServerResponse.prototype.write = originalWrite;
+    }
+  });
 });
