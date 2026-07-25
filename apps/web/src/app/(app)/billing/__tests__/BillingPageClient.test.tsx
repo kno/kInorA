@@ -96,6 +96,45 @@ const TRIALING: BillingVisibilityDTO = {
   memberUsage: [],
 };
 
+// An expired Pro TRIAL — resolved to Free with the trial-expired denial reason.
+const EXPIRED_TRIAL: BillingVisibilityDTO = {
+  billing: {
+    tenantId: "tenant-4" as never,
+    tier: "free",
+    status: "expired",
+    source: "system",
+    trialStartedAt: "2026-06-01T00:00:00.000Z",
+    trialEndsAt: "2026-07-01T00:00:00.000Z",
+    activeOverrideEndsAt: null,
+    updatedAt: "2026-07-01T00:00:00.000Z",
+  },
+  tenantUsage: [],
+  memberUsage: [],
+  denialReason: "trial_expired",
+  upgradePromptPath: "/billing",
+};
+
+// A canceled/ended PAID subscription — resolved to Free with subscription_ended.
+const CANCELED_SUB: BillingVisibilityDTO = {
+  billing: {
+    tenantId: "tenant-5" as never,
+    tier: "free",
+    status: "expired",
+    source: "stripe",
+    trialStartedAt: null,
+    trialEndsAt: null,
+    activeOverrideEndsAt: null,
+    updatedAt: "2026-07-10T00:00:00.000Z",
+    billingCycle: "monthly",
+    currentPeriodEnd: "2026-07-10T00:00:00.000Z",
+    cancelAtPeriodEnd: true,
+  },
+  tenantUsage: [],
+  memberUsage: [],
+  denialReason: "subscription_ended",
+  upgradePromptPath: "/billing",
+};
+
 const INVOICES: InvoiceDTO[] = [
   {
     id: "in_1",
@@ -189,6 +228,37 @@ describe("BillingPageClient — OD layout", () => {
   });
 });
 
+describe("BillingPageClient — access-ended upgrade surface (#198)", () => {
+  it("renders the trial-ended banner with an upgrade CTA when the trial has expired", () => {
+    renderClient({ initialData: EXPIRED_TRIAL });
+    const banner = screen.getByTestId("billing-access-ended");
+    expect(banner.textContent).toMatch(/Your Pro trial has ended/i);
+    const cta = screen.getByRole("link", { name: /view upgrade options/i });
+    expect(cta).toBeDefined();
+  });
+
+  it("renders the subscription-ended banner (NOT trial copy) with an upgrade CTA for a canceled paid sub", () => {
+    renderClient({ initialData: CANCELED_SUB });
+    const banner = screen.getByTestId("billing-access-ended");
+    expect(banner.textContent).toMatch(/Your Pro subscription has ended/i);
+    // Must NOT show trial-ended copy for a canceled paid subscription.
+    expect(banner.textContent).not.toMatch(/trial has ended/i);
+    expect(screen.getByRole("link", { name: /view upgrade options/i })).toBeDefined();
+  });
+
+  it("does NOT render the access-ended banner for an active Pro plan", () => {
+    renderClient({ initialData: PRO_ACTIVE });
+    expect(screen.queryByTestId("billing-access-ended")).toBeNull();
+    expect(screen.queryByText(/Your Pro trial has ended/i)).toBeNull();
+    expect(screen.queryByText(/Your Pro subscription has ended/i)).toBeNull();
+  });
+
+  it("does NOT render the access-ended banner during an active, unexpired trial", () => {
+    renderClient({ initialData: TRIALING });
+    expect(screen.queryByTestId("billing-access-ended")).toBeNull();
+  });
+});
+
 describe("BillingPageClient — usage meters (metered caps, never unlimited)", () => {
   it("renders per-feature meters showing used / limit from the real Pro caps", () => {
     renderClient({ initialData: PRO_ACTIVE });
@@ -225,14 +295,46 @@ describe("BillingPageClient — invoice history (owner-only)", () => {
     expect(screen.getByText(/No charges yet/i)).toBeDefined();
   });
 
-  it("shows an invoice error state when the invoice read failed", () => {
+  // #197: an INITIAL transient invoice error is NOT a definitive ownership
+  // signal, so the owner-only invoice section is hidden (fail-closed) rather
+  // than shown — previously an `error` was treated as "owner".
+  it("hides the owner-only invoice history on an initial transient error (ownership unknown, #197)", () => {
     renderClient({ initialData: PRO_ACTIVE, initialInvoices: INVOICE_ERROR });
-    expect(screen.getByText(/couldn't load your invoices/i)).toBeDefined();
+    expect(screen.queryByText(/Invoices & charges/i)).toBeNull();
   });
 
   it("hides the invoice history entirely for a non-owner", () => {
     renderClient({ initialData: PRO_ACTIVE, initialInvoices: NON_OWNER });
     expect(screen.queryByText(/Invoices & charges/i)).toBeNull();
+  });
+});
+
+describe("BillingPageClient — ownership on transient invoice error (#197)", () => {
+  it("does NOT grant owner-only controls when the invoice read is a transient error (no owner flip)", () => {
+    renderClient({ initialData: PRO_ACTIVE, initialInvoices: INVOICE_ERROR });
+    // A transient error must never promote a caller into the owner UI.
+    expect(screen.queryByRole("button", { name: /manage \/ add card/i })).toBeNull();
+    expect(screen.queryByText(/Invoices & charges/i)).toBeNull();
+  });
+
+  it("preserves an established owner's UI when a later refresh hits a transient invoice error (graceful degrade)", async () => {
+    getBillingVisibilityAction.mockResolvedValue({ kind: "ok", data: PRO_ACTIVE });
+    getBillingInvoicesAction.mockResolvedValue(INVOICE_ERROR);
+    renderClient({ initialData: PRO_ACTIVE, initialInvoices: OWNER_INVOICES });
+
+    // Ownership is established (definitive ok) — owner controls render.
+    expect(screen.getByRole("button", { name: /manage \/ add card/i })).toBeDefined();
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await Promise.resolve();
+    });
+
+    // After the transient error: the owner is NOT flipped to non-owner. The
+    // invoice section degrades to its error card, and the owner-only payment
+    // control is preserved.
+    await waitFor(() => expect(screen.getByText(/couldn't load your invoices/i)).toBeDefined());
+    expect(screen.getByRole("button", { name: /manage \/ add card/i })).toBeDefined();
   });
 });
 
@@ -264,6 +366,14 @@ describe("BillingPageClient — payment + support cards", () => {
     renderClient({ initialData: FREE_ACTIVE, initialInvoices: NON_OWNER });
     expect(screen.getByText(/Need help\?/i)).toBeDefined();
     expect(screen.getByRole("link", { name: /billing FAQ/i })).toBeDefined();
+  });
+
+  it("links the support card to the real /help/billing route, not a dead placeholder (#199)", () => {
+    renderClient({ initialData: FREE_ACTIVE, initialInvoices: NON_OWNER });
+    const link = screen.getByRole("link", { name: /billing FAQ/i });
+    // A real, navigable anchor — never an aria-disabled placeholder span.
+    expect(link.getAttribute("href")).toBe("/help/billing");
+    expect(link.getAttribute("aria-disabled")).toBeNull();
   });
 
   it("shows the payment-method manage CTA only for an owner", () => {

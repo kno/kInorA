@@ -41,29 +41,70 @@ function trialing(trialEndsAt: Date): EntitlementContext {
   };
 }
 
+/** A trial that lapsed to a persisted `expired` status (system-provisioned). */
+function expiredTrial(): EntitlementContext {
+  return {
+    membershipStatus: "active",
+    billing: {
+      tier: "pro",
+      status: "expired",
+      source: "system",
+      trialStartedAt: new Date("2026-06-01T12:00:00.000Z"),
+      trialEndsAt: new Date("2026-07-01T12:00:00.000Z"),
+    },
+    activeOverrideTier: null,
+  };
+}
+
+/** A canceled/ended PAID Stripe subscription — NOT a trial (source `stripe`). */
+function canceledPaid(): EntitlementContext {
+  return {
+    membershipStatus: "active",
+    billing: {
+      tier: "pro",
+      status: "expired",
+      source: "stripe",
+      trialStartedAt: null,
+      trialEndsAt: null,
+    },
+    activeOverrideTier: null,
+  };
+}
+
 describe("resolveEffectiveTier", () => {
   it("resolves an active free tenant to free", () => {
     expect(resolveEffectiveTier(freeActive(), NOW)).toEqual({
       tier: "free",
       source: "backfill",
-      trialExpired: false,
+      lapsedReason: null,
     });
   });
 
   it("resolves an in-window trial to pro", () => {
     const eff = resolveEffectiveTier(trialing(new Date("2026-07-31T12:00:00.000Z")), NOW);
-    expect(eff).toEqual({ tier: "pro", source: "system", trialExpired: false });
+    expect(eff).toEqual({ tier: "pro", source: "system", lapsedReason: null });
   });
 
-  it("resolves an expired trial to free and flags trialExpired", () => {
+  it("resolves an in-flight expired trial to free and flags trial_expired", () => {
     const eff = resolveEffectiveTier(trialing(new Date("2026-07-23T11:59:59.000Z")), NOW);
-    expect(eff).toEqual({ tier: "free", source: "system", trialExpired: true });
+    expect(eff).toEqual({ tier: "free", source: "system", lapsedReason: "trial_expired" });
   });
 
   it("treats the exact expiry boundary (now === trialEndsAt) as expired", () => {
     const eff = resolveEffectiveTier(trialing(new Date(NOW)), NOW);
     expect(eff.tier).toBe("free");
-    expect(eff.trialExpired).toBe(true);
+    expect(eff.lapsedReason).toBe("trial_expired");
+  });
+
+  it("resolves a lapsed trial (persisted status='expired', source='system') to free with trial_expired (#196)", () => {
+    const eff = resolveEffectiveTier(expiredTrial(), NOW);
+    expect(eff).toEqual({ tier: "free", source: "system", lapsedReason: "trial_expired" });
+  });
+
+  it("resolves a canceled PAID subscription (status='expired', source='stripe') to free with subscription_ended, NOT trial_expired (#196)", () => {
+    const eff = resolveEffectiveTier(canceledPaid(), NOW);
+    // Tier still lapses to Free — only the REASON differs from a lapsed trial.
+    expect(eff).toEqual({ tier: "free", source: "stripe", lapsedReason: "subscription_ended" });
   });
 
   it("lets an active override win over the underlying state with admin_override source", () => {
@@ -71,7 +112,7 @@ describe("resolveEffectiveTier", () => {
     expect(resolveEffectiveTier(ctx, NOW)).toEqual({
       tier: "pro",
       source: "admin_override",
-      trialExpired: false,
+      lapsedReason: null,
     });
   });
 
@@ -92,7 +133,7 @@ describe("resolveEffectiveTier", () => {
     };
     const eff = resolveEffectiveTier(ctx, NOW);
     expect(eff.tier).toBe("free");
-    expect(eff.trialExpired).toBe(false);
+    expect(eff.lapsedReason).toBe(null);
   });
 });
 
@@ -119,6 +160,18 @@ describe("CheckEntitlement", () => {
     const uc = new CheckEntitlement(reader(trialing(new Date("2026-07-23T11:59:59.000Z"))));
     const decision = await uc.check(SCOPE, "memory_retrieval", NOW);
     expect(decision).toEqual({ allowed: false, reason: "trial_expired" });
+  });
+
+  it("denies a premium feature for a lapsed trial (status='expired', source='system') with trial_expired (#196)", async () => {
+    const uc = new CheckEntitlement(reader(expiredTrial()));
+    const decision = await uc.check(SCOPE, "memory_retrieval", NOW);
+    expect(decision).toEqual({ allowed: false, reason: "trial_expired" });
+  });
+
+  it("denies a premium feature for a canceled PAID sub (status='expired', source='stripe') with subscription_ended, NOT trial_expired (#196)", async () => {
+    const uc = new CheckEntitlement(reader(canceledPaid()));
+    const decision = await uc.check(SCOPE, "memory_retrieval", NOW);
+    expect(decision).toEqual({ allowed: false, reason: "subscription_ended" });
   });
 
   it("denies any feature for an inactive membership (fail-closed)", async () => {

@@ -104,7 +104,7 @@ export class GetBillingVisibility {
     // per feature.
     const premiumLimit = resolveTenantFeatureLimit(effective.tier, "memory_write");
     const denialReason: BillingDenialReason | undefined =
-      premiumLimit <= 0 ? (effective.trialExpired ? "trial_expired" : "premium_required") : undefined;
+      premiumLimit <= 0 ? (effective.lapsedReason ?? "premium_required") : undefined;
 
     const [tenantUsage, memberUsage] = await Promise.all([
       this.port.readTenantUsage(scope.tenantId, period),

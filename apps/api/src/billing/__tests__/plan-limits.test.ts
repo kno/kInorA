@@ -110,6 +110,6 @@ describe("a paid/active subscription supersedes trial (11b Slice 3)", () => {
 
     expect(eff.tier).toBe("pro");
     expect(eff.source).toBe("stripe");
-    expect(eff.trialExpired).toBe(false);
+    expect(eff.lapsedReason).toBe(null);
   });
 });
