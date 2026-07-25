@@ -253,3 +253,88 @@ Verified the sibling FIX 2 same-second tie-break test does NOT have the same iss
 
 ### Status
 Flaky-test fix complete. NOT committed/pushed per instructions.
+
+---
+
+## Slice 3 — Checkout + Real Caps + Coupons — COMPLETE
+
+Branch `sdd/11b-slice3-checkout` (off main, Slices 1+2 merged). Strict TDD. NOT committed/pushed/reviewed.
+
+### Completed Tasks
+- [x] 3.1 RED — `create-checkout.test.ts`, `coupon.test.ts`, `plan-limits.test.ts`
+- [x] 3.2 GREEN — pure `create-checkout.ts` + coupon flow, SDK adapter extended, checkout route wired
+- [x] 3.3 GREEN — metered-caps swap (drop `1_000_000` → `PRO_TIER_LIMITS`)
+- [x] 3.4 TRIANGLE — cross-tenant prevention, secret-hygiene log-scrub, real-cap enforcement (unit + real-PG), no live Stripe key
+
+### Files Changed
+| File | Action | What |
+|------|--------|------|
+| `apps/api/src/billing/create-checkout.ts` | Create | Pure `CreateCheckout` use case (SDK-free); selects cycle Price, validates coupon server-side, forwards tenant; re-exports `InvalidPromotionCodeError` |
+| `apps/api/src/billing/stripe-gateway.ts` | Modify | Added SEGREGATED `CheckoutGateway` port + `PromotionCodeValidation`/`CreateCheckoutSessionInput`/`CheckoutSession` + `InvalidPromotionCodeError` (webhook `StripeGateway` left intact so Slice 2 fakes stay valid) |
+| `apps/api/src/db/repositories/stripe-gateway.ts` | Modify | `StripeApiGateway implements StripeGateway & CheckoutGateway`: `createCheckoutSession` (client_reference_id + subscription metadata `tenantId`) + `validatePromotionCode`; `UnconfiguredCheckoutGateway`; `+returnUrl` ctor; env factory returns concrete type. ONLY `stripe` importer. |
+| `apps/api/src/billing/plan-limits.ts` | Modify | Dropped `PRO_FEATURE_LIMIT=1_000_000`; imports `PRO_TIER_LIMITS`; `resolveTenantFeatureLimit` per-feature. `resolveEffectiveTier` untouched. |
+| `apps/api/src/billing/pricing-config.ts` | Modify | Doc-only header update (now wired) |
+| `apps/api/src/routes/billing.ts` | Modify | `POST /billing/checkout` (requireAuth; tenant only from authContext; cycle validated; `InvalidPromotionCodeError`→422); `createCheckout` in options + guard |
+| `apps/api/src/app.ts` | Modify | Build real gateway once (webhook + checkout reuse); `resolveCheckoutPricing()`; wire `CreateCheckout`; injectable checkout gateway/pricing |
+| `apps/api/src/routes/__tests__/billing.test.ts` | Modify | +7 checkout triangle tests + harness `createCheckout` wiring |
+| `apps/api/src/routes/__tests__/billing-visibility.test.ts` | Modify | Harness `createCheckout` stub (shared plugin now requires it) |
+| `apps/api/src/db/repositories/__tests__/billing-quota.integration.test.ts` | Modify | +1 real-PG Pro-cap boundary test (seed used=cap-1 → allow-then-deny at real cap 500) |
+| `.github/workflows/ci-cd.yml` | Modify | billing-integration assert-executed guard MIN 30→31 |
+
+### TDD Cycle Evidence
+| Task | Test File | Layer | RED | GREEN | TRIANGULATE |
+|------|-----------|-------|-----|-------|-------------|
+| 3.1/3.2 | `billing/__tests__/create-checkout.test.ts` | Unit | ✅ module-not-found (`create-checkout.js`) | ✅ 6/6 | ✅ monthly/annual price, tenant passthrough, no-promo, blank-promo |
+| 3.1/3.2 | `billing/__tests__/coupon.test.ts` | Unit | ✅ module-not-found | ✅ 4/4 | ✅ valid attach / invalid / expired / valid-no-id → all no-session on reject |
+| 3.1/3.3 | `billing/__tests__/plan-limits.test.ts` | Unit | ✅ 3 failed (Pro still 1_000_000) | ✅ 5/5 | ✅ real caps, Free unchanged, under/over-cap, paid-supersedes-trial |
+| 3.4 | `routes/__tests__/billing.test.ts` (checkout describe) | Route (hermetic, fake gateway) | ✅ within RED file set | ✅ 32/32 (7 new) | ✅ spoofed-body-tenant ignored, unauth 401, invalid cycle 422, invalid coupon 422, log-scrub |
+| 3.4 | `db/repositories/__tests__/billing-quota.integration.test.ts` | Integration (real PG) | N/A (extends passing suite) | ⏳ CI-validated (local podman down) | ✅ real Pro-cap boundary |
+
+### Work Unit Evidence
+| Evidence | Value |
+|---|---|
+| Focused test command | `pnpm --filter api exec vitest run src/billing/__tests__/{create-checkout,coupon,plan-limits}.test.ts src/routes/__tests__/billing.test.ts` → **47 passed / 0 failed** (4 files) |
+| Runtime harness | Real-PG Pro-cap test in `billing-quota.integration.test.ts` — NOT run locally (podman down); loads clean DB-absent (unchanged placeholder shape). CI `billing-integration` job (real pgvector:pg17) validates it; guard MIN bumped 30→31 so a dropped DATABASE_URL fails RED. NOT faked. |
+| Rollback boundary | Revert route + `app.ts` checkout wiring + `create-checkout.ts` + adapter/port checkout methods + the `plan-limits.ts` caps swap (restore `PRO_FEATURE_LIMIT`) + test/CI edits. Webhook (Slice 2) + `resolveEffectiveTier` untouched. |
+
+### Hermetic Gate Results (exact)
+- `pnpm type-check` (6 packages): PASS
+- `pnpm build` (deps-guard + ui-api-guard + architecture/depcruise incl. `api-no-stripe-outside-infra` + all tsc + web build): PASS
+- `pnpm -r --if-present test:coverage`: PASS — contracts 58, domain 255, i18n 30, api **1014 passed / 31 skipped**, web 881 — 0 failed
+
+### Caps-swap blast radius
+The swap required ZERO existing-assertion rewrites: no test asserted `resolveTenantFeatureLimit == 1_000_000` (entitlement.test checks only `limit > 0`; quota-consumption.test uses dynamic `input.tenantLimit` with small counts; integration/route `1_000_000` literals are test-authored explicit limits, not resolver output). The only existing-test churn was mechanical — 3 route-test registrations of the shared `billingRoutes` plugin now must pass the newly-required `createCheckout` option (`billing.test.ts` ×2, `billing-visibility.test.ts` ×2). The full `test:coverage` run (not the focused run) surfaced `billing-visibility.test.ts` (6 tests).
+
+### Deviations from Design
+- **Port shape (ISP)**: design says "one `StripeGateway` port with all methods". Extending the webhook `StripeGateway` interface with required checkout methods would have broken every merged Slice 2 fake (bare `{ verifyAndParseEvent }` objects typed as `StripeGateway`). Implemented as a SECOND segregated `CheckoutGateway` port in the same file; the single SDK adapter implements both. Satisfies "extend the port + adapter, single `stripe` importer" without touching Slice 2. No other deviation.
+- Coupon-expiry read uses a defensive cast because the pinned Stripe `PromotionCode` type does not surface `.coupon` on the list-item shape.
+
+### Issues Found
+None blocking. Note for 4R: checkout returns `200 { url }` (matches `CheckoutSessionResponse` contract) rather than a server `303` — the web client performs the redirect.
+
+### Status
+4/4 Slice-3 tasks complete. Ready for verify → `review/start`. NOT committed/pushed/reviewed per instructions.
+
+---
+
+## Slice 3 — 4R Follow-Up Fixes (post-review) — COMPLETE
+
+4R review of Slice 3 passed (risk/reliability clean); 3 cheap fixes applied before merge. NOT committed/pushed.
+
+### FIX 1 (WARNING, resilience — Stripe brownout stalls checkout ~80s)
+`apps/api/src/db/repositories/stripe-gateway.ts` (`StripeApiGateway` constructor): the SDK client was built with no explicit timeout and neither checkout nor coupon calls passed an `AbortSignal`, so a reachable-but-slow Stripe brownout would block `POST /billing/checkout` for the SDK default (~80s); Fastify has no default request timeout, so concurrent attempts would pile up. Fixed by constructing the client with `new Stripe(secretKey, { timeout: 10_000, maxNetworkRetries: 1 })` — 10s bounded timeout + 1 retry, so a degraded Stripe fails fast to a clean 5xx instead of stalling tens of seconds. Chosen values: `timeout: 10_000` ms (generous enough for a normal checkout-session create, short enough to bound worst-case latency), `maxNetworkRetries: 1` (one retry absorbs a single transient blip without compounding the worst case toward ~20s). Real-SDK construction path is not exercised hermetically (adapter tests use the fake gateway) — verified via type-check/build only, as instructed.
+
+### FIX 2 (SUGGESTION, readability — spelling inconsistency that would bite Slice 5)
+`apps/api/src/db/repositories/stripe-gateway.ts` (`createCheckoutSession`, `cancel_url`): changed the query-param value from British `checkout=cancelled` to American `checkout=canceled`, matching the rest of the module's vocabulary (`STRIPE_SUBSCRIPTION_STATUSES` uses `canceled`). The Slice-5 web client will string-match this param; a spelling mismatch would have left the cancelled-checkout UI state unreachable. `success_url` (`checkout=success`) was already consistent — left unchanged.
+
+### FIX 3 (SUGGESTION, readability)
+`apps/api/src/routes/billing.ts` (`POST /billing/checkout` handler): added a comment before the `200 { url }` response stating this is deliberate — the SPA web client performs the redirect itself (`window.location`) — so a future maintainer doesn't "fix" it into a server-side `303` and break the client's fetch-then-navigate contract.
+
+### Gate results (post-fix, exact)
+- Focused: `pnpm --filter api exec vitest run src/billing/__tests__/create-checkout.test.ts src/billing/__tests__/coupon.test.ts src/routes/__tests__/billing.test.ts` → **42 passed / 0 failed** (3 files)
+- `pnpm type-check` (6 packages): PASS
+- `pnpm build` (deps-guard + ui-api-guard + architecture/depcruise + all tsc + web build): PASS
+- `pnpm -r --if-present test:coverage`: PASS — contracts 58, domain 255, i18n 30, api **1014 passed / 31 skipped**, web 881 — 0 failed (counts unchanged vs. pre-fix, confirming no regression)
+
+### Status
+3/3 Slice-3 4R fixes complete. Gates green. NOT committed/pushed per instructions.
