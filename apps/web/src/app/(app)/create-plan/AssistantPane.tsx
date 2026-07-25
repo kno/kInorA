@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import type { PlanGoal, TrainingLocation } from "@kinora/contracts";
+import { PlanSpecDraftSchema, type PlanGoal, type TrainingLocation } from "@kinora/contracts";
 import { parseSSEStream } from "./chat-stream";
 import type { ChatDraftSpec } from "./chat-types";
 import styles from "./assistant-pane.module.css";
@@ -44,15 +44,24 @@ const LOCATION_LABEL_KEY: Record<TrainingLocation, string> = {
 const GOALS: readonly PlanGoal[] = ["strength", "hypertrophy", "fat_loss", "general_fitness"];
 const LOCATIONS: readonly TrainingLocation[] = ["home", "gym", "outdoor"];
 
+/**
+ * Complete AND valid: every required field is present, and re-validates the
+ * whole spec against `PlanSpecDraftSchema.safeParse` (the SAME contract the
+ * server confirm gate uses) so an out-of-range panel edit (e.g. daysPerWeek=0,
+ * sessionDurationMinutes outside 15-240, an invalid enum) keeps "Generar plan"
+ * disabled instead of only failing at the server. The server confirm remains
+ * the real enforcement — this is a UX gate, not a replacement for it.
+ */
 function isSpecComplete(spec: ChatDraftSpec): boolean {
-  return (
+  const hasAllFields =
     spec.goal != null &&
     spec.location != null &&
     spec.daysPerWeek != null &&
     spec.sessionDurationMinutes != null &&
     spec.equipment != null &&
-    spec.limitations != null
-  );
+    spec.limitations != null;
+  if (!hasAllFields) return false;
+  return PlanSpecDraftSchema.safeParse(spec).success;
 }
 
 /**
@@ -98,19 +107,27 @@ export function AssistantPane({
     return () => abortRef.current?.abort();
   }, []);
 
+  /**
+   * Run one turn. `appendUserMessage` is false on retry: the ORIGINAL user
+   * bubble is reused (not re-sent to the thread) so an error + retry reads
+   * naturally — one user message, one assistant reply — instead of showing a
+   * duplicated user bubble. A fresh, empty assistant placeholder is always
+   * appended to receive the incoming tokens/terminal text.
+   */
   const runTurn = useCallback(
-    async (message: string) => {
+    async (message: string, appendUserMessage: boolean) => {
       // Turn serialization: never overlap turns (prevents the shared-draft
       // lost-update from two concurrent commits).
       if (streaming) return;
 
       lastUserMessageRef.current = message;
       setErrorReason(null);
-      setMessages((prev) => [
-        ...prev,
-        { role: "user", text: message },
-        { role: "assistant", text: "" },
-      ]);
+      setMessages((prev) => {
+        const withUser = appendUserMessage
+          ? [...prev, { role: "user" as const, text: message }]
+          : prev;
+        return [...withUser, { role: "assistant" as const, text: "" }];
+      });
       setStreaming(true);
 
       const controller = new AbortController();
@@ -125,6 +142,7 @@ export function AssistantPane({
         });
 
         if (!res.ok || !res.body) {
+          setMessages((prev) => removeTrailingEmptyAssistant(prev));
           setErrorReason("generic");
           return;
         }
@@ -138,13 +156,20 @@ export function AssistantPane({
             }
             onSpecChange(event.draftSpec);
           } else {
+            // Terminal error: never leave a blank coach bubble in the thread —
+            // remove the placeholder if no prose arrived before the failure;
+            // keep it (as partial prose) when some tokens already streamed.
+            setMessages((prev) => removeTrailingEmptyAssistant(prev));
             setErrorReason(event.reason);
           }
         }
       } catch {
         // A user-initiated abort (unmount/navigation) is expected; only surface
         // a real failure when the turn was not aborted.
-        if (!controller.signal.aborted) setErrorReason("generic");
+        if (!controller.signal.aborted) {
+          setMessages((prev) => removeTrailingEmptyAssistant(prev));
+          setErrorReason("generic");
+        }
       } finally {
         setStreaming(false);
       }
@@ -156,11 +181,12 @@ export function AssistantPane({
     const message = input.trim();
     if (message === "" || streaming) return;
     setInput("");
-    void runTurn(message);
+    void runTurn(message, true);
   };
 
   const handleRetry = () => {
-    if (lastUserMessageRef.current !== "") void runTurn(lastUserMessageRef.current);
+    // Resend the SAME last turn — do not append another user bubble.
+    if (lastUserMessageRef.current !== "") void runTurn(lastUserMessageRef.current, false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -400,6 +426,20 @@ function appendToAssistant(messages: ChatMessage[], delta: string): ChatMessage[
     }
   }
   return next;
+}
+
+/**
+ * Drop the trailing assistant placeholder when it is still empty (no prose
+ * arrived before a terminal error/failure) so the thread never renders a
+ * blank coach bubble. A placeholder that already received partial prose is
+ * left in place as the (incomplete) reply.
+ */
+function removeTrailingEmptyAssistant(messages: ChatMessage[]): ChatMessage[] {
+  const last = messages[messages.length - 1];
+  if (last && last.role === "assistant" && last.text === "") {
+    return messages.slice(0, -1);
+  }
+  return messages;
 }
 
 function replaceAssistant(messages: ChatMessage[], text: string): ChatMessage[] {

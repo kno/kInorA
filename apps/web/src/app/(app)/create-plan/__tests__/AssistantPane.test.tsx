@@ -116,6 +116,54 @@ describe("AssistantPane — SSE consumer", () => {
     expect(screen.getByText(/Strength/i)).toBeTruthy();
   });
 
+  it("renders no empty coach bubble on a terminal error, and retry does not duplicate the user message or leave a stray blank bubble", async () => {
+    // First attempt fails; the retry succeeds with a normal assistant reply.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: eagerStream(['event: error\ndata: {"error":"chat_stream_failed"}\n\n']),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: eagerStream([
+          'event: draft\ndata: {"draftSpec":{},"missingFields":[],"assistantMessage":"All set."}\n\n',
+        ]),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    setup();
+    await sendTurn("build muscle 4 days a week");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /retry/i })).toBeTruthy();
+    });
+
+    // No blank coach bubble rendered after the error: every assistant message
+    // container must have non-empty text.
+    const assistantBubbles = document.querySelectorAll('[data-role="assistant"]');
+    for (const bubble of assistantBubbles) {
+      expect(bubble.textContent?.trim()).not.toBe("");
+    }
+    // Exactly one user bubble so far.
+    expect(
+      screen.getAllByText("build muscle 4 days a week").length,
+    ).toBe(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    await waitFor(() => {
+      expect(screen.getByText("All set.")).toBeTruthy();
+    });
+
+    // Retry must NOT duplicate the user message.
+    expect(
+      screen.getAllByText("build muscle 4 days a week").length,
+    ).toBe(1);
+    // Fetch called exactly twice: original attempt + one retry.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("serializes turns: the send control is disabled while a stream is in flight", async () => {
     const driver = controllableStream();
     mockFetchOnce(driver.stream);
@@ -183,6 +231,36 @@ describe("AssistantPane — generation gate", () => {
   it("disables Generate when required fields are missing", () => {
     mockFetchOnce(eagerStream([]));
     setup({ spec: { goal: "strength" } });
+    const generate = screen.getByRole("button", { name: /generate plan/i }) as HTMLButtonElement;
+    expect(generate.disabled).toBe(true);
+  });
+
+  it("disables Generate when daysPerWeek is out of range (0), even though all fields are present", () => {
+    mockFetchOnce(eagerStream([]));
+    const outOfRange: ChatDraftSpec = {
+      goal: "strength",
+      location: "gym",
+      daysPerWeek: 0,
+      sessionDurationMinutes: 60,
+      equipment: ["barbell"],
+      limitations: [],
+    };
+    setup({ spec: outOfRange });
+    const generate = screen.getByRole("button", { name: /generate plan/i }) as HTMLButtonElement;
+    expect(generate.disabled).toBe(true);
+  });
+
+  it("disables Generate when sessionDurationMinutes is out of range (10, below the 15-minute floor)", () => {
+    mockFetchOnce(eagerStream([]));
+    const outOfRange: ChatDraftSpec = {
+      goal: "strength",
+      location: "gym",
+      daysPerWeek: 3,
+      sessionDurationMinutes: 10,
+      equipment: ["barbell"],
+      limitations: [],
+    };
+    setup({ spec: outOfRange });
     const generate = screen.getByRole("button", { name: /generate plan/i }) as HTMLButtonElement;
     expect(generate.disabled).toBe(true);
   });
