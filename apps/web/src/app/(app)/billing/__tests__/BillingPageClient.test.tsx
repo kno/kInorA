@@ -142,9 +142,24 @@ describe("BillingPageClient — OD layout", () => {
     expect(screen.getByText("Current plan")).toBeDefined();
   });
 
+  // e2e fix (#179 CI failure): "Pro" renders in MULTIPLE places (topbar tier
+  // chip + PlanHero title) — assert the stable testids Playwright now targets
+  // each resolve to a single element with the expected text.
+  it("exposes stable testids for the tier/status chips and plan hero (unambiguous e2e targets)", () => {
+    renderClient({ initialData: PRO_ACTIVE });
+    expect(screen.getByTestId("billing-tier-chip").textContent).toBe("Pro");
+    expect(screen.getByTestId("billing-status-chip").textContent).toBe("Active");
+    expect(screen.getByTestId("billing-plan-hero")).toBeDefined();
+  });
+
   it("shows the trial badge while trialing", () => {
     renderClient({ initialData: TRIALING });
     expect(screen.getByText(/Pro trial —/i)).toBeDefined();
+  });
+
+  it("exposes a testid for the trial badge with the expected content while trialing", () => {
+    renderClient({ initialData: TRIALING });
+    expect(screen.getByTestId("billing-trial-badge").textContent).toMatch(/Pro trial/);
   });
 
   // FIX 1 (4R review): the Price tile and the Current-period tile must show

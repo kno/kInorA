@@ -492,3 +492,42 @@ Phase 5 tasks 5.1–5.4 COMPLETE. All gates green (type-check, build, full test:
 
 ### Status
 Both Slice 5 4R fixes complete (1 WARNING via RED→GREEN TDD + 1 SUGGESTION). Gates green, coverage holds ≥90. NOT committed/pushed/reviewed.
+
+---
+
+## Slice 5 — e2e locator fix (post-CI, before merge)
+
+CI's End-to-end job FAILED: the pre-existing `tests/e2e/billing-visibility.spec.ts` (#179) used `page.getByText('Pro', { exact: true })`, which is now ambiguous against the new OD billing UI — "Pro" renders in BOTH the topbar tier chip AND the `PlanHero` title (`h2` planName), causing a Playwright strict-mode violation (2+ matches). `billing-integration` + unit suites passed; only the e2e job failed. NOT committed/pushed.
+
+### Root cause (confirmed)
+Checked every EN billing i18n value for an exact `"Pro"`/`"Trial"` string: `billing.tier.pro` = `"Pro"` (renders twice — topbar `tierChip` AND `PlanHero`'s `h2`); `billing.status.trialing` = `"Trial"` (renders once, `statusChip` — not itself ambiguous, but fixed the same way for robustness/consistency).
+
+### Fix — stable `data-testid`s (preferred over role/name scoping per instruction)
+`apps/web/src/app/(app)/billing/BillingPageClient.tsx`:
+- `tierChip` span → `data-testid="billing-tier-chip"`
+- `statusChip` span → `data-testid="billing-status-chip"`
+- `trialChip` span → `data-testid="billing-trial-badge"`
+- `PlanHero`'s root `<section>` → `data-testid="billing-plan-hero"`
+
+`tests/e2e/billing-visibility.spec.ts` — both affected tests updated:
+- "an authenticated member sees their tenant's Pro trial state and empty usage": replaced `getByText("Pro", {exact:true})`/`getByText("Trial", {exact:true})`/`getByText(/Pro trial/)` with `getByTestId("billing-tier-chip")`.toHaveText("Pro")`, `getByTestId("billing-status-chip")`.toHaveText("Trial")`, `getByTestId("billing-trial-badge")`.toContainText("Pro trial")`.
+- "reissuing the session refreshes billing and clears the error card": same testid locators post-refresh.
+- Re-verified the OTHER assertions in the spec against the new DOM: the unauthenticated error-card test ("We could not load your billing." + Retry button) is untouched — both strings/roles are single-instance in the new layout (`BillingStatusCard`), confirmed unique. The `toHaveCount(0)` checks for "Your Pro trial has ended" / "Unlock Pro features" remain — these are absence assertions (not ambiguous by construction) and still pass; **discovery, not a fix**: the OD redesign's `BillingScreen` no longer renders those two legacy 11a blocks at all (their i18n keys still exist/parity-pass, but nothing wires them into the new component) — the OD `ProCard` upgrade CTA appears to be the intended single consolidated upgrade surface. Out of scope for this locator-only fix; flagged for a maintainer follow-up decision, not silently changed.
+
+### Unit test coverage of the new testids (additive/harmless — verified)
+Added to `BillingPageClient.test.tsx`:
+- "exposes stable testids for the tier/status chips and plan hero (unambiguous e2e targets)" — asserts `billing-tier-chip`="Pro", `billing-status-chip`="Active", `billing-plan-hero` present, for a Pro/active fixture.
+- "exposes a testid for the trial badge with the expected content while trialing" — asserts `billing-trial-badge` contains "Pro trial" for the trialing fixture.
+
+### Gate evidence (exact)
+- `pnpm --filter web exec vitest run BillingPageClient.test.tsx` → **33 passed** (up from 31 — the 2 new testid tests).
+- `pnpm --filter web test -- "src/app/(app)/billing"` → **924 passed** (up from 922).
+- `pnpm type-check` (6 packages): **PASS**.
+- `pnpm build` (deps-guard + ui-api-guard + architecture/depcruise + all tsc + web build): **PASS**.
+- `pnpm -r --if-present test:coverage`: **EXIT 0 / PASS** — contracts 58, domain 255, i18n 30, api 1047 passed/34 skipped, web **924 passed**, 0 failed. Web global **function coverage 90.69%** (unchanged, still ≥90 threshold — testids are markup-only, no new branches).
+
+### Verification constraint (stated explicitly, per instruction)
+Local podman is DOWN — the Playwright e2e (`tests/e2e/billing-visibility.spec.ts`) requires the real Next.js + Fastify API + migrated Postgres stack and could NOT be run locally. The locators were fixed by construction: read the exact rendered JSX/i18n values to confirm which strings are genuinely ambiguous ("Pro") vs. already unique ("Trial", error-card text, Retry button), and bound the assertions to new stable `data-testid`s that resolve to exactly one element regardless of copy changes. **The e2e itself will be re-validated by CI on the next push** — no e2e pass is claimed or faked here; only the web unit/component suite + full coverage + type-check/build gates above were run and are green.
+
+### Status
+e2e locator fix complete. NOT committed/pushed/reviewed. Awaiting the next CI run to confirm the End-to-end job passes.
