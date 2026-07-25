@@ -145,4 +145,76 @@ describe("ResolveBillingPricing — display amounts sourced from Stripe (#195)",
     expect(pricing.monthly.amountPerMonth).toBe(999);
     expect(warn).toHaveBeenCalledTimes(1);
   });
+
+  it("falls back + warns when the monthly and annual Prices are in DIFFERENT currencies (review #1)", async () => {
+    // Monthly charges EUR, annual charges USD — silently picking one would show
+    // e.g. 95,88 EUR/yr while Stripe charges 95,88 USD/yr: the exact
+    // display/charge drift #195 must prevent.
+    const { gateway } = buildGateway({
+      [PRICE_IDS.monthly]: { ...MONTHLY_PRICE, currency: "eur" },
+      [PRICE_IDS.annual]: { ...ANNUAL_PRICE, currency: "usd" },
+    });
+    const warn = vi.fn();
+    const useCase = new ResolveBillingPricing(gateway, PRICE_IDS, {
+      fallbackEnv: {
+        STRIPE_PRICE_MONTHLY_AMOUNT: "999",
+        STRIPE_PRICE_ANNUAL_AMOUNT: "799",
+        STRIPE_PRICE_CURRENCY: "eur",
+      },
+      warn,
+    });
+
+    const pricing = await useCase.execute();
+
+    // Falls back to the config amounts rather than silently mixing currencies.
+    expect(pricing.currency).toBe("eur");
+    expect(pricing.monthly.amountPerMonth).toBe(999);
+    expect(pricing.annual.amountPerMonth).toBe(799);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back + warns when the annual Price is NOT cheaper per month than monthly (review #2)", async () => {
+    // monthly 799/mo, annual 12000/yr → 1000/mo → a NEGATIVE save % (-25). The
+    // offline validator models this as `annual_not_cheaper_than_monthly`; the
+    // live path must too instead of shipping a "save -25%" badge.
+    const { gateway } = buildGateway({
+      [PRICE_IDS.monthly]: { unitAmount: 799, currency: "eur", interval: "month" },
+      [PRICE_IDS.annual]: { unitAmount: 12000, currency: "eur", interval: "year" },
+    });
+    const warn = vi.fn();
+    const useCase = new ResolveBillingPricing(gateway, PRICE_IDS, {
+      fallbackEnv: { STRIPE_PRICE_MONTHLY_AMOUNT: "999", STRIPE_PRICE_ANNUAL_AMOUNT: "799" },
+      warn,
+    });
+
+    const pricing = await useCase.execute();
+
+    expect(pricing.monthly.amountPerMonth).toBe(999);
+    expect(pricing.annualSavePercent).toBe(20); // from the sane fallback, never -25
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("coalesces a concurrent burst on a cold cache into a SINGLE resolve (review #3)", async () => {
+    // A gateway that only settles after a tick, so all concurrent calls observe
+    // an empty cache and would each fire their own retrievals without coalescing.
+    const retrieveSpy = vi.fn(
+      (priceId: string): Promise<StripePrice> =>
+        new Promise((resolve) =>
+          setTimeout(
+            () => resolve(priceId === PRICE_IDS.monthly ? MONTHLY_PRICE : ANNUAL_PRICE),
+            0,
+          ),
+        ),
+    );
+    const useCase = new ResolveBillingPricing({ retrievePrice: retrieveSpy }, PRICE_IDS);
+
+    // Fire five concurrent requests against the cold cache.
+    const results = await Promise.all(Array.from({ length: 5 }, () => useCase.execute()));
+
+    // Exactly ONE resolve → two retrievals total (monthly + annual), not 5 × 2.
+    expect(retrieveSpy).toHaveBeenCalledTimes(2);
+    for (const pricing of results) {
+      expect(pricing.monthly.amountPerMonth).toBe(1299);
+    }
+  });
 });
