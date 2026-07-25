@@ -9,7 +9,14 @@ import {
   type BillingVisibilityPort,
 } from "../../billing/billing-visibility.js";
 import { CreateCheckout } from "../../billing/create-checkout.js";
-import type { CheckoutGateway, PromotionCodeValidation } from "../../billing/stripe-gateway.js";
+import { CreatePortalSession } from "../../billing/create-portal-session.js";
+import { ListInvoices } from "../../billing/list-invoices.js";
+import type {
+  CheckoutGateway,
+  InvoiceGateway,
+  PortalGateway,
+  PromotionCodeValidation,
+} from "../../billing/stripe-gateway.js";
 import {
   VALID_TOKEN,
   createAuthMockDb,
@@ -105,6 +112,20 @@ function buildUnusedCheckout(): CreateCheckout {
   return new CreateCheckout(gateway, { priceMonthly: "price_m", priceAnnual: "price_a" });
 }
 
+// Unused-but-required Slice 4 portal/invoice use cases (their own suite is
+// billing-portal.test.ts).
+function buildUnusedPortalSession(): CreatePortalSession {
+  const gateway: PortalGateway = {
+    createPortalSession: vi.fn(async () => ({ url: "https://billing.stripe.test/unused" })),
+  };
+  return new CreatePortalSession({ findStripeCustomerId: vi.fn(async () => null) }, gateway);
+}
+
+function buildUnusedListInvoices(): ListInvoices {
+  const gateway: InvoiceGateway = { listInvoices: vi.fn(async () => []) };
+  return new ListInvoices({ findStripeCustomerId: vi.fn(async () => null) }, gateway);
+}
+
 function buildMockDb(membershipRow: unknown, userId: string) {
   const session = buildSessionRow({ tokenHash: "hash-of-token", tenantId: TENANT_A, userId });
   return createAuthMockDb({
@@ -128,6 +149,9 @@ async function buildTestApp(
     getTenantUsage: new GetTenantUsage(adminPort),
     getBillingVisibility: new GetBillingVisibility(visibilityPort),
     createCheckout: buildUnusedCheckout(),
+    createPortalSession: buildUnusedPortalSession(),
+    listInvoices: buildUnusedListInvoices(),
+    checkBillingOwnership: adminPort,
   });
 
   return app;
@@ -285,6 +309,9 @@ describe("GET /billing/visibility — Billing State Visibility", () => {
       getTenantUsage: new GetTenantUsage(buildUnusedAdminPort()),
       getBillingVisibility: new GetBillingVisibility(port),
       createCheckout: buildUnusedCheckout(),
+      createPortalSession: buildUnusedPortalSession(),
+      listInvoices: buildUnusedListInvoices(),
+      checkBillingOwnership: buildUnusedAdminPort(),
     });
     app = app0;
 

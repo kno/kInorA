@@ -7,12 +7,24 @@ import {
   type CheckoutGateway,
   type CheckoutSession,
   type CreateCheckoutSessionInput,
+  type InvoiceGateway,
+  type PortalGateway,
+  type PortalSession,
   type PromotionCodeValidation,
   type StripeGateway,
+  type StripeInvoiceView,
   type StripeSubscriptionSnapshot,
   type StripeSubscriptionStatus,
   type StripeWebhookEvent,
 } from "../../billing/stripe-gateway.js";
+
+/**
+ * Max invoices returned per {@link StripeApiGateway.listInvoices} call (11b
+ * Slice 4 4R FIX 3, readability). No pagination in this slice — the web
+ * invoice-history list (Slice 5) shows a single page, so this bounds the
+ * Stripe read to that page size rather than an unexplained magic number.
+ */
+const INVOICE_LIST_LIMIT = 24;
 
 /**
  * The ONLY file in `apps/api` that imports the `stripe` node SDK
@@ -27,7 +39,9 @@ import {
  * surfaced as a {@link StripeSignatureError} whose message carries no payload
  * and no secret.
  */
-export class StripeApiGateway implements StripeGateway, CheckoutGateway {
+export class StripeApiGateway
+  implements StripeGateway, CheckoutGateway, PortalGateway, InvoiceGateway
+{
   private readonly stripe: Stripe;
 
   constructor(
@@ -127,6 +141,84 @@ export class StripeApiGateway implements StripeGateway, CheckoutGateway {
     }
     return { url: session.url };
   }
+
+  /**
+   * Open a Stripe-hosted Customer Portal session (11b Slice 4). The customer id
+   * is resolved SERVER-SIDE by the route from `authContext` (our
+   * `tenant_billing_states.stripe_customer_id`) and passed straight through — it
+   * is NEVER accepted from client input. Card management / cancellation happen
+   * only on the hosted portal; no card/PAN data ever reaches our API. No secret
+   * is logged; only the hosted URL is returned.
+   */
+  async createPortalSession(stripeCustomerId: string): Promise<PortalSession> {
+    const session = await this.stripe.billingPortal.sessions.create({
+      customer: stripeCustomerId,
+      return_url: `${this.returnUrl}/billing`,
+    });
+    if (!session.url) {
+      throw new Error("stripe portal session did not return a url");
+    }
+    return { url: session.url };
+  }
+
+  /**
+   * List a customer's invoices LIVE from Stripe (11b Slice 4) — there is no
+   * local invoice store. The customer id is resolved SERVER-SIDE by the route
+   * (tenant-scoped) and never from client input. Each Stripe invoice is
+   * projected to the privacy-safe {@link StripeInvoiceView}: only display-safe
+   * fields (amounts, currency, dates, status, hosted/receipt URLs, and at most
+   * the card brand + last four) — never a full PAN, CVC, or other member PII.
+   */
+  async listInvoices(stripeCustomerId: string): Promise<StripeInvoiceView[]> {
+    const list = await this.stripe.invoices.list({
+      customer: stripeCustomerId,
+      limit: INVOICE_LIST_LIMIT,
+      expand: ["data.charge"],
+    });
+    return list.data.map(toStripeInvoiceView);
+  }
+}
+
+/**
+ * Project a Stripe SDK invoice to the privacy-safe, SDK-free
+ * {@link StripeInvoiceView}. Reads card display info DEFENSIVELY off the
+ * expanded charge (its exact shape varies across Stripe API versions) and keeps
+ * ONLY the brand + last four — the PAN, CVC, and any other PII are never read.
+ */
+function toStripeInvoiceView(invoice: Stripe.Invoice): StripeInvoiceView {
+  const { brand, last4 } = readCardDisplay(invoice);
+  return {
+    id: invoice.id ?? "",
+    amountDue: invoice.amount_due ?? 0,
+    currency: invoice.currency ?? "",
+    status: invoice.status ?? "",
+    created: invoice.created ?? 0,
+    hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
+    // Deliberately the invoice PDF link (`invoice_pdf`), NOT the charge-level
+    // `receipt_url` (11b Slice 4 4R FIX 3) — this is the downloadable invoice
+    // document Stripe intends for invoice history, independent of whether the
+    // underlying charge exposes its own receipt.
+    receiptUrl: invoice.invoice_pdf ?? null,
+    cardBrand: brand,
+    cardLast4: last4,
+  };
+}
+
+/**
+ * Extract ONLY the card brand + last four from an invoice's expanded charge,
+ * defensively (optional at every hop). Never reads a full card number.
+ */
+function readCardDisplay(invoice: Stripe.Invoice): { brand: string | null; last4: string | null } {
+  const charge = (invoice as { charge?: unknown }).charge;
+  if (!charge || typeof charge !== "object") {
+    return { brand: null, last4: null };
+  }
+  const card = (
+    charge as {
+      payment_method_details?: { card?: { brand?: string | null; last4?: string | null } };
+    }
+  ).payment_method_details?.card;
+  return { brand: card?.brand ?? null, last4: card?.last4 ?? null };
 }
 
 /**
@@ -176,6 +268,24 @@ export class UnconfiguredCheckoutGateway implements CheckoutGateway {
     throw new StripeGatewayUnconfiguredError();
   }
   async createCheckoutSession(): Promise<CheckoutSession> {
+    throw new StripeGatewayUnconfiguredError();
+  }
+}
+
+/**
+ * Fail-closed portal/invoice gateway used when Stripe env is unconfigured (11b
+ * Slice 4). Every portal/invoice call throws {@link StripeGatewayUnconfiguredError}
+ * so the route returns 5xx rather than silently pretending to open a portal or
+ * fabricating an invoice list against a missing Stripe configuration. Never logs
+ * a secret. (The invoice USE CASE still short-circuits to `[]` for a
+ * never-subscribed tenant BEFORE reaching any gateway, so this only fires when a
+ * customer id exists but Stripe itself is not configured.)
+ */
+export class UnconfiguredPortalInvoiceGateway implements PortalGateway, InvoiceGateway {
+  async createPortalSession(): Promise<PortalSession> {
+    throw new StripeGatewayUnconfiguredError();
+  }
+  async listInvoices(): Promise<StripeInvoiceView[]> {
     throw new StripeGatewayUnconfiguredError();
   }
 }

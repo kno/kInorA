@@ -10,9 +10,13 @@ import {
 } from "../../billing/quota-admin.js";
 import { GetBillingVisibility, type BillingVisibilityPort } from "../../billing/billing-visibility.js";
 import { CreateCheckout } from "../../billing/create-checkout.js";
+import { CreatePortalSession } from "../../billing/create-portal-session.js";
+import { ListInvoices } from "../../billing/list-invoices.js";
 import type {
   CheckoutGateway,
   CreateCheckoutSessionInput,
+  InvoiceGateway,
+  PortalGateway,
   PromotionCodeValidation,
 } from "../../billing/stripe-gateway.js";
 import {
@@ -122,9 +126,28 @@ async function buildTestApp(
     // billingRoutes plugin's required options.
     getBillingVisibility: new GetBillingVisibility(buildUnusedVisibilityPort()),
     createCheckout,
+    // Slice 4 portal/invoice use cases: unused by THIS suite (covered by
+    // billing-portal.test.ts). Provided only to satisfy the shared plugin.
+    createPortalSession: buildUnusedPortalSession(),
+    listInvoices: buildUnusedListInvoices(),
+    // Slice 4 4R FIX 1 owner-only check: reuses the SAME QuotaAdminPort fake
+    // already passed in (it already has loadActorMembership) — no new fake.
+    checkBillingOwnership: port,
   });
 
   return app;
+}
+
+function buildUnusedPortalSession(): CreatePortalSession {
+  const gateway: PortalGateway = {
+    createPortalSession: vi.fn(async () => ({ url: "https://billing.stripe.test/unused" })),
+  };
+  return new CreatePortalSession({ findStripeCustomerId: vi.fn(async () => null) }, gateway);
+}
+
+function buildUnusedListInvoices(): ListInvoices {
+  const gateway: InvoiceGateway = { listInvoices: vi.fn(async () => []) };
+  return new ListInvoices({ findStripeCustomerId: vi.fn(async () => null) }, gateway);
 }
 
 // --- Checkout fakes (11b Slice 3) -------------------------------------------
@@ -291,6 +314,9 @@ describe("PUT /billing/allocations — Member Quota Administration", () => {
       getTenantUsage: new GetTenantUsage(port),
       getBillingVisibility: new GetBillingVisibility(buildUnusedVisibilityPort()),
       createCheckout: buildUnusedCheckout(),
+      createPortalSession: buildUnusedPortalSession(),
+      listInvoices: buildUnusedListInvoices(),
+      checkBillingOwnership: port,
     });
     app = app0;
 

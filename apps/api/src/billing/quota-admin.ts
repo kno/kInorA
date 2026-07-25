@@ -88,8 +88,15 @@ export interface GetTenantUsageInput {
 /**
  * True when the actor is an ACTIVE OWNER of the tenant. Fail-closed: a missing
  * membership, non-owner role, or non-active status is never authorized.
+ *
+ * Exported (11b-v1 Slice 4 4R FIX 1) so the billing ROUTE layer can reuse the
+ * EXACT SAME owner check for the Customer Portal + invoice endpoints — those
+ * are broader-privilege than plain member visibility (the portal lets the
+ * caller cancel the tenant's subscription; invoices carry owner-identifying
+ * PDF links), so they are gated with the SAME owner-only rule as the
+ * quota-admin use cases above, not duplicated logic.
  */
-function isActiveOwner(actor: AdminMembershipView | null): boolean {
+export function isActiveOwner(actor: AdminMembershipView | null): boolean {
   return actor !== null && actor.status === "active" && actor.role === "owner";
 }
 
