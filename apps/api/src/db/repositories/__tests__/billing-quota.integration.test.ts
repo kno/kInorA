@@ -28,10 +28,12 @@ import {
   memberQuotaAllocations,
   memberQuotaCounters,
   memberships,
+  tenantQuotaCounters,
   tenants,
   users,
 } from "../../schema.js";
 import { QuotaLedgerRepository } from "../billing-quota.js";
+import { resolveTenantFeatureLimit } from "../../../billing/plan-limits.js";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
@@ -80,6 +82,53 @@ describe.skipIf(!hasDb)("QuotaLedgerRepository (real Postgres)", () => {
     });
     // The aggregate counter must reflect exactly ONE consumption, not two.
     expect(counter?.used).toBe(1);
+  });
+
+  it("11b Slice 3: enforces the REAL Pro cap boundary end-to-end (not the dropped 1_000_000)", async () => {
+    // Prove the metered-caps swap against a real Postgres counter: a Pro tenant
+    // is allowed exactly UP TO the config-driven cap and denied
+    // tenant_quota_exhausted the moment it is exhausted — the same denial a Free
+    // tenant hits over its allowance. Seed the aggregate counter to (cap - 1) so
+    // the boundary is exercised with only two consumes instead of `cap` of them.
+    const { tenantId, userId } = await seedActiveTenant();
+    const scope = { tenantId, userId };
+    const feature = "plan_generation" as const;
+    const proCap = resolveTenantFeatureLimit("pro", feature);
+    expect(proCap).toBe(500); // real config-driven cap, NOT the provisional 1_000_000
+
+    // Seed the tenant aggregate counter one unit below the real cap.
+    await db.insert(tenantQuotaCounters).values({
+      tenantId,
+      feature,
+      period: PERIOD,
+      used: proCap - 1,
+      limit: proCap,
+    });
+
+    // The final unit under the cap is consumed.
+    const underCap = await repo.consume({
+      scope,
+      feature,
+      period: PERIOD,
+      operationKey: "pro-cap:under",
+      tenantLimit: proCap,
+    });
+    expect(underCap.outcome).toBe("consumed");
+
+    // The next consume is over the real cap → denied, counter not advanced past cap.
+    const overCap = await repo.consume({
+      scope,
+      feature,
+      period: PERIOD,
+      operationKey: "pro-cap:over",
+      tenantLimit: proCap,
+    });
+    expect(overCap).toEqual({ outcome: "denied", reason: "tenant_quota_exhausted" });
+
+    const [counter] = await db.query.tenantQuotaCounters.findMany({
+      where: (t, { and: andOp, eq: eqOp }) => andOp(eqOp(t.tenantId, tenantId), eqOp(t.feature, feature)),
+    });
+    expect(counter?.used).toBe(proCap);
   });
 
   it("CRITICAL 1: a retried same-key request after the first commits replays without consuming again", async () => {
