@@ -321,3 +321,54 @@ describe("GET /billing/visibility — Billing State Visibility", () => {
     expect(port.loadContext).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Scenario: Config-Driven Pricing — GET /billing/pricing (11b Slice 5)
+// The web billing screen reads displayed prices + the save badge from this
+// endpoint (config-driven, never hardcoded in the web bundle). Any active
+// member may read it (same gate as visibility).
+// ---------------------------------------------------------------------------
+
+describe("GET /billing/pricing — Config-Driven Pricing", () => {
+  let app: FastifyInstance;
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("returns the config-driven display pricing (default 9,99/7,99 → 20% save)", async () => {
+    app = await buildTestApp(
+      buildFakePort(),
+      buildActiveMembershipRow({ tenantId: TENANT_A, userId: MEMBER_A, role: "member" }),
+      MEMBER_A,
+    );
+
+    const res = await app.inject({ method: "GET", url: "/billing/pricing", headers: auth });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      currency: "eur",
+      monthly: { cycle: "monthly", amountPerMonth: 999, amountPerInterval: 999 },
+      annual: { cycle: "annual", amountPerMonth: 799, amountPerInterval: 9588 },
+      annualSavePercent: 20,
+    });
+  });
+
+  it("rejects a request with no session → 401", async () => {
+    const app0 = Fastify();
+    await app0.register(authPlugin, { db: createAuthMockDb({ sessionRows: [] }).db as never });
+    await app0.register(billingRoutes, {
+      setMemberAllocation: new SetMemberAllocation(buildUnusedAdminPort()),
+      getTenantUsage: new GetTenantUsage(buildUnusedAdminPort()),
+      getBillingVisibility: new GetBillingVisibility(buildFakePort()),
+      createCheckout: buildUnusedCheckout(),
+      createPortalSession: buildUnusedPortalSession(),
+      listInvoices: buildUnusedListInvoices(),
+      checkBillingOwnership: buildUnusedAdminPort(),
+    });
+    app = app0;
+
+    const res = await app.inject({ method: "GET", url: "/billing/pricing" });
+
+    expect(res.statusCode).toBe(401);
+  });
+});

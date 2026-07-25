@@ -1,33 +1,54 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
-import type { BillingVisibilityDTO } from "@kinora/contracts";
-import { useTranslations } from "next-intl";
-import { getBillingVisibilityAction } from "./actions";
+import type {
+  BillingCycle,
+  BillingPricingDTO,
+  BillingVisibilityDTO,
+  InvoiceDTO,
+  TenantQuotaUsageDTO,
+} from "@kinora/contracts";
+import { useFormatter, useTranslations } from "next-intl";
+import type { GetBillingInvoicesResult } from "./billing-types";
+import {
+  getBillingInvoicesAction,
+  getBillingVisibilityAction,
+  openPortalAction,
+  startCheckoutAction,
+} from "./actions";
+import styles from "./BillingPageClient.module.css";
 
 export interface BillingPageClientProps {
   initialData: BillingVisibilityDTO | null;
   initialError?: string | null;
+  pricing: BillingPricingDTO | null;
+  initialInvoices: GetBillingInvoicesResult;
 }
 
 const MS_PER_DAY = 86_400_000;
 
-export function BillingPageClient({ initialData, initialError = null }: BillingPageClientProps) {
+/** Redirect the browser to a Stripe-hosted URL. Extracted so it is easy to spy in tests. */
+function redirectTo(url: string): void {
+  window.location.assign(url);
+}
+
+export function BillingPageClient({
+  initialData,
+  initialError = null,
+  pricing,
+  initialInvoices,
+}: BillingPageClientProps) {
   const t = useTranslations();
   const [data, setData] = useState<BillingVisibilityDTO | null>(initialData);
   const [error, setError] = useState<string | null>(initialError);
+  const [invoices, setInvoices] = useState<GetBillingInvoicesResult>(initialInvoices);
   const [loading, setLoading] = useState(false);
   const [online, setOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
   const retryButtonRef = useRef<HTMLButtonElement>(null);
-  // FIX 3 (review correction): `focus` and `visibilitychange` fire together
-  // on a real tab activation — without a guard, both listeners call
-  // `refresh()` concurrently (a "storm" on rapid toggling). `inFlightRef`
-  // collapses any activation while a refresh is already pending into a
-  // no-op; `requestIdRef` is a belt-and-suspenders "latest wins" guard so a
-  // stale in-flight response (if one were ever started despite the guard)
-  // can never overwrite a newer one.
+  // FIX 3 (11a): collapse concurrent focus+visibilitychange activations into a
+  // single refresh; requestId is a latest-wins guard against stale responses.
   const inFlightRef = useRef(false);
   const requestIdRef = useRef(0);
 
@@ -53,26 +74,28 @@ export function BillingPageClient({ initialData, initialError = null }: BillingP
   }, [isErrorState, isOfflineState]);
 
   async function refresh() {
-    if (inFlightRef.current) return; // collapse a concurrent activation into a no-op
+    if (inFlightRef.current) return;
     inFlightRef.current = true;
     const requestId = ++requestIdRef.current;
 
     setLoading(true);
     setError(null);
     try {
-      const result = await getBillingVisibilityAction();
-      if (requestId !== requestIdRef.current) return; // a newer refresh has since started — ignore this stale response
-      if (result.kind === "ok") {
-        // REPLACE, never merge, so a tenant switch shows only the new
-        // tenant's billing state (spec: "Tenant switching refreshes billing").
-        setData(result.data);
+      // Refresh billing state AND owner-only invoices together, so a tenant
+      // switch that changes ownership can never keep the previous tenant's
+      // invoices or owner-only actions on screen.
+      const [visibility, invoiceResult] = await Promise.all([
+        getBillingVisibilityAction(),
+        getBillingInvoicesAction(),
+      ]);
+      if (requestId !== requestIdRef.current) return; // a newer refresh started — ignore
+      if (visibility.kind === "ok") {
+        setData(visibility.data);
         setError(null);
+        setInvoices(invoiceResult);
       } else {
-        // #176 — a failed client refetch must be observable, not silently
-        // swallowed. Structured event + failure kind only; never any token or
-        // response content (the Result carries only an error kind string).
-        console.error({ event: "billing_visibility_refresh_failed", kind: result.message });
-        setError(result.message);
+        console.error({ event: "billing_visibility_refresh_failed", kind: visibility.message });
+        setError(visibility.message);
       }
     } finally {
       inFlightRef.current = false;
@@ -82,10 +105,6 @@ export function BillingPageClient({ initialData, initialError = null }: BillingP
     }
   }
 
-  // Refresh on tab focus/visibility so a tenant switch (which issues a new
-  // session bound to the newly active tenant) is picked up without a full
-  // reload. The Server Action always reads the CURRENT session cookie, so
-  // this can only ever surface the caller's own current tenant.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handleFocus = () => {
@@ -138,14 +157,35 @@ export function BillingPageClient({ initialData, initialError = null }: BillingP
     );
   }
 
-  const { billing, tenantUsage, memberUsage, denialReason, upgradePromptPath } = data;
-  const isUsageEmpty = tenantUsage.length === 0 && memberUsage.length === 0;
-  // FIX 2 (review correction): the STORED billing.status stays 'trialing'
-  // even after trialEndsAt lapses — only the dynamically resolved tier and
-  // denialReason ('trial_expired') reflect expiry. Gate the badge on an
-  // ACTIVE, UNEXPIRED trial (status trialing + trialEndsAt strictly in the
-  // future + no trial_expired denial) so the badge and the "trial ended"
-  // block are never shown together.
+  // A definitive 403 (forbidden) proves the caller is NOT an owner. Any other
+  // outcome (ok, or a transient error) is treated as owner, so owner-only UI is
+  // hidden ONLY when we are certain the member lacks ownership.
+  const isOwner = invoices.kind !== "forbidden";
+
+  return (
+    <BillingScreen
+      data={data}
+      pricing={pricing}
+      invoices={invoices}
+      isOwner={isOwner}
+    />
+  );
+}
+
+function BillingScreen({
+  data,
+  pricing,
+  invoices,
+  isOwner,
+}: {
+  data: BillingVisibilityDTO;
+  pricing: BillingPricingDTO | null;
+  invoices: GetBillingInvoicesResult;
+  isOwner: boolean;
+}) {
+  const t = useTranslations();
+  const { billing, tenantUsage, memberUsage, denialReason } = data;
+
   const isActiveUnexpiredTrial =
     billing.status === "trialing" &&
     denialReason !== "trial_expired" &&
@@ -156,93 +196,460 @@ export function BillingPageClient({ initialData, initialError = null }: BillingP
     : null;
 
   return (
-    <section className="kin-card kin-card--center" style={{ maxWidth: 760 }}>
-      <h2 className="kin-title">{t("billing.title")}</h2>
+    <div className={styles.page}>
+      <header className={styles.topbar}>
+        <div>
+          <h1 className="kin-title">{t("billing.title")}</h1>
+          <p className="kin-text kin-muted">{t("billing.subtitle")}</p>
+        </div>
+        <div className={styles.chips}>
+          <span className={styles.tierChip}>{t(`billing.tier.${billing.tier}`)}</span>
+          <span className={styles.statusChip}>{t(`billing.status.${billing.status}`)}</span>
+          {trialDaysRemaining !== null ? (
+            <span className={styles.trialChip}>
+              {t("billing.trial.badge", { daysRemaining: trialDaysRemaining })}
+            </span>
+          ) : null}
+        </div>
+      </header>
 
-      <div
-        style={{
-          display: "flex",
-          gap: "0.75rem",
-          alignItems: "center",
-          flexWrap: "wrap",
-          margin: "1rem 0",
-        }}
-      >
-        <span className="kin-text" style={{ fontWeight: 600 }}>
-          {t(`billing.tier.${billing.tier}`)}
-        </span>
-        <span className="kin-text kin-muted">{t(`billing.status.${billing.status}`)}</span>
-        {trialDaysRemaining !== null ? (
-          <span className="kin-text kin-muted">
-            {t("billing.trial.badge", { daysRemaining: trialDaysRemaining })}
-          </span>
-        ) : null}
+      <div className={styles.grid}>
+        <div role="region" aria-label={t("billing.regions.main")} className={styles.mainCol}>
+          <PlanHero
+            billing={billing}
+            pricing={pricing}
+            period={tenantUsage[0]?.period ?? memberUsage[0]?.period ?? null}
+          />
+          <UsageMeters tenantUsage={tenantUsage} memberUsage={memberUsage} />
+          {isOwner ? <InvoiceHistory invoices={invoices} /> : null}
+        </div>
+
+        <aside aria-label={t("billing.regions.aside")} className={styles.asideCol}>
+          <ProCard billing={billing} pricing={pricing} />
+          {isOwner ? <PaymentCard /> : null}
+          <SupportCard />
+        </aside>
       </div>
+    </div>
+  );
+}
 
-      {denialReason === "trial_expired" ? (
-        <div className="kin-card" style={{ marginBottom: "1rem" }}>
-          <h3 className="kin-title" style={{ fontSize: "1rem" }}>
-            {t("billing.trial.expiredTitle")}
-          </h3>
-          <p className="kin-text kin-muted">{t("billing.trial.expiredDescription")}</p>
-        </div>
+function PlanHero({
+  billing,
+  pricing,
+  period,
+}: {
+  billing: BillingVisibilityDTO["billing"];
+  pricing: BillingPricingDTO | null;
+  /** The current billing period key (e.g. "2026-07"), sourced from a usage
+   * row — the SAME period the Usage Meters section reports on below. Kept as
+   * a distinct signal from `currentPeriodEnd` (a renewal DATE) so the
+   * "Current period" tile never collapses into the "Renewal" tile. */
+  period: string | null;
+}) {
+  const t = useTranslations();
+  const format = useFormatter();
+  const isPro = billing.tier === "pro";
+  const renewal =
+    billing.currentPeriodEnd != null
+      ? new Date(billing.currentPeriodEnd).toISOString().slice(0, 10)
+      : t("billing.plan.renewalNone");
+
+  // FIX 1 (4R review): the Price tile must show the actual formatted price for
+  // the tenant's cycle — NOT the cycle label (the cycle toggle already shows
+  // that in the Pro card, and reusing it here duplicated the Current-period
+  // tile below). Pro without a resolvable cycle/price falls back to a plain
+  // placeholder rather than duplicating any other tile's content.
+  const priceForCycle =
+    isPro && billing.billingCycle && pricing ? pricing[billing.billingCycle] : null;
+  const priceValue = !isPro
+    ? t("billing.plan.priceFree")
+    : priceForCycle
+      ? format.number(priceForCycle.amountPerMonth / 100, {
+          style: "currency",
+          currency: pricing!.currency,
+        })
+      : t("billing.plan.valueNotSet");
+
+  // FIX 1 (4R review): "Current period" must reflect the REAL current billing
+  // period (the same period key the Usage Meters section reports on) — NOT
+  // the cycle label, and NOT a restatement of the Renewal date tile above.
+  const currentPeriodValue =
+    period ??
+    (billing.status === "trialing" && billing.trialEndsAt != null
+      ? t("billing.plan.periodTrialEndsOn", {
+          date: new Date(billing.trialEndsAt).toISOString().slice(0, 10),
+        })
+      : t("billing.plan.valueNotSet"));
+
+  return (
+    <section className={styles.card}>
+      <span className={styles.eyebrow}>{t("billing.plan.currentLabel")}</span>
+      <h2 className={styles.planName}>{t(`billing.tier.${billing.tier}`)}</h2>
+      <p className="kin-text kin-muted">
+        {isPro ? t("billing.plan.descriptionPro") : t("billing.plan.descriptionFree")}
+      </p>
+      <dl className={styles.metaGrid}>
+        <MetaTile label={t("billing.plan.metaPrice")} value={priceValue} />
+        <MetaTile label={t("billing.plan.metaRenewal")} value={renewal} />
+        <MetaTile label={t("billing.plan.metaPeriod")} value={currentPeriodValue} />
+        <MetaTile
+          label={t("billing.plan.metaPayment")}
+          value={isPro ? t("billing.pro.title") : t("billing.plan.valueNotSet")}
+        />
+      </dl>
+    </section>
+  );
+}
+
+function MetaTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={styles.metaTile}>
+      <dt className={styles.metaLabel}>{label}</dt>
+      <dd className={styles.metaValue}>{value}</dd>
+    </div>
+  );
+}
+
+function UsageMeters({
+  tenantUsage,
+  memberUsage,
+}: {
+  tenantUsage: TenantQuotaUsageDTO[];
+  memberUsage: BillingVisibilityDTO["memberUsage"];
+}) {
+  const t = useTranslations();
+  const isEmpty = tenantUsage.length === 0 && memberUsage.length === 0;
+
+  if (isEmpty) {
+    return (
+      <section className={styles.card}>
+        <h3 className={styles.cardTitle}>{t("billing.usage.tenantTitle")}</h3>
+        <p className="kin-text kin-muted">{t("billing.usage.emptyTitle")}</p>
+        <p className="kin-text kin-muted">{t("billing.usage.emptyDescription")}</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className={styles.card}>
+      <h3 className={styles.cardTitle}>{t("billing.usage.tenantTitle")}</h3>
+      <ul className={styles.meterList} aria-label={t("billing.usage.tenantTitle")}>
+        {tenantUsage.map((row) => (
+          <Meter key={`tenant-${row.feature}`} feature={row.feature} used={row.used} limit={row.limit} period={row.period} />
+        ))}
+      </ul>
+      {memberUsage.length > 0 ? (
+        <>
+          <h3 className={styles.cardTitle}>{t("billing.usage.memberTitle")}</h3>
+          <ul className={styles.meterList} aria-label={t("billing.usage.memberTitle")}>
+            {memberUsage.map((row) => (
+              <Meter key={`member-${row.feature}`} feature={row.feature} used={row.used} limit={row.limit} period={row.period} />
+            ))}
+          </ul>
+        </>
       ) : null}
+      <p className={styles.usageFooter}>{t("billing.usage.footer")}</p>
+    </section>
+  );
+}
 
-      {denialReason && upgradePromptPath ? (
-        <div className="kin-card" style={{ marginBottom: "1rem" }}>
-          <h3 className="kin-title" style={{ fontSize: "1rem" }}>
-            {t("billing.upgrade.title")}
-          </h3>
-          <p className="kin-text kin-muted">{t("billing.upgrade.description")}</p>
-          <a className="kin-btn kin-btn--primary" href={upgradePromptPath}>
-            {t("billing.upgrade.cta")}
-          </a>
-        </div>
-      ) : null}
+function Meter({
+  feature,
+  used,
+  limit,
+  period,
+}: {
+  feature: string;
+  used: number;
+  limit: number;
+  period: string;
+}) {
+  const t = useTranslations();
+  const featureLabel = t(`billing.feature.${feature}`);
+  const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
 
-      {isUsageEmpty ? (
-        <div className="kin-card" style={{ width: "100%" }}>
-          <h3 className="kin-title" style={{ fontSize: "1.125rem" }}>
-            {t("billing.usage.emptyTitle")}
-          </h3>
-          <p className="kin-text kin-muted">{t("billing.usage.emptyDescription")}</p>
-        </div>
+  return (
+    <li className={styles.meterRow}>
+      <div className={styles.meterHead}>
+        <span className={styles.meterLabel}>{featureLabel}</span>
+        <span className={styles.meterValue}>{`${used}/${limit}`}</span>
+      </div>
+      <div
+        role="meter"
+        aria-valuenow={used}
+        aria-valuemin={0}
+        aria-valuemax={limit}
+        aria-label={t("billing.usage.meterAria", { feature: featureLabel, used, limit })}
+        className={styles.meterTrack}
+      >
+        <span className={styles.meterFill} style={{ width: `${percent}%` }} />
+      </div>
+      <div className={styles.meterNotes}>
+        {/* Metered copy — NEVER "unlimited": the enforcement path denies over-cap
+            requests, so the UI states the concrete monthly cap. */}
+        <span className={styles.meterNote}>{t("billing.usage.limitNote", { limit })}</span>
+        <span className={styles.meterNote}>{t("billing.usage.periodLabel", { period })}</span>
+      </div>
+    </li>
+  );
+}
+
+function InvoiceHistory({ invoices }: { invoices: GetBillingInvoicesResult }) {
+  const t = useTranslations();
+  const format = useFormatter();
+
+  return (
+    <section className={styles.card}>
+      <h3 className={styles.cardTitle}>{t("billing.history.title")}</h3>
+      {invoices.kind === "error" ? (
+        <>
+          <p className="kin-text">{t("billing.history.errorTitle")}</p>
+          <p className="kin-text kin-muted">{t("billing.history.errorDescription")}</p>
+        </>
+      ) : invoices.kind === "ok" && invoices.invoices.length > 0 ? (
+        <ul className={styles.invoiceList} aria-label={t("billing.history.title")}>
+          {invoices.invoices.map((invoice) => (
+            <InvoiceRow key={invoice.id} invoice={invoice} format={format} />
+          ))}
+        </ul>
       ) : (
         <>
-          <div className="kin-card" style={{ width: "100%", marginBottom: "1rem" }}>
-            <h3 className="kin-title" style={{ fontSize: "1.125rem" }}>
-              {t("billing.usage.tenantTitle")}
-            </h3>
-            <ul aria-label={t("billing.usage.tenantTitle")} style={{ listStyle: "none", padding: 0, margin: 0 }}>
-              {tenantUsage.map((row) => (
-                <li key={row.feature} className="kin-text">
-                  {t("billing.usage.row", {
-                    feature: t(`billing.feature.${row.feature}`),
-                    used: row.used,
-                    limit: row.limit,
-                  })}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="kin-card" style={{ width: "100%" }}>
-            <h3 className="kin-title" style={{ fontSize: "1.125rem" }}>
-              {t("billing.usage.memberTitle")}
-            </h3>
-            <ul aria-label={t("billing.usage.memberTitle")} style={{ listStyle: "none", padding: 0, margin: 0 }}>
-              {memberUsage.map((row) => (
-                <li key={row.feature} className="kin-text">
-                  {t("billing.usage.row", {
-                    feature: t(`billing.feature.${row.feature}`),
-                    used: row.used,
-                    limit: row.limit,
-                  })}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <p className="kin-text">{t("billing.history.empty")}</p>
+          <p className="kin-text kin-muted">{t("billing.history.emptyDescription")}</p>
         </>
       )}
+    </section>
+  );
+}
+
+function InvoiceRow({
+  invoice,
+  format,
+}: {
+  invoice: InvoiceDTO;
+  format: ReturnType<typeof useFormatter>;
+}) {
+  const t = useTranslations();
+  const date = new Date(invoice.createdAt).toISOString().slice(0, 10);
+  const amount = format.number(invoice.amountDue / 100, {
+    style: "currency",
+    currency: invoice.currency,
+  });
+  const receiptHref = invoice.receiptUrl ?? invoice.hostedInvoiceUrl;
+
+  return (
+    <li className={styles.invoiceRow}>
+      <div>
+        <span className={styles.invoiceDate}>{date}</span>
+        <span className={styles.invoiceStatus}>{invoice.status}</span>
+      </div>
+      <div className={styles.invoiceRight}>
+        <span className={styles.invoiceAmount}>{amount}</span>
+        {receiptHref ? (
+          <a
+            className={styles.receiptLink}
+            href={receiptHref}
+            target="_blank"
+            rel="noreferrer noopener"
+            aria-label={t("billing.history.invoiceAria", {
+              date,
+              amount,
+              status: invoice.status,
+            })}
+          >
+            {t("billing.history.download")}
+          </a>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+function ProCard({
+  billing,
+  pricing,
+}: {
+  billing: BillingVisibilityDTO["billing"];
+  pricing: BillingPricingDTO | null;
+}) {
+  const t = useTranslations();
+  const format = useFormatter();
+  const [cycle, setCycle] = useState<BillingCycle>("monthly");
+  const [busy, setBusy] = useState(false);
+  const [ctaError, setCtaError] = useState<string | null>(null);
+
+  const isCurrentPro = billing.tier === "pro" && billing.status === "active";
+
+  async function onUpgrade() {
+    setBusy(true);
+    setCtaError(null);
+    try {
+      const result = await startCheckoutAction(cycle, undefined);
+      if (result.kind === "ok") {
+        redirectTo(result.url);
+        return;
+      }
+      setCtaError(
+        result.message === "invalid_promotion_code"
+          ? t("billing.actions.invalidPromotion")
+          : t("billing.actions.checkoutError"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const priceForCycle = pricing ? pricing[cycle] : null;
+
+  return (
+    <section className={`${styles.card} ${styles.proCard}`}>
+      <span className={styles.eyebrow}>{t("billing.pro.eyebrow")}</span>
+      <h3 className={styles.cardTitle}>{t("billing.pro.title")}</h3>
+
+      <div role="radiogroup" aria-label={t("billing.pro.cycleAria")} className={styles.cycleToggle}>
+        <CycleOption
+          label={t("billing.pro.cycleMonthly")}
+          selected={cycle === "monthly"}
+          onSelect={() => setCycle("monthly")}
+        />
+        <CycleOption
+          label={t("billing.pro.cycleAnnual")}
+          selected={cycle === "annual"}
+          onSelect={() => setCycle("annual")}
+        />
+      </div>
+
+      {priceForCycle && pricing ? (
+        <div className={styles.priceBlock}>
+          <span className={styles.price}>
+            {format.number(priceForCycle.amountPerMonth / 100, {
+              style: "currency",
+              currency: pricing.currency,
+            })}
+          </span>
+          <span className={styles.priceSuffix}>{t("billing.pro.priceSuffix")}</span>
+          {pricing.annualSavePercent > 0 ? (
+            <span className={styles.saveBadge}>
+              {t("billing.pro.saveBadge", { percent: pricing.annualSavePercent })}
+            </span>
+          ) : null}
+          {cycle === "annual" ? (
+            <span className={styles.annualNote}>{t("billing.pro.annualBilled")}</span>
+          ) : null}
+        </div>
+      ) : null}
+
+      <ul className={styles.benefits}>
+        <li>{t("billing.pro.benefitGenerations")}</li>
+        <li>{t("billing.pro.benefitMemory")}</li>
+        <li>{t("billing.pro.benefitSupport")}</li>
+      </ul>
+
+      {isCurrentPro ? (
+        <p className={styles.currentBadge}>{t("billing.pro.currentBadge")}</p>
+      ) : (
+        <button
+          type="button"
+          className="kin-btn kin-btn--primary"
+          onClick={() => void onUpgrade()}
+          disabled={busy}
+        >
+          {busy ? t("billing.actions.redirecting") : t("billing.pro.cta")}
+        </button>
+      )}
+
+      {ctaError ? (
+        <p role="alert" className={styles.ctaError}>
+          {ctaError}
+        </p>
+      ) : null}
+
+      <p className="kin-text kin-muted">{t("billing.pro.noCommitment")}</p>
+    </section>
+  );
+}
+
+function CycleOption({
+  label,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      className={`${styles.cycleOption} ${selected ? styles.cycleOptionActive : ""}`}
+      onClick={onSelect}
+    >
+      {label}
+    </button>
+  );
+}
+
+function PaymentCard() {
+  const t = useTranslations();
+  const [busy, setBusy] = useState(false);
+  const [portalError, setPortalError] = useState<string | null>(null);
+
+  async function onManage() {
+    setBusy(true);
+    setPortalError(null);
+    try {
+      const result = await openPortalAction();
+      if (result.kind === "ok") {
+        redirectTo(result.url);
+        return;
+      }
+      setPortalError(t("billing.actions.portalError"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className={styles.card}>
+      <h3 className={styles.cardTitle}>{t("billing.payment.title")}</h3>
+      <p className="kin-text kin-muted">{t("billing.payment.description")}</p>
+      <button
+        type="button"
+        className="kin-btn kin-btn--secondary"
+        onClick={() => void onManage()}
+        disabled={busy}
+      >
+        {busy ? t("billing.actions.redirecting") : t("billing.payment.manageCta")}
+      </button>
+      {portalError ? (
+        <p role="alert" className={styles.ctaError}>
+          {portalError}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function SupportCard() {
+  const t = useTranslations();
+  return (
+    <section className={styles.card}>
+      <h3 className={styles.cardTitle}>{t("billing.support.title")}</h3>
+      <p className="kin-text kin-muted">{t("billing.support.description")}</p>
+      {/*
+       * FIX 2 (4R review, SUGGESTION): no `/help/billing` route exists in
+       * apps/web yet — linking there would 404 on click. Until a real support
+       * destination exists, render this as a NON-navigating disabled affordance
+       * (aria-disabled, no href) rather than ship a dead link. Swap back to a
+       * real <a href> once a billing FAQ/support destination is added.
+       * TODO(11b-followup): point at the real billing FAQ/support URL.
+       */}
+      <span className={styles.supportLink} aria-disabled="true" role="link">
+        {t("billing.support.faqCta")}
+      </span>
     </section>
   );
 }

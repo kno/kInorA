@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { BillingVisibilityDTO } from "@kinora/contracts";
-import { getBillingVisibility } from "../billing-client";
+import type { BillingPricingDTO, BillingVisibilityDTO, InvoiceDTO } from "@kinora/contracts";
+import {
+  getBillingInvoices,
+  getBillingPricing,
+  getBillingVisibility,
+  openPortal,
+  startCheckout,
+} from "../billing-client";
 
 const OPTIONS = { apiBaseUrl: "http://api.test" };
 const TOKEN = "session-tok";
@@ -224,5 +230,223 @@ describe("getBillingVisibility", () => {
         process.env.API_BASE_URL = previousBaseUrl;
       }
     }
+  });
+});
+
+const PRICING: BillingPricingDTO = {
+  currency: "eur",
+  monthly: { cycle: "monthly", amountPerMonth: 999, amountPerInterval: 999 },
+  annual: { cycle: "annual", amountPerMonth: 799, amountPerInterval: 9588 },
+  annualSavePercent: 20,
+};
+
+describe("getBillingPricing", () => {
+  it("returns ok with the parsed BillingPricingDTO on 200", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, PRICING));
+
+    const result = await getBillingPricing(TOKEN, { ...OPTIONS, fetchImpl });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://api.test/billing/pricing",
+      expect.objectContaining({ method: "GET", cache: "no-store" }),
+    );
+    expect(result).toEqual({ kind: "ok", data: PRICING });
+  });
+
+  it("sends the bearer token and returns no_session without a token", async () => {
+    const withToken = vi.fn().mockResolvedValue(jsonResponse(200, PRICING));
+    await getBillingPricing(TOKEN, { ...OPTIONS, fetchImpl: withToken });
+    const [, init] = withToken.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${TOKEN}`);
+
+    const noToken = vi.fn();
+    expect(await getBillingPricing(undefined, { ...OPTIONS, fetchImpl: noToken })).toEqual({
+      kind: "error",
+      message: "no_session",
+    });
+    expect(noToken).not.toHaveBeenCalled();
+  });
+
+  it("maps a thrown fetch to api_unreachable", async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error("down"));
+    expect(await getBillingPricing(TOKEN, { ...OPTIONS, fetchImpl })).toEqual({
+      kind: "error",
+      message: "api_unreachable",
+    });
+  });
+
+  it("maps a non-2xx to the error code", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(500, { error: "boom" }));
+    expect(await getBillingPricing(TOKEN, { ...OPTIONS, fetchImpl })).toEqual({
+      kind: "error",
+      message: "boom",
+    });
+  });
+
+  it("returns invalid_response when the payload is malformed", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { currency: "eur" }));
+    expect(await getBillingPricing(TOKEN, { ...OPTIONS, fetchImpl })).toEqual({
+      kind: "error",
+      message: "invalid_response",
+    });
+  });
+});
+
+const INVOICES: InvoiceDTO[] = [
+  {
+    id: "in_1",
+    amountDue: 999,
+    currency: "eur",
+    status: "paid",
+    createdAt: "2026-07-01T00:00:00.000Z",
+    hostedInvoiceUrl: "https://stripe.test/i/1",
+    receiptUrl: "https://stripe.test/r/1",
+    cardBrand: "visa",
+    cardLast4: "4242",
+  },
+];
+
+describe("getBillingInvoices", () => {
+  it("returns ok with the invoices on 200 (owner)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, INVOICES));
+
+    const result = await getBillingInvoices(TOKEN, { ...OPTIONS, fetchImpl });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://api.test/billing/invoices",
+      expect.objectContaining({ method: "GET", cache: "no-store" }),
+    );
+    expect(result).toEqual({ kind: "ok", invoices: INVOICES });
+  });
+
+  it("returns ok with an empty array (owner, no charges yet)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, []));
+    expect(await getBillingInvoices(TOKEN, { ...OPTIONS, fetchImpl })).toEqual({
+      kind: "ok",
+      invoices: [],
+    });
+  });
+
+  it("returns forbidden on a 403 (caller is not an owner) — never an error", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(403, { error: "unauthorized_quota_admin" }));
+    expect(await getBillingInvoices(TOKEN, { ...OPTIONS, fetchImpl })).toEqual({ kind: "forbidden" });
+  });
+
+  it("returns error on a transient 5xx", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(503, { error: "upstream" }));
+    expect(await getBillingInvoices(TOKEN, { ...OPTIONS, fetchImpl })).toEqual({
+      kind: "error",
+      message: "upstream",
+    });
+  });
+
+  it("maps a thrown fetch to api_unreachable", async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error("down"));
+    expect(await getBillingInvoices(TOKEN, { ...OPTIONS, fetchImpl })).toEqual({
+      kind: "error",
+      message: "api_unreachable",
+    });
+  });
+
+  it("returns no_session without calling fetch when no token is present", async () => {
+    const fetchImpl = vi.fn();
+    expect(await getBillingInvoices(undefined, { ...OPTIONS, fetchImpl })).toEqual({
+      kind: "error",
+      message: "no_session",
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("returns invalid_response when the payload is not an invoice array", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { not: "an array" }));
+    expect(await getBillingInvoices(TOKEN, { ...OPTIONS, fetchImpl })).toEqual({
+      kind: "error",
+      message: "invalid_response",
+    });
+  });
+});
+
+describe("startCheckout", () => {
+  it("POSTs the selected cycle and returns the Stripe url", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { url: "https://checkout.stripe.test/s" }));
+
+    const result = await startCheckout(TOKEN, "annual", undefined, { ...OPTIONS, fetchImpl });
+
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://api.test/billing/checkout");
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${TOKEN}`);
+    expect((init.headers as Record<string, string>)["content-type"]).toContain("application/json");
+    expect(JSON.parse(init.body as string)).toEqual({ cycle: "annual" });
+    expect(result).toEqual({ kind: "ok", url: "https://checkout.stripe.test/s" });
+  });
+
+  it("includes a promotion code in the body when provided", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { url: "https://checkout.stripe.test/s" }));
+    await startCheckout(TOKEN, "monthly", "SAVE10", { ...OPTIONS, fetchImpl });
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ cycle: "monthly", promotionCode: "SAVE10" });
+  });
+
+  it("maps a 422 invalid_promotion_code to a typed error", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(422, { error: "invalid_promotion_code" }));
+    expect(await startCheckout(TOKEN, "monthly", "BAD", { ...OPTIONS, fetchImpl })).toEqual({
+      kind: "error",
+      message: "invalid_promotion_code",
+    });
+  });
+
+  it("maps a thrown fetch to api_unreachable and no_session without a token", async () => {
+    const thrown = vi.fn().mockRejectedValue(new Error("down"));
+    expect(await startCheckout(TOKEN, "monthly", undefined, { ...OPTIONS, fetchImpl: thrown })).toEqual({
+      kind: "error",
+      message: "api_unreachable",
+    });
+    const noToken = vi.fn();
+    expect(await startCheckout(undefined, "monthly", undefined, { ...OPTIONS, fetchImpl: noToken })).toEqual({
+      kind: "error",
+      message: "no_session",
+    });
+    expect(noToken).not.toHaveBeenCalled();
+  });
+
+  it("returns invalid_response when the ok payload has no url", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { nope: true }));
+    expect(await startCheckout(TOKEN, "monthly", undefined, { ...OPTIONS, fetchImpl })).toEqual({
+      kind: "error",
+      message: "invalid_response",
+    });
+  });
+});
+
+describe("openPortal", () => {
+  it("POSTs and returns the portal url", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { url: "https://billing.stripe.test/p" }));
+
+    const result = await openPortal(TOKEN, { ...OPTIONS, fetchImpl });
+
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://api.test/billing/portal");
+    expect(init.method).toBe("POST");
+    expect(result).toEqual({ kind: "ok", url: "https://billing.stripe.test/p" });
+  });
+
+  it("maps a 403 to forbidden (non-owner)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(403, { error: "unauthorized_quota_admin" }));
+    expect(await openPortal(TOKEN, { ...OPTIONS, fetchImpl })).toEqual({ kind: "forbidden" });
+  });
+
+  it("maps a thrown fetch to api_unreachable and no_session without a token", async () => {
+    const thrown = vi.fn().mockRejectedValue(new Error("down"));
+    expect(await openPortal(TOKEN, { ...OPTIONS, fetchImpl: thrown })).toEqual({
+      kind: "error",
+      message: "api_unreachable",
+    });
+    const noToken = vi.fn();
+    expect(await openPortal(undefined, { ...OPTIONS, fetchImpl: noToken })).toEqual({
+      kind: "error",
+      message: "no_session",
+    });
+    expect(noToken).not.toHaveBeenCalled();
   });
 });

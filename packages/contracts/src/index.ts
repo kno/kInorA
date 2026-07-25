@@ -487,6 +487,37 @@ export interface InvoiceDTO {
   cardLast4?: string;
 }
 
+/**
+ * Config-driven display pricing for one billing cycle (11b-v1 Slice 5). Amounts
+ * are in the currency's MINOR unit (e.g. cents), sourced server-side from the
+ * Stripe pricing configuration — never hardcoded in the web bundle.
+ */
+export interface BillingCyclePriceDTO {
+  cycle: BillingCycle;
+  /** Amount attributed to a single month, in minor units (e.g. 999 = 9,99 €). */
+  amountPerMonth: number;
+  /**
+   * Amount charged per billing interval, in minor units. Equal to
+   * `amountPerMonth` for the monthly cycle; `amountPerMonth * 12` for annual.
+   */
+  amountPerInterval: number;
+}
+
+/**
+ * Config-driven billing pricing surfaced to the web billing screen (11b-v1
+ * Slice 5). The displayed prices and the save badge derive from this DTO, which
+ * the API builds from its Stripe pricing config — the web NEVER hardcodes
+ * amounts or the save percentage.
+ */
+export interface BillingPricingDTO {
+  /** ISO 4217 currency code, lowercase (e.g. "eur"). */
+  currency: string;
+  monthly: BillingCyclePriceDTO;
+  annual: BillingCyclePriceDTO;
+  /** Derived: round((1 - annualPerMonth / monthlyPerMonth) * 100). */
+  annualSavePercent: number;
+}
+
 export interface TenantQuotaUsageDTO {
   feature: BillingFeature;
   period: string;

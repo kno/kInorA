@@ -410,3 +410,85 @@ Same adapter file: (a) added a one-line comment on `receiptUrl: invoice.invoice_
 
 ### Status
 3/3 Slice-4 4R fixes complete (1 WARNING owner-only authz fix via RED→GREEN TDD + 2 SUGGESTION fixes). Gates green. NOT committed/pushed per instructions.
+
+---
+
+## Slice 5 (PR5) — Web Billing UI [Phase 5, tasks 5.1–5.4] — COMPLETE
+
+Strict TDD, RED → GREEN per unit. NOT committed/pushed/reviewed.
+
+### What was built
+Reproduces the Open Design `screens/web-billing.html` layout + tokens (dark oklch, lime accent `oklch(89% 0.2 128)`, Space Grotesk display + DM Sans body, 22px card radius — all already present as CSS vars in `apps/web/src/app/globals.css`, reused via a new CSS module) and wires the CTAs to the merged API.
+
+Components / files (web):
+- `apps/web/src/app/(app)/billing/BillingPageClient.tsx` — rebuilt into the OD layout: topbar (title + subtitle + tier/status/trial chips), main region (`role=region`, "Billing overview") = Plan hero (current-plan name/status + meta tiles Price/Renewal/Current period/Payment method) + Usage meters + Invoice history; aside (`<aside>` complementary, "Plan options") = Pro upgrade card (Monthly/Annual radiogroup toggle + config price + derived save badge + benefit list + CTA) + Payment-method card + Support card. Keeps the 11a loading/empty/error/offline states, focus/visibility tenant-switch refresh, and #176 refresh telemetry.
+- `apps/web/src/app/(app)/billing/BillingPageClient.module.css` — new; OD grid (`minmax(0,1.5fr)` main + `minmax(320px,.9fr)` aside), meter bars, cycle toggle, cards; collapses to one column ≤900px (the AppShell sidebar itself becomes a bottom tab bar at its own ≤768px breakpoint).
+- `apps/web/src/app/(app)/billing/billing-types.ts` — new; client-safe result types shared by the server-only fetchers, server actions, and the client component (extracted so the client component never imports the `server-only` fetch module — satisfies the repo UI→API guard).
+- `apps/web/src/app/(app)/billing/billing-client.ts` — added server-only `getBillingPricing`, `getBillingInvoices` (403 → `forbidden`, a non-error owner signal), `startCheckout`, `openPortal`. Result types moved to `billing-types.ts` and re-exported.
+- `apps/web/src/app/(app)/billing/actions.ts` — added `getBillingInvoicesAction`, `startCheckoutAction(cycle, promotionCode?)`, `openPortalAction()` server actions (session token stays server-side; excluded from coverage as thin wrappers per existing config).
+- `apps/web/src/app/(app)/billing/page.tsx` — server-fetches visibility + pricing + invoices in parallel and threads them to the client.
+- `packages/i18n/src/messages/{en,es}.json` — +49 billing keys (34 → 83): plan hero meta, usage meters incl. the metered `up to {limit}/mo` / `hasta {limit}/mes` copy, invoice history, Pro card (cycle labels, price suffix, `Save {percent}%`, benefits), payment-method + support cards, checkout/portal CTA action feedback, region labels. Reworded the pre-existing `billing.upgrade.description` in BOTH locales to remove "unlimited"/"ilimitadas" (metered reconciliation).
+
+### How prices reach the client (config-driven, never hardcoded)
+The merged `pricing-config.ts` only held Stripe Price *IDs* + a `annualSavePercent(monthly, annual)` helper — the display *amounts* were NOT exposed to the web. Added:
+- `apps/api/src/billing/pricing-config.ts` → `buildBillingPricing(env)`: env-driven display amounts (`STRIPE_PRICE_MONTHLY_AMOUNT` default 999, `STRIPE_PRICE_ANNUAL_AMOUNT` default 799, `STRIPE_PRICE_CURRENCY` default `eur`, minor units), with the save % DERIVED via the existing `annualSavePercent` (999/799 → 20%). Falls back to defaults on blank/non-numeric env.
+- `packages/contracts/src/index.ts` → `BillingPricingDTO` + `BillingCyclePriceDTO`.
+- `apps/api/src/routes/billing.ts` → new `GET /billing/pricing` (requireAuth, any active member; pure config read, no secret exposed).
+- Web `getBillingPricing` fetches it server-side; the Pro card formats `amountPerMonth/100` via next-intl `useFormatter` with the config currency. Toggling Monthly↔Annual swaps the displayed amount + shows "billed annually"; the save badge renders `annualSavePercent`. Nothing hardcoded in the web.
+
+### Owner-only UI gating approach
+No new API field needed — ownership is derived from the API's OWN authorization: the owner-only `GET /billing/invoices` returns **403 → `forbidden`** for a non-owner (Slice 4 4R FIX 1). The web maps `forbidden` to `isOwner = false` and hides BOTH the invoice-history section AND the payment-method "Manage / Add card" (portal) CTA; a definitive 403 is the only non-owner signal, so a transient 5xx/network error is treated as owner (invoice error card shown, CTA kept) — the UI never shows a broken owner-only action to a proven non-owner. On tenant switch (focus/visibilitychange) invoices are refreshed alongside visibility, so a switched-to non-owner tenant never keeps the previous tenant's invoices/actions on screen. `POST /billing/portal` also maps 403 → `forbidden`, and its error surfaces as a non-redirecting inline alert.
+
+### RED → GREEN evidence (exact)
+- **API pricing builder** — RED: added `buildBillingPricing` tests to `pricing-config.test.ts`; `pnpm --filter api test -- src/billing/__tests__/pricing-config.test.ts` → **4 failed** (`buildBillingPricing is not a function`). GREEN: implemented builder → all pass.
+- **API pricing route** — RED: added `GET /billing/pricing` tests to `billing-visibility.test.ts`; run → **2 failed** (404). GREEN: added the route → pass.
+- **Web fetchers** — RED: added `getBillingPricing`/`getBillingInvoices` (then `startCheckout`/`openPortal`) tests to `billing-client.test.ts`; run → **12 failed** (functions absent). GREEN: implemented → `billing-client.test.ts` **37 passed**.
+- **Web actions** — RED then GREEN: `actions.test.ts` **5 passed**.
+- **Web UI** — RED: rewrote `BillingPageClient.test.tsx` for the OD layout/meters/invoices/toggle/owner-gating/CTAs; run → failed (old component). GREEN: rebuilt `BillingPageClient.tsx` + CSS module + `page.tsx` → `BillingPageClient.test.tsx` **26 tests passing** (incl. metered-copy assertion that NO "unlimited"/"ilimitado" string renders).
+- **i18n** — updated the frozen billing key count 34 → 83; `pnpm --filter @kinora/i18n test` **30 passed** (full-catalog EN/ES parity + ICU-arg guard green).
+
+### Gate evidence (final, exact)
+- `pnpm type-check` (6 packages): **PASS**
+- `pnpm build` (deps-guard + ui-api-guard + architecture/depcruise + all tsc + web build): **PASS** (ui-api-guard initially FAILED because the client component imported a type from the `server-only` `billing-client`; fixed by extracting `billing-types.ts`).
+- `pnpm -r --if-present test:coverage`: **EXIT 0 / PASS** — contracts **58**, domain **255**, i18n **30**, api **1047 passed / 34 skipped** (up from 1041 — +6: 4 pricing-builder + 2 pricing-route), web **920 passed** (up from 881 — +39 billing tests). Web global function coverage **90.69%** (threshold 90; a first run hit 89.97% and was corrected by adding loading/connectivity/visibility-handler tests to reach the `BillingPageClient` functions).
+
+### Deviations from design
+- Added a small `GET /billing/pricing` endpoint (+ `BillingPricingDTO` + `buildBillingPricing`) rather than folding pricing into the visibility DTO — the design File-Changes table only listed the web slice generically; the endpoint is the least-coupling way to surface config-driven amounts without touching the existing visibility contract/tests. Authorized by the task ("surface via the visibility endpoint or a small pricing endpoint").
+- Ownership is derived from the invoices 403 rather than a new `viewerIsOwner` field on the visibility DTO — keeps the web's notion of "owner" identical to the API's own gate (no drift), and avoids churn to the visibility use case/port/adapter/tests.
+
+### Runtime smoke — deferred (local podman DOWN)
+Local podman is down, so the real-stack `/billing` runtime smoke (`pnpm --filter api dev` + `pnpm --filter web dev`) could NOT be executed locally. Covered instead by the web unit/component suite (layout, meters, invoices ok/empty/error/forbidden, Monthly/Annual toggle + price/save update, checkout + portal CTA redirect/error, tenant-switch refresh, loading/empty/error/offline, a11y roles/labels, EN/ES parity). Real-stack `/billing` smoke is DEFERRED to CI / a podman-up environment (see verify-report.md).
+
+### Status
+Phase 5 tasks 5.1–5.4 COMPLETE. All gates green (type-check, build, full test:coverage EXIT 0). NOT committed/pushed/reviewed.
+
+---
+
+## Slice 5 — 4R Follow-Up Fixes (before merge)
+
+4R review of Slice 5 passed (risk/resilience/reliability clean). 2 readability/UI-correctness fixes applied. NOT committed/pushed.
+
+### FIX 1 (WARNING — PlanHero meta tiles showed wrong/duplicate data)
+`apps/web/src/app/(app)/billing/BillingPageClient.tsx` (`PlanHero`): the "Price" tile (`metaPrice`) and the "Current period" tile (`metaPeriod`) both rendered `cycleLabel` ("Monthly"/"Annual") for Pro users — two differently-labeled tiles showed identical content, and neither showed what its label promised.
+
+**Fix**:
+- **Price** tile now binds to the actual formatted price for the tenant's current cycle — `format.number(pricing[billing.billingCycle].amountPerMonth / 100, { style: "currency", currency: pricing.currency })`, the SAME formatting `ProCard` already uses. Free tier shows `billing.plan.priceFree`; Pro without a resolvable cycle/price shows the placeholder (`—`), never the cycle word.
+- **Current period** tile now binds to the real current billing period key (e.g. `"2026-07"`) sourced from the SAME `tenantUsage`/`memberUsage` row the Usage Meters section below already reports on (`tenantUsage[0]?.period ?? memberUsage[0]?.period`) — passed down as a new `period` prop. This is genuinely distinct data from both the cycle label and the "Renewal" tile (which still shows the `currentPeriodEnd` DATE). While trialing with no usage rows yet, it falls back to `billing.plan.periodTrialEndsOn` ("Trial ends {date}"); otherwise a placeholder.
+- Added 1 new i18n key (`billing.plan.periodTrialEndsOn`, EN+ES) — billing namespace count 83 → 84.
+
+**RED → GREEN (exact)**: added a test in `BillingPageClient.test.tsx` asserting the Price tile matches `/9[.,]99/` (the formatted price) and NOT `/^Monthly$|^Annual$/`, the Current-period tile equals the tenant's usage `period` ("2026-07") and NOT the cycle word, and the two tiles' text is never identical. Verified RED by temporarily reintroducing the exact original bug (both tiles bound to `cycleLabel`) via a scripted revert — ran `vitest run BillingPageClient.test.tsx -t "Price tile"` → **1 failed**: `AssertionError: expected 'Monthly' to match /9[.,]99/`. Restored the fix, re-ran the same command → **1 passed**. Also added a companion test for the trial-end placeholder path (no usage rows, no `currentPeriodEnd`) — asserts `"Trial ends 2026-07-28"`.
+
+### FIX 2 (SUGGESTION — dead support link)
+`apps/web/src/app/(app)/billing/BillingPageClient.tsx` (`SupportCard`), `href="/help/billing"`: no such route exists in `apps/web` (a click would 404). No real support/FAQ destination exists anywhere in the repo to link to instead.
+
+**Fix (least-surprising option chosen)**: rendered the CTA as a non-navigating `<span role="link" aria-disabled="true">` (same visible copy/style, no `href`) instead of shipping a link that 404s, with an inline comment explaining the placeholder and a `TODO(11b-followup): point at the real billing FAQ/support URL` marker. Existing `getByRole("link", { name: /billing FAQ/i })` test still passes (the explicit `role="link"` keeps the accessible name/role stable) — no test change needed for this fix beyond re-verifying it stays green.
+
+### Gate evidence (post-fix, exact)
+- Focused: `pnpm --filter web test -- "src/app/(app)/billing"` → **922 passed** (up from 920 — the 2 new meta-tile tests).
+- `pnpm --filter @kinora/i18n test` → **30 passed** (billing key count 83→84, full EN/ES parity + ICU-arg guard green).
+- `pnpm type-check` (6 packages): **PASS**.
+- `pnpm build` (deps-guard + ui-api-guard + architecture/depcruise + all tsc + web build): **PASS**.
+- `pnpm -r --if-present test:coverage`: **EXIT 0 / PASS** — contracts 58, domain 255, i18n 30, api 1047 passed/34 skipped, web **922 passed**, 0 failed. Web global **function coverage 90.69%** (unchanged, still ≥90 threshold).
+
+### Status
+Both Slice 5 4R fixes complete (1 WARNING via RED→GREEN TDD + 1 SUGGESTION). Gates green, coverage holds ≥90. NOT committed/pushed/reviewed.

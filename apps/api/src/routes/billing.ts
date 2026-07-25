@@ -12,8 +12,10 @@ import type {
   UserId,
 } from "@kinora/contracts";
 import { BILLING_FEATURES } from "@kinora/contracts";
+import type { BillingPricingDTO } from "@kinora/contracts";
 import { requireAuth } from "../auth/plugin.js";
 import { PERIOD_PATTERN, currentBillingPeriod } from "../billing/plan-limits.js";
+import { buildBillingPricing } from "../billing/pricing-config.js";
 import type {
   AdminMembershipView,
   GetTenantUsageInput,
@@ -314,6 +316,20 @@ export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
       }
 
       return reply.code(200).send(result.visibility satisfies BillingVisibilityDTO);
+    },
+  );
+
+  // GET /billing/pricing
+  // Config-driven display pricing for the web billing screen (11b Slice 5).
+  // Any active member may read it (same gate as GET /billing/visibility). The
+  // amounts + currency + derived save % come from the Stripe pricing config
+  // (env-backed) — so the web renders prices/save badge without ever hardcoding
+  // them. No secret is exposed: only display amounts and the currency.
+  fastify.get(
+    "/billing/pricing",
+    { preHandler: requireAuth() },
+    async (_request: FastifyRequest, reply: FastifyReply) => {
+      return reply.code(200).send(buildBillingPricing() satisfies BillingPricingDTO);
     },
   );
 
