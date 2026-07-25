@@ -419,6 +419,7 @@ export type BillingDenialReason =
   | "billing_state_unavailable"
   | "premium_required"
   | "trial_expired"
+  | "subscription_ended"
   | "tenant_quota_exhausted"
   | "member_allocation_exhausted"
   | "allocation_out_of_bounds"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
+import Link from "next/link";
 import type {
   BillingCycle,
   BillingPricingDTO,
@@ -42,6 +43,13 @@ export function BillingPageClient({
   const [data, setData] = useState<BillingVisibilityDTO | null>(initialData);
   const [error, setError] = useState<string | null>(initialError);
   const [invoices, setInvoices] = useState<GetBillingInvoicesResult>(initialInvoices);
+  // Ownership tracked as state, updated ONLY on a definitive signal (#197). A
+  // definitive positive (`ok`) grants owner-only UI; a definitive `forbidden`
+  // revokes it; a transient `error` leaves the last-known value untouched so a
+  // real non-owner is never flipped into the owner UI, and an established owner
+  // degrades gracefully instead of flashing to non-owner. Initial unknown
+  // (`error`) is fail-closed: no owner-only UI until a positive signal arrives.
+  const [isOwner, setIsOwner] = useState<boolean>(initialInvoices.kind === "ok");
   const [loading, setLoading] = useState(false);
   const [online, setOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine,
@@ -93,6 +101,10 @@ export function BillingPageClient({
         setData(visibility.data);
         setError(null);
         setInvoices(invoiceResult);
+        // Only a definitive invoice signal changes ownership; a transient
+        // `error` preserves the last-known value (#197).
+        if (invoiceResult.kind === "ok") setIsOwner(true);
+        else if (invoiceResult.kind === "forbidden") setIsOwner(false);
       } else {
         console.error({ event: "billing_visibility_refresh_failed", kind: visibility.message });
         setError(visibility.message);
@@ -157,11 +169,6 @@ export function BillingPageClient({
     );
   }
 
-  // A definitive 403 (forbidden) proves the caller is NOT an owner. Any other
-  // outcome (ok, or a transient error) is treated as owner, so owner-only UI is
-  // hidden ONLY when we are certain the member lacks ownership.
-  const isOwner = invoices.kind !== "forbidden";
-
   return (
     <BillingScreen
       data={data}
@@ -185,6 +192,15 @@ function BillingScreen({
 }) {
   const t = useTranslations();
   const { billing, tenantUsage, memberUsage, denialReason } = data;
+
+  // "Access ended → upgrade" surface (#198): only a LAPSED premium entitlement
+  // (an expired trial or a canceled/ended paid subscription) shows the banner.
+  // A plain Free tenant (`premium_required`) or an active plan shows nothing —
+  // the Pro card already carries the upgrade path for those.
+  const accessEndedReason =
+    denialReason === "trial_expired" || denialReason === "subscription_ended"
+      ? denialReason
+      : null;
 
   const isActiveUnexpiredTrial =
     billing.status === "trialing" &&
@@ -224,6 +240,7 @@ function BillingScreen({
 
       <div className={styles.grid}>
         <div role="region" aria-label={t("billing.regions.main")} className={styles.mainCol}>
+          {accessEndedReason ? <AccessEndedBanner reason={accessEndedReason} /> : null}
           <PlanHero
             billing={billing}
             pricing={pricing}
@@ -240,6 +257,41 @@ function BillingScreen({
         </aside>
       </div>
     </div>
+  );
+}
+
+/**
+ * Access-ended upgrade banner (#198). Rendered only when a previously-premium
+ * entitlement lapsed. The copy is reason-specific — a lapsed trial vs a
+ * canceled paid subscription must NOT show the same "trial ended" message
+ * (#196 keys the denial reason so these two states are distinguishable). The
+ * CTA anchors to the in-page Pro card, which carries the real checkout flow.
+ */
+function AccessEndedBanner({ reason }: { reason: "trial_expired" | "subscription_ended" }) {
+  const t = useTranslations();
+  const title =
+    reason === "subscription_ended"
+      ? t("billing.subscription.endedTitle")
+      : t("billing.trial.expiredTitle");
+  const description =
+    reason === "subscription_ended"
+      ? t("billing.subscription.endedDescription")
+      : t("billing.trial.expiredDescription");
+
+  return (
+    <section
+      className={`${styles.card} ${styles.accessEnded}`}
+      data-testid="billing-access-ended"
+      role="region"
+      aria-label={title}
+    >
+      <h2 className={styles.cardTitle}>{title}</h2>
+      <p className="kin-text kin-muted">{description}</p>
+      <p className="kin-text">{t("billing.upgrade.description")}</p>
+      <a href="#pro-card" className="kin-btn kin-btn--primary">
+        {t("billing.upgrade.cta")}
+      </a>
+    </section>
   );
 }
 
@@ -512,7 +564,7 @@ function ProCard({
   const priceForCycle = pricing ? pricing[cycle] : null;
 
   return (
-    <section className={`${styles.card} ${styles.proCard}`}>
+    <section id="pro-card" className={`${styles.card} ${styles.proCard}`}>
       <span className={styles.eyebrow}>{t("billing.pro.eyebrow")}</span>
       <h3 className={styles.cardTitle}>{t("billing.pro.title")}</h3>
 
@@ -648,17 +700,10 @@ function SupportCard() {
     <section className={styles.card}>
       <h3 className={styles.cardTitle}>{t("billing.support.title")}</h3>
       <p className="kin-text kin-muted">{t("billing.support.description")}</p>
-      {/*
-       * FIX 2 (4R review, SUGGESTION): no `/help/billing` route exists in
-       * apps/web yet — linking there would 404 on click. Until a real support
-       * destination exists, render this as a NON-navigating disabled affordance
-       * (aria-disabled, no href) rather than ship a dead link. Swap back to a
-       * real <a href> once a billing FAQ/support destination is added.
-       * TODO(11b-followup): point at the real billing FAQ/support URL.
-       */}
-      <span className={styles.supportLink} aria-disabled="true" role="link">
+      {/* Real, navigable link to the in-app billing FAQ (#199). */}
+      <Link className={styles.supportLink} href="/help/billing">
         {t("billing.support.faqCta")}
-      </span>
+      </Link>
     </section>
   );
 }
