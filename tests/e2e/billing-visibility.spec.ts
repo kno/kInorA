@@ -458,9 +458,11 @@ test.describe("Billing real-stack QA (#200)", () => {
     const upgrade = page.getByRole("button", { name: "Upgrade to Pro" });
     await expect(upgrade).toBeEnabled();
     await upgrade.click();
-    await expect(page.getByRole("alert")).toContainText(
-      "We couldn't start checkout. Please try again.",
-    );
+    // Scope to the specific copy: a bare getByRole("alert") also matches Next's
+    // empty __next-route-announcer__ live region (strict-mode violation).
+    await expect(
+      page.getByText("We couldn't start checkout. Please try again."),
+    ).toBeVisible();
     // Still on /billing — no external redirect was followed.
     expect(new URL(page.url()).pathname).toBe("/billing");
 
