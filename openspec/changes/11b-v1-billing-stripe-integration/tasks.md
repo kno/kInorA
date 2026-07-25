@@ -56,9 +56,9 @@ Every slice is on the payments hot path → full 4R review each. Stripe SDK call
 
 ## Phase 4: Slice 4 — Customer Portal + Invoices [Requirements: Stripe Customer Portal, Invoice History, Payment Security]
 
-- [ ] 4.1 RED: Add failing `create-portal-session.test.ts` (portal session from tenant `stripe_customer_id` resolved via `authContext`; tenant-scoped; no cross-tenant) and `list-invoices.test.ts` (live Stripe list mapped to privacy-safe `InvoiceDTO` with no PAN; empty state; tenant-scoped).
-- [ ] 4.2 GREEN: Create pure `apps/api/src/billing/create-portal-session.ts` + `list-invoices.ts` using the `StripeGateway` port; add `createPortalSession`/`listInvoices` to the adapter; wire `POST /billing/portal` + `GET /billing/invoices` routes (authenticated) in `billing.ts` + `app.ts`.
-- [ ] 4.3 TRIANGLE: Prove `InvoiceDTO` mapping strips card PAN (only `cardBrand`/`cardLast4` allowed), empty-invoice state renders no error, and portal/invoice customer identity is never taken from client input.
+- [x] 4.1 RED: Add failing `create-portal-session.test.ts` (portal session from tenant `stripe_customer_id` resolved via `authContext`; tenant-scoped; no cross-tenant) and `list-invoices.test.ts` (live Stripe list mapped to privacy-safe `InvoiceDTO` with no PAN; empty state; tenant-scoped).
+- [x] 4.2 GREEN: Create pure `apps/api/src/billing/create-portal-session.ts` + `list-invoices.ts` using the `StripeGateway` port; add `createPortalSession`/`listInvoices` to the adapter; wire `POST /billing/portal` + `GET /billing/invoices` routes (authenticated) in `billing.ts` + `app.ts`.
+- [x] 4.3 TRIANGLE: Prove `InvoiceDTO` mapping strips card PAN (only `cardBrand`/`cardLast4` allowed), empty-invoice state renders no error, and portal/invoice customer identity is never taken from client input.
 
 ## Phase 5: Slice 5 — Web Billing UI [Requirements: Web Billing Screen, Config-Driven Pricing]
 

@@ -338,3 +338,75 @@ None blocking. Note for 4R: checkout returns `200 { url }` (matches `CheckoutSes
 
 ### Status
 3/3 Slice-3 4R fixes complete. Gates green. NOT committed/pushed per instructions.
+
+---
+
+## Slice 4 (PR4) — Customer Portal + Invoices [Phase 4: 4.1–4.3]
+
+Strict TDD (RED → GREEN → TRIANGLE). NOT committed/pushed/reviewed. Branch `sdd/11b-slice4-portal-invoices` off main with Slices 1+2+3 merged.
+
+### What was built
+- **Ports (pure, SDK-free)** — `apps/api/src/billing/stripe-gateway.ts`: added `PortalSession`, `NoStripeCustomerError`, the SDK-free `StripeInvoiceView` projection, and segregated `PortalGateway` (`createPortalSession(customerId)`) + `InvoiceGateway` (`listInvoices(customerId): StripeInvoiceView[]`). Interface-segregated so the Slice 2/3 fakes keep satisfying their narrower contracts.
+- **Pure use cases** — `apps/api/src/billing/create-portal-session.ts` (`CreatePortalSession` + the `BillingCustomerReaderPort` interface) and `apps/api/src/billing/list-invoices.ts` (`ListInvoices` + the pure allowlist mapper `toInvoiceDTO`). Both resolve the tenant's `stripe_customer_id` SERVER-SIDE via `BillingCustomerReaderPort` and forward only the resolved id to the gateway.
+- **SDK adapter (single stripe importer)** — `apps/api/src/db/repositories/stripe-gateway.ts`: `StripeApiGateway` now also implements `PortalGateway, InvoiceGateway` (`billingPortal.sessions.create` with `return_url`, `invoices.list` with `expand:['data.charge']` mapped to `StripeInvoiceView` via defensive `readCardDisplay` that reads ONLY brand + last4). Added fail-closed `UnconfiguredPortalInvoiceGateway`. Reuses the Slice-3 bounded client (`timeout: 10_000, maxNetworkRetries: 1`).
+- **DB reader adapter** — `apps/api/src/db/repositories/billing-customer.ts`: `BillingCustomerRepository.findStripeCustomerId(tenantId)` reads `tenant_billing_states.stripe_customer_id` keyed by the authContext tenant (drizzle, infra layer). Returns null for no-row / null-customer.
+- **Routes** — `apps/api/src/routes/billing.ts`: `POST /billing/portal` → `200 { url }` (PortalSessionResponse); `NoStripeCustomerError → 409 { error: "no_stripe_customer" }`; `GET /billing/invoices` → `200 InvoiceDTO[]`. Tenant read ONLY from `authContext`; any customerId/tenantId in body/query ignored.
+- **Wiring** — `apps/api/src/app.ts`: resolves portal/invoice gateways (real SDK adapter, else `UnconfiguredPortalInvoiceGateway`) + `BillingCustomerRepository`, constructs the two use cases, passes them into `billingRoutes`. Added `portalGateway`/`invoiceGateway`/`billingCustomerReader` to `BuildAppOptions` for test injection.
+
+### InvoiceDTO shape (confirmed — NO PAN)
+`{ id, amountDue, currency, status, createdAt (ISO), hostedInvoiceUrl|null, receiptUrl|null, cardBrand?, cardLast4? }`. Two-layer privacy guard: (1) the port returns the SDK-free `StripeInvoiceView` which has NO PAN/CVC/email field — a PAN cannot cross the port by type; (2) `toInvoiceDTO` is an explicit allowlist pick (never a spread), proven by a rogue-input test that injects `cardNumber`/`pan`/`cvc`/`customerEmail` and asserts every DTO key is in the sanctioned set and no PAN/CVC/email substring survives serialization. Only `cardBrand`/`cardLast4` are exposed, and only when present.
+
+### No-customer-yet handling (never a 500/crash)
+- `GET /billing/invoices` for a tenant with no `stripe_customer_id` → `[]` (empty state), gateway never called.
+- `POST /billing/portal` for the same tenant → clean `409 { error: "no_stripe_customer" }` (a portal cannot exist without a Stripe customer), NOT a 500.
+
+### Cross-tenant / spoofing (payments hot path)
+Tenant/customer identity is resolved ONLY from `authContext`-keyed DB lookup. Route tests prove a spoofed `customerId`/`tenantId` in the portal body and a spoofed `customerId` in the invoices query are ignored (gateway invoked with the server-resolved customer, never the spoofed value). Real-Postgres integration test proves the DB read is tenant-scoped (tenant B never sees tenant A's customer; unknown tenant → null).
+
+### Tests added
+- `apps/api/src/billing/__tests__/create-portal-session.test.ts` (3)
+- `apps/api/src/billing/__tests__/list-invoices.test.ts` (6: 3 `toInvoiceDTO` incl. PAN-strip + 3 `ListInvoices`)
+- `apps/api/src/routes/__tests__/billing-portal.test.ts` (9: portal 4 + invoices 5)
+- `apps/api/src/db/repositories/__tests__/billing-customer.integration.test.ts` (real-PG: 3 real tenant-scoped tests + 1 skip-placeholder). Wired into the CI `billing-integration` job; assert-executed guard MIN bumped 31 → 34 (DB-present now 34 passed / 6 skipped).
+- Updated existing `billing.test.ts` + `billing-visibility.test.ts` registrations for the two new required `billingRoutes` options.
+
+### RED → GREEN evidence (exact)
+- RED: focused run failed 3/3 new files with `Cannot find module ../create-portal-session.js` / `../list-invoices.js` (impl absent) while the other 76 files stayed green (1014 passed / 31 skipped).
+- GREEN: `pnpm --filter api exec vitest run` (full api suite) → **1032 passed / 34 skipped, 0 failed** (79→80 files). The 3 focused Slice-4 files: `create-portal-session` 3, `list-invoices` 9 (the file also picks up co-located sibling suites), `billing-portal` 9 — all pass.
+
+### Full hermetic gate results (exact)
+- `pnpm type-check` (6 packages): **PASS**
+- `pnpm build` (deps-guard + ui-api-guard + architecture/depcruise + all tsc + web build): **PASS** (stripe import stays confined to the single infra adapter — architecture guard green)
+- `pnpm -r --if-present test:coverage`: **PASS** — contracts **58**, domain **255**, i18n **30**, api **1032 passed / 34 skipped**, web **881** — **0 failed**.
+- No live Stripe key used anywhere; all Stripe interaction via `FakeStripeGateway`/fakes. Real-PG integration test skipped locally (podman down) — relies on CI, written correctly (no faked real-PG result).
+
+### Status
+Phase 4 (4.1–4.3) COMPLETE. Gates green. NOT committed/pushed/reviewed per instructions. Ready for full 4R review (payments hot path).
+
+---
+
+## Slice 4 — 4R Follow-Up Fixes
+
+4R review of Slice 4 passed (resilience clean); 1 authz WARNING + 3 low findings. Strict TDD (RED first for the authz change). NOT committed/pushed.
+
+### FIX 1 (WARNING, authz/privacy — portal + invoices must be OWNER-ONLY)
+`apps/api/src/routes/billing.ts` (`POST /billing/portal`, `GET /billing/invoices`): both were gated only by `requireAuth()` (any ACTIVE member). Wrong for two reasons: (a) the Customer Portal lets the caller change the payment method AND CANCEL THE SUBSCRIPTION — a non-owner member must not cancel the tenant's plan; (b) invoices expose `hostedInvoiceUrl`/`receiptUrl` (long-lived Stripe links whose PDFs carry the tenant's billing name/address — owner PII).
+
+**Fix**: gated both endpoints owner-only, reusing the EXACT SAME owner check the quota-admin use cases use. Exported `isActiveOwner` from `apps/api/src/billing/quota-admin.ts` (previously module-private). Added a `requireBillingOwner(request, reply, route)` guard in `billing.ts` that resolves the actor's membership via a new `checkBillingOwnership: { loadActorMembership(scope) }` route option (the exact same shape as `QuotaAdminPort.loadActorMembership`) and denies a non-owner with `403 { error: "unauthorized_quota_admin" }` — same denial shape/log convention (`logDeniedQuotaAdmin`, #175) as the existing quota-admin endpoints. Wired in `app.ts` by passing the SAME `billingAdminRepo` instance already used for `setMemberAllocation`/`getTenantUsage` — one owner check, one repository, zero duplicated authorization logic. `GET /billing/visibility` was NOT touched (stays any-active-member, count/tier-only).
+
+**RED → GREEN (exact)**: RED — added 4 new tests to `billing-portal.test.ts` (non-owner → 403 + owner → 200 regression, for both portal and invoices) BEFORE the route change; ran `vitest run src/routes/__tests__/billing-portal.test.ts` → **4 failed / 8 passed** (the 2 non-owner tests got 200 instead of 403; the 2 owner-called-with-ownershipSpy assertions failed since the port wasn't wired yet — confirming the guard did not exist). GREEN — after wiring `requireBillingOwner` + `checkBillingOwnership` in `billing.ts`/`app.ts` and updating the 2 other test files' registrations (`billing.test.ts`, `billing-visibility.test.ts`) to supply the new required option: `billing-portal.test.ts` → **12 passed / 0 failed**.
+
+### FIX 2 (SUGGESTION, reliability — untested infra mapper)
+`apps/api/src/db/repositories/stripe-gateway.ts` `toStripeInvoiceView`/`readCardDisplay`: this layer null-coalesces partial/malformed Stripe invoices and had NO test (every invoice test used already-shaped `StripeInvoiceView` fixtures). Added `apps/api/src/db/repositories/__tests__/stripe-gateway.test.ts` — injects a FAKE Stripe client via the adapter's existing `stripeClient?` constructor param (no live Stripe key) and feeds: an invoice with NO `charge` field at all; a maximally-empty invoice (`{}`, missing id/amount_due/currency/status/created/urls); a charge present but with NO `payment_method_details.card`; plus one fully-shaped regression case and a call-shape assertion (`customer`/`limit` passed correctly). All assert a fully-formed `StripeInvoiceView` with null card fields where appropriate and no throw. **5 new tests, all passing** — this exercises the `?? 0` / `?? null` / optional-chaining that only manual inspection covered before.
+
+### FIX 3 (SUGGESTION, readability)
+Same adapter file: (a) added a one-line comment on `receiptUrl: invoice.invoice_pdf ?? null` noting it deliberately maps to the invoice PDF link, not the charge-level `receipt_url`; (b) extracted the magic `limit: 24` into a named `INVOICE_LIST_LIMIT = 24` constant with a short comment (no pagination in this slice / matches the web page size).
+
+### Gate evidence (post-fix, exact)
+- Focused: `pnpm --filter api exec vitest run src/db/repositories/__tests__/stripe-gateway.test.ts src/routes/__tests__/billing-portal.test.ts src/routes/__tests__/billing.test.ts src/routes/__tests__/billing-visibility.test.ts src/billing/__tests__/create-portal-session.test.ts src/billing/__tests__/list-invoices.test.ts` → **64 passed / 0 failed** (6 files).
+- `pnpm type-check` (6 packages): **PASS**
+- `pnpm build` (deps-guard + ui-api-guard + architecture/depcruise + all tsc + web build): **PASS**
+- `pnpm -r --if-present test:coverage`: **PASS** — contracts 58, domain 255, i18n 30, api **1041 passed / 34 skipped** (up from 1032 — the 9 new tests: 4 authz + 5 mapper), web 881 — **0 failed**.
+
+### Status
+3/3 Slice-4 4R fixes complete (1 WARNING owner-only authz fix via RED→GREEN TDD + 2 SUGGESTION fixes). Gates green. NOT committed/pushed per instructions.

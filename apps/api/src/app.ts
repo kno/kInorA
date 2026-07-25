@@ -64,12 +64,24 @@ import { SetMemberAllocation, GetTenantUsage } from "./billing/quota-admin.js";
 import { GetBillingVisibility } from "./billing/billing-visibility.js";
 import { billingRoutes, stripeWebhookRoutes } from "./routes/billing.js";
 import { ProcessStripeWebhook } from "./billing/process-webhook.js";
-import type { CheckoutGateway, StripeGateway } from "./billing/stripe-gateway.js";
+import type {
+  CheckoutGateway,
+  InvoiceGateway,
+  PortalGateway,
+  StripeGateway,
+} from "./billing/stripe-gateway.js";
 import { CreateCheckout, type CheckoutPriceConfig } from "./billing/create-checkout.js";
+import {
+  CreatePortalSession,
+  type BillingCustomerReaderPort,
+} from "./billing/create-portal-session.js";
+import { ListInvoices } from "./billing/list-invoices.js";
 import { StripeEventStoreRepository } from "./db/repositories/stripe-events.js";
+import { BillingCustomerRepository } from "./db/repositories/billing-customer.js";
 import {
   UnconfiguredStripeGateway,
   UnconfiguredCheckoutGateway,
+  UnconfiguredPortalInvoiceGateway,
   createStripeGatewayFromEnv,
 } from "./db/repositories/stripe-gateway.js";
 
@@ -102,6 +114,23 @@ export interface BuildAppOptions {
   checkoutGateway?: CheckoutGateway;
   /** Injectable config-driven Stripe Price ids for tests (11b Slice 3). */
   checkoutPricing?: CheckoutPriceConfig;
+  /**
+   * Injectable Customer Portal gateway for tests (11b Slice 4). Defaults to the
+   * same real SDK-backed adapter as {@link stripeGateway}; when Stripe env is
+   * unset, portal fails closed (→ 5xx). Tests pass a fake.
+   */
+  portalGateway?: PortalGateway;
+  /**
+   * Injectable invoice-listing gateway for tests (11b Slice 4). Defaults to the
+   * same real SDK-backed adapter as {@link stripeGateway}; when Stripe env is
+   * unset, invoice listing fails closed for a subscribed customer (→ 5xx).
+   */
+  invoiceGateway?: InvoiceGateway;
+  /**
+   * Injectable reader that resolves a tenant's Stripe customer id from OUR DB
+   * (11b Slice 4). Defaults to {@link BillingCustomerRepository}. Tests pass a fake.
+   */
+  billingCustomerReader?: BillingCustomerReaderPort;
 }
 
 /**
@@ -130,6 +159,9 @@ export async function buildApp(
   let stripeGateway: StripeGateway | undefined;
   let checkoutGateway: CheckoutGateway | undefined;
   let checkoutPricing: CheckoutPriceConfig | undefined;
+  let portalGateway: PortalGateway | undefined;
+  let invoiceGateway: InvoiceGateway | undefined;
+  let billingCustomerReader: BillingCustomerReaderPort | undefined;
 
   // Discriminate between the options-bag form (BuildAppOptions) and the legacy
   // 2-argument form (Database, SocialAuthService?).
@@ -156,6 +188,9 @@ export async function buildApp(
     stripeGateway = opts.stripeGateway;
     checkoutGateway = opts.checkoutGateway;
     checkoutPricing = opts.checkoutPricing;
+    portalGateway = opts.portalGateway;
+    invoiceGateway = opts.invoiceGateway;
+    billingCustomerReader = opts.billingCustomerReader;
   } else {
     // Legacy 2-argument form: (db?, socialAuthService?)
     database = (dbOrOptions as Database | undefined) ?? createDbClient().db;
@@ -365,11 +400,36 @@ export async function buildApp(
     checkoutPricing ?? resolveCheckoutPricing();
   const createCheckout = new CreateCheckout(resolvedCheckoutGateway, resolvedCheckoutPricing);
 
+  // 11b Slice 4 — Customer Portal + invoices. The tenant's Stripe customer id is
+  // resolved SERVER-SIDE from OUR DB (BillingCustomerRepository) keyed by the
+  // authContext tenant, never from client input. The same real SDK adapter
+  // implements the portal + invoice ports; when Stripe env is unset it is null →
+  // portal/invoice fail closed via UnconfiguredPortalInvoiceGateway (the invoice
+  // use case still returns [] for a never-subscribed tenant before reaching it).
+  const resolvedPortalGateway: PortalGateway =
+    portalGateway ?? realStripeGateway ?? new UnconfiguredPortalInvoiceGateway();
+  const resolvedInvoiceGateway: InvoiceGateway =
+    invoiceGateway ?? realStripeGateway ?? new UnconfiguredPortalInvoiceGateway();
+  const resolvedBillingCustomerReader: BillingCustomerReaderPort =
+    billingCustomerReader ?? new BillingCustomerRepository(database);
+  const createPortalSession = new CreatePortalSession(
+    resolvedBillingCustomerReader,
+    resolvedPortalGateway,
+  );
+  const listInvoices = new ListInvoices(resolvedBillingCustomerReader, resolvedInvoiceGateway);
+
   await app.register(billingRoutes, {
     setMemberAllocation: new SetMemberAllocation(billingAdminRepo),
     getTenantUsage: new GetTenantUsage(billingAdminRepo),
     getBillingVisibility: new GetBillingVisibility(billingVisibilityRepo),
     createCheckout,
+    createPortalSession,
+    listInvoices,
+    // 11b Slice 4, 4R FIX 1 — Customer Portal + invoices are owner-only. Reuses
+    // the SAME billingAdminRepo instance (and its loadActorMembership) already
+    // wired above for setMemberAllocation/getTenantUsage — one owner check,
+    // one repository, no duplicated authorization logic.
+    checkBillingOwnership: billingAdminRepo,
   });
 
   // 11b Slice 2 — Stripe webhook (POST /billing/webhook). Registered as its own
