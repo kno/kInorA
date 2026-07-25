@@ -209,6 +209,132 @@ describe("AssistantPane — SSE consumer", () => {
   });
 });
 
+describe("AssistantPane — Datos extraídos panel field edits", () => {
+  it("editField persists a goal edit via persistSpec and updates onSpecChange", async () => {
+    const onSpecChange = vi.fn();
+    const persistSpec = vi.fn().mockResolvedValue(undefined);
+    setup({ onSpecChange, persistSpec, spec: { location: "gym" } });
+
+    fireEvent.change(screen.getByLabelText(/edit goal/i), { target: { value: "hypertrophy" } });
+
+    expect(onSpecChange).toHaveBeenCalledWith({ location: "gym", goal: "hypertrophy" });
+    await waitFor(() => {
+      expect(persistSpec).toHaveBeenCalledWith({ location: "gym", goal: "hypertrophy" });
+    });
+  });
+
+  it("editField clears the goal back to unset when the blank option is chosen", () => {
+    const onSpecChange = vi.fn();
+    setup({ onSpecChange, spec: { goal: "strength" } });
+
+    fireEvent.change(screen.getByLabelText(/edit goal/i), { target: { value: "" } });
+
+    expect(onSpecChange).toHaveBeenCalledWith({ goal: undefined });
+  });
+
+  it("editField persists a location edit", async () => {
+    const persistSpec = vi.fn().mockResolvedValue(undefined);
+    setup({ persistSpec, spec: {} });
+
+    fireEvent.change(screen.getByLabelText(/edit location/i), { target: { value: "outdoor" } });
+
+    await waitFor(() => {
+      expect(persistSpec).toHaveBeenCalledWith({ location: "outdoor" });
+    });
+  });
+
+  it("editField persists a daysPerWeek edit, mapping a blank value to undefined", async () => {
+    const onSpecChange = vi.fn();
+    setup({ onSpecChange, spec: { daysPerWeek: 3 } });
+
+    const daysInput = screen.getByLabelText(/edit days/i);
+    fireEvent.change(daysInput, { target: { value: "5" } });
+    expect(onSpecChange).toHaveBeenCalledWith({ daysPerWeek: 5 });
+
+    fireEvent.change(daysInput, { target: { value: "" } });
+    expect(onSpecChange).toHaveBeenCalledWith({ daysPerWeek: undefined });
+  });
+
+  it("editField persists a sessionDurationMinutes edit, mapping a blank value to undefined", async () => {
+    const onSpecChange = vi.fn();
+    setup({ onSpecChange, spec: { sessionDurationMinutes: 45 } });
+
+    const durationInput = screen.getByLabelText(/edit session length/i);
+    fireEvent.change(durationInput, { target: { value: "90" } });
+    expect(onSpecChange).toHaveBeenCalledWith({ sessionDurationMinutes: 90 });
+
+    fireEvent.change(durationInput, { target: { value: "" } });
+    expect(onSpecChange).toHaveBeenCalledWith({ sessionDurationMinutes: undefined });
+  });
+
+  it("shows the read-only experience level when provided by the profile", () => {
+    setup({ spec: {} });
+    cleanup();
+    renderWithIntl(
+      <AssistantPane
+        spec={{}}
+        onSpecChange={vi.fn()}
+        persistSpec={noopPersist}
+        onGenerate={noopGenerate}
+        experienceLevel="intermediate"
+      />,
+    );
+    expect(screen.getByText("intermediate")).toBeTruthy();
+  });
+});
+
+describe("AssistantPane — input keyboard handling", () => {
+  it("Enter (without Shift) sends the message", async () => {
+    mockFetchOnce(eagerStream(['event: draft\ndata: {"draftSpec":{},"missingFields":[],"assistantMessage":"ok"}\n\n']));
+    setup();
+    const input = screen.getByRole("textbox", { name: /chat message/i });
+    fireEvent.change(input, { target: { value: "hello" } });
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: false });
+    await waitFor(() => expect(screen.getByText("hello")).toBeTruthy());
+  });
+
+  it("Shift+Enter does NOT send the message (allows a newline)", () => {
+    const fetchMock = mockFetchOnce(eagerStream([]));
+    setup();
+    const input = screen.getByRole("textbox", { name: /chat message/i });
+    fireEvent.change(input, { target: { value: "hello" } });
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    expect(fetchMock).not.toHaveBeenCalled();
+    // The draft stays in the input — no turn was sent.
+    expect((input as HTMLTextAreaElement).value).toBe("hello");
+  });
+
+  it("a non-Enter key does not trigger send", () => {
+    const fetchMock = mockFetchOnce(eagerStream([]));
+    setup();
+    const input = screen.getByRole("textbox", { name: /chat message/i });
+    fireEvent.change(input, { target: { value: "hello" } });
+    fireEvent.keyDown(input, { key: "a" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("AssistantPane — error message resolution", () => {
+  it("falls back to the generic error copy for an unrecognized reason", async () => {
+    mockFetchOnce(eagerStream(['event: error\ndata: {"error":"something_else"}\n\n']));
+    setup();
+    await sendTurn();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /retry/i })).toBeTruthy();
+    });
+    expect(screen.getByRole("alert")).toBeTruthy();
+  });
+
+  it("shows the generic error copy when fetch resolves with a non-ok response and no body", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500, body: null }));
+    setup();
+    await sendTurn();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /retry/i })).toBeTruthy();
+    });
+  });
+});
+
 describe("AssistantPane — generation gate", () => {
   it("enables Generate only when the spec is complete and routes through onGenerate", async () => {
     const onGenerate = vi.fn().mockResolvedValue(undefined);

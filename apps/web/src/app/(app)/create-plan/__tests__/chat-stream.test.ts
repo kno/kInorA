@@ -81,4 +81,41 @@ describe("parseSSEStream", () => {
     );
     expect(events).toEqual([{ type: "token", delta: "x" }]);
   });
+
+  it("ignores a frame whose data is not valid JSON", async () => {
+    const events = await collect(
+      streamOf(["event: token\ndata: not-json\n\n", 'event: token\ndata: {"delta":"ok"}\n\n']),
+    );
+    expect(events).toEqual([{ type: "token", delta: "ok" }]);
+  });
+
+  it("ignores a token frame whose delta is missing/not a string", async () => {
+    const events = await collect(
+      streamOf(['event: token\ndata: {"delta":123}\n\n', 'event: token\ndata: {"delta":"ok"}\n\n']),
+    );
+    expect(events).toEqual([{ type: "token", delta: "ok" }]);
+  });
+
+  it("defaults missingFields to [] when the draft frame's missingFields is not an array", async () => {
+    const events = await collect(
+      streamOf([
+        'event: draft\ndata: {"draftSpec":{},"missingFields":"nope","assistantMessage":"ok"}\n\n',
+      ]),
+    );
+    expect(events).toEqual([
+      { type: "draft", draftSpec: {}, missingFields: [], assistantMessage: "ok" },
+    ]);
+  });
+
+  it("ignores an unknown event name", async () => {
+    const events = await collect(
+      streamOf(['event: heartbeat\ndata: {}\n\n', 'event: token\ndata: {"delta":"x"}\n\n']),
+    );
+    expect(events).toEqual([{ type: "token", delta: "x" }]);
+  });
+
+  it("flushes a trailing frame that lacks a final blank line", async () => {
+    const events = await collect(streamOf(['event: token\ndata: {"delta":"tail"}']));
+    expect(events).toEqual([{ type: "token", delta: "tail" }]);
+  });
 });
