@@ -139,6 +139,24 @@ module.exports = {
       },
     },
     {
+      name: "api-no-stripe-outside-infra",
+      comment:
+        "The Stripe SDK MUST be imported ONLY by the infra adapter (db/repositories/stripe-gateway.ts). Pure billing use cases depend on the StripeGateway port, never the SDK. Tests may import it to sign hermetic events.",
+      severity: "error",
+      from: {
+        path: "^apps/api/src/",
+        pathNot: [
+          "^apps/api/src/db/",
+          "^apps/api/src/tenant/",
+          "/__tests__/",
+        ],
+      },
+      to: {
+        dependencyTypes: ["npm", "npm-dev", "npm-optional", "npm-peer", "undetermined", "unknown"],
+        path: ["node_modules/.+/stripe/"],
+      },
+    },
+    {
       name: "routes-no-db-layer",
       comment:
         "Route modules MUST NOT import the DB layer directly. Depend on an injected port (see workout-session.ts); app.ts is the sole composition root that constructs repositories.",

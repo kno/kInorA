@@ -17,6 +17,7 @@ import type {
   SetMemberAllocationOutcome,
 } from "../billing/quota-admin.js";
 import type { GetBillingVisibilityOutcome } from "../billing/billing-visibility.js";
+import type { ProcessWebhookResult } from "../billing/process-webhook.js";
 
 /**
  * Billing routes (11a, Phase 3 + Phase 4).
@@ -221,6 +222,66 @@ export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
       }
 
       return reply.code(200).send(result.visibility satisfies BillingVisibilityDTO);
+    },
+  );
+};
+
+/**
+ * Stripe webhook plugin (11b-v1-billing-stripe-integration, Slice 2).
+ *
+ * Registered as its OWN encapsulated Fastify plugin so the raw-body content
+ * parser it installs is scoped to THIS instance only — every other JSON route
+ * keeps the default parser (minimal blast radius, no global raw-body change).
+ *
+ * The route is UNAUTHENTICATED by design: the Stripe signature IS the
+ * authentication. `ProcessStripeWebhook` verifies the raw bytes against the
+ * signing secret before any side effect; an invalid/absent/tampered signature
+ * returns 400 with no state write. Any processing error propagates to the
+ * global 500 handler so Stripe retries — Pro is never granted on failure
+ * (fail-closed). No secret or payload is ever logged.
+ */
+export interface StripeWebhookRoutesOptions {
+  processWebhook: {
+    process(
+      rawBody: Buffer | string,
+      signature: string | undefined,
+      now?: Date,
+    ): Promise<ProcessWebhookResult>;
+  };
+}
+
+export const stripeWebhookRoutes: FastifyPluginAsync<StripeWebhookRoutesOptions> = async (
+  fastify,
+  options,
+) => {
+  const { processWebhook } = options;
+  if (!processWebhook) {
+    throw new Error("stripeWebhookRoutes requires a processWebhook use case");
+  }
+
+  // RAW body ONLY within this encapsulated scope: Stripe signature
+  // verification MUST run over the exact received bytes, so hand the route the
+  // untouched Buffer instead of a parsed JSON object.
+  fastify.addContentTypeParser(
+    "application/json",
+    { parseAs: "buffer" },
+    (_request, body, done) => {
+      done(null, body);
+    },
+  );
+
+  fastify.post(
+    "/billing/webhook",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const header = request.headers["stripe-signature"];
+      const signature = Array.isArray(header) ? header[0] : header;
+      const rawBody = request.body as Buffer;
+
+      const result = await processWebhook.process(rawBody, signature);
+      if (result.status === "invalid_signature") {
+        return reply.code(400).send({ error: "invalid_signature" });
+      }
+      return reply.code(200).send({ received: true });
     },
   );
 };

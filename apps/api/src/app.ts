@@ -62,7 +62,14 @@ import { CheckEntitlement } from "./billing/entitlement.js";
 import { CheckAndConsumeQuota } from "./billing/quota-consumption.js";
 import { SetMemberAllocation, GetTenantUsage } from "./billing/quota-admin.js";
 import { GetBillingVisibility } from "./billing/billing-visibility.js";
-import { billingRoutes } from "./routes/billing.js";
+import { billingRoutes, stripeWebhookRoutes } from "./routes/billing.js";
+import { ProcessStripeWebhook } from "./billing/process-webhook.js";
+import type { StripeGateway } from "./billing/stripe-gateway.js";
+import { StripeEventStoreRepository } from "./db/repositories/stripe-events.js";
+import {
+  UnconfiguredStripeGateway,
+  createStripeGatewayFromEnv,
+} from "./db/repositories/stripe-gateway.js";
 
 export interface BuildAppOptions {
   db?: Database;
@@ -79,6 +86,12 @@ export interface BuildAppOptions {
    * Pass a pre-constructed instance to observe notifications in tests.
    */
   wsRegistry?: WsRegistry;
+  /**
+   * Injectable StripeGateway for tests (11b Slice 2). Defaults to the real
+   * SDK-backed gateway built from env in production; when Stripe env is unset
+   * the webhook fails closed (every event → 400). Tests pass a FakeStripeGateway.
+   */
+  stripeGateway?: StripeGateway;
 }
 
 /**
@@ -104,6 +117,7 @@ export async function buildApp(
   let socialAuthService: SocialAuthService | undefined;
   let planGenerator: PlanGenerator | undefined;
   let wsRegistry: WsRegistry | undefined;
+  let stripeGateway: StripeGateway | undefined;
 
   // Discriminate between the options-bag form (BuildAppOptions) and the legacy
   // 2-argument form (Database, SocialAuthService?).
@@ -127,6 +141,7 @@ export async function buildApp(
     socialAuthService = opts.socialAuthService;
     planGenerator = opts.planGenerator;
     wsRegistry = opts.wsRegistry;
+    stripeGateway = opts.stripeGateway;
   } else {
     // Legacy 2-argument form: (db?, socialAuthService?)
     database = (dbOrOptions as Database | undefined) ?? createDbClient().db;
@@ -329,6 +344,19 @@ export async function buildApp(
     getTenantUsage: new GetTenantUsage(billingAdminRepo),
     getBillingVisibility: new GetBillingVisibility(billingVisibilityRepo),
   });
+
+  // 11b Slice 2 — Stripe webhook (POST /billing/webhook). Registered as its own
+  // ENCAPSULATED plugin so the raw-body content parser it installs is scoped to
+  // that route only (every other JSON route keeps the default parser). The
+  // route is UNAUTHENTICATED: the Stripe signature is the auth. The gateway is
+  // injectable for tests (FakeStripeGateway); in production it is the real
+  // SDK-backed gateway from env, or a fail-closed gateway when Stripe env is
+  // unset (so an unconfigured deploy can never grant Pro from a webhook).
+  const resolvedStripeGateway: StripeGateway =
+    stripeGateway ?? createStripeGatewayFromEnv() ?? new UnconfiguredStripeGateway();
+  const stripeEventStore = new StripeEventStoreRepository(database);
+  const processStripeWebhook = new ProcessStripeWebhook(resolvedStripeGateway, stripeEventStore);
+  await app.register(stripeWebhookRoutes, { processWebhook: processStripeWebhook });
 
   // WebSocket plugin + authenticated plan-status route.
   // WsRegistry is shared between this route and PlanGenerationService so
