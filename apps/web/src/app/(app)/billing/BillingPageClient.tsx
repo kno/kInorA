@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
+import Link from "next/link";
 import type {
   BillingCycle,
   BillingPricingDTO,
@@ -699,17 +700,10 @@ function SupportCard() {
     <section className={styles.card}>
       <h3 className={styles.cardTitle}>{t("billing.support.title")}</h3>
       <p className="kin-text kin-muted">{t("billing.support.description")}</p>
-      {/*
-       * FIX 2 (4R review, SUGGESTION): no `/help/billing` route exists in
-       * apps/web yet — linking there would 404 on click. Until a real support
-       * destination exists, render this as a NON-navigating disabled affordance
-       * (aria-disabled, no href) rather than ship a dead link. Swap back to a
-       * real <a href> once a billing FAQ/support destination is added.
-       * TODO(11b-followup): point at the real billing FAQ/support URL.
-       */}
-      <span className={styles.supportLink} aria-disabled="true" role="link">
+      {/* Real, navigable link to the in-app billing FAQ (#199). */}
+      <Link className={styles.supportLink} href="/help/billing">
         {t("billing.support.faqCta")}
-      </span>
+      </Link>
     </section>
   );
 }

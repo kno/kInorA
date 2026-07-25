@@ -955,6 +955,21 @@
       "description": "Encuentra respuestas a las preguntas frecuentes de facturación.",
       "faqCta": "Ver preguntas frecuentes"
     },
+    "help": {
+      "title": "Ayuda de facturación",
+      "intro": "Respuestas a las preguntas frecuentes sobre tu plan, pagos y facturas.",
+      "backToBilling": "Volver a facturación",
+      "faq": {
+        "upgradeQuestion": "¿Cómo mejoro a Pro?",
+        "upgradeAnswer": "Abre la página de facturación y elige un ciclo mensual o anual en la tarjeta Pro; después sigue el proceso de pago seguro.",
+        "manageQuestion": "¿Cómo cambio o cancelo mi suscripción?",
+        "manageAnswer": "Usa \"Gestionar / Añadir tarjeta\" en la página de facturación para abrir el portal seguro de cliente, donde puedes actualizar tu tarjeta o cancelar tu suscripción.",
+        "invoiceQuestion": "¿Dónde encuentro mis facturas y recibos?",
+        "invoiceAnswer": "Las personas propietarias de la cuenta ven una sección \"Facturas y cargos\" en la página de facturación con un recibo descargable por cada pago.",
+        "endedQuestion": "¿Qué ocurre cuando termina mi prueba o suscripción?",
+        "endedAnswer": "Tu cuenta pasa al plan Gratis con sus límites mensuales. Puedes mejorar de nuevo en cualquier momento para recuperar las funciones premium."
+      }
+    },
     "actions": {
       "checkoutError": "No pudimos iniciar el pago. Inténtalo de nuevo.",
       "portalError": "No pudimos abrir el portal de facturación. Inténtalo de nuevo.",
