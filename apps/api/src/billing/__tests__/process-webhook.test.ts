@@ -16,6 +16,7 @@ import {
   type StripeSubscriptionSnapshot,
   type StripeWebhookEvent,
 } from "../stripe-gateway.js";
+import { GUARD_MATRIX, type GuardTsRelation } from "./stripe-webhook-guard-matrix.fixture.js";
 
 // ---------------------------------------------------------------------------
 // Slice 2 — Stripe webhook subscription lifecycle (hottest path).
@@ -366,5 +367,45 @@ describe("shouldAcceptStoreWrite (pure guard predicate — mirrors the SQL WHERE
 
   it("at an EQUAL timestamp, accepts a non-terminal write over a stored non-terminal state", () => {
     expect(shouldAcceptStoreWrite({ stripeEventTs: T1, status: "active" }, { stripeEventTs: T1, status: "active" })).toBe(true);
+  });
+});
+
+// #201: drift guard between this pure predicate and the real SQL `setWhere`
+// clause (`db/repositories/stripe-events.ts`). This suite and the
+// real-Postgres `stripe-webhook.integration.test.ts` suite drive the SAME
+// `GUARD_MATRIX` fixture through their respective predicate — a one-sided
+// edit to either side deterministically fails one of the two suites.
+describe("shouldAcceptStoreWrite — full GUARD_MATRIX (drift guard vs. the SQL setWhere clause, #201)", () => {
+  const INCOMING_TS = new Date("2026-07-25T10:00:00.000Z");
+  const EARLIER_TS = new Date("2026-07-24T10:00:00.000Z");
+  const LATER_TS = new Date("2026-07-26T10:00:00.000Z");
+
+  function existingTsFor(relation: GuardTsRelation): Date | null {
+    switch (relation) {
+      case "none":
+        return null; // handled as `existing: null` entirely below
+      case "null":
+        return null;
+      case "earlier":
+        return EARLIER_TS;
+      case "equal":
+        return INCOMING_TS;
+      case "later":
+        return LATER_TS;
+    }
+  }
+
+  it.each(GUARD_MATRIX)("$name", (testCase) => {
+    const existing =
+      testCase.tsRelation === "none"
+        ? null
+        : { stripeEventTs: existingTsFor(testCase.tsRelation), status: testCase.existingStatus! };
+
+    const accepted = shouldAcceptStoreWrite(existing, {
+      stripeEventTs: INCOMING_TS,
+      status: testCase.incomingStatus,
+    });
+
+    expect(accepted).toBe(testCase.expectAccept);
   });
 });
