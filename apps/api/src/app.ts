@@ -60,7 +60,11 @@ import { BillingAdminRepository } from "./db/repositories/billing-admin.js";
 import { BillingVisibilityRepository } from "./db/repositories/billing-visibility.js";
 import { CheckEntitlement } from "./billing/entitlement.js";
 import { ChatEntitlement } from "./billing/chat-entitlement.js";
-import { MockPlanSpecExtractor } from "./ai/mock-extractor.js";
+import {
+  PlanSpecExtractionAdapter,
+  buildExtractionModelFactory,
+} from "./ai/extraction-adapter.js";
+import type { PlanSpecExtractor } from "./ai/extraction-port.js";
 import { CheckAndConsumeQuota } from "./billing/quota-consumption.js";
 import { SetMemberAllocation, GetTenantUsage } from "./billing/quota-admin.js";
 import { GetBillingVisibility } from "./billing/billing-visibility.js";
@@ -100,6 +104,13 @@ export interface BuildAppOptions {
    * Pass a MockPlanGenerator to avoid LLM calls in tests.
    */
   planGenerator?: PlanGenerator;
+  /**
+   * Injectable PlanSpecExtractor for the chat endpoint (12, S2b).
+   * Defaults to the real LangChain-backed `PlanSpecExtractionAdapter` in
+   * production (provider config read per turn). Pass a `MockPlanSpecExtractor`
+   * (or any fake) to avoid LLM calls in tests.
+   */
+  chatExtractor?: PlanSpecExtractor;
   /**
    * Injectable WsRegistry for tests.
    * Defaults to a fresh WsRegistry() in production.
@@ -167,6 +178,7 @@ export async function buildApp(
   let database: Database;
   let socialAuthService: SocialAuthService | undefined;
   let planGenerator: PlanGenerator | undefined;
+  let chatExtractorOverride: PlanSpecExtractor | undefined;
   let wsRegistry: WsRegistry | undefined;
   let stripeGateway: StripeGateway | undefined;
   let checkoutGateway: CheckoutGateway | undefined;
@@ -197,6 +209,7 @@ export async function buildApp(
     database = opts.db ?? createDbClient().db;
     socialAuthService = opts.socialAuthService;
     planGenerator = opts.planGenerator;
+    chatExtractorOverride = opts.chatExtractor;
     wsRegistry = opts.wsRegistry;
     stripeGateway = opts.stripeGateway;
     checkoutGateway = opts.checkoutGateway;
@@ -327,13 +340,19 @@ export async function buildApp(
     planDraftRepo,
     workoutPlanRepo,
   });
-  // 12-interactive-text-chat (S2a): Pro-only chat gate + a stub token source.
+  // 12-interactive-text-chat (S2b): Pro-only chat gate + the real extractor.
   // The gate reuses the SAME entitlement reader as every other billing decision
-  // (server-side, authContext-scoped, fail-closed). The extractor is the
-  // deterministic MockPlanSpecExtractor for now — S2b swaps in the real
-  // LangChain-backed adapter. The chat route only calls `streamReply`.
+  // (server-side, authContext-scoped, fail-closed). The extractor is the real
+  // LangChain-backed `PlanSpecExtractionAdapter` in production — it reads the
+  // active provider/model config per turn (same `configRepo` as generation) and
+  // owns the LangChain dependency so the route never imports it. Tests inject a
+  // deterministic `MockPlanSpecExtractor` (or any fake) via `chatExtractor`; when
+  // no override is given AND no LLM key is configured we still default to the
+  // Mock so local/dev boots without a provider key behave predictably.
   const chatEntitlement = new ChatEntitlement(billingStateReader);
-  const chatExtractor = new MockPlanSpecExtractor();
+  const chatExtractor: PlanSpecExtractor =
+    chatExtractorOverride ??
+    new PlanSpecExtractionAdapter(configRepo, buildExtractionModelFactory());
   await app.register(planRoutes, {
     repo: planRouteRepo,
     generationService: planGenerationService,

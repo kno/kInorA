@@ -102,6 +102,7 @@ async function buildTestApp(opts: {
   repo?: PlanRepoMock;
   chatEntitlement: ChatEntitlementPort;
   chatExtractor: PlanSpecExtractor;
+  chatStreamTimeoutMs?: number;
 }): Promise<FastifyInstance> {
   const app = Fastify();
   app.setErrorHandler((error, _request, reply) => {
@@ -116,6 +117,7 @@ async function buildTestApp(opts: {
     generationService: noopGenerationService,
     chatEntitlement: opts.chatEntitlement,
     chatExtractor: opts.chatExtractor,
+    chatStreamTimeoutMs: opts.chatStreamTimeoutMs,
   });
   return app;
 }
@@ -228,7 +230,11 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     expect(res.headers["x-accel-buffering"]).toBe("no");
   });
 
-  it("streams the stub token deltas then a terminal done event", async () => {
+  it("streams token deltas then a terminal draft event (empty extraction → no write)", async () => {
+    // The stub extractor returns an empty `{}` extraction. Merged onto the empty
+    // current draft it changes nothing, so NO draft is committed — but the
+    // terminal event is now `draft` (S2b), carrying the empty spec + all six
+    // missingFields.
     const extractor = stubExtractor();
     const repo = buildPlanRepo();
     app = await buildTestApp({
@@ -249,9 +255,19 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     const tokenFrames = frames.filter((f) => f.event === "token");
     expect(tokenFrames.map((f) => JSON.parse(f.data).delta)).toEqual(CANNED_TOKENS);
     // Exactly one terminal event, and it is the last frame.
-    expect(frames.at(-1)?.event).toBe("done");
-    expect(frames.filter((f) => f.event === "done")).toHaveLength(1);
-    // S2a is a stub pass-through: NO draft is committed (that is S2b).
+    expect(frames.at(-1)?.event).toBe("draft");
+    expect(frames.filter((f) => f.event === "draft")).toHaveLength(1);
+    const terminal = JSON.parse(frames.at(-1)!.data);
+    expect(terminal.draftSpec).toEqual({});
+    expect(terminal.missingFields).toEqual([
+      "goal",
+      "daysPerWeek",
+      "sessionDurationMinutes",
+      "location",
+      "equipment",
+      "limitations",
+    ]);
+    // Empty/no-op extraction never touches `plan_drafts`.
     expect(repo.upsertDraft).not.toHaveBeenCalled();
     // The extractor received the streaming AbortSignal.
     const [, signalArg] = extractor.streamReply.mock.calls[0]!;
@@ -432,5 +448,251 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
 
     expect(res.statusCode).toBe(400);
     expect(extractor.streamReply).not.toHaveBeenCalled();
+  });
+
+  // --- S2b: terminal structured extraction + draft commit ------------------
+
+  /** Extractor that streams prose then returns a fixed structured extraction. */
+  function richExtractor(
+    extracted: PlanSpecDraft,
+    tokens: string[] = ["Got ", "it."],
+  ): PlanSpecExtractor & { extract: ReturnType<typeof vi.fn> } {
+    return {
+      async *streamReply(_input, signal) {
+        for (const t of tokens) {
+          if (signal.aborted) return;
+          yield t;
+        }
+      },
+      extract: vi.fn().mockResolvedValue(extracted),
+    };
+  }
+
+  it("valid message → prose deltas then a terminal draft with the MERGED spec, committed once", async () => {
+    const extractor = richExtractor({ goal: "hypertrophy", daysPerWeek: 4, equipment: ["dumbbells"] });
+    const repo = buildPlanRepo();
+    // Current draft already has a location; the merge must preserve it.
+    repo.findCurrentDraft.mockResolvedValue({ step: 2, specJson: { location: "gym" } });
+
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      chatEntitlement: allowGate(),
+      chatExtractor: extractor,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/chat",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { message: "build muscle 4 days a week with dumbbells" },
+    });
+
+    const frames = parseSse(res.payload);
+    expect(frames.filter((f) => f.event === "token").map((f) => JSON.parse(f.data).delta)).toEqual([
+      "Got ",
+      "it.",
+    ]);
+    expect(frames.at(-1)?.event).toBe("draft");
+    const terminal = JSON.parse(frames.at(-1)!.data);
+    // Merged: extracted fields + preserved current `location`.
+    expect(terminal.draftSpec).toEqual({
+      location: "gym",
+      goal: "hypertrophy",
+      daysPerWeek: 4,
+      equipment: ["dumbbells"],
+    });
+    expect(terminal.missingFields).toEqual(["sessionDurationMinutes", "limitations"]);
+    expect(terminal.assistantMessage).toBe("Got it.");
+    // Committed exactly once, only on the terminal event, with the merged spec.
+    expect(repo.upsertDraft).toHaveBeenCalledTimes(1);
+    expect(repo.upsertDraft).toHaveBeenCalledWith(TENANT_A, USER_A, 2, terminal.draftSpec);
+  });
+
+  it("mid-stream extraction (Pass 2) failure → terminal error and the draft is NOT written", async () => {
+    const extractor: PlanSpecExtractor = {
+      async *streamReply(_input, signal) {
+        for (const t of ["thinking", "..."]) {
+          if (signal.aborted) return;
+          yield t;
+        }
+      },
+      extract: vi.fn().mockRejectedValue(new Error("provider 500")),
+    };
+    const repo = buildPlanRepo();
+    repo.findCurrentDraft.mockResolvedValue({ step: 1, specJson: { goal: "strength" } });
+
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      chatEntitlement: allowGate(),
+      chatExtractor: extractor,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/chat",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { message: "make it harder" },
+    });
+
+    const frames = parseSse(res.payload);
+    // Some prose streamed, then a terminal error — never a `draft`.
+    expect(frames.some((f) => f.event === "token")).toBe(true);
+    expect(frames.at(-1)?.event).toBe("error");
+    expect(JSON.parse(frames.at(-1)!.data)).toEqual({ error: "chat_stream_failed" });
+    expect(frames.some((f) => f.event === "draft")).toBe(false);
+    // Draft untouched.
+    expect(repo.upsertDraft).not.toHaveBeenCalled();
+  });
+
+  it("empty/whitespace message → NO LLM work, a clarifying draft, draft unchanged", async () => {
+    const extractor = richExtractor({ goal: "strength" });
+    const streamSpy = vi.spyOn(extractor, "streamReply");
+    const repo = buildPlanRepo();
+    repo.findCurrentDraft.mockResolvedValue({ step: 1, specJson: { daysPerWeek: 3 } });
+
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      chatEntitlement: allowGate(),
+      chatExtractor: extractor,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/chat",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { message: "   " },
+    });
+
+    const frames = parseSse(res.payload);
+    expect(frames.at(-1)?.event).toBe("draft");
+    const terminal = JSON.parse(frames.at(-1)!.data);
+    // Draft is echoed UNCHANGED with the still-missing fields.
+    expect(terminal.draftSpec).toEqual({ daysPerWeek: 3 });
+    expect(terminal.missingFields).toContain("goal");
+    // No extractor call, no write.
+    expect(streamSpy).not.toHaveBeenCalled();
+    expect(extractor.extract).not.toHaveBeenCalled();
+    expect(repo.upsertDraft).not.toHaveBeenCalled();
+  });
+
+  it("stream timeout → terminal error, LLM aborted, draft NOT written", async () => {
+    let sawAbort = false;
+    const extractor: PlanSpecExtractor = {
+      async *streamReply(_input, signal) {
+        signal.addEventListener("abort", () => {
+          sawAbort = true;
+        });
+        // Stall well past the injected deadline.
+        for (let i = 0; i < 100; i++) {
+          if (signal.aborted) return;
+          yield `tok${i} `;
+          await new Promise((r) => setTimeout(r, 30));
+        }
+      },
+      extract: vi.fn().mockResolvedValue({ goal: "strength" } as PlanSpecDraft),
+    };
+    const repo = buildPlanRepo();
+
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      chatEntitlement: allowGate(),
+      chatExtractor: extractor,
+      chatStreamTimeoutMs: 40,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/chat",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { message: "build muscle" },
+    });
+
+    const frames = parseSse(res.payload);
+    expect(frames.at(-1)?.event).toBe("error");
+    expect(JSON.parse(frames.at(-1)!.data)).toEqual({ error: "chat_stream_timeout" });
+    expect(sawAbort).toBe(true);
+    // Timed out before Pass 2 / commit.
+    expect(extractor.extract).not.toHaveBeenCalled();
+    expect(repo.upsertDraft).not.toHaveBeenCalled();
+  });
+
+  it("honors backpressure: when raw.write() returns false it awaits drain, losing no token", async () => {
+    // Force the FIRST write of each hijacked ServerResponse to return false and
+    // schedule a 'drain' — mirroring a full kernel send buffer. Every token +
+    // the terminal draft must still arrive in order.
+    const originalWrite = http.ServerResponse.prototype.write;
+    const throttled = new WeakSet<ServerResponse>();
+    http.ServerResponse.prototype.write = function (
+      this: ServerResponse,
+      ...args: Parameters<ServerResponse["write"]>
+    ) {
+      const result = originalWrite.apply(this, args);
+      if (!throttled.has(this)) {
+        throttled.add(this);
+        // Emit 'drain' on the next tick so the awaited writeFrame resolves.
+        setImmediate(() => this.emit("drain"));
+        return false;
+      }
+      return result;
+    } as typeof originalWrite;
+
+    try {
+      const extractor = richExtractor({ goal: "hypertrophy" }, ["a", "b", "c"]);
+      const repo = buildPlanRepo();
+      app = await buildTestApp({
+        db: buildSessionDb(),
+        repo,
+        chatEntitlement: allowGate(),
+        chatExtractor: extractor,
+      });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/plan-specs/chat",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: { message: "build muscle" },
+      });
+
+      const frames = parseSse(res.payload);
+      // No token lost despite the backpressure on the first write.
+      expect(frames.filter((f) => f.event === "token").map((f) => JSON.parse(f.data).delta)).toEqual([
+        "a",
+        "b",
+        "c",
+      ]);
+      expect(frames.at(-1)?.event).toBe("draft");
+    } finally {
+      http.ServerResponse.prototype.write = originalWrite;
+    }
+  });
+
+  it("performs no vector-store embedding of the chat transcript", async () => {
+    // Privacy/Threat Matrix: raw-transcript embedding. The route is wired with
+    // ONLY the draft repo, gate and extractor — there is no embedding/vector
+    // seam reachable from a chat turn. This guards that the turn's persistence
+    // surface stays limited to `plan_drafts` (upsertDraft) and nothing else.
+    const extractor = richExtractor({ goal: "hypertrophy", limitations: [{ text: "bad knee", isWarning: true }] });
+    const repo = buildPlanRepo();
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      chatEntitlement: allowGate(),
+      chatExtractor: extractor,
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/plan-specs/chat",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { message: "build muscle, I have a bad knee" },
+    });
+
+    // The only write is the draft upsert — no other repo method wrote anything.
+    expect(repo.upsertDraft).toHaveBeenCalledTimes(1);
+    expect(repo.promoteDraftToSpec).not.toHaveBeenCalled();
   });
 });
