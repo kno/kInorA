@@ -368,6 +368,14 @@ describe("BillingPageClient — payment + support cards", () => {
     expect(screen.getByRole("link", { name: /billing FAQ/i })).toBeDefined();
   });
 
+  it("links the support card to the real /help/billing route, not a dead placeholder (#199)", () => {
+    renderClient({ initialData: FREE_ACTIVE, initialInvoices: NON_OWNER });
+    const link = screen.getByRole("link", { name: /billing FAQ/i });
+    // A real, navigable anchor — never an aria-disabled placeholder span.
+    expect(link.getAttribute("href")).toBe("/help/billing");
+    expect(link.getAttribute("aria-disabled")).toBeNull();
+  });
+
   it("shows the payment-method manage CTA only for an owner", () => {
     renderClient({ initialData: PRO_ACTIVE, initialInvoices: OWNER_INVOICES });
     expect(screen.getByRole("button", { name: /manage \/ add card/i })).toBeDefined();

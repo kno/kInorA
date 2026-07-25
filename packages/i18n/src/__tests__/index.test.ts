@@ -129,8 +129,10 @@ describe("@kinora/i18n package assembly", () => {
     // 34 (11a Phase 4) + 49 (11b Slice 5 web billing screen: plan hero meta,
     // usage meters + "up to N/mo" metered copy, invoice history, Pro card with
     // cycle toggle + save badge, payment-method + support cards, CTA actions)
-    // + 1 (11b Slice 5 4R FIX 1: distinct Price/Current-period plan-hero copy).
-    expect(billingKeys).toHaveLength(84);
+    // + 1 (11b Slice 5 4R FIX 1: distinct Price/Current-period plan-hero copy)
+    // + 2 (#198 subscription-ended access banner: endedTitle/endedDescription)
+    // + 11 (#199 billing help FAQ page: title/intro/backToBilling + 4 Q/A pairs).
+    expect(billingKeys).toHaveLength(97);
     expect(en["billing.tier.free"]).toBe("Free");
     expect(es["billing.tier.free"]).toBe("Gratis");
   });

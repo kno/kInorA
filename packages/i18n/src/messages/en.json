@@ -955,6 +955,21 @@
       "description": "Find answers to common billing questions.",
       "faqCta": "View billing FAQ"
     },
+    "help": {
+      "title": "Billing help",
+      "intro": "Answers to common questions about your plan, payments, and invoices.",
+      "backToBilling": "Back to billing",
+      "faq": {
+        "upgradeQuestion": "How do I upgrade to Pro?",
+        "upgradeAnswer": "Open the billing page and pick a monthly or annual cycle in the Pro card, then follow the secure checkout.",
+        "manageQuestion": "How do I change or cancel my subscription?",
+        "manageAnswer": "Use \"Manage / Add card\" on the billing page to open the secure customer portal, where you can update your card or cancel your subscription.",
+        "invoiceQuestion": "Where can I find my invoices and receipts?",
+        "invoiceAnswer": "Account owners see an \"Invoices & charges\" section on the billing page with a downloadable receipt for each payment.",
+        "endedQuestion": "What happens when my trial or subscription ends?",
+        "endedAnswer": "Your account moves to the Free plan with its monthly limits. You can upgrade again at any time to restore premium features."
+      }
+    },
     "actions": {
       "checkoutError": "We couldn't start checkout. Please try again.",
       "portalError": "We couldn't open the billing portal. Please try again.",
