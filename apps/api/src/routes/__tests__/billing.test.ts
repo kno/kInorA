@@ -975,3 +975,72 @@ describe("POST /billing/checkout — Stripe checkout (11b Slice 3)", () => {
     expect(serialized).not.toContain(VALID_TOKEN);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Scenario: GET /billing/pricing sources the displayed amounts from Stripe (#195)
+//
+// The route delegates to the injected `getBillingPricing` use case (which
+// sources amounts from the real Stripe Price objects), NOT the env-only
+// `buildBillingPricing`. Here we inject a stub returning a distinctive DTO and
+// prove the endpoint returns exactly it — so a display/charge drift is
+// impossible: what the endpoint shows is what the source (Stripe) reports.
+// ---------------------------------------------------------------------------
+
+describe("GET /billing/pricing — sourced from Stripe (#195)", () => {
+  let app: FastifyInstance;
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  // A distinctive DTO that is NOT the env/config default (999/799/20), so a pass
+  // proves the value came from the injected source and not the pure fallback.
+  const SOURCED_PRICING = {
+    currency: "eur",
+    monthly: { cycle: "monthly" as const, amountPerMonth: 1299, amountPerInterval: 1299 },
+    annual: { cycle: "annual" as const, amountPerMonth: 799, amountPerInterval: 9588 },
+    annualSavePercent: 38,
+  };
+
+  async function buildPricingApp(getBillingPricing: {
+    execute: ReturnType<typeof vi.fn>;
+  }): Promise<FastifyInstance> {
+    const port = buildFakePort();
+    const db = buildMockDb(
+      buildActiveMembershipRow({ tenantId: TENANT_A, userId: OWNER_ID, role: "owner" }),
+    ) as never;
+    const instance = Fastify();
+    await instance.register(authPlugin, { db });
+    await instance.register(billingRoutes, {
+      setMemberAllocation: new SetMemberAllocation(port),
+      getTenantUsage: new GetTenantUsage(port),
+      getBillingVisibility: new GetBillingVisibility(buildUnusedVisibilityPort()),
+      createCheckout: buildUnusedCheckout(),
+      createPortalSession: buildUnusedPortalSession(),
+      listInvoices: buildUnusedListInvoices(),
+      checkBillingOwnership: port,
+      getBillingPricing,
+    });
+    return instance;
+  }
+
+  it("returns the amounts from the injected (Stripe-sourced) pricing use case", async () => {
+    const execute = vi.fn(async () => SOURCED_PRICING);
+    app = await buildPricingApp({ execute });
+
+    const res = await app.inject({ method: "GET", url: "/billing/pricing", headers: auth });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(SOURCED_PRICING);
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires authentication → 401, never invoking the pricing source", async () => {
+    const execute = vi.fn(async () => SOURCED_PRICING);
+    app = await buildPricingApp({ execute });
+
+    const res = await app.inject({ method: "GET", url: "/billing/pricing" });
+
+    expect(res.statusCode).toBe(401);
+    expect(execute).not.toHaveBeenCalled();
+  });
+});

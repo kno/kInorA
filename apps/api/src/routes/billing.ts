@@ -81,6 +81,16 @@ export interface BillingRoutesOptions {
   createCheckout: {
     execute(input: CreateCheckoutInput): Promise<CheckoutSession>;
   };
+  /**
+   * Display-pricing source for GET /billing/pricing (#195). Sources the
+   * displayed amounts from the REAL Stripe Price objects (single source of
+   * truth) with an in-process cache and a safe config fallback. OPTIONAL so the
+   * existing billing-route test registrations keep working; when absent the
+   * handler falls back to the pure env/config `buildBillingPricing`.
+   */
+  getBillingPricing?: {
+    execute(): Promise<BillingPricingDTO>;
+  };
   createPortalSession: {
     execute(input: CreatePortalSessionInput): Promise<PortalSession>;
   };
@@ -154,6 +164,7 @@ export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
     createPortalSession,
     listInvoices,
     checkBillingOwnership,
+    getBillingPricing,
   } = options;
 
   if (
@@ -320,16 +331,20 @@ export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
   );
 
   // GET /billing/pricing
-  // Config-driven display pricing for the web billing screen (11b Slice 5).
-  // Any active member may read it (same gate as GET /billing/visibility). The
-  // amounts + currency + derived save % come from the Stripe pricing config
-  // (env-backed) — so the web renders prices/save badge without ever hardcoding
-  // them. No secret is exposed: only display amounts and the currency.
+  // Display pricing for the web billing screen. Any active member may read it
+  // (same gate as GET /billing/visibility). The amounts + currency + derived
+  // save % are sourced from the REAL Stripe Price objects the checkout actually
+  // charges (#195) via the injected `getBillingPricing` use case (cached, with a
+  // safe config fallback) — so the displayed price can never drift from what
+  // Stripe bills. When no source is injected, it falls back to the pure
+  // env/config `buildBillingPricing`. No secret is exposed: only display amounts
+  // and the currency.
   fastify.get(
     "/billing/pricing",
     { preHandler: requireAuth() },
     async (_request: FastifyRequest, reply: FastifyReply) => {
-      return reply.code(200).send(buildBillingPricing() satisfies BillingPricingDTO);
+      const pricing = getBillingPricing ? await getBillingPricing.execute() : buildBillingPricing();
+      return reply.code(200).send(pricing satisfies BillingPricingDTO);
     },
   );
 

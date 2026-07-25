@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type Stripe from "stripe";
-import { StripeApiGateway } from "../stripe-gateway.js";
+import { StripeApiGateway, UnconfiguredPriceGateway } from "../stripe-gateway.js";
+import { StripeGatewayUnconfiguredError } from "../../../billing/stripe-gateway.js";
 
 // ---------------------------------------------------------------------------
 // 11b Slice 4, 4R FIX 2 (SUGGESTION, reliability) — the `listInvoices` →
@@ -152,6 +153,94 @@ describe("StripeApiGateway.listInvoices — partial/malformed invoice mapping (1
 
     expect(client.invoices.list).toHaveBeenCalledWith(
       expect.objectContaining({ customer: "cus_scoped", limit: 24 }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #195 — the adapter sources display prices from the Stripe Price API. A stub
+// Stripe client is injected so the test stays hermetic (NO live Stripe call).
+// ---------------------------------------------------------------------------
+
+function fakePriceStripeClient(prices: Record<string, Partial<Stripe.Price>>): Stripe {
+  const retrieve = vi.fn(async (priceId: string) => {
+    const price = prices[priceId];
+    if (!price) throw new Error(`no such price: ${priceId}`);
+    return price as Stripe.Price;
+  });
+  return { prices: { retrieve } } as unknown as Stripe;
+}
+
+function buildPriceGateway(prices: Record<string, Partial<Stripe.Price>>): {
+  gateway: StripeApiGateway;
+  client: Stripe;
+} {
+  const client = fakePriceStripeClient(prices);
+  return { gateway: new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client), client };
+}
+
+describe("StripeApiGateway.retrievePrice (#195)", () => {
+  it("maps a recurring monthly Price to the SDK-free projection", async () => {
+    const { gateway, client } = buildPriceGateway({
+      price_monthly_1: {
+        unit_amount: 1299,
+        currency: "eur",
+        recurring: { interval: "month" } as Stripe.Price.Recurring,
+      },
+    });
+
+    const price = await gateway.retrievePrice("price_monthly_1");
+
+    expect(client.prices.retrieve).toHaveBeenCalledWith("price_monthly_1");
+    expect(price).toEqual({ unitAmount: 1299, currency: "eur", interval: "month" });
+  });
+
+  it("maps a recurring yearly Price (interval year)", async () => {
+    const { gateway } = buildPriceGateway({
+      price_annual_1: {
+        unit_amount: 9588,
+        currency: "eur",
+        recurring: { interval: "year" } as Stripe.Price.Recurring,
+      },
+    });
+
+    expect(await gateway.retrievePrice("price_annual_1")).toEqual({
+      unitAmount: 9588,
+      currency: "eur",
+      interval: "year",
+    });
+  });
+
+  it("maps a Price with no fixed unit amount / non-recurring interval to nulls, without throwing", async () => {
+    const { gateway } = buildPriceGateway({
+      price_weird: { unit_amount: null, currency: "eur", recurring: null },
+    });
+
+    expect(await gateway.retrievePrice("price_weird")).toEqual({
+      unitAmount: null,
+      currency: "eur",
+      interval: null,
+    });
+  });
+
+  it("normalizes an unrecognized recurring interval (e.g. week) to null", async () => {
+    const { gateway } = buildPriceGateway({
+      price_weekly: {
+        unit_amount: 100,
+        currency: "eur",
+        recurring: { interval: "week" } as unknown as Stripe.Price.Recurring,
+      },
+    });
+
+    expect((await gateway.retrievePrice("price_weekly")).interval).toBeNull();
+  });
+});
+
+describe("UnconfiguredPriceGateway (#195)", () => {
+  it("throws StripeGatewayUnconfiguredError so the pricing use case falls back to config", async () => {
+    const gateway = new UnconfiguredPriceGateway();
+    await expect(gateway.retrievePrice("price_monthly_1")).rejects.toBeInstanceOf(
+      StripeGatewayUnconfiguredError,
     );
   });
 });

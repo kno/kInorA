@@ -236,3 +236,35 @@ export interface PortalGateway {
 export interface InvoiceGateway {
   listInvoices(stripeCustomerId: string): Promise<StripeInvoiceView[]>;
 }
+
+// ---------------------------------------------------------------------------
+// Price-lookup port (#195 — displayed prices sourced from the Stripe Price API).
+//
+// The displayed monthly/annual amounts MUST come from the SAME Stripe Price
+// objects checkout actually charges (`STRIPE_PRICE_MONTHLY` /
+// `STRIPE_PRICE_ANNUAL`), not from independent display-only env amounts that can
+// silently drift. Interface-segregated like the other billing ports so the pure
+// `ResolveBillingPricing` use case depends only on this method; the single SDK
+// adapter (`db/repositories/stripe-gateway.ts`) implements it via
+// `stripe.prices.retrieve`.
+// ---------------------------------------------------------------------------
+
+/** The recurring interval of a Stripe Price, normalized to the shapes we map. */
+export type StripePriceInterval = "month" | "year";
+
+/**
+ * A privacy-safe, SDK-free projection of a Stripe Price object. `unitAmount` is
+ * the amount charged per interval in the currency's MINOR unit (e.g. cents), or
+ * null when the Price carries no fixed unit amount. `interval` is the recurring
+ * interval, or null for a non-recurring/one-off Price.
+ */
+export interface StripePrice {
+  unitAmount: number | null;
+  currency: string;
+  interval: StripePriceInterval | null;
+}
+
+/** The Price-lookup port the pure `ResolveBillingPricing` use case depends on. */
+export interface PriceGateway {
+  retrievePrice(priceId: string): Promise<StripePrice>;
+}
