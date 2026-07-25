@@ -1,10 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  BILLING_PRICING_ERROR_ISSUES,
   PRO_TIER_LIMITS,
   annualSavePercent,
   buildBillingPricing,
+  collectBillingPricingIssues,
   loadStripeConfig,
+  validateBillingPricingConfig,
 } from "../pricing-config.js";
+
+// A fully-consistent env: both price IDs present alongside their display
+// amounts, positive, annual cheaper than 12x monthly.
+const CONSISTENT_PRICING_ENV = {
+  STRIPE_PRICE_MONTHLY: "price_monthly_1",
+  STRIPE_PRICE_ANNUAL: "price_annual_1",
+  STRIPE_PRICE_MONTHLY_AMOUNT: "999",
+  STRIPE_PRICE_ANNUAL_AMOUNT: "799",
+};
 
 const FULL_ENV = {
   STRIPE_SECRET_KEY: "sk_test_abc123",
@@ -127,5 +139,157 @@ describe("buildBillingPricing (11b Slice 5 — web display pricing)", () => {
     });
     expect(pricing.monthly.amountPerMonth).toBe(999);
     expect(pricing.annual.amountPerMonth).toBe(799);
+  });
+});
+
+describe("collectBillingPricingIssues (FIX 2 — display/charge drift guard)", () => {
+  it("returns no issues for a fully-consistent config", () => {
+    expect(collectBillingPricingIssues(CONSISTENT_PRICING_ENV)).toEqual([]);
+  });
+
+  it("flags a monthly display amount set WITHOUT its price-id env", () => {
+    const { STRIPE_PRICE_MONTHLY: _drop, ...env } = CONSISTENT_PRICING_ENV;
+    expect(collectBillingPricingIssues(env)).toContain("monthly_amount_without_price_id");
+  });
+
+  it("flags a monthly price-id set WITHOUT its display amount env", () => {
+    const { STRIPE_PRICE_MONTHLY_AMOUNT: _drop, ...env } = CONSISTENT_PRICING_ENV;
+    expect(collectBillingPricingIssues(env)).toContain("monthly_price_id_without_amount");
+  });
+
+  it("flags an annual display amount set WITHOUT its price-id env", () => {
+    const { STRIPE_PRICE_ANNUAL: _drop, ...env } = CONSISTENT_PRICING_ENV;
+    expect(collectBillingPricingIssues(env)).toContain("annual_amount_without_price_id");
+  });
+
+  it("flags an annual price-id set WITHOUT its display amount env", () => {
+    const { STRIPE_PRICE_ANNUAL_AMOUNT: _drop, ...env } = CONSISTENT_PRICING_ENV;
+    expect(collectBillingPricingIssues(env)).toContain("annual_price_id_without_amount");
+  });
+
+  it("flags a non-positive monthly amount", () => {
+    expect(
+      collectBillingPricingIssues({ ...CONSISTENT_PRICING_ENV, STRIPE_PRICE_MONTHLY_AMOUNT: "0" }),
+    ).toContain("non_positive_monthly_amount");
+  });
+
+  it("flags a non-positive annual amount", () => {
+    expect(
+      collectBillingPricingIssues({ ...CONSISTENT_PRICING_ENV, STRIPE_PRICE_ANNUAL_AMOUNT: "-5" }),
+    ).toContain("non_positive_annual_amount");
+  });
+
+  it("flags an annual interval charge that is NOT cheaper than 12x monthly", () => {
+    // annual per-month >= monthly per-month → annual once-a-year charge >=
+    // monthly*12, which is nonsensical (annual should save money).
+    expect(
+      collectBillingPricingIssues({ ...CONSISTENT_PRICING_ENV, STRIPE_PRICE_ANNUAL_AMOUNT: "999" }),
+    ).toContain("annual_not_cheaper_than_monthly");
+  });
+});
+
+describe("BILLING_PRICING_ERROR_ISSUES (FIX 2 round-2 — severity split)", () => {
+  it("classifies the genuinely-broken cases as error-level (throw-worthy)", () => {
+    expect([...BILLING_PRICING_ERROR_ISSUES].sort()).toEqual(
+      [
+        "annual_amount_without_price_id",
+        "annual_not_cheaper_than_monthly",
+        "monthly_amount_without_price_id",
+        "non_positive_annual_amount",
+        "non_positive_monthly_amount",
+      ].sort(),
+    );
+  });
+
+  it("classifies 'price-id set but amount unset' as WARN-level, NOT error (defaults are valid)", () => {
+    expect(BILLING_PRICING_ERROR_ISSUES).not.toContain("monthly_price_id_without_amount");
+    expect(BILLING_PRICING_ERROR_ISSUES).not.toContain("annual_price_id_without_amount");
+  });
+});
+
+describe("validateBillingPricingConfig (FIX 2 — fail-fast vs warn)", () => {
+  // A realistic prod deploy: Stripe Price IDs are set (checkout needs them) but
+  // the operator left the *_AMOUNT display envs unset → buildBillingPricing
+  // uses the documented-valid defaults (999/799). This MUST boot (warn only).
+  const PRICE_IDS_ONLY_ENV = {
+    STRIPE_PRICE_MONTHLY: "price_monthly_1",
+    STRIPE_PRICE_ANNUAL: "price_annual_1",
+  };
+
+  it("accepts a consistent config without throwing (production)", () => {
+    expect(() =>
+      validateBillingPricingConfig(CONSISTENT_PRICING_ENV, { production: true }),
+    ).not.toThrow();
+  });
+
+  it("does NOT throw in production when only Price IDs are set (defaults valid) — warns instead", () => {
+    const warn = vi.fn();
+    expect(() =>
+      validateBillingPricingConfig(PRICE_IDS_ONLY_ENV, { production: true, warn }),
+    ).not.toThrow();
+    expect(warn).toHaveBeenCalledTimes(1);
+    const message = String(warn.mock.calls[0]?.[0]);
+    expect(message).toContain("monthly_price_id_without_amount");
+    expect(message).toContain("annual_price_id_without_amount");
+  });
+
+  it("throws in production for an amount set WITHOUT its price id, naming the issue", () => {
+    const { STRIPE_PRICE_MONTHLY: _drop, ...env } = CONSISTENT_PRICING_ENV;
+    let error: unknown;
+    try {
+      validateBillingPricingConfig(env, { production: true });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("monthly_amount_without_price_id");
+  });
+
+  it("throws in production for a non-positive amount", () => {
+    expect(() =>
+      validateBillingPricingConfig(
+        { ...CONSISTENT_PRICING_ENV, STRIPE_PRICE_MONTHLY_AMOUNT: "0" },
+        { production: true },
+      ),
+    ).toThrow(/non_positive_monthly_amount/);
+  });
+
+  it("throws in production when annual is NOT cheaper than 12x monthly", () => {
+    expect(() =>
+      validateBillingPricingConfig(
+        { ...CONSISTENT_PRICING_ENV, STRIPE_PRICE_ANNUAL_AMOUNT: "999" },
+        { production: true },
+      ),
+    ).toThrow(/annual_not_cheaper_than_monthly/);
+  });
+
+  it("warns (does NOT throw) outside production when inconsistent", () => {
+    const { STRIPE_PRICE_MONTHLY: _drop, ...env } = CONSISTENT_PRICING_ENV;
+    const warn = vi.fn();
+    expect(() =>
+      validateBillingPricingConfig(env, { production: false, warn }),
+    ).not.toThrow();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain("monthly_amount_without_price_id");
+  });
+
+  it("outside production NEVER throws, even for error-level issues (dev/test warns)", () => {
+    const warn = vi.fn();
+    expect(() =>
+      validateBillingPricingConfig(
+        { ...CONSISTENT_PRICING_ENV, STRIPE_PRICE_MONTHLY_AMOUNT: "0" },
+        { production: false, warn },
+      ),
+    ).not.toThrow();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain("non_positive_monthly_amount");
+  });
+
+  it("neither throws nor warns for a consistent config outside production", () => {
+    const warn = vi.fn();
+    expect(() =>
+      validateBillingPricingConfig(CONSISTENT_PRICING_ENV, { production: false, warn }),
+    ).not.toThrow();
+    expect(warn).not.toHaveBeenCalled();
   });
 });
