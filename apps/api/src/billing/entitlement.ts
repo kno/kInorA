@@ -30,42 +30,66 @@ export interface EntitlementReaderPort {
   loadContext(scope: BillingScope): Promise<EntitlementContext>;
 }
 
+/**
+ * Why a previously-premium entitlement lapsed to Free, when it did. Drives the
+ * denial reason a caller surfaces: a lapsed trial (`trial_expired`) vs a
+ * canceled/ended paid subscription (`subscription_ended`). These are exactly
+ * the two premium-lapse `BillingDenialReason` values (see `@kinora/contracts`).
+ */
+export type LapsedReason = "trial_expired" | "subscription_ended";
+
 export interface EffectiveTier {
   tier: BillingTier;
   source: BillingSource;
-  /** True when the resolved-to-free state is the result of a lapsed trial. */
-  trialExpired: boolean;
+  /**
+   * Set when the resolved-to-Free state is the result of a LAPSED premium
+   * entitlement, and says which kind: a lapsed trial vs a canceled paid
+   * subscription. null when Free is not the result of a lapse (an always-Free
+   * tenant, an active tier, or a still-active trial).
+   */
+  lapsedReason: LapsedReason | null;
 }
 
 /**
  * Resolve the tier in force right now. Precedence: an active admin override wins;
  * otherwise the tenant billing status decides. A `trialing` state is Pro only
  * while `now < trialEndsAt` — at or past the boundary it lapses to Free and is
- * flagged `trialExpired` so callers can surface a subscribe-to-continue prompt.
+ * flagged `trial_expired` so callers can surface a subscribe-to-continue prompt.
+ *
+ * A persisted `expired` status also lapses to Free, but the REASON depends on
+ * `source`: a paid Stripe subscription that ended reports `subscription_ended`
+ * (NOT `trial_expired`), while a system/backfill-provisioned trial that lapsed
+ * reports `trial_expired`. The tier is Free in both cases — only the reason,
+ * and thus the upgrade copy, differs (#196).
  *
  * Callers MUST ensure `ctx.billing` is present OR `ctx.activeOverrideTier` is set
  * before calling (see {@link CheckEntitlement.check}).
  */
 export function resolveEffectiveTier(ctx: EntitlementContext, now: Date): EffectiveTier {
   if (ctx.activeOverrideTier) {
-    return { tier: ctx.activeOverrideTier, source: "admin_override", trialExpired: false };
+    return { tier: ctx.activeOverrideTier, source: "admin_override", lapsedReason: null };
   }
 
   const billing = ctx.billing;
   if (!billing) {
     // Defensive: unreachable via CheckEntitlement, which denies first.
-    return { tier: "free", source: "backfill", trialExpired: false };
+    return { tier: "free", source: "backfill", lapsedReason: null };
   }
 
   if (billing.status === "trialing") {
     const expired = !billing.trialEndsAt || now.getTime() >= billing.trialEndsAt.getTime();
     return expired
-      ? { tier: "free", source: billing.source, trialExpired: true }
-      : { tier: "pro", source: billing.source, trialExpired: false };
+      ? { tier: "free", source: billing.source, lapsedReason: "trial_expired" }
+      : { tier: "pro", source: billing.source, lapsedReason: null };
   }
 
   if (billing.status === "expired") {
-    return { tier: "free", source: billing.source, trialExpired: true };
+    // A paid Stripe subscription that lapsed is a canceled/ended SUBSCRIPTION,
+    // not a trial — surface `subscription_ended` so the UI shows the right
+    // "your subscription ended" copy instead of a misleading "trial ended".
+    const lapsedReason: LapsedReason =
+      billing.source === "stripe" ? "subscription_ended" : "trial_expired";
+    return { tier: "free", source: billing.source, lapsedReason };
   }
 
   if (billing.status === "overridden") {
@@ -75,11 +99,11 @@ export function resolveEffectiveTier(ctx: EntitlementContext, now: Date): Effect
     // to the Free baseline rather than granting a durable, never-expiring Pro.
     // Defensive: no code path currently writes `overridden`; this guards a future
     // override-write path from leaving a tenant permanently premium.
-    return { tier: "free", source: billing.source, trialExpired: false };
+    return { tier: "free", source: billing.source, lapsedReason: null };
   }
 
   // active → the stored tier stands.
-  return { tier: billing.tier, source: billing.source, trialExpired: false };
+  return { tier: billing.tier, source: billing.source, lapsedReason: null };
 }
 
 /**
@@ -111,9 +135,11 @@ export class CheckEntitlement {
     const limit = resolveTenantFeatureLimit(effective.tier, feature);
 
     if (limit <= 0) {
+      // A lapsed premium entitlement reports its specific reason (trial vs
+      // ended subscription); an always-Free tenant reports `premium_required`.
       return {
         allowed: false,
-        reason: effective.trialExpired ? "trial_expired" : "premium_required",
+        reason: effective.lapsedReason ?? "premium_required",
       };
     }
 
