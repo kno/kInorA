@@ -75,8 +75,8 @@ export function annualSavePercent(monthlyAmount: number, annualPerMonthAmount: n
  */
 const DEFAULT_MONTHLY_AMOUNT = 999;
 const DEFAULT_ANNUAL_PER_MONTH_AMOUNT = 799;
-const DEFAULT_CURRENCY = "eur";
-const MONTHS_PER_YEAR = 12;
+export const DEFAULT_CURRENCY = "eur";
+export const MONTHS_PER_YEAR = 12;
 
 /** Parse a minor-unit amount env var, falling back to `fallback` when blank/non-numeric. */
 function readAmount(raw: string | undefined, fallback: number): number {

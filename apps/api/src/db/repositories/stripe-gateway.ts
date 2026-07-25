@@ -10,9 +10,12 @@ import {
   type InvoiceGateway,
   type PortalGateway,
   type PortalSession,
+  type PriceGateway,
   type PromotionCodeValidation,
   type StripeGateway,
   type StripeInvoiceView,
+  type StripePrice,
+  type StripePriceInterval,
   type StripeSubscriptionSnapshot,
   type StripeSubscriptionStatus,
   type StripeWebhookEvent,
@@ -40,7 +43,7 @@ const INVOICE_LIST_LIMIT = 24;
  * and no secret.
  */
 export class StripeApiGateway
-  implements StripeGateway, CheckoutGateway, PortalGateway, InvoiceGateway
+  implements StripeGateway, CheckoutGateway, PortalGateway, InvoiceGateway, PriceGateway
 {
   private readonly stripe: Stripe;
 
@@ -177,6 +180,31 @@ export class StripeApiGateway
     });
     return list.data.map(toStripeInvoiceView);
   }
+
+  /**
+   * Retrieve a Stripe Price LIVE (#195) and project it to the SDK-free
+   * {@link StripePrice}. This is the single source of truth for the DISPLAYED
+   * amounts: they come from the SAME Price ids checkout charges, so the UI can
+   * never show an amount that differs from what Stripe bills. Reads the unit
+   * amount + currency + recurring interval defensively (optional across API
+   * versions); a non-recurring or unrecognized interval maps to null. No secret
+   * is logged.
+   */
+  async retrievePrice(priceId: string): Promise<StripePrice> {
+    const price = await this.stripe.prices.retrieve(priceId);
+    return {
+      unitAmount: price.unit_amount ?? null,
+      currency: price.currency ?? "",
+      interval: normalizePriceInterval(price.recurring?.interval),
+    };
+  }
+}
+
+/** Map a Stripe recurring interval to the intervals we surface (else null). */
+function normalizePriceInterval(interval: string | undefined | null): StripePriceInterval | null {
+  if (interval === "month") return "month";
+  if (interval === "year") return "year";
+  return null;
 }
 
 /**
@@ -286,6 +314,19 @@ export class UnconfiguredPortalInvoiceGateway implements PortalGateway, InvoiceG
     throw new StripeGatewayUnconfiguredError();
   }
   async listInvoices(): Promise<StripeInvoiceView[]> {
+    throw new StripeGatewayUnconfiguredError();
+  }
+}
+
+/**
+ * Fail-closed Price gateway used when Stripe env is unconfigured (#195). Every
+ * price lookup throws {@link StripeGatewayUnconfiguredError}; the pure
+ * `ResolveBillingPricing` use case CATCHES it and falls back to the config/env
+ * display amounts, so `GET /billing/pricing` still serves a price (from config)
+ * on an unconfigured deploy rather than crashing. Never logs a secret.
+ */
+export class UnconfiguredPriceGateway implements PriceGateway {
+  async retrievePrice(): Promise<StripePrice> {
     throw new StripeGatewayUnconfiguredError();
   }
 }
