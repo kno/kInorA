@@ -9,7 +9,9 @@
  *     domain, contracts, web, mobile to keep inner layers pure and network-free
  *   - PWA packages: ALLOWED in apps/web only; BLOCKED everywhere else
  *   - Capacitor/native packages: ALLOWED at root and apps/mobile only; BLOCKED elsewhere
- *   - Auth, Stripe, Docker, CI/CD: BLOCKED everywhere
+ *   - Stripe SDK: ALLOWED in apps/api only (11b-v1-billing-stripe-integration, the
+ *     single infra adapter that verifies webhooks / creates checkout); BLOCKED elsewhere
+ *   - Auth, Docker, CI/CD: BLOCKED everywhere
  *
  * Exits 0 if clean, 1 with a descriptive error listing any violations.
  */
@@ -31,8 +33,6 @@ const PROHIBITED_EVERYWHERE = [
   /oauth/i,
   /bcrypt/i,
   /argon2/i,
-  // Payments
-  /stripe/i,
   // Docker
   /docker/i,
   /dockerode/i,
@@ -69,6 +69,16 @@ const AI_PATTERNS = [
 
 // Workspaces where AI packages are permitted.
 const AI_ALLOWED_WORKSPACES = ["apps/api"];
+
+// Stripe SDK: allowed ONLY in apps/api (11b-v1-billing-stripe-integration — the
+// single infra adapter in db/repositories that calls the SDK); banned from
+// domain, contracts, web, mobile, and root to keep payments off every other
+// layer. The dependency-cruiser additionally confines the import to the infra
+// layer WITHIN apps/api (api-no-stripe-outside-infra).
+const STRIPE_PATTERNS = [/^stripe$/i];
+
+// Workspaces where the Stripe SDK is permitted.
+const STRIPE_ALLOWED_WORKSPACES = ["apps/api"];
 
 // PWA packages: allowed ONLY in apps/web; banned from every other workspace.
 const PWA_PATTERNS = [
@@ -153,6 +163,16 @@ for (const filePath of WORKSPACE_PACKAGE_FILES) {
     // Check AI/LLM packages — prohibited unless in an allowed workspace
     if (!isAllowedWorkspace(filePath, AI_ALLOWED_WORKSPACES)) {
       for (const pattern of AI_PATTERNS) {
+        if (pattern.test(dep)) {
+          violations.push(dep);
+          break;
+        }
+      }
+    }
+
+    // Check Stripe SDK — prohibited unless in an allowed workspace (apps/api)
+    if (!isAllowedWorkspace(filePath, STRIPE_ALLOWED_WORKSPACES)) {
+      for (const pattern of STRIPE_PATTERNS) {
         if (pattern.test(dep)) {
           violations.push(dep);
           break;
