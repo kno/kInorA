@@ -59,6 +59,8 @@ import {
 import { BillingAdminRepository } from "./db/repositories/billing-admin.js";
 import { BillingVisibilityRepository } from "./db/repositories/billing-visibility.js";
 import { CheckEntitlement } from "./billing/entitlement.js";
+import { ChatEntitlement } from "./billing/chat-entitlement.js";
+import { MockPlanSpecExtractor } from "./ai/mock-extractor.js";
 import { CheckAndConsumeQuota } from "./billing/quota-consumption.js";
 import { SetMemberAllocation, GetTenantUsage } from "./billing/quota-admin.js";
 import { GetBillingVisibility } from "./billing/billing-visibility.js";
@@ -325,6 +327,13 @@ export async function buildApp(
     planDraftRepo,
     workoutPlanRepo,
   });
+  // 12-interactive-text-chat (S2a): Pro-only chat gate + a stub token source.
+  // The gate reuses the SAME entitlement reader as every other billing decision
+  // (server-side, authContext-scoped, fail-closed). The extractor is the
+  // deterministic MockPlanSpecExtractor for now — S2b swaps in the real
+  // LangChain-backed adapter. The chat route only calls `streamReply`.
+  const chatEntitlement = new ChatEntitlement(billingStateReader);
+  const chatExtractor = new MockPlanSpecExtractor();
   await app.register(planRoutes, {
     repo: planRouteRepo,
     generationService: planGenerationService,
@@ -332,6 +341,8 @@ export async function buildApp(
       checkAndConsume: (scope, feature, operationKey) =>
         checkAndConsumeQuota.checkAndConsume(scope, feature, operationKey),
     },
+    chatEntitlement,
+    chatExtractor,
   });
 
   await app.register(workoutSessionRoutes, {
