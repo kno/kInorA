@@ -614,34 +614,57 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         }, timeoutMs);
 
         // Backpressure-aware write. When `raw.write()` returns false the kernel
-        // send buffer is full — await 'drain' (or abort) before continuing so no
-        // token is lost. `clientGone` (not `signal.aborted`) gates the write so a
+        // send buffer is full — await 'drain' before continuing so no token is
+        // lost. `clientGone` (not `signal.aborted`) gates the INITIAL write so a
         // timeout can still flush its terminal `error` to the open socket.
+        //
+        // HANG FIX: the drain wait previously escaped ONLY via `abort`. Two gaps:
+        // (a) if the signal was ALREADY aborted before this call (e.g. the
+        //     timeout's own terminal-error write), the `addEventListener("abort")`
+        //     listener never fires because the event already happened — bail
+        //     immediately instead of registering a listener that will never see
+        //     the transition. (b) if 'drain' never arrives (a stalled/dead
+        //     socket — the very condition that caused the timeout) and nothing
+        //     else escapes, the promise hangs forever, leaking the handler and
+        //     the socket (it never reaches `finally`/`raw.end()`). Race 'drain'
+        //     against 'close'/'error' on `raw` as well as `abort`, and always
+        //     remove every listener on settle.
         const writeFrame = (event: string, data: unknown): Promise<void> => {
           if (clientGone || raw.writableEnded) return Promise.resolve();
           const ok = raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
           if (ok) return Promise.resolve();
+          // Already aborted by the time we'd wait — bail without registering a
+          // listener for an event that already fired.
+          if (controller.signal.aborted) return Promise.resolve();
           return new Promise<void>((resolve) => {
             const cleanup = () => {
-              raw.removeListener("drain", onDrain);
-              controller.signal.removeEventListener("abort", onAbort);
+              raw.removeListener("drain", settle);
+              raw.removeListener("close", settle);
+              raw.removeListener("error", settle);
+              controller.signal.removeEventListener("abort", settle);
             };
-            const onDrain = () => {
+            const settle = () => {
               cleanup();
               resolve();
             };
-            const onAbort = () => {
-              cleanup();
-              resolve();
-            };
-            raw.once("drain", onDrain);
-            controller.signal.addEventListener("abort", onAbort, { once: true });
+            raw.once("drain", settle);
+            raw.once("close", settle);
+            raw.once("error", settle);
+            controller.signal.addEventListener("abort", settle, { once: true });
           });
         };
 
         try {
           // Shared draft: read the tenant/user-scoped `plan_drafts` state (never
           // the body). A missing draft is an empty draft.
+          //
+          // TODO(S3): two concurrent/overlapping chat turns for the same
+          // tenant+user (e.g. a fast double-submit) can both read the SAME
+          // `currentDraft` here and the second commit's `upsertDraft` can
+          // overwrite the first turn's merged fields (a lost update — WARNING,
+          // not fixed in S2b). Mitigation lands in S3 by serializing chat turns
+          // client-side (disable submit while a turn is in flight); no
+          // server-side locking is added here.
           const currentRow = await repo.findCurrentDraft(tenantId, userId);
           const currentDraft = (currentRow?.specJson ?? {}) as PlanSpecDraft;
           const step = currentRow?.step ?? 1;
@@ -660,7 +683,13 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
             return;
           }
 
-          const input = { message, currentDraft };
+          // Compute the still-missing input fields from the CURRENT draft
+          // (reusing the same canonical merge logic against an empty
+          // extraction) so the extractor can steer its prose/extraction toward
+          // a deterministic clarifying question, exactly like S1's
+          // `buildExtractionPrompt` was designed to receive.
+          const { missingFields: currentMissingFields } = mergePlanSpecDraft(currentDraft, {});
+          const input = { message, currentDraft, missingFields: currentMissingFields };
 
           // Pass 1 — stream the assistant prose token-by-token, accumulating it
           // for the terminal event.
@@ -677,8 +706,11 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
             return;
           }
 
-          // Pass 2 — terminal structured extraction (non-streamed).
-          const extracted = await chatExtractorPort.extract(input);
+          // Pass 2 — terminal structured extraction (non-streamed). Threads the
+          // SAME AbortSignal so a timeout/disconnect firing during this call
+          // cancels the in-flight structured-output request (HIGH fix — Pass 2
+          // was previously uncancellable).
+          const extracted = await chatExtractorPort.extract(input, controller.signal);
 
           if (controller.signal.aborted) {
             if (timedOut) await writeFrame("error", { error: "chat_stream_timeout" });
@@ -705,8 +737,16 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
           // A client-gone stream gets no terminal write. Log with tenant/user
           // correlation (authContext, never the body); the client event stays
           // generic (no stack/internal detail).
+          //
+          // A timed-out Pass 2 rejects (its signal aborted mid-`await`) and
+          // lands HERE rather than at the post-await `controller.signal.aborted`
+          // check below Pass 2 — surface it as the same `chat_stream_timeout`
+          // terminal, not the generic `chat_stream_failed`.
           request.log.error({ err: error, tenantId, userId }, "chat stream failed");
-          if (!clientGone) await writeFrame("error", { error: "chat_stream_failed" });
+          if (!clientGone) {
+            const reason = timedOut ? "chat_stream_timeout" : "chat_stream_failed";
+            await writeFrame("error", { error: reason });
+          }
         } finally {
           clearTimeout(timer);
           request.raw.removeListener("close", onClose);

@@ -342,13 +342,16 @@ export async function buildApp(
   });
   // 12-interactive-text-chat (S2b): Pro-only chat gate + the real extractor.
   // The gate reuses the SAME entitlement reader as every other billing decision
-  // (server-side, authContext-scoped, fail-closed). The extractor is the real
-  // LangChain-backed `PlanSpecExtractionAdapter` in production — it reads the
-  // active provider/model config per turn (same `configRepo` as generation) and
-  // owns the LangChain dependency so the route never imports it. Tests inject a
-  // deterministic `MockPlanSpecExtractor` (or any fake) via `chatExtractor`; when
-  // no override is given AND no LLM key is configured we still default to the
-  // Mock so local/dev boots without a provider key behave predictably.
+  // (server-side, authContext-scoped, fail-closed). PRODUCTION ALWAYS uses the
+  // real LangChain-backed `PlanSpecExtractionAdapter` — it reads the active
+  // provider/model config per turn (same `configRepo` as generation) and owns
+  // the LangChain dependency so the route never imports it. There is NO silent
+  // Mock fallback: if no LLM provider key is configured, the adapter is still
+  // constructed (keys are read at call time, matching every other adapter in
+  // this file) and a live chat turn will fail at call time with the provider's
+  // own error, surfaced to the client as the generic terminal `error` event.
+  // Tests inject a deterministic `MockPlanSpecExtractor` (or any fake) via the
+  // `chatExtractor` BuildAppOptions override.
   const chatEntitlement = new ChatEntitlement(billingStateReader);
   const chatExtractor: PlanSpecExtractor =
     chatExtractorOverride ??

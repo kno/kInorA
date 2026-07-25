@@ -25,10 +25,14 @@ export interface ChatExtractInput {
  *
  * `streamReply` yields the assistant prose token-by-token and MUST honor the
  * `AbortSignal` (client disconnect). `extract` returns the terminal structured
- * `Partial<PlanSpec>` for one turn. No external imports beyond `@kinora/contracts`
- * — this is the boundary layer; adapters (S2b) own the LLM dependency.
+ * `Partial<PlanSpec>` for one turn and MUST honor its optional `AbortSignal` too
+ * — the Pass-2 structured-output call is a separate, potentially long-running
+ * LLM round-trip and a wall-clock timeout or client disconnect firing during
+ * Pass 2 must be able to cancel it, not just Pass 1's token stream. No external
+ * imports beyond `@kinora/contracts` — this is the boundary layer; adapters
+ * (S2b) own the LLM dependency.
  */
 export interface PlanSpecExtractor {
   streamReply(input: ChatExtractInput, signal: AbortSignal): AsyncIterable<string>;
-  extract(input: ChatExtractInput): Promise<PlanSpecDraft>;
+  extract(input: ChatExtractInput, signal?: AbortSignal): Promise<PlanSpecDraft>;
 }

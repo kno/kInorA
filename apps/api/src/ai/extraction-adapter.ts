@@ -39,6 +39,13 @@ import type { DynamicConfigRepo } from "./dynamic-generator.js";
  * (feature/provider/model) — never the raw message or limitation text — exactly
  * as `invokeChain` does for generation. Health text therefore never reaches the
  * observability backend.
+ *
+ * KNOWN TRADEOFF: Pass 1 (prose) and Pass 2 (structured extraction) are
+ * INDEPENDENT LLM calls over the same prompt and MAY disagree (e.g. the prose
+ * mentions a value the structured pass does not extract, or vice versa). This
+ * is accepted: the terminal `draft` committed to `plan_drafts` is always Pass
+ * 2's output — Pass 2 is the source of truth, Pass 1 is purely the user-facing
+ * narration of the turn.
  */
 
 /** Minimal LangChain chat-model surface the adapter needs (real models + test fakes satisfy it). */
@@ -164,11 +171,17 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
     }
   }
 
-  async extract(input: ChatExtractInput): Promise<PlanSpecDraft> {
+  async extract(input: ChatExtractInput, signal?: AbortSignal): Promise<PlanSpecDraft> {
     const { model, metadata } = await this.resolve();
     const prompt = buildExtractionPrompt(input);
     const chain = model.withStructuredOutput(PlanSpecDraftSchema, { method: "jsonSchema" });
-    const raw = await chain.invoke(prompt, { runName: RUN_NAME, metadata });
+    // Forward `signal` into the LangChain call options (the same `{ signal }`
+    // shape `.stream()` accepts) so an external abort — a wall-clock timeout OR
+    // client disconnect firing DURING Pass 2 — actually cancels this in-flight
+    // structured-output round-trip instead of the caller blocking until the
+    // provider responds. (HIGH fix: Pass 2 was previously uncancellable because
+    // no signal reached the LangChain call.)
+    const raw = await chain.invoke(prompt, { signal, runName: RUN_NAME, metadata });
     // Re-parse at the boundary: never trust the model to honor the allow-list.
     // A forbidden key (preferenceScores/confirmed) or bad value is stripped/rejected here.
     return PlanSpecDraftSchema.parse(raw);

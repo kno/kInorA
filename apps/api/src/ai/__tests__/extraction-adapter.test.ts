@@ -25,6 +25,14 @@ interface FakeModelSpec {
   streamError?: Error;
   /** When set, Pass 2 (`invoke`) rejects with this error. */
   extractError?: Error;
+  /**
+   * When set, Pass 2's `invoke` NEVER resolves/rejects on its own — it only
+   * settles (rejects) when the call's `signal` fires `abort`, simulating a
+   * stalled provider round-trip. Proves `extract()` propagates its `signal` all
+   * the way to the LangChain call so an external abort actually cancels the
+   * in-flight structured-output request instead of the caller blocking on it.
+   */
+  stallUntilAbort?: boolean;
 }
 
 interface RecordedCall {
@@ -55,6 +63,22 @@ function fakeModel(spec: FakeModelSpec) {
         async invoke(input: string, options?: ExtractionCallOptions) {
           invokeCalls.push({ input, options });
           if (spec.extractError) throw spec.extractError;
+          if (spec.stallUntilAbort) {
+            return new Promise((_resolve, reject) => {
+              const signal = options?.signal;
+              if (signal?.aborted) {
+                reject(new Error("aborted"));
+                return;
+              }
+              signal?.addEventListener(
+                "abort",
+                () => reject(new Error("aborted")),
+                { once: true },
+              );
+              // Deliberately never resolves/rejects on its own — only the
+              // signal's abort settles this call.
+            });
+          }
           return spec.extracted;
         },
       };
@@ -147,6 +171,27 @@ describe("PlanSpecExtractionAdapter (real two-pass adapter, fake model)", () => 
     });
 
     await expect(adapter.extract(input())).rejects.toThrow("provider 500");
+  });
+
+  it("extract forwards its AbortSignal into the Pass-2 call so an external abort cancels a stalled request", async () => {
+    // HIGH fix: a wall-clock timeout firing DURING Pass 2 must cancel the
+    // in-flight structured-output call, not block until the (possibly
+    // never-resolving) provider round-trip settles on its own.
+    const { adapter, invokeCalls } = buildAdapter({
+      tokens: [],
+      extracted: {},
+      stallUntilAbort: true,
+    });
+    const controller = new AbortController();
+
+    const promise = adapter.extract(input(), controller.signal);
+    // Give the fake a turn to register its call before aborting.
+    await Promise.resolve();
+    controller.abort();
+
+    await expect(promise).rejects.toThrow();
+    // The signal was actually threaded into the LangChain call options.
+    expect(invokeCalls[0]?.options?.signal).toBe(controller.signal);
   });
 
   it("MASKING: the observability payload masks known limitation text while the model still receives the prompt", async () => {
