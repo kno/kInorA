@@ -123,18 +123,23 @@ jobs:
           src/db/repositories/__tests__/billing-quota.integration.test.ts
           src/db/repositories/__tests__/billing-admin.integration.test.ts
           src/db/repositories/__tests__/billing-visibility.integration.test.ts
+          src/db/repositories/__tests__/stripe-schema.integration.test.ts
 
       - name: Assert billing suites executed (guard against false-green)
         # Each integration file pairs `describe.skipIf(!hasDb)` (the real tests)
         # with a `describe.skipIf(hasDb)` placeholder that passes trivially when
         # DATABASE_URL is absent. So if DATABASE_URL is ever dropped/renamed or
-        # the service is unreachable, vitest runs ONLY the 3 placeholders, exits
+        # the service is unreachable, vitest runs ONLY the placeholders, exits
         # 0, and the job goes GREEN having verified NONE of the billing
         # invariants. This guard fails the job RED unless the real suites
-        # actually ran: a DB-present run yields 12 passed / 3 skipped, whereas a
-        # DB-absent run yields only the 3 placeholders.
+        # actually ran. The four suites are billing-quota (14 tests incl.
+        # placeholder), billing-admin (5), billing-visibility (5), and
+        # stripe-schema (5, 11b Slice 1): a DB-present run yields 25 passed / 4
+        # skipped, whereas a DB-absent run yields only the 4 placeholders. MIN
+        # is set to the exact DB-present passed count so dropping DATABASE_URL
+        # fails RED, not false-green.
         run: >-
-          node -e 'const r = require(process.argv[1]); const passed = r.numPassedTests ?? 0; const MIN = 12; if (passed < MIN) { console.error("ERROR: billing integration suites did NOT execute (numPassedTests=" + passed + " < " + MIN + "). DATABASE_URL was likely unset/unreachable, so vitest ran only the skip-placeholder tests and would have gone GREEN without verifying any billing invariant. Failing the job."); process.exit(1); } console.log("OK: billing integration suites executed (" + passed + " passed tests).");'
+          node -e 'const r = require(process.argv[1]); const passed = r.numPassedTests ?? 0; const MIN = 25; if (passed < MIN) { console.error("ERROR: billing integration suites did NOT execute (numPassedTests=" + passed + " < " + MIN + "). DATABASE_URL was likely unset/unreachable, so vitest ran only the skip-placeholder tests and would have gone GREEN without verifying any billing invariant. Failing the job."); process.exit(1); } console.log("OK: billing integration suites executed (" + passed + " passed tests).");'
           "$RUNNER_TEMP/billing-vitest-results.json"
 
   docker-smoke:

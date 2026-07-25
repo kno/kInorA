@@ -41,10 +41,15 @@ describe("billing schema shape", () => {
       "expired",
       "overridden",
     ]);
+    // 11b-v1 appends 'stripe' additively (11a values keep their ordinals).
+    // The Stripe metadata columns this value accompanies are never read by
+    // resolveEffectiveTier, so this is a pure schema-shape update, not a
+    // behavior change to 11a entitlement resolution.
     expect(billingSourceEnum.enumValues).toEqual([
       "system",
       "backfill",
       "admin_override",
+      "stripe",
     ]);
     expect(billingFeatureEnum.enumValues).toEqual([
       "plan_generation",
