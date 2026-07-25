@@ -105,7 +105,19 @@ export const billingSourceEnum = pgEnum("billing_source", [
   "system",
   "backfill",
   "admin_override",
+  // 11b-v1-billing-stripe-integration: the webhook is the first writer to map a
+  // paid Stripe subscription onto the existing status/tier contract. Appended
+  // last so the 11a values keep their ordinals (additive `ALTER TYPE ... ADD
+  // VALUE`); `resolveEffectiveTier` never branches on `source`.
+  "stripe",
 ]);
+
+/**
+ * Billing cycle for a paid Stripe subscription (11b-v1). Nullable metadata on
+ * `tenant_billing_states`: Free/trial tenants have no cycle. Monthly and annual
+ * map to two config-driven Stripe Prices; both, once paid, resolve to `pro`.
+ */
+export const billingCycleEnum = pgEnum("billing_cycle", ["monthly", "annual"]);
 
 export const billingFeatureEnum = pgEnum("billing_feature", [
   "plan_generation",
@@ -185,6 +197,18 @@ export const tenantBillingStates = pgTable(
     source: billingSourceEnum("source").notNull(),
     trialStartedAt: timestamp("trial_started_at", { withTimezone: true }),
     trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+    // 11b-v1-billing-stripe-integration: additive, nullable Stripe metadata.
+    // These columns are pure metadata for the webhook/portal/invoice flows and
+    // are NEVER read by `resolveEffectiveTier` (entitlement.ts) — the webhook
+    // still writes `status`/`tier` as the single source of truth. All columns
+    // carry safe defaults (nullable, or a defaulted boolean) so the ADD COLUMN
+    // migration is metadata-only with no table rewrite.
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    stripeSubscriptionStatus: text("stripe_subscription_status"),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    billingCycle: billingCycleEnum("billing_cycle"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -195,6 +219,22 @@ export const tenantBillingStates = pgTable(
     ),
   }),
 );
+
+/**
+ * Stripe processed-events store (11b-v1-billing-stripe-integration).
+ * Idempotency + out-of-order guard for the webhook: keyed by the Stripe
+ * `event_id` (PK), an insert-on-conflict-do-nothing makes each event apply at
+ * most once (mirrors the `billing_usage_ledger` operation-key replay pattern).
+ * `stripe_event_ts` records the source subscription/event timestamp so a stale,
+ * out-of-order delivery never overwrites newer state. Purely additive — no 11a
+ * table is touched.
+ */
+export const stripeProcessedEvents = pgTable("stripe_processed_events", {
+  eventId: text("event_id").primaryKey(),
+  type: text("type").notNull(),
+  stripeEventTs: timestamp("stripe_event_ts", { withTimezone: true }),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const tenantBillingOverrides = pgTable(
   "tenant_billing_overrides",
