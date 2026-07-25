@@ -42,6 +42,13 @@ export function BillingPageClient({
   const [data, setData] = useState<BillingVisibilityDTO | null>(initialData);
   const [error, setError] = useState<string | null>(initialError);
   const [invoices, setInvoices] = useState<GetBillingInvoicesResult>(initialInvoices);
+  // Ownership tracked as state, updated ONLY on a definitive signal (#197). A
+  // definitive positive (`ok`) grants owner-only UI; a definitive `forbidden`
+  // revokes it; a transient `error` leaves the last-known value untouched so a
+  // real non-owner is never flipped into the owner UI, and an established owner
+  // degrades gracefully instead of flashing to non-owner. Initial unknown
+  // (`error`) is fail-closed: no owner-only UI until a positive signal arrives.
+  const [isOwner, setIsOwner] = useState<boolean>(initialInvoices.kind === "ok");
   const [loading, setLoading] = useState(false);
   const [online, setOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine,
@@ -93,6 +100,10 @@ export function BillingPageClient({
         setData(visibility.data);
         setError(null);
         setInvoices(invoiceResult);
+        // Only a definitive invoice signal changes ownership; a transient
+        // `error` preserves the last-known value (#197).
+        if (invoiceResult.kind === "ok") setIsOwner(true);
+        else if (invoiceResult.kind === "forbidden") setIsOwner(false);
       } else {
         console.error({ event: "billing_visibility_refresh_failed", kind: visibility.message });
         setError(visibility.message);
@@ -156,11 +167,6 @@ export function BillingPageClient({
       </section>
     );
   }
-
-  // A definitive 403 (forbidden) proves the caller is NOT an owner. Any other
-  // outcome (ok, or a transient error) is treated as owner, so owner-only UI is
-  // hidden ONLY when we are certain the member lacks ownership.
-  const isOwner = invoices.kind !== "forbidden";
 
   return (
     <BillingScreen
