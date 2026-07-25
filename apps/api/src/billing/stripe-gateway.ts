@@ -173,3 +173,66 @@ export interface CheckoutGateway {
   validatePromotionCode(code: string): Promise<PromotionCodeValidation>;
   createCheckoutSession(input: CreateCheckoutSessionInput): Promise<CheckoutSession>;
 }
+
+// ---------------------------------------------------------------------------
+// Customer Portal + invoice ports (11b-v1-billing-stripe-integration, Slice 4).
+//
+// Interface-segregated from {@link StripeGateway}/{@link CheckoutGateway}: the
+// portal use case needs ONLY `createPortalSession` and the invoice use case
+// ONLY `listInvoices`, so the Slice 2/3 fakes keep satisfying their narrower
+// contracts. The SINGLE SDK adapter (`db/repositories/stripe-gateway.ts`)
+// implements EVERY port, so all `stripe` imports stay confined to that one file.
+//
+// The Stripe CUSTOMER identity is NEVER accepted from client input. It is
+// resolved SERVER-SIDE from OUR `tenant_billing_states.stripe_customer_id`
+// keyed by the `authContext` tenant (see BillingCustomerReaderPort in
+// `create-portal-session.ts`) and only then handed to these gateway methods.
+// ---------------------------------------------------------------------------
+
+/** The Stripe-hosted Customer Portal URL to redirect the member to. */
+export interface PortalSession {
+  url: string;
+}
+
+/**
+ * Thrown by the portal use case when the tenant has NO `stripe_customer_id`
+ * (never subscribed). It is OUR OWN controlled precondition error: a portal
+ * cannot exist without a Stripe customer, so the route maps it to a clean 409
+ * — NOT a 500/crash. The message NEVER contains a customer id or any secret.
+ */
+export class NoStripeCustomerError extends Error {
+  constructor(message = "tenant has no stripe customer") {
+    super(message);
+    this.name = "NoStripeCustomerError";
+  }
+}
+
+/**
+ * A privacy-safe, SDK-free projection of the fields we read off a Stripe
+ * invoice. It carries NO full card number (PAN), CVC, or other member PII — the
+ * adapter that talks to the `stripe` SDK is the trust boundary and extracts ONLY
+ * these fields, so a PAN can never cross the port into a pure use case by type.
+ * `created` is the Stripe unix-seconds timestamp; card display fields are null
+ * when the invoice has no associated card.
+ */
+export interface StripeInvoiceView {
+  id: string;
+  amountDue: number;
+  currency: string;
+  status: string;
+  created: number;
+  hostedInvoiceUrl: string | null;
+  receiptUrl: string | null;
+  cardBrand: string | null;
+  cardLast4: string | null;
+}
+
+/** The Customer Portal port the pure `CreatePortalSession` use case depends on. */
+export interface PortalGateway {
+  createPortalSession(stripeCustomerId: string): Promise<PortalSession>;
+}
+
+/** The invoice-listing port the pure `ListInvoices` use case depends on. */
+export interface InvoiceGateway {
+  listInvoices(stripeCustomerId: string): Promise<StripeInvoiceView[]>;
+}
