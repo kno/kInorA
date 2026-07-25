@@ -224,19 +224,19 @@ bounded against item **13 — voice assistant** (STT/TTS), which is out of scope
 
 ## Success Criteria
 
-- [ ] A free-text description produces a validated `Partial<PlanSpec>` draft covering the 6 input
+- [x] A free-text description produces a validated `Partial<PlanSpec>` draft covering the 6 input
       fields (+ optional name), never `preferenceScores`/`confirmed`.
-- [ ] The assistant reply streams token-by-token over SSE; the extracted `draftSpec` +
+- [x] The assistant reply streams token-by-token over SSE; the extracted `draftSpec` +
       `missingFields` arrive as the terminal `draft` event; a mid-stream failure emits a terminal
       `error` event without corrupting the draft.
-- [ ] Ambiguous/partial input yields deterministic clarifying questions instead of a bad draft.
-- [ ] A Free tenant calling `POST /plan-specs/chat` is rejected fail-closed with an
+- [x] Ambiguous/partial input yields deterministic clarifying questions instead of a bad draft.
+- [x] A Free tenant calling `POST /plan-specs/chat` is rejected fail-closed with an
       upgrade-required denial regardless of client mode; a Pro tenant is allowed.
-- [ ] Create-plan defaults to Asistente for Pro and Formulario for Free, derived server-side;
+- [x] Create-plan defaults to Asistente for Pro and Formulario for Free, derived server-side;
       Free sees an Asistente teaser / "Mejora a Pro" CTA and cannot run chat turns.
-- [ ] Chat and wizard share one draft; toggling modes preserves the in-progress spec.
-- [ ] Generation runs only via the existing confirm gate and consumes exactly one
+- [x] Chat and wizard share one draft; toggling modes preserves the in-progress spec.
+- [x] Generation runs only via the existing confirm gate and consumes exactly one
       `plan_generation` unit; extraction turns consume none.
-- [ ] No LLM/extraction code outside `apps/api/src/ai/` (deps-guard clean); web sends text + renders.
-- [ ] Health/limitation text is masked before reaching LLM/observability; no raw transcript embedded.
-- [ ] Web Asistente screen matches the OD layout; non-mapping OD fields scoped out or profile-read.
+- [x] No LLM/extraction code outside `apps/api/src/ai/` (deps-guard clean); web sends text + renders.
+- [x] Health/limitation text is masked before reaching LLM/observability; no raw transcript embedded.
+- [x] Web Asistente screen matches the OD layout; non-mapping OD fields scoped out or profile-read.
