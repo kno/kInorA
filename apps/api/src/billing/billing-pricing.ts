@@ -72,6 +72,13 @@ export class ResolveBillingPricing {
   private readonly now: () => number;
   private readonly warn: (message: string) => void;
   private cache: CacheEntry | null = null;
+  /**
+   * The in-flight resolution shared by a concurrent burst on a cold/expired
+   * cache (review #3). Without it, N simultaneous `GET /billing/pricing` each
+   * run `resolve()` and fire their own Stripe retrievals, bypassing the TTL
+   * cache. Stored on first miss, awaited by the rest, and cleared on settle.
+   */
+  private pending: Promise<BillingPricingDTO> | null = null;
 
   constructor(
     private readonly gateway: PriceGateway,
@@ -85,17 +92,27 @@ export class ResolveBillingPricing {
   }
 
   async execute(): Promise<BillingPricingDTO> {
-    const now = this.now();
-    if (this.cache && now < this.cache.expiresAt) {
+    if (this.cache && this.now() < this.cache.expiresAt) {
       return this.cache.pricing;
     }
+    // Coalesce a concurrent burst: the first miss starts one resolution; every
+    // other caller awaits the SAME promise instead of firing its own retrievals.
+    if (this.pending) {
+      return this.pending;
+    }
 
-    const pricing = await this.resolve();
-    // Cache whatever we resolved (sourced OR fallback): caching the fallback too
-    // bounds Stripe calls during a brownout instead of hammering it per request;
-    // the next request after the TTL retries live sourcing.
-    this.cache = { pricing, expiresAt: now + this.cacheTtlMs };
-    return pricing;
+    this.pending = this.resolve()
+      .then((pricing) => {
+        // Cache whatever we resolved (sourced OR fallback): caching the fallback
+        // too bounds Stripe calls during a brownout instead of hammering it per
+        // request; the next request after the TTL retries live sourcing.
+        this.cache = { pricing, expiresAt: this.now() + this.cacheTtlMs };
+        return pricing;
+      })
+      .finally(() => {
+        this.pending = null;
+      });
+    return this.pending;
   }
 
   private async resolve(): Promise<BillingPricingDTO> {
@@ -123,8 +140,11 @@ export class ResolveBillingPricing {
  * Price recurs monthly (its unit amount IS the per-month amount); the annual
  * Price is charged once a year (its unit amount is the per-interval amount, and
  * the per-month figure is derived from it). Throws
- * {@link InconsistentStripePriceError} when the intervals are swapped/absent or
- * an amount is non-positive so the caller falls back safely.
+ * {@link InconsistentStripePriceError} — so the caller falls back safely — when
+ * the intervals are swapped/absent, an amount is non-positive, the two Prices
+ * are in different currencies (review #1), or the annual charge is not cheaper
+ * per month than monthly (review #2 — the offline validator's
+ * `annual_not_cheaper_than_monthly` case, replicated on the live path).
  */
 function pricingFromStripePrices(monthly: StripePrice, annual: StripePrice): BillingPricingDTO {
   if (monthly.interval !== "month" || annual.interval !== "year") {
@@ -135,8 +155,21 @@ function pricingFromStripePrices(monthly: StripePrice, annual: StripePrice): Bil
   if (monthlyPerMonth <= 0 || annualPerInterval <= 0) {
     throw new InconsistentStripePriceError("stripe price unit amount is missing or non-positive");
   }
+  // Both Prices MUST bill the same currency; silently keeping one would show a
+  // price in a currency Stripe does not charge for the other cycle (review #1).
+  const monthlyCurrency = (monthly.currency || DEFAULT_CURRENCY).toLowerCase();
+  const annualCurrency = (annual.currency || DEFAULT_CURRENCY).toLowerCase();
+  if (monthlyCurrency !== annualCurrency) {
+    throw new InconsistentStripePriceError("stripe monthly and annual prices use different currencies");
+  }
+  // Replicate the offline `annual_not_cheaper_than_monthly` guard on the live
+  // path (review #2): the yearly charge MUST be strictly cheaper than paying
+  // monthly for twelve months, else the "annual saves N%" story is broken.
+  if (annualPerInterval >= monthlyPerMonth * MONTHS_PER_YEAR) {
+    throw new InconsistentStripePriceError("stripe annual price is not cheaper than 12x monthly");
+  }
   const annualPerMonth = Math.round(annualPerInterval / MONTHS_PER_YEAR);
-  const currency = (monthly.currency || annual.currency || DEFAULT_CURRENCY).toLowerCase();
+  const currency = monthlyCurrency;
 
   return {
     currency,
