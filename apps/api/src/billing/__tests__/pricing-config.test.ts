@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PRO_TIER_LIMITS,
   annualSavePercent,
+  buildBillingPricing,
   loadStripeConfig,
 } from "../pricing-config.js";
 
@@ -85,5 +86,46 @@ describe("annualSavePercent (11b Slice 1)", () => {
 
   it("returns 0 when annual per-month equals monthly (no saving)", () => {
     expect(annualSavePercent(999, 999)).toBe(0);
+  });
+});
+
+describe("buildBillingPricing (11b Slice 5 — web display pricing)", () => {
+  it("defaults to 9,99 €/mo monthly and 7,99 €/mo annual with a derived 20% save", () => {
+    const pricing = buildBillingPricing({});
+    expect(pricing).toEqual({
+      currency: "eur",
+      monthly: { cycle: "monthly", amountPerMonth: 999, amountPerInterval: 999 },
+      annual: { cycle: "annual", amountPerMonth: 799, amountPerInterval: 799 * 12 },
+      annualSavePercent: 20,
+    });
+  });
+
+  it("reads amounts + currency from env (config-driven, not hardcoded)", () => {
+    const pricing = buildBillingPricing({
+      STRIPE_PRICE_MONTHLY_AMOUNT: "1200",
+      STRIPE_PRICE_ANNUAL_AMOUNT: "600",
+      STRIPE_PRICE_CURRENCY: "usd",
+    });
+    expect(pricing.currency).toBe("usd");
+    expect(pricing.monthly.amountPerMonth).toBe(1200);
+    expect(pricing.monthly.amountPerInterval).toBe(1200);
+    expect(pricing.annual.amountPerMonth).toBe(600);
+    // Annual is billed once for twelve months.
+    expect(pricing.annual.amountPerInterval).toBe(7200);
+    // 1 - 600/1200 = 0.5 → 50% (derived, forces real math).
+    expect(pricing.annualSavePercent).toBe(50);
+  });
+
+  it("normalizes the currency to lowercase", () => {
+    expect(buildBillingPricing({ STRIPE_PRICE_CURRENCY: "EUR" }).currency).toBe("eur");
+  });
+
+  it("falls back to defaults when an amount env var is blank or non-numeric", () => {
+    const pricing = buildBillingPricing({
+      STRIPE_PRICE_MONTHLY_AMOUNT: "",
+      STRIPE_PRICE_ANNUAL_AMOUNT: "not-a-number",
+    });
+    expect(pricing.monthly.amountPerMonth).toBe(999);
+    expect(pricing.annual.amountPerMonth).toBe(799);
   });
 });

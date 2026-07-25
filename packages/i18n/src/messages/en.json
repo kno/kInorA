@@ -855,6 +855,7 @@
     "navLabel": "Billing",
     "title": "Billing",
     "description": "Review your plan, trial status, and usage for this account.",
+    "subtitle": "Manage your plan, usage, and payment details.",
     "loading": {
       "title": "Loading your billing…",
       "description": "We are fetching your plan, trial, and usage details.",
@@ -868,6 +869,10 @@
       "offlineTitle": "You are offline",
       "offlineDescription": "Reconnect to load your billing details.",
       "retry": "Retry"
+    },
+    "regions": {
+      "main": "Billing overview",
+      "aside": "Plan options"
     },
     "tier": {
       "free": "Free",
@@ -884,12 +889,30 @@
       "expiredTitle": "Your Pro trial has ended",
       "expiredDescription": "You are now on the Free plan. Upgrade to keep premium features."
     },
+    "plan": {
+      "currentLabel": "Current plan",
+      "descriptionFree": "You are on the Free plan with basic monthly limits.",
+      "descriptionPro": "You are on Pro with high monthly limits across every feature.",
+      "metaPrice": "Price",
+      "metaRenewal": "Renewal",
+      "metaPeriod": "Current period",
+      "metaPayment": "Payment method",
+      "valueNotSet": "—",
+      "renewalNone": "No renewal",
+      "comparePlans": "Compare plans",
+      "priceFree": "Free",
+      "periodTrialEndsOn": "Trial ends {date}"
+    },
     "usage": {
       "tenantTitle": "Tenant usage this period",
       "memberTitle": "Your usage this period",
       "row": "{feature} — {used}/{limit} used",
       "emptyTitle": "No usage recorded yet",
-      "emptyDescription": "Usage for this billing period will appear here once it starts."
+      "emptyDescription": "Usage for this billing period will appear here once it starts.",
+      "periodLabel": "Period {period}",
+      "limitNote": "up to {limit}/mo",
+      "footer": "Expand your limits with Pro",
+      "meterAria": "{feature}: {used} of {limit} used"
     },
     "feature": {
       "plan_generation": "Plan generations",
@@ -897,9 +920,50 @@
       "memory_write": "Memory writes",
       "memory_retrieval": "Memory retrievals"
     },
+    "history": {
+      "title": "Invoices & charges",
+      "empty": "No charges yet",
+      "emptyDescription": "Your invoices and receipts will appear here after your first payment.",
+      "download": "Receipt",
+      "invoiceAria": "Receipt for invoice {date}, {amount}, {status}",
+      "errorTitle": "We couldn't load your invoices.",
+      "errorDescription": "Try again in a moment."
+    },
+    "pro": {
+      "eyebrow": "Recommended",
+      "title": "kInorA Pro",
+      "cycleAria": "Billing cycle",
+      "cycleMonthly": "Monthly",
+      "cycleAnnual": "Annual",
+      "priceSuffix": "/mo",
+      "annualBilled": "billed annually",
+      "saveBadge": "Save {percent}%",
+      "benefitGenerations": "Generous monthly plan generations & regenerations",
+      "benefitMemory": "Premium memory writes & retrievals",
+      "benefitSupport": "Priority support",
+      "cta": "Upgrade to Pro",
+      "currentBadge": "Your current plan",
+      "noCommitment": "No commitment · Cancel in one click"
+    },
+    "payment": {
+      "title": "Payment method",
+      "description": "Manage your card securely in the Stripe portal.",
+      "manageCta": "Manage / Add card"
+    },
+    "support": {
+      "title": "Need help?",
+      "description": "Find answers to common billing questions.",
+      "faqCta": "View billing FAQ"
+    },
+    "actions": {
+      "checkoutError": "We couldn't start checkout. Please try again.",
+      "portalError": "We couldn't open the billing portal. Please try again.",
+      "invalidPromotion": "That promotion code isn't valid.",
+      "redirecting": "Redirecting…"
+    },
     "upgrade": {
       "title": "Unlock Pro features",
-      "description": "Upgrade to Pro for unlimited plan generations and premium memory.",
+      "description": "Upgrade to Pro for high monthly limits on plan generation and premium memory.",
       "cta": "View upgrade options"
     }
   },

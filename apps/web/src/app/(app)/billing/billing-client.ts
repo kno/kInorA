@@ -1,15 +1,32 @@
 import "server-only";
 
-import type { BillingVisibilityDTO } from "@kinora/contracts";
+import type {
+  BillingCycle,
+  BillingPricingDTO,
+  BillingVisibilityDTO,
+  InvoiceDTO,
+} from "@kinora/contracts";
+import type {
+  GetBillingInvoicesResult,
+  GetBillingPricingResult,
+  GetBillingVisibilityResult,
+  OpenPortalResult,
+  StartCheckoutResult,
+} from "./billing-types";
+
+// Re-export the client-safe result types so existing importers keep working.
+export type {
+  GetBillingInvoicesResult,
+  GetBillingPricingResult,
+  GetBillingVisibilityResult,
+  OpenPortalResult,
+  StartCheckoutResult,
+} from "./billing-types";
 
 interface ClientOptions {
   apiBaseUrl?: string;
   fetchImpl?: typeof fetch;
 }
-
-export type GetBillingVisibilityResult =
-  | { kind: "ok"; data: BillingVisibilityDTO }
-  | { kind: "error"; message: string };
 
 export function apiBaseUrl(): string {
   return process.env.API_BASE_URL ?? "http://localhost:4000";
@@ -129,4 +146,217 @@ export async function getBillingVisibility(
   }
 
   return { kind: "ok", data: body };
+}
+
+function isBillingCyclePriceDTO(value: unknown, cycle: string): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const c = value as Record<string, unknown>;
+  return (
+    c.cycle === cycle &&
+    typeof c.amountPerMonth === "number" &&
+    typeof c.amountPerInterval === "number"
+  );
+}
+
+function isBillingPricingDTO(value: unknown): value is BillingPricingDTO {
+  if (typeof value !== "object" || value === null) return false;
+  const c = value as Record<string, unknown>;
+  return (
+    typeof c.currency === "string" &&
+    typeof c.annualSavePercent === "number" &&
+    isBillingCyclePriceDTO(c.monthly, "monthly") &&
+    isBillingCyclePriceDTO(c.annual, "annual")
+  );
+}
+
+function isInvoiceDTO(value: unknown): value is InvoiceDTO {
+  if (typeof value !== "object" || value === null) return false;
+  const c = value as Record<string, unknown>;
+  return (
+    typeof c.id === "string" &&
+    typeof c.amountDue === "number" &&
+    typeof c.currency === "string" &&
+    typeof c.status === "string" &&
+    typeof c.createdAt === "string" &&
+    (c.hostedInvoiceUrl === null || typeof c.hostedInvoiceUrl === "string") &&
+    (c.receiptUrl === null || typeof c.receiptUrl === "string")
+  );
+}
+
+/**
+ * Fetch the config-driven display pricing (`GET /billing/pricing`, 11b Slice 5).
+ * The billing screen renders displayed amounts + the save badge from this
+ * response — the web never hardcodes prices. Server-only: the session token is
+ * never exposed to the client bundle.
+ */
+export async function getBillingPricing(
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<GetBillingPricingResult> {
+  if (!token) return { kind: "error", message: "no_session" };
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}/billing/pricing`, {
+      method: "GET",
+      headers: headers(token),
+      cache: "no-store",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch {
+    logReadFailure("pricing_api_unreachable");
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (!res.ok) {
+    if (res.status >= 500) logReadFailure("pricing_server_error", { status: res.status });
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? `api_error_${res.status}` };
+  }
+
+  const body = (await res.json().catch(() => null)) as unknown;
+  if (!isBillingPricingDTO(body)) {
+    logReadFailure("pricing_invalid_response");
+    return { kind: "error", message: "invalid_response" };
+  }
+
+  return { kind: "ok", data: body };
+}
+
+/**
+ * Fetch the tenant's invoice history (`GET /billing/invoices`, 11b Slice 4 —
+ * OWNER-ONLY). A 403 means the caller is not an owner and maps to `forbidden`
+ * (an expected, non-error outcome the UI uses to hide the owner-only sections),
+ * NOT to a read-failure log. Server-only: the session token is never exposed to
+ * the client bundle.
+ */
+export async function getBillingInvoices(
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<GetBillingInvoicesResult> {
+  if (!token) return { kind: "error", message: "no_session" };
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}/billing/invoices`, {
+      method: "GET",
+      headers: headers(token),
+      cache: "no-store",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch {
+    logReadFailure("invoices_api_unreachable");
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  // 403 = not an owner. Expected authorization outcome, not a failure.
+  if (res.status === 403) return { kind: "forbidden" };
+
+  if (!res.ok) {
+    if (res.status >= 500) logReadFailure("invoices_server_error", { status: res.status });
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? `api_error_${res.status}` };
+  }
+
+  const body = (await res.json().catch(() => null)) as unknown;
+  if (!Array.isArray(body) || !body.every(isInvoiceDTO)) {
+    logReadFailure("invoices_invalid_response");
+    return { kind: "error", message: "invalid_response" };
+  }
+
+  return { kind: "ok", invoices: body };
+}
+
+function jsonHeaders(token: string): HeadersInit {
+  return { authorization: `Bearer ${token}`, "content-type": "application/json" };
+}
+
+/**
+ * Start a Stripe-hosted checkout for the selected cycle (`POST /billing/checkout`,
+ * 11b Slice 3). The tenant is bound server-side from the session — never from
+ * the body. Returns the hosted URL for the client to redirect to. Server-only:
+ * the session token never reaches the client bundle.
+ */
+export async function startCheckout(
+  token: string | undefined,
+  cycle: BillingCycle,
+  promotionCode: string | undefined,
+  options: ClientOptions = {},
+): Promise<StartCheckoutResult> {
+  if (!token) return { kind: "error", message: "no_session" };
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const payload: { cycle: BillingCycle; promotionCode?: string } = { cycle };
+  if (promotionCode && promotionCode.trim() !== "") payload.promotionCode = promotionCode.trim();
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}/billing/checkout`, {
+      method: "POST",
+      headers: jsonHeaders(token),
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (!res.ok) {
+    const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: errBody.error ?? `api_error_${res.status}` };
+  }
+
+  const body = (await res.json().catch(() => null)) as { url?: unknown } | null;
+  if (!body || typeof body.url !== "string") {
+    return { kind: "error", message: "invalid_response" };
+  }
+  return { kind: "ok", url: body.url };
+}
+
+/**
+ * Open the Stripe Customer Portal (`POST /billing/portal`, 11b Slice 4 —
+ * OWNER-ONLY). A 403 maps to `forbidden` (non-owner), mirroring the invoice
+ * read. Server-only: the session token never reaches the client bundle.
+ */
+export async function openPortal(
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<OpenPortalResult> {
+  if (!token) return { kind: "error", message: "no_session" };
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}/billing/portal`, {
+      method: "POST",
+      headers: jsonHeaders(token),
+      cache: "no-store",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (res.status === 403) return { kind: "forbidden" };
+
+  if (!res.ok) {
+    const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: errBody.error ?? `api_error_${res.status}` };
+  }
+
+  const body = (await res.json().catch(() => null)) as { url?: unknown } | null;
+  if (!body || typeof body.url !== "string") {
+    return { kind: "error", message: "invalid_response" };
+  }
+  return { kind: "ok", url: body.url };
 }

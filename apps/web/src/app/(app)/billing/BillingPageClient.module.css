@@ -1,0 +1,359 @@
+/*
+ * Web billing screen — reproduces the Open Design `screens/web-billing.html`
+ * layout + tokens (dark oklch theme, lime accent, Space Grotesk display + DM
+ * Sans body, 22px card radius). The app-level sidebar is provided by AppShell;
+ * this module lays out the main column (plan hero, usage meters, invoice
+ * history) + the aside (Pro card, payment method, support). Prices/save % come
+ * from config (never hardcoded) and usage is shown as metered "up to N/mo".
+ */
+
+.page {
+  width: 100%;
+  max-width: 1120px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.chips {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.tierChip,
+.statusChip,
+.trialChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+}
+
+.tierChip {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 40%, transparent);
+}
+
+.statusChip {
+  color: var(--muted);
+}
+
+.trialChip {
+  color: var(--warning);
+  border-color: color-mix(in oklab, var(--warning) 40%, transparent);
+}
+
+/* Main + aside grid — main is the wider column (1.5fr), aside is fixed-min. */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.mainCol,
+.asideCol {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.planName {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  margin: 0;
+  color: var(--fg);
+}
+
+.cardTitle {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  margin: 0;
+  color: var(--fg);
+}
+
+/* Plan hero meta tiles */
+.metaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.metaTile {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.75rem 0.9rem;
+}
+
+.metaLabel {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metaValue {
+  margin: 0.25rem 0 0;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+/* Usage meters */
+.meterList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.meterRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.meterHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.meterLabel {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.meterValue {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.meterTrack {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.meterFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.meterNotes {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.meterNote {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.usageFooter {
+  font-size: 0.85rem;
+  color: var(--accent);
+  margin: 0;
+}
+
+/* Invoice history */
+.invoiceList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.invoiceRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.invoiceDate {
+  color: var(--fg);
+  font-weight: 500;
+  margin-right: 0.5rem;
+}
+
+.invoiceStatus {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.invoiceRight {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.invoiceAmount {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+.receiptLink,
+.supportLink {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+}
+
+.receiptLink:hover,
+.supportLink:hover {
+  text-decoration: underline;
+}
+
+/* Pro upgrade card */
+.proCard {
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+}
+
+.cycleToggle {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: var(--surface-2);
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  width: fit-content;
+}
+
+.cycleOption {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  font: inherit;
+  cursor: pointer;
+  min-height: var(--tap);
+}
+
+.cycleOptionActive {
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
+
+.priceBlock {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.price {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  color: var(--fg);
+}
+
+.priceSuffix {
+  color: var(--muted);
+}
+
+.saveBadge {
+  background: var(--accent-dim);
+  color: var(--accent);
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.annualNote {
+  width: 100%;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.benefits {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  color: var(--fg);
+}
+
+.benefits li::before {
+  content: "✓";
+  color: var(--accent);
+  margin-right: 0.5rem;
+  font-weight: 700;
+}
+
+.currentBadge {
+  color: var(--accent);
+  font-weight: 600;
+  margin: 0;
+}
+
+.ctaError {
+  color: var(--danger);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* Responsive: collapse to a single column on narrow viewports. The AppShell
+   sidebar itself becomes a bottom tab bar at its own ≤768px breakpoint. */
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .metaGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
