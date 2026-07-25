@@ -159,7 +159,9 @@ const chatTurnSchema = {
     type: "object",
     required: ["message"],
     properties: {
-      message: { type: "string", minLength: 1 },
+      // Bounded well below Fastify's 1MB default body limit so an oversized
+      // message is rejected with a clean 400 before any streaming/LLM work.
+      message: { type: "string", minLength: 1, maxLength: 4000 },
     },
     additionalProperties: true,
   },
@@ -539,6 +541,21 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         request.raw.on("close", onClose);
         raw.on("close", onClose);
 
+        // CRITICAL: a mid-stream socket-level failure (e.g. a client TCP RESET
+        // → ECONNRESET) fires an 'error' event on the hijacked `reply.raw` (and
+        // possibly its underlying socket). Node re-throws an unhandled 'error'
+        // event as an UNCAUGHT EXCEPTION that crashes the ENTIRE process — every
+        // tenant, not just this request. Treat it exactly like a disconnect:
+        // log it, abort, and never rethrow. Listen on both the response object
+        // and its socket since either can be the emitter depending on where the
+        // failure originates.
+        const onError = (err: unknown) => {
+          request.log.error({ err, tenantId, userId }, "chat stream socket error");
+          controller.abort();
+        };
+        raw.on("error", onError);
+        raw.socket?.on("error", onError);
+
         const write = (event: string, data: unknown): void => {
           // Never write to an aborted/ended socket — that throws ERR_STREAM_*.
           if (controller.signal.aborted || raw.writableEnded) return;
@@ -555,13 +572,19 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
           // Terminal stub event. S2b emits `draft` (with the merged spec) or
           // `error` here; S2a has no extraction/merge/commit yet.
           write("done", {});
-        } catch {
+        } catch (error) {
           // A stub-source failure is surfaced as a terminal `error`; no draft is
-          // ever written in S2a regardless.
+          // ever written in S2a regardless. Log with tenant/user correlation
+          // (from authContext, never the body) so a failing stream is
+          // diagnosable in prod — the client-facing event stays generic (no
+          // stack/internal detail).
+          request.log.error({ err: error, tenantId, userId }, "chat stream failed");
           write("error", { error: "chat_stream_failed" });
         } finally {
           request.raw.removeListener("close", onClose);
           raw.removeListener("close", onClose);
+          raw.removeListener("error", onError);
+          raw.socket?.removeListener("error", onError);
           if (!raw.writableEnded) raw.end();
         }
       }

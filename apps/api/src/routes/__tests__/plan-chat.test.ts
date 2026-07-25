@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import http from "node:http";
 import Fastify, { type FastifyInstance } from "fastify";
+import type { ServerResponse } from "node:http";
 import { authPlugin } from "../../auth/plugin.js";
 import { planRoutes, type PlanRouteRepo } from "../plan.js";
 import type { ChatEntitlementPort } from "../../billing/chat-entitlement.js";
@@ -309,5 +311,126 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
 
     expect(observed).toBe(true);
     expect(repo.upsertDraft).not.toHaveBeenCalled();
+  });
+
+  it("cleans up quietly on a socket-level error without crashing the process", async () => {
+    // CRITICAL fix regression guard: a mid-stream socket failure (e.g. a client
+    // TCP RESET → ECONNRESET) fires an 'error' event on the hijacked
+    // `reply.raw` (http.ServerResponse). With NO 'error' listener attached,
+    // Node re-throws this as an uncaught exception that crashes the whole
+    // process (every tenant, not just this request).
+    //
+    // Deterministic reproduction: monkeypatch `http.ServerResponse.prototype.write`
+    // to CAPTURE the exact `reply.raw` instance the route hijacked (no other
+    // seam exposes it), then emit a synthetic 'error' on it from a detached
+    // `setImmediate` turn — mirroring how Node's own socket internals dispatch
+    // a real ECONNRESET, OUTSIDE any try/catch on our call stack. If the fix's
+    // listener is missing, this reliably surfaces as `process.on("uncaughtException")`
+    // instead of being silently handled.
+    const originalWrite = http.ServerResponse.prototype.write;
+    let capturedRes: ServerResponse | undefined;
+    http.ServerResponse.prototype.write = function (
+      this: ServerResponse,
+      ...args: Parameters<ServerResponse["write"]>
+    ) {
+      capturedRes ??= this;
+      return originalWrite.apply(this, args);
+    } as typeof originalWrite;
+
+    let resolveAborted: (v: boolean) => void;
+    const aborted = new Promise<boolean>((resolve) => {
+      resolveAborted = resolve;
+    });
+
+    const slowExtractor: PlanSpecExtractor = {
+      async *streamReply(_input, signal) {
+        signal.addEventListener("abort", () => resolveAborted(true), { once: true });
+        for (let i = 0; i < 50; i++) {
+          if (signal.aborted) return;
+          yield `tok${i} `;
+          await new Promise((r) => setTimeout(r, 20));
+        }
+      },
+      extract: vi.fn().mockResolvedValue({} as PlanSpecDraft),
+    };
+
+    const repo = buildPlanRepo();
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      chatEntitlement: allowGate(),
+      chatExtractor: slowExtractor,
+    });
+
+    await app.listen({ port: 0, host: "127.0.0.1" });
+    const address = app.server.address();
+    if (!address || typeof address === "string") throw new Error("no listening port");
+    const port = address.port;
+
+    let uncaught: unknown;
+    const onUncaught = (err: unknown) => {
+      uncaught = err;
+    };
+    process.on("uncaughtException", onUncaught);
+
+    const ac = new AbortController();
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/plan-specs/chat`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${VALID_TOKEN}`, "content-type": "application/json" },
+        body: JSON.stringify({ message: "build muscle" }),
+        signal: ac.signal,
+      });
+      const reader = response.body!.getReader();
+      await reader.read(); // at least one write() happened → capturedRes is set
+
+      if (!capturedRes) throw new Error("test setup failed: no ServerResponse captured");
+      const simulated = new Error("simulated ECONNRESET");
+      const target = capturedRes;
+      // Detached turn: mirrors Node's own socket-internal error dispatch, which
+      // is OUTSIDE any user try/catch — the real-world crash path.
+      await new Promise<void>((resolve) => {
+        setImmediate(() => {
+          target.emit("error", simulated);
+          resolve();
+        });
+      });
+      // Give the event loop a tick for any resulting uncaughtException to surface.
+      await new Promise((r) => setTimeout(r, 50));
+
+      await reader.cancel().catch(() => {});
+    } finally {
+      ac.abort();
+      process.removeListener("uncaughtException", onUncaught);
+      http.ServerResponse.prototype.write = originalWrite;
+    }
+
+    expect(uncaught).toBeUndefined();
+
+    const observed = await Promise.race([
+      aborted,
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 500)),
+    ]);
+    expect(observed).toBe(true);
+    expect(repo.upsertDraft).not.toHaveBeenCalled();
+  });
+
+  it("rejects an over-limit message with 400 before any streaming/LLM work", async () => {
+    const extractor = stubExtractor();
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      chatEntitlement: allowGate(),
+      chatExtractor: extractor,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/chat",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { message: "a".repeat(4001) },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(extractor.streamReply).not.toHaveBeenCalled();
   });
 });
