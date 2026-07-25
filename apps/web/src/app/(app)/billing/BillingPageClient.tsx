@@ -583,7 +583,12 @@ function ProCard({
 
       {priceForCycle && pricing ? (
         <div className={styles.priceBlock}>
-          <span className={styles.price}>
+          {/* data-testid: stable e2e target for the cycle-driven price. The
+              Monthly/Annual toggle updates this value, so the e2e needs an
+              unambiguous locator (the PlanHero Price tile above shows a
+              DIFFERENT, cycle-independent value). See
+              tests/e2e/billing-visibility.spec.ts. */}
+          <span className={styles.price} data-testid="billing-pro-price">
             {format.number(priceForCycle.amountPerMonth / 100, {
               style: "currency",
               currency: pricing.currency,
