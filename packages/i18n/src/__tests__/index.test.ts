@@ -112,8 +112,19 @@ describe("@kinora/i18n package assembly", () => {
     // below, mirroring the mobileTracker pattern) and exclude themselves
     // here, instead of bumping this number.
     const flat = flattenMessages(catalogs.en);
-    const nonBillingKeys = Object.keys(flat).filter((key) => !key.startsWith("billing."));
+    const nonBillingKeys = Object.keys(flat).filter(
+      (key) => !key.startsWith("billing.") && !key.startsWith("chat."),
+    );
     expect(nonBillingKeys).toHaveLength(609);
+  });
+
+  it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
+    expect(catalogs.en.chat).toBeDefined();
+    expect(catalogs.es.chat).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
   });
 
   it("the billing namespace is present with EN+ES parity (11a Phase 4 / Slice 4)", () => {
