@@ -390,7 +390,14 @@ export type BillingTier = "free" | "pro";
 
 export type BillingStatus = "active" | "trialing" | "expired" | "overridden";
 
-export type BillingSource = "system" | "backfill" | "admin_override";
+export type BillingSource = "system" | "backfill" | "admin_override" | "stripe";
+
+/**
+ * Billing cycle for a paid Stripe subscription (11b-v1-billing-stripe-integration).
+ * Monthly and annual map to two config-driven Stripe Prices; both, once paid,
+ * resolve to the `pro` tier. Null on Free/trial tenants that have no cycle.
+ */
+export type BillingCycle = "monthly" | "annual";
 
 /**
  * The billing-metered features. SINGLE source of truth: the `BillingFeature`
@@ -426,6 +433,58 @@ export interface TenantBillingStateDTO {
   trialEndsAt: string | null;
   activeOverrideEndsAt: string | null;
   updatedAt: string;
+  /**
+   * Additive Stripe subscription metadata (11b-v1). Pure metadata: the tier is
+   * still resolved by the server's entitlement logic, never from these fields.
+   * OPTIONAL in Slice 1 so the existing 11a visibility mapper compiles and
+   * emits an unchanged response (zero behavior change); the webhook/web slices
+   * populate them. `billingCycle`/`currentPeriodEnd` are null when there is no
+   * paid Stripe subscription; `cancelAtPeriodEnd` defaults to false.
+   */
+  billingCycle?: BillingCycle | null;
+  currentPeriodEnd?: string | null;
+  cancelAtPeriodEnd?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Stripe billing flow DTOs (11b-v1-billing-stripe-integration).
+// Type-only scaffolding so later slices (checkout, portal, invoices) compile.
+// No card/PAN data crosses this boundary.
+// ---------------------------------------------------------------------------
+
+/**
+ * Request to start a Stripe-hosted checkout for a Pro upgrade. The tenant is
+ * NEVER supplied here — it is derived server-side from `authContext`.
+ */
+export interface CheckoutSessionRequest {
+  cycle: BillingCycle;
+  promotionCode?: string;
+}
+
+/** Response carrying the Stripe-hosted checkout URL to redirect the user to. */
+export interface CheckoutSessionResponse {
+  url: string;
+}
+
+/** Response carrying the Stripe-hosted Customer Portal URL. */
+export interface PortalSessionResponse {
+  url: string;
+}
+
+/**
+ * Privacy-safe invoice projection read live from Stripe. Contains NO full card
+ * number (PAN) — only the display brand and last four digits, if present.
+ */
+export interface InvoiceDTO {
+  id: string;
+  amountDue: number;
+  currency: string;
+  status: string;
+  createdAt: string;
+  hostedInvoiceUrl: string | null;
+  receiptUrl: string | null;
+  cardBrand?: string;
+  cardLast4?: string;
 }
 
 export interface TenantQuotaUsageDTO {
