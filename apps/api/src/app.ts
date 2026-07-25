@@ -68,9 +68,11 @@ import type {
   CheckoutGateway,
   InvoiceGateway,
   PortalGateway,
+  PriceGateway,
   StripeGateway,
 } from "./billing/stripe-gateway.js";
 import { CreateCheckout, type CheckoutPriceConfig } from "./billing/create-checkout.js";
+import { ResolveBillingPricing } from "./billing/billing-pricing.js";
 import {
   CreatePortalSession,
   type BillingCustomerReaderPort,
@@ -83,6 +85,7 @@ import {
   UnconfiguredStripeGateway,
   UnconfiguredCheckoutGateway,
   UnconfiguredPortalInvoiceGateway,
+  UnconfiguredPriceGateway,
   createStripeGatewayFromEnv,
 } from "./db/repositories/stripe-gateway.js";
 
@@ -132,6 +135,12 @@ export interface BuildAppOptions {
    * (11b Slice 4). Defaults to {@link BillingCustomerRepository}. Tests pass a fake.
    */
   billingCustomerReader?: BillingCustomerReaderPort;
+  /**
+   * Injectable Price-lookup gateway for tests (#195). Defaults to the same real
+   * SDK-backed adapter as {@link stripeGateway}; when Stripe env is unset the
+   * pricing use case falls back to the config/env display amounts. Tests pass a fake.
+   */
+  priceGateway?: PriceGateway;
 }
 
 /**
@@ -163,6 +172,7 @@ export async function buildApp(
   let portalGateway: PortalGateway | undefined;
   let invoiceGateway: InvoiceGateway | undefined;
   let billingCustomerReader: BillingCustomerReaderPort | undefined;
+  let priceGateway: PriceGateway | undefined;
 
   // Discriminate between the options-bag form (BuildAppOptions) and the legacy
   // 2-argument form (Database, SocialAuthService?).
@@ -192,6 +202,7 @@ export async function buildApp(
     portalGateway = opts.portalGateway;
     invoiceGateway = opts.invoiceGateway;
     billingCustomerReader = opts.billingCustomerReader;
+    priceGateway = opts.priceGateway;
   } else {
     // Legacy 2-argument form: (db?, socialAuthService?)
     database = (dbOrOptions as Database | undefined) ?? createDbClient().db;
@@ -428,6 +439,21 @@ export async function buildApp(
   );
   const listInvoices = new ListInvoices(resolvedBillingCustomerReader, resolvedInvoiceGateway);
 
+  // #195 — the displayed billing prices are sourced from the REAL Stripe Price
+  // objects checkout charges (single source of truth), so the UI can never show
+  // an amount that differs from what Stripe bills. Cached in-process (GET
+  // /billing/pricing does not call Stripe per request); on a live-sourcing
+  // failure the use case falls back to the config/env display amounts and warns.
+  const resolvedPriceGateway: PriceGateway =
+    priceGateway ?? realStripeGateway ?? new UnconfiguredPriceGateway();
+  // Source the DISPLAY amounts from the SAME Price ids checkout charges.
+  const displayPriceIds = resolveCheckoutPricing();
+  const getBillingPricing = new ResolveBillingPricing(
+    resolvedPriceGateway,
+    { monthly: displayPriceIds.priceMonthly, annual: displayPriceIds.priceAnnual },
+    { warn: (message) => app.log.warn(message) },
+  );
+
   await app.register(billingRoutes, {
     setMemberAllocation: new SetMemberAllocation(billingAdminRepo),
     getTenantUsage: new GetTenantUsage(billingAdminRepo),
@@ -435,6 +461,7 @@ export async function buildApp(
     createCheckout,
     createPortalSession,
     listInvoices,
+    getBillingPricing,
     // 11b Slice 4, 4R FIX 1 — Customer Portal + invoices are owner-only. Reuses
     // the SAME billingAdminRepo instance (and its loadActorMembership) already
     // wired above for setMemberAllocation/getTenantUsage — one owner check,
