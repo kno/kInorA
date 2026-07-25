@@ -8,7 +8,7 @@ const UNSAFE_MEMORY_PATTERNS = [
   /\bmedical advice\b/i,
 ];
 
-function sanitizeMemoryContext(memoryContext: string[] | undefined): string[] | undefined {
+export function sanitizeMemoryContext(memoryContext: string[] | undefined): string[] | undefined {
   if (!memoryContext) return undefined;
 
   return memoryContext.map((memory) => {
