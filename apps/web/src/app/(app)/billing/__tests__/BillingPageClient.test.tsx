@@ -96,6 +96,45 @@ const TRIALING: BillingVisibilityDTO = {
   memberUsage: [],
 };
 
+// An expired Pro TRIAL — resolved to Free with the trial-expired denial reason.
+const EXPIRED_TRIAL: BillingVisibilityDTO = {
+  billing: {
+    tenantId: "tenant-4" as never,
+    tier: "free",
+    status: "expired",
+    source: "system",
+    trialStartedAt: "2026-06-01T00:00:00.000Z",
+    trialEndsAt: "2026-07-01T00:00:00.000Z",
+    activeOverrideEndsAt: null,
+    updatedAt: "2026-07-01T00:00:00.000Z",
+  },
+  tenantUsage: [],
+  memberUsage: [],
+  denialReason: "trial_expired",
+  upgradePromptPath: "/billing",
+};
+
+// A canceled/ended PAID subscription — resolved to Free with subscription_ended.
+const CANCELED_SUB: BillingVisibilityDTO = {
+  billing: {
+    tenantId: "tenant-5" as never,
+    tier: "free",
+    status: "expired",
+    source: "stripe",
+    trialStartedAt: null,
+    trialEndsAt: null,
+    activeOverrideEndsAt: null,
+    updatedAt: "2026-07-10T00:00:00.000Z",
+    billingCycle: "monthly",
+    currentPeriodEnd: "2026-07-10T00:00:00.000Z",
+    cancelAtPeriodEnd: true,
+  },
+  tenantUsage: [],
+  memberUsage: [],
+  denialReason: "subscription_ended",
+  upgradePromptPath: "/billing",
+};
+
 const INVOICES: InvoiceDTO[] = [
   {
     id: "in_1",
@@ -186,6 +225,37 @@ describe("BillingPageClient — OD layout", () => {
     const periodLabel = screen.getByText("Current period");
     const periodValue = periodLabel.nextElementSibling as HTMLElement;
     expect(periodValue.textContent).toBe("Trial ends 2026-07-28");
+  });
+});
+
+describe("BillingPageClient — access-ended upgrade surface (#198)", () => {
+  it("renders the trial-ended banner with an upgrade CTA when the trial has expired", () => {
+    renderClient({ initialData: EXPIRED_TRIAL });
+    const banner = screen.getByTestId("billing-access-ended");
+    expect(banner.textContent).toMatch(/Your Pro trial has ended/i);
+    const cta = screen.getByRole("link", { name: /view upgrade options/i });
+    expect(cta).toBeDefined();
+  });
+
+  it("renders the subscription-ended banner (NOT trial copy) with an upgrade CTA for a canceled paid sub", () => {
+    renderClient({ initialData: CANCELED_SUB });
+    const banner = screen.getByTestId("billing-access-ended");
+    expect(banner.textContent).toMatch(/Your Pro subscription has ended/i);
+    // Must NOT show trial-ended copy for a canceled paid subscription.
+    expect(banner.textContent).not.toMatch(/trial has ended/i);
+    expect(screen.getByRole("link", { name: /view upgrade options/i })).toBeDefined();
+  });
+
+  it("does NOT render the access-ended banner for an active Pro plan", () => {
+    renderClient({ initialData: PRO_ACTIVE });
+    expect(screen.queryByTestId("billing-access-ended")).toBeNull();
+    expect(screen.queryByText(/Your Pro trial has ended/i)).toBeNull();
+    expect(screen.queryByText(/Your Pro subscription has ended/i)).toBeNull();
+  });
+
+  it("does NOT render the access-ended banner during an active, unexpired trial", () => {
+    renderClient({ initialData: TRIALING });
+    expect(screen.queryByTestId("billing-access-ended")).toBeNull();
   });
 });
 

@@ -961,6 +961,10 @@
       "invalidPromotion": "Ese código promocional no es válido.",
       "redirecting": "Redirigiendo…"
     },
+    "subscription": {
+      "endedTitle": "Tu suscripción Pro ha terminado",
+      "endedDescription": "Ahora estás en el plan Gratis. Mejora tu plan para recuperar las funciones premium."
+    },
     "upgrade": {
       "title": "Desbloquea las funciones Pro",
       "description": "Mejora a Pro para obtener límites mensuales amplios en generación de planes y memoria premium.",

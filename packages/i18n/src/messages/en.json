@@ -961,6 +961,10 @@
       "invalidPromotion": "That promotion code isn't valid.",
       "redirecting": "Redirecting…"
     },
+    "subscription": {
+      "endedTitle": "Your Pro subscription has ended",
+      "endedDescription": "You are now on the Free plan. Upgrade to restore your premium features."
+    },
     "upgrade": {
       "title": "Unlock Pro features",
       "description": "Upgrade to Pro for high monthly limits on plan generation and premium memory.",

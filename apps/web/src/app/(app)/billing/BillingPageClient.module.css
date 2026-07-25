@@ -84,6 +84,20 @@
   gap: 0.85rem;
 }
 
+/*
+ * Access-ended upgrade banner (#198): shown when a Pro trial lapsed or a paid
+ * subscription ended. A warning-tinted accent separates it from the neutral
+ * plan/usage cards so the "access ended → upgrade" prompt reads as actionable.
+ */
+.accessEnded {
+  border-color: color-mix(in oklab, var(--warning) 45%, var(--border));
+  background: color-mix(in oklab, var(--warning) 8%, var(--surface));
+}
+
+.accessEnded a {
+  align-self: flex-start;
+}
+
 .eyebrow {
   font-size: 0.72rem;
   letter-spacing: 0.08em;
