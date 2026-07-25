@@ -23,9 +23,6 @@ importers:
       '@playwright/test':
         specifier: ^1.61.0
         version: 1.61.0
-      '@types/pg':
-        specifier: ^8.15.4
-        version: 8.20.0
       '@vitest/coverage-v8':
         specifier: 3.2.4
         version: 3.2.4(vitest@3.2.4(@types/node@22.19.21)(jsdom@29.1.1)(lightningcss@1.27.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
@@ -35,9 +32,6 @@ importers:
       dependency-cruiser:
         specifier: ^17.4.3
         version: 17.4.3
-      pg:
-        specifier: ^8.16.2
-        version: 8.22.0
       vitest:
         specifier: 3.2.4
         version: 3.2.4(@types/node@22.19.21)(jsdom@29.1.1)(lightningcss@1.27.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)

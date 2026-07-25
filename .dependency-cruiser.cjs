@@ -29,7 +29,7 @@ module.exports = {
       severity: "error",
       from: { path: "^packages/domain/src/" },
       to: {
-        dependencyTypes: ["npm", "npm-dev", "npm-optional", "npm-peer", "npm-no-pkg", "undetermined", "unknown"],
+        dependencyTypes: ["npm", "npm-dev", "npm-optional", "npm-peer", "undetermined", "unknown"],
         path: [
           // Frameworks
           "node_modules/.+/fastify/",
@@ -103,7 +103,7 @@ module.exports = {
       severity: "error",
       from: { path: "^packages/contracts/src/" },
       to: {
-        dependencyTypes: ["npm", "npm-dev", "npm-optional", "npm-peer", "npm-no-pkg", "undetermined", "unknown"],
+        dependencyTypes: ["npm", "npm-dev", "npm-optional", "npm-peer", "undetermined", "unknown"],
         path: [
           "node_modules/.+/pg/",
           "node_modules/.+/mysql/",
@@ -131,7 +131,7 @@ module.exports = {
         ],
       },
       to: {
-        dependencyTypes: ["npm", "npm-dev", "npm-optional", "npm-peer", "npm-no-pkg", "undetermined", "unknown"],
+        dependencyTypes: ["npm", "npm-dev", "npm-optional", "npm-peer", "undetermined", "unknown"],
         path: [
           "node_modules/.+/pg/",
           "node_modules/.+/drizzle/",
@@ -152,7 +152,7 @@ module.exports = {
         ],
       },
       to: {
-        dependencyTypes: ["npm", "npm-dev", "npm-optional", "npm-peer", "npm-no-pkg", "undetermined", "unknown"],
+        dependencyTypes: ["npm", "npm-dev", "npm-optional", "npm-peer", "undetermined", "unknown"],
         path: ["node_modules/.+/stripe/"],
       },
     },
