@@ -8,6 +8,8 @@
  * DTOs, and cross-boundary types.
  */
 
+import { z } from "zod";
+
 // ---------------------------------------------------------------------------
 // Workout plan types — 08-v1-ai-plan-generation
 // Forward-compatible with 09a (session/exercise/planned-set tracking).
@@ -881,3 +883,50 @@ export interface ExerciseDetailDTO {
   exerciseTitle: string;
   recentSets: Array<{ completedAt: string; weightKg?: number; actualReps?: number; rpe?: number }>;
 }
+
+// ---------------------------------------------------------------------------
+// 12-v1.1-interactive-text-chat — conversational create-plan draft contract
+// A `Partial<PlanSpec>` restricted to the SIX wizard INPUT fields (+ optional
+// name) that a single chat turn may extract. `preferenceScores` and `confirmed`
+// are intentionally absent: preferenceScores is derived server-side by
+// `derivePreferenceScores`, and `confirmed` is a server-owned state transition.
+// ---------------------------------------------------------------------------
+
+/**
+ * Zod schema for a per-turn extracted plan-spec draft (12-interactive-text-chat).
+ *
+ * Every field is optional — a turn may fill any subset. Enum-validated against
+ * `PlanGoal` / `TrainingLocation`; `sessionDurationMinutes` is bounded 15..240.
+ *
+ * COUPLING: the 15/240 bound is hardcoded here because `@kinora/contracts` is a
+ * leaf package and MUST NOT import `@kinora/domain`. It MUST stay in sync with
+ * `SESSION_DURATION_LIMITS` in `packages/domain/src/plan/session-duration.ts`.
+ * If the domain bound changes, update this schema in the same change.
+ *
+ * MUST NOT declare `preferenceScores` or `confirmed`.
+ */
+export const PlanSpecDraftSchema = z.object({
+  goal: z.enum(["strength", "hypertrophy", "fat_loss", "general_fitness"]).optional(),
+  daysPerWeek: z.number().int().min(1).max(7).optional(),
+  // 15..240 — MUST match SESSION_DURATION_LIMITS (packages/domain session-duration.ts).
+  sessionDurationMinutes: z.number().int().min(15).max(240).optional(),
+  location: z.enum(["home", "gym", "outdoor"]).optional(),
+  equipment: z.array(z.string()).optional(),
+  limitations: z.array(z.object({ text: z.string(), isWarning: z.boolean() })).optional(),
+  name: z.string().nullable().optional(),
+});
+
+/** Inferred `Partial<PlanSpec>` over the six wizard input fields (+ optional name). */
+export type PlanSpecDraft = z.infer<typeof PlanSpecDraftSchema>;
+
+/**
+ * The six required wizard INPUT fields. Drives `missingFields` computation in the
+ * domain merge (`mergePlanSpecDraft`) and the deterministic clarifying questions.
+ */
+export type PlanSpecDraftField =
+  | "goal"
+  | "daysPerWeek"
+  | "sessionDurationMinutes"
+  | "location"
+  | "equipment"
+  | "limitations";

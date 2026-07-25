@@ -46,11 +46,14 @@ describe("shared contracts boundary", () => {
     // taxonomy const — see design.md "Muscle-group taxonomy".
     // BILLING_FEATURES (#181 billing-correctness) is the single source of truth
     // for the BillingFeature union — routes/billing.ts imports it directly.
+    // PlanSpecDraftSchema (12-interactive-text-chat) is the Zod contract for a
+    // per-turn extracted Partial<PlanSpec> over the six wizard input fields.
     expect(Object.keys(contracts)).toEqual([
       "WorkoutProgramSchema",
       "DEFAULT_VECTOR_MEMORY_EMBEDDING_CONFIG",
       "BILLING_FEATURES",
       "MUSCLE_GROUPS",
+      "PlanSpecDraftSchema",
     ]);
   });
 
