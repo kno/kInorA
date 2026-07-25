@@ -51,6 +51,9 @@ const FREE_ACTIVE_CONTEXT: BillingVisibilityContext = {
     trialStartedAt: null,
     trialEndsAt: null,
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    billingCycle: null,
+    currentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
   },
   activeOverrideTier: null,
   activeOverrideEndsAt: null,
@@ -65,6 +68,31 @@ const TRIALING_CONTEXT: BillingVisibilityContext = {
     trialStartedAt: new Date("2026-06-28T00:00:00.000Z"),
     trialEndsAt: new Date("2026-07-28T00:00:00.000Z"),
     updatedAt: new Date("2026-06-28T00:00:00.000Z"),
+    billingCycle: null,
+    currentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
+  },
+  activeOverrideTier: null,
+  activeOverrideEndsAt: null,
+};
+
+// A paying Pro tenant whose Stripe subscription metadata (billing cycle +
+// renewal date) MUST reach the DTO so the web PlanHero "Price" and "Renewal"
+// tiles populate. The context here carries the values a real `loadContext`
+// SELECT would return from `tenant_billing_states` — the test does NOT
+// hand-inject them onto the DTO; it asserts `execute` projects them through.
+const PRO_VIA_STRIPE_CONTEXT: BillingVisibilityContext = {
+  membershipStatus: "active",
+  billing: {
+    tier: "pro",
+    status: "active",
+    source: "stripe",
+    trialStartedAt: null,
+    trialEndsAt: null,
+    updatedAt: new Date("2026-07-01T00:00:00.000Z"),
+    billingCycle: "monthly",
+    currentPeriodEnd: new Date("2026-08-01T00:00:00.000Z"),
+    cancelAtPeriodEnd: false,
   },
   activeOverrideTier: null,
   activeOverrideEndsAt: null,
@@ -229,6 +257,37 @@ describe("GET /billing/visibility — Billing State Visibility", () => {
     // The port was ALWAYS asked for each requester's OWN userId only.
     expect(port.readOwnMemberUsage).toHaveBeenCalledWith(TENANT_A, MEMBER_A, PERIOD);
     expect(port.readOwnMemberUsage).toHaveBeenCalledWith(TENANT_A, MEMBER_B, PERIOD);
+  });
+
+  it("projects a paying Pro tenant's billingCycle + currentPeriodEnd (renewal) through the DTO", async () => {
+    // Regression guard for the dead visibility seam: the webhook persists
+    // billing_cycle / current_period_end, but if execute() drops them the web
+    // PlanHero always shows "Price: not set" / "Renewal: none". Here the fake
+    // port returns a context carrying those values (as the real SELECT would);
+    // the DTO must carry them through — with NO hand-injection onto the DTO.
+    const port = buildFakePort({ context: PRO_VIA_STRIPE_CONTEXT, usageByUser: {} });
+    app = await buildTestApp(
+      port,
+      buildActiveMembershipRow({ tenantId: TENANT_A, userId: MEMBER_A, role: "member" }),
+      MEMBER_A,
+    );
+
+    const res = await app.inject({ method: "GET", url: `/billing/visibility?period=${PERIOD}`, headers: auth });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      billing: {
+        tier: string;
+        status: string;
+        billingCycle: string | null;
+        currentPeriodEnd: string | null;
+        cancelAtPeriodEnd: boolean;
+      };
+    };
+    expect(body.billing.tier).toBe("pro");
+    expect(body.billing.billingCycle).toBe("monthly");
+    expect(body.billing.currentPeriodEnd).toBe("2026-08-01T00:00:00.000Z");
+    expect(body.billing.cancelAtPeriodEnd).toBe(false);
   });
 
   it("a suspended member is denied before the handler runs (401, auth re-check)", async () => {

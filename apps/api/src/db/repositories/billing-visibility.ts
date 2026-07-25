@@ -44,6 +44,9 @@ export class BillingVisibilityRepository implements BillingVisibilityPort {
         trialStartedAt: tenantBillingStates.trialStartedAt,
         trialEndsAt: tenantBillingStates.trialEndsAt,
         updatedAt: tenantBillingStates.updatedAt,
+        billingCycle: tenantBillingStates.billingCycle,
+        currentPeriodEnd: tenantBillingStates.currentPeriodEnd,
+        cancelAtPeriodEnd: tenantBillingStates.cancelAtPeriodEnd,
       })
       .from(tenantBillingStates)
       .where(eq(tenantBillingStates.tenantId, scope.tenantId));
@@ -70,6 +73,9 @@ export class BillingVisibilityRepository implements BillingVisibilityPort {
             trialStartedAt: billingRow.trialStartedAt,
             trialEndsAt: billingRow.trialEndsAt,
             updatedAt: billingRow.updatedAt,
+            billingCycle: billingRow.billingCycle,
+            currentPeriodEnd: billingRow.currentPeriodEnd,
+            cancelAtPeriodEnd: billingRow.cancelAtPeriodEnd,
           }
         : null,
       activeOverrideTier: overrideRow?.tier ?? null,
