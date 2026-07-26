@@ -112,6 +112,32 @@ describe("createChatStore", () => {
     expect(calls[0]!.signal).toBeInstanceOf(AbortSignal);
   });
 
+  it("ignores an empty/whitespace-only message: no bubble, no stream", async () => {
+    const { fn } = scriptedStream([]);
+    const store = createChatStore({ greeting: "hi", stream: fn });
+    await store.runTurn("   ");
+    await store.runTurn("");
+    expect(fn).not.toHaveBeenCalled();
+    expect(store.getState().messages).toEqual([{ role: "assistant", text: "hi" }]);
+    expect(store.getState().streaming).toBe(false);
+  });
+
+  it("leaves the turn retry-able after a timeout error (streaming clears, next turn runs)", async () => {
+    const first = scriptedStream([{ type: "error", reason: "chat_stream_timeout" }]);
+    const store = createChatStore({ greeting: "hi", stream: first.fn });
+    await store.runTurn("uno");
+    // Timeout must NOT wedge the store: streaming cleared, error recorded.
+    expect(store.getState().streaming).toBe(false);
+    expect(store.getState().errorReason).toBe("chat_stream_timeout");
+
+    // A subsequent turn is NOT blocked by a stuck `streaming` guard.
+    const second = scriptedStream([{ type: "token", delta: "ok" }]);
+    store.setStream(second.fn);
+    await store.runTurn("dos");
+    expect(second.fn).toHaveBeenCalledTimes(1);
+    expect(store.getState().messages.at(-1)).toEqual({ role: "assistant", text: "ok" });
+  });
+
   it("serializes turns: a second runTurn is ignored while one is in flight", async () => {
     const pending = pendingStream();
     const store = createChatStore({ greeting: "hi", stream: pending.fn });

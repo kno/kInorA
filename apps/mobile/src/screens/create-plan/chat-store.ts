@@ -100,6 +100,10 @@ export function createChatStore(options: CreateChatStoreOptions = {}): ChatStore
   };
 
   const runTurn = async (message: string, appendUserMessage = true): Promise<void> => {
+    // Empty/whitespace-only input is a no-op: no user bubble, no stream. The web
+    // guarded this in its `handleSend` caller; a C2b screen forwarding raw input
+    // to `runTurn` needs the guard here so it can wire the input directly.
+    if (message.trim() === "") return;
     // Turn serialization: never overlap turns (prevents the shared-draft
     // lost-update from two concurrent commits).
     if (state.streaming || disposed) return;
