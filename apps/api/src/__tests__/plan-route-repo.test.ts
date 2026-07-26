@@ -65,9 +65,13 @@ function buildSpecRepo(create = vi.fn().mockResolvedValue(createdSpec)) {
 function buildDraftRepo(deleteFn = vi.fn().mockResolvedValue(undefined)) {
   return {
     upsert: vi.fn(),
+    commitWithVersion: vi.fn(),
     findCurrent: vi.fn(),
     delete: deleteFn,
-  } as unknown as Pick<PlanDraftRepository, "upsert" | "findCurrent" | "delete"> & {
+  } as unknown as Pick<
+    PlanDraftRepository,
+    "upsert" | "commitWithVersion" | "findCurrent" | "delete"
+  > & {
     delete: ReturnType<typeof vi.fn>;
   };
 }
