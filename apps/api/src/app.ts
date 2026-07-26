@@ -65,6 +65,8 @@ import {
   buildExtractionModelFactory,
 } from "./ai/extraction-adapter.js";
 import type { PlanSpecExtractor } from "./ai/extraction-port.js";
+import type { SpeechTranscriber } from "./ai/speech-transcriber-port.js";
+import { OpenAIAudioAdapter } from "./ai/openai-audio-adapter.js";
 import { CheckAndConsumeQuota } from "./billing/quota-consumption.js";
 import { SetMemberAllocation, GetTenantUsage } from "./billing/quota-admin.js";
 import { GetBillingVisibility } from "./billing/billing-visibility.js";
@@ -111,6 +113,13 @@ export interface BuildAppOptions {
    * (or any fake) to avoid LLM calls in tests.
    */
   chatExtractor?: PlanSpecExtractor;
+  /**
+   * Injectable SpeechTranscriber for the voice transcribe endpoint (13, A2).
+   * Defaults to the real `OpenAIAudioAdapter` (whisper-1, dedicated OPENAI_API_KEY
+   * read at call time) in production. Pass a `MockSpeechTranscriber` (or any fake)
+   * to avoid network calls in tests.
+   */
+  transcriber?: SpeechTranscriber;
   /**
    * Injectable WsRegistry for tests.
    * Defaults to a fresh WsRegistry() in production.
@@ -179,6 +188,7 @@ export async function buildApp(
   let socialAuthService: SocialAuthService | undefined;
   let planGenerator: PlanGenerator | undefined;
   let chatExtractorOverride: PlanSpecExtractor | undefined;
+  let transcriberOverride: SpeechTranscriber | undefined;
   let wsRegistry: WsRegistry | undefined;
   let stripeGateway: StripeGateway | undefined;
   let checkoutGateway: CheckoutGateway | undefined;
@@ -210,6 +220,7 @@ export async function buildApp(
     socialAuthService = opts.socialAuthService;
     planGenerator = opts.planGenerator;
     chatExtractorOverride = opts.chatExtractor;
+    transcriberOverride = opts.transcriber;
     wsRegistry = opts.wsRegistry;
     stripeGateway = opts.stripeGateway;
     checkoutGateway = opts.checkoutGateway;
@@ -356,6 +367,14 @@ export async function buildApp(
   const chatExtractor: PlanSpecExtractor =
     chatExtractorOverride ??
     new PlanSpecExtractionAdapter(configRepo, buildExtractionModelFactory());
+  // 13-v1.1-interactive-voice-chat (A2): speech-to-text for the voice companion.
+  // PRODUCTION uses the real OpenAI-audio adapter (whisper-1); like every other
+  // adapter it reads the dedicated OPENAI_API_KEY at CALL time, so the app boots
+  // cleanly with the key unset and only a live transcribe call would fail (mapped
+  // to a generic 502). Tests inject a deterministic `MockSpeechTranscriber` via
+  // the `transcriber` BuildAppOptions override. The transcribe route is
+  // registered only when this port is present (it always is here).
+  const transcriber: SpeechTranscriber = transcriberOverride ?? new OpenAIAudioAdapter();
   await app.register(planRoutes, {
     repo: planRouteRepo,
     generationService: planGenerationService,
@@ -365,6 +384,7 @@ export async function buildApp(
     },
     chatEntitlement,
     chatExtractor,
+    transcriber,
   });
 
   await app.register(workoutSessionRoutes, {
