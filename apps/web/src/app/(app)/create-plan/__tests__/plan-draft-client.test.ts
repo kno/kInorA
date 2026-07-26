@@ -5,6 +5,7 @@ import {
   promotePlanSpec,
   isSpecComplete,
   fetchUserPlans,
+  adaptPlan,
 } from "../plan-draft-client";
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -148,6 +149,50 @@ describe("promotePlanSpec", () => {
   it("returns an error when there is no session token", async () => {
     const fetchImpl = vi.fn();
     const result = await promotePlanSpec(undefined, { fetchImpl });
+    expect(result.kind).toBe("error");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("adaptPlan", () => {
+  it("POSTs an empty body to /plan-specs/:id/adapt and returns { planId, status }", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(202, { planId: "plan-1", status: "generating" }));
+
+    const result = await adaptPlan("spec-7", "tok-a", {
+      fetchImpl,
+      apiBaseUrl: "http://api.test",
+    });
+
+    expect(result).toEqual({ kind: "ok", planId: "plan-1", status: "generating" });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://api.test/plan-specs/spec-7/adapt",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ authorization: "Bearer tok-a" }),
+        body: JSON.stringify({}),
+      }),
+    );
+  });
+
+  it("maps a 403 quota-exhausted response to an error result", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(403, { error: "tenant_quota_exhausted" }));
+    const result = await adaptPlan("spec-7", "tok", { fetchImpl });
+    expect(result).toEqual({ kind: "error", message: "tenant_quota_exhausted" });
+  });
+
+  it("maps a 409 no_adaptation response to an error result", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(409, { error: "no_adaptation" }));
+    const result = await adaptPlan("spec-7", "tok", { fetchImpl });
+    expect(result).toEqual({ kind: "error", message: "no_adaptation" });
+  });
+
+  it("returns an error when there is no session token", async () => {
+    const fetchImpl = vi.fn();
+    const result = await adaptPlan("spec-7", undefined, { fetchImpl });
     expect(result.kind).toBe("error");
     expect(fetchImpl).not.toHaveBeenCalled();
   });

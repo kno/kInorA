@@ -408,6 +408,10 @@ export async function buildApp(
       checkAndConsume: (scope, feature, operationKey) =>
         checkAndConsumeQuota.checkAndConsume(scope, feature, operationKey),
     },
+    // 14a-v1.1 Slice B1 — the adherence-adaptation confirm route re-derives the
+    // caller's CURRENT recommendation via the SAME dashboard read that backs
+    // GET /progress/dashboard (reusing the one WorkoutSessionRepository instance).
+    adherenceReader: workoutSessionRepo,
     chatEntitlement,
     chatExtractor,
     transcriber,

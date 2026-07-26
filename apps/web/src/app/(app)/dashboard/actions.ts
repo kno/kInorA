@@ -4,6 +4,10 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { fetchDashboardSummary, type FetchDashboardSummaryResult } from "./dashboard-client";
+import { adaptPlan } from "@/app/(app)/create-plan/plan-draft-client";
+
+/** Result of confirming an adherence adaptation from the coach banner. */
+export type AdaptPlanActionResult = { kind: "ok" } | { kind: "error"; message: string };
 
 /**
  * Logout Server Action.
@@ -44,4 +48,20 @@ export async function getDashboardAction(): Promise<FetchDashboardSummaryResult>
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   return fetchDashboardSummary(token);
+}
+
+/**
+ * Confirm an adherence adaptation for `planSpecId` (14a-v1.1 Slice B1). Reads
+ * the session cookie server-side and POSTs `{}` to `/plan-specs/:id/adapt` via
+ * the internal API — the browser never calls the API directly and never sends a
+ * target frequency (the server re-derives it). Returns a result the coach banner
+ * branches on: an error (quota exhausted, stale recommendation, network) leaves
+ * the plan unchanged and is shown inline. Thin framework glue; the branching
+ * logic lives in the unit-tested `adaptPlan` client.
+ */
+export async function adaptPlanAction(planSpecId: string): Promise<AdaptPlanActionResult> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  const result = await adaptPlan(planSpecId, token);
+  return result.kind === "ok" ? { kind: "ok" } : { kind: "error", message: result.message };
 }

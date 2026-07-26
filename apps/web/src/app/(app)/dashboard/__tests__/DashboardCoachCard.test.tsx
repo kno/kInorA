@@ -1,25 +1,89 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { screen, fireEvent } from "@testing-library/react";
+import type { AdaptationRecommendation } from "@kinora/contracts";
 import { renderWithIntl } from "@/test-utils/render-with-intl";
 import { DashboardCoachCard } from "../DashboardCoachCard";
 
-describe("DashboardCoachCard", () => {
-  it("renders the presentational coach copy from the catalog", () => {
+const lowAdaptation: AdaptationRecommendation = {
+  source: "adherence",
+  level: "low",
+  suggestedChange: { kind: "reduce_frequency", fromDays: 4, toDays: 3 },
+  rationaleKey: "adaptation.adherence.reduceFrequency",
+  planSpecId: "spec-1",
+  adherence: { adherence: 0.31, periodWeeks: 4, completedInWindow: 5, plannedInWindow: 16 },
+};
+
+describe("DashboardCoachCard — static fallback (no adaptation)", () => {
+  it("renders the presentational coach copy when there is no low adaptation", () => {
     renderWithIntl(<DashboardCoachCard />);
 
     expect(screen.getByText("Coach AI")).toBeDefined();
     expect(screen.getByText(/Train hard/)).toBeDefined();
     expect(screen.getByRole("button", { name: "Apply advice" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Dismiss" })).toBeDefined();
   });
 
-  it("swaps the body text and shows a toast when advice is applied", () => {
-    renderWithIntl(<DashboardCoachCard />);
+  it("does not render the adaptation banner when level is ok", () => {
+    renderWithIntl(
+      <DashboardCoachCard adaptation={{ source: "adherence", level: "ok", planSpecId: "spec-1" }} />,
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "Apply advice" }));
+    expect(screen.queryByRole("button", { name: /Try 3 days/ })).toBeNull();
+    // Falls back to the static coach card.
+    expect(screen.getByRole("button", { name: "Apply advice" })).toBeDefined();
+  });
 
-    expect(screen.getByText(/Advice applied/)).toBeDefined();
-    expect(screen.getByRole("status")).toBeDefined();
+  it("does not render the banner when low but there is no suggestedChange (already at the floor)", () => {
+    renderWithIntl(
+      <DashboardCoachCard adaptation={{ source: "adherence", level: "low", planSpecId: "spec-1" }} />,
+    );
+
+    expect(screen.queryByText(/Want to try/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Apply advice" })).toBeDefined();
+  });
+});
+
+describe("DashboardCoachCard — adherence adaptation banner", () => {
+  it("renders the option-framed suggestion with accept + dismiss actions on low adherence", () => {
+    renderWithIntl(<DashboardCoachCard adaptation={lowAdaptation} />);
+
+    expect(screen.getByText(/Want to try 3 days per week instead of 4/)).toBeDefined();
+    expect(screen.getByRole("button", { name: "Try 3 days" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Not now" })).toBeDefined();
+  });
+
+  it("accept → calls onAccept with the planSpecId and shows the regenerating state", async () => {
+    const onAccept = vi.fn().mockResolvedValue({ kind: "ok" });
+    renderWithIntl(<DashboardCoachCard adaptation={lowAdaptation} onAccept={onAccept} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try 3 days" }));
+
+    expect(onAccept).toHaveBeenCalledTimes(1);
+    expect(onAccept).toHaveBeenCalledWith("spec-1");
+    expect(await screen.findByText(/Adjusting your plan/)).toBeDefined();
+  });
+
+  it("dismiss → makes NO request and removes the banner (plan unchanged)", () => {
+    const onAccept = vi.fn().mockResolvedValue({ kind: "ok" });
+    renderWithIntl(<DashboardCoachCard adaptation={lowAdaptation} onAccept={onAccept} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+
+    expect(onAccept).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Want to try 3 days per week/)).toBeNull();
+  });
+
+  it("error → shows a clear inline error, plan unchanged, and keeps the retry affordance", async () => {
+    const onAccept = vi.fn().mockResolvedValue({ kind: "error", message: "tenant_quota_exhausted" });
+    renderWithIntl(<DashboardCoachCard adaptation={lowAdaptation} onAccept={onAccept} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try 3 days" }));
+
+    // The failure surfaces as an alert; the accept button remains so the user
+    // can retry, and no "regenerating" state is shown (the plan is unchanged).
+    expect(await screen.findByRole("alert")).toBeDefined();
+    expect(onAccept).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Try 3 days" })).toBeDefined();
+    expect(screen.queryByText(/Adjusting your plan/)).toBeNull();
   });
 });
