@@ -41,6 +41,7 @@ import {
   type ClientOptions,
   type FetchDashboardResult,
 } from "../api/plan-status-client";
+import AdherenceBanner from "./AdherenceBanner";
 import { styles } from "./HomeScreen.styles";
 
 /** The single C1 client call the screen depends on — injectable for tests. */
@@ -233,16 +234,24 @@ export default function HomeScreen({
   }
 
   /* ── Ready ── */
-  // TODO(D1): render the adherence suggestion banner from `summary.adaptation`
-  // (when `adaptation.level === "low"` with a `suggestedChange`) using the
-  // `adaptation.*` i18n namespace and `plan-status-client`'s `adaptPlan`. C3
-  // deliberately leaves `summary.adaptation` otherwise unused — the banner is
-  // Track D1's concern; the plan-status screen never renders it either.
+  // D1: render the adherence suggestion banner from `summary.adaptation`. The
+  // banner self-gates — it renders only when `adaptation.level === "low"` with a
+  // frequency-reduction `suggestedChange` (and otherwise returns null), reusing
+  // the `adaptation.*` i18n namespace and `plan-status-client`'s `adaptPlan`. It
+  // reads the summary this screen already fetched (no second dashboard read).
 
   return (
     <View style={styles.container} testID="home-ready">
       <Text style={styles.title}>{intl.formatMessage({ id: "home.title" })}</Text>
       <Text style={styles.subtitle}>{intl.formatMessage({ id: "home.subtitle" })}</Text>
+
+      <AdherenceBanner
+        adaptation={summary?.adaptation}
+        navigation={navigation}
+        clearSession={clearSession}
+        apiBaseUrl={apiBaseUrl}
+        getToken={getToken}
+      />
 
       {planSpecId ? (
         <Pressable
