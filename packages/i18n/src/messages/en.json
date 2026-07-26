@@ -1095,7 +1095,8 @@
       "idle": "Ready",
       "listening": "Listening…",
       "processing": "Processing…",
-      "speaking": "Speaking…"
+      "speaking": "Speaking…",
+      "responding": "kInorA is responding…"
     },
     "stopSpeaking": "Stop speaking",
     "stopSpeakingAria": "Stop the assistant's voice",
@@ -1103,7 +1104,15 @@
     "unsupported": "Voice input isn't available in this browser. You can keep typing.",
     "offline": "Voice needs a connection. You can keep typing.",
     "unclear": "I didn't catch that. Please try again.",
-    "error": "Voice input failed. Please try again."
+    "error": "Voice input failed. Please try again.",
+    "screenTitle": "kInorA Assistant",
+    "hold": "Hold to speak",
+    "backAria": "Go back",
+    "keyboardAria": "Switch to typing",
+    "endSession": "End session",
+    "endSessionAria": "End the voice session",
+    "roleYou": "You",
+    "roleCoach": "kInorA"
   },
   "sidebar": {
     "logout": "Log out",

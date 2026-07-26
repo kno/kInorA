@@ -1095,7 +1095,8 @@
       "idle": "Listo",
       "listening": "Escuchando…",
       "processing": "Procesando…",
-      "speaking": "Hablando…"
+      "speaking": "Hablando…",
+      "responding": "kInorA responde…"
     },
     "stopSpeaking": "Detener voz",
     "stopSpeakingAria": "Detener la voz del asistente",
@@ -1103,7 +1104,15 @@
     "unsupported": "La entrada de voz no está disponible en este navegador. Podés seguir escribiendo.",
     "offline": "La voz necesita conexión. Podés seguir escribiendo.",
     "unclear": "No te entendí. Intentá de nuevo.",
-    "error": "Falló la entrada de voz. Intentá de nuevo."
+    "error": "Falló la entrada de voz. Intentá de nuevo.",
+    "screenTitle": "Asistente kInorA",
+    "hold": "Mantené para hablar",
+    "backAria": "Volver",
+    "keyboardAria": "Cambiar a escritura",
+    "endSession": "Finalizar sesión",
+    "endSessionAria": "Finalizar la sesión de voz",
+    "roleYou": "Tú",
+    "roleCoach": "kInorA"
   },
   "sidebar": {
     "logout": "Cerrar sesión",
