@@ -16,6 +16,9 @@ import type { SpeechOutcome } from "../../../api/speech-client";
 // AssistantScreen.test / HomeScreen.test — Vite cannot parse RN's Flow entry).
 // Pressable forwards ALL props so the suite can invoke onPressIn/onPressOut
 // (push-to-talk) and read `disabled` directly.
+// `Animated.View` is a passthrough host element; the injected fake OrbAnimation
+// (below) supplies plain values, so the real `Animated`/`Easing` runtime is
+// never exercised here (that is covered in orb-animation.test.ts).
 vi.mock("react-native", () => ({
   View: "View",
   Text: "Text",
@@ -23,6 +26,8 @@ vi.mock("react-native", () => ({
   TextInput: (props: any) => <input {...props} />,
   Pressable: (props: any) => <button type="button" {...props} />,
   StyleSheet: { create: (styles: unknown) => styles },
+  Animated: { View: "View" },
+  Easing: { inOut: (fn: unknown) => fn, out: (fn: unknown) => fn, ease: (n: number) => n },
 }));
 
 // The screen imports `deleteSessionToken` at module scope → expo-secure-store →
@@ -54,6 +59,21 @@ function fakePlayer(overrides: Partial<AudioPlayer> = {}) {
     ...overrides,
   };
   return { player, fireEnded: () => ended() };
+}
+
+/**
+ * A fake orb animation (#230): spy `start`/`stop` and stand-in values whose
+ * `interpolate` returns a number, so the screen's animated styles render under
+ * the passthrough `Animated.View` mock without the real `Animated` runtime.
+ */
+function fakeOrbAnimation() {
+  const value = () => ({ interpolate: () => 0, setValue: () => {} }) as any;
+  return {
+    rings: [value(), value(), value()],
+    bars: Array.from({ length: 9 }, value),
+    start: vi.fn(),
+    stop: vi.fn(),
+  };
 }
 
 function fakeRecorder(overrides: Partial<VoiceRecorder> = {}): VoiceRecorder {
@@ -110,6 +130,7 @@ function renderScreen(props: Record<string, unknown> = {}) {
       return () => {};
     };
   }
+  const orbAnimation = "orbAnimation" in props ? undefined : fakeOrbAnimation();
   let renderer!: ReactTestRenderer;
   act(() => {
     renderer = create(
@@ -118,6 +139,7 @@ function renderScreen(props: Record<string, unknown> = {}) {
           navigation={navigation}
           clearSession={clearSession}
           subscribeConnectivity={subscribeConnectivity}
+          orbAnimation={orbAnimation as any}
           {...props}
         />
       </IntlProvider>,
@@ -620,5 +642,109 @@ describe("VoiceScreen (D2 native TTS playback of the assistant reply)", () => {
     expect(transcribe).toHaveBeenCalledTimes(1);
     expect(stream).toHaveBeenCalledTimes(1);
     expect(synthesize).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("VoiceScreen (#230 orb/waveform animation driven by status)", () => {
+  it("starts the animation on listening and stops it when back at idle", async () => {
+    const orb = fakeOrbAnimation();
+    const recorder = fakeRecorder();
+    // An unclear transcript returns straight to idle without a streaming turn.
+    const transcribe = vi.fn(async (): Promise<TranscribeOutcome> => ({ kind: "ok", text: "", unclear: true }));
+    const { renderer } = renderScreen({ recorder, transcribe, stream: scriptedStream([]), orbAnimation: orb });
+    await act(async () => {});
+
+    // Idle at mount → the orb is at rest, never started.
+    expect(orb.start).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await mic(renderer).props.onPressIn();
+    });
+    expect(status(renderer)).toBe("Listening…");
+    expect(orb.start).toHaveBeenCalled();
+
+    await act(async () => {
+      await mic(renderer).props.onPressOut();
+    });
+    // Unclear → idle again → the animation is stopped.
+    expect(status(renderer)).toBe("Ready");
+    expect(orb.stop).toHaveBeenCalled();
+  });
+
+  it("keeps animating through a streaming reply and stops when the turn finishes", async () => {
+    const orb = fakeOrbAnimation();
+    const stream = pendingStream();
+    const { renderer } = renderScreen({ recorder: fakeRecorder(), stream: stream.fn, orbAnimation: orb });
+    await act(async () => {});
+
+    // Drive a streaming turn via the text composer.
+    act(() => renderer.root.find((n) => n.props.testID === "keyboard-btn").props.onPress());
+    act(() => renderer.root.find((n) => n.props.testID === "voice-text-input").props.onChangeText("hola"));
+    act(() => {
+      void renderer.root.find((n) => n.props.testID === "voice-send-btn").props.onPress();
+    });
+
+    // Responding (streaming) counts as engaged → the orb animates.
+    expect(status(renderer)).toBe("kInorA is responding…");
+    expect(orb.start).toHaveBeenCalled();
+    const stopsBefore = orb.stop.mock.calls.length;
+
+    await act(async () => {
+      stream.finish();
+    });
+    // Turn done → idle → the animation is stopped again.
+    expect(status(renderer)).toBe("Ready");
+    expect(orb.stop.mock.calls.length).toBeGreaterThan(stopsBefore);
+  });
+
+  it("stops the animation on unmount so no loop leaks past teardown", async () => {
+    const orb = fakeOrbAnimation();
+    const stream = pendingStream();
+    const { renderer } = renderScreen({ recorder: fakeRecorder(), stream: stream.fn, orbAnimation: orb });
+    await act(async () => {});
+
+    act(() => renderer.root.find((n) => n.props.testID === "keyboard-btn").props.onPress());
+    act(() => renderer.root.find((n) => n.props.testID === "voice-text-input").props.onChangeText("hola"));
+    act(() => {
+      void renderer.root.find((n) => n.props.testID === "voice-send-btn").props.onPress();
+    });
+    expect(orb.start).toHaveBeenCalled();
+    const stopsBefore = orb.stop.mock.calls.length;
+
+    act(() => renderer.unmount());
+    expect(orb.stop.mock.calls.length).toBeGreaterThan(stopsBefore);
+  });
+});
+
+describe("VoiceScreen (#231 Free-tier Pro gate surfaced client-side)", () => {
+  it("shows the upgrade notice on a 403 premium_required transcribe (no crash, no chat turn)", async () => {
+    const recorder = fakeRecorder();
+    const transcribe = vi.fn(
+      async (): Promise<TranscribeOutcome> => ({ kind: "error", status: 403, premiumRequired: true }),
+    );
+    const stream = scriptedStream([]);
+    const { renderer, navigation } = renderScreen({ recorder, transcribe, stream });
+    await act(async () => {});
+
+    await act(async () => {
+      await mic(renderer).props.onPressIn();
+    });
+    await act(async () => {
+      await mic(renderer).props.onPressOut();
+    });
+
+    // A clear upgrade-oriented notice — NOT the retry-oriented generic error,
+    // and NOT a silent nothing or a crash.
+    const notice = renderer.root.find((n) => n.props.testID === "voice-notice");
+    expect(notice.props.children).toBe(
+      "Voice is a Pro feature. Upgrade to Pro to use it. You can keep typing.",
+    );
+    // A 403 is not a session expiry, so it never logs the user out.
+    expect(navigation.reset).not.toHaveBeenCalled();
+    // The gate blocked before any chat turn ran, and the screen is usable (idle,
+    // with the text composer still available).
+    expect(stream).not.toHaveBeenCalled();
+    expect(status(renderer)).toBe("Ready");
+    expect(renderer.root.findAll((n) => n.props.testID === "voice-text-input").length).toBeGreaterThanOrEqual(0);
   });
 });
