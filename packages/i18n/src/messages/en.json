@@ -718,7 +718,10 @@
     "regenerate": "Regenerate plan",
     "regenerating": "Regenerating…",
     "retry": "Try again",
-    "error": "Something went wrong. Please try again."
+    "error": "Something went wrong. Please try again.",
+    "stalledTitle": "Taking longer than expected",
+    "stalledBody": "Your plan is still generating — this is taking a bit longer than usual. You can wait or refresh to check again.",
+    "refresh": "Refresh"
   },
   "exercises": {
     "title": "Exercises",

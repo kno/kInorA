@@ -24,6 +24,18 @@
  *     and resets navigation to Login exactly once (guarded by `loggedOutRef`),
  *     mirroring `WorkoutTrackerScreen`'s `handleUnauthenticatedSession`.
  *
+ * Poll-loop robustness (post-C2-review fixes):
+ *   - a poll-time error (e.g. the backend goes down mid-generation) is
+ *     tolerated for one consecutive failure (a transient blip self-heals on
+ *     the next tick), but `POLL_ERROR_THRESHOLD` consecutive failures surface
+ *     the SAME error state + Retry the initial load uses — the screen never
+ *     silently spins forever on a dead backend;
+ *   - a genuinely stalled plan (never leaves `generating`) is capped at
+ *     `maxPollAttempts` polls (default `DEFAULT_MAX_POLL_ATTEMPTS`, ~2 min at
+ *     the default cadence); once the cap is hit the screen shows a terminal
+ *     "taking longer than expected" state with a manual Refresh that resets
+ *     the counters and restarts polling immediately.
+ *
  * Result codes surfaced from a regenerate confirm:
  *   - `403` (quota exhausted) → an inline notice (reusing the `adaptation`
  *     i18n copy), the plan is left unchanged;
@@ -58,6 +70,10 @@ import { messages as M } from "./messages";
 import { styles } from "./PlanStatusScreen.styles";
 
 const DEFAULT_POLL_INTERVAL_MS = 3000;
+/** Consecutive poll-time errors tolerated before surfacing the error state. */
+const POLL_ERROR_THRESHOLD = 2;
+/** ~2 min of polling at the default 3s cadence before the stalled terminal state. */
+const DEFAULT_MAX_POLL_ATTEMPTS = 40;
 
 /** The three C1 client calls the screen depends on — injectable for tests. */
 interface PlanStatusClientApi {
@@ -91,11 +107,13 @@ export interface PlanStatusScreenProps {
   clearSession?: () => Promise<void>;
   /** Poll cadence for the generating state (ms). */
   pollIntervalMs?: number;
+  /** Max consecutive polls while `generating` before the terminal "stalled" state. */
+  maxPollAttempts?: number;
   apiBaseUrl?: string;
   getToken?: () => Promise<string | null>;
 }
 
-type Phase = "loading" | "generating" | "ready" | "failed" | "error";
+type Phase = "loading" | "generating" | "ready" | "failed" | "error" | "stalled";
 
 export default function PlanStatusScreen({
   navigation,
@@ -103,6 +121,7 @@ export default function PlanStatusScreen({
   client,
   clearSession,
   pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+  maxPollAttempts = DEFAULT_MAX_POLL_ATTEMPTS,
   apiBaseUrl,
   getToken,
 }: PlanStatusScreenProps) {
@@ -160,6 +179,16 @@ export default function PlanStatusScreen({
     });
   }, []);
 
+  // Poll-loop counters (post-C2-review fixes). Reset whenever a FRESH
+  // generating loop starts (initial load, regenerate confirm, stalled Refresh)
+  // so a prior loop's failures/attempts never bleed into the next one.
+  const pollErrorCountRef = useRef(0);
+  const pollAttemptsRef = useRef(0);
+  const resetPollCounters = () => {
+    pollErrorCountRef.current = 0;
+    pollAttemptsRef.current = 0;
+  };
+
   // Apply a fetched plan to the state machine (used by the initial load).
   const applyPlanResult = useCallback(
     (result: FetchPlanStatusResult) => {
@@ -175,7 +204,10 @@ export default function PlanStatusScreen({
       setPlan(result.plan);
       if (result.plan.status === "ready") setPhase("ready");
       else if (result.plan.status === "failed") setPhase("failed");
-      else setPhase("generating");
+      else {
+        resetPollCounters();
+        setPhase("generating");
+      }
     },
     [routeToLogin],
   );
@@ -206,24 +238,48 @@ export default function PlanStatusScreen({
     void load();
   }, [load]);
 
-  // One poll pass: re-read the plan's status. A transient (non-session) error
-  // is swallowed so the generating view stays put and the next tick retries;
-  // a `sessionExpired` routes to Login.
+  // One poll pass: re-read the plan's status.
+  //   - a `sessionExpired` result routes to Login;
+  //   - a non-session error is tolerated for one consecutive failure (a
+  //     transient blip self-heals on the next tick), but
+  //     `POLL_ERROR_THRESHOLD` consecutive failures surface the SAME error
+  //     state + Retry the initial load uses — never a silent forever-spin;
+  //   - a successful "still generating" response resets the error counter and
+  //     increments the attempt counter; hitting `maxPollAttempts` surfaces the
+  //     terminal "stalled" state instead of polling indefinitely.
   const poll = useCallback(
     async (id: string) => {
       const result = await clientRef.current.fetchPlanStatus(id, clientOptions);
       if (!mountedRef.current) return;
       if (result.kind === "error") {
-        if (result.sessionExpired) routeToLogin();
+        if (result.sessionExpired) {
+          routeToLogin();
+          return;
+        }
+        pollErrorCountRef.current += 1;
+        if (pollErrorCountRef.current >= POLL_ERROR_THRESHOLD) {
+          setPhase("error");
+        }
         return;
       }
+      pollErrorCountRef.current = 0;
       setPlan(result.plan);
-      if (result.plan.status === "ready") setPhase("ready");
-      else if (result.plan.status === "failed") setPhase("failed");
-      // else: still generating — keep polling.
+      if (result.plan.status === "ready") {
+        setPhase("ready");
+        return;
+      }
+      if (result.plan.status === "failed") {
+        setPhase("failed");
+        return;
+      }
+      // Still generating.
+      pollAttemptsRef.current += 1;
+      if (pollAttemptsRef.current >= maxPollAttempts) {
+        setPhase("stalled");
+      }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [routeToLogin],
+    [routeToLogin, maxPollAttempts],
   );
 
   // The poll interval exists ONLY while generating and is torn down on unmount
@@ -261,6 +317,7 @@ export default function PlanStatusScreen({
         return;
       }
       // 202 → a fresh generating plan; point the poll loop at the new id.
+      resetPollCounters();
       setPlan({ id: result.planId, status: result.status, specId });
       setPhase("generating");
     } finally {
@@ -269,6 +326,19 @@ export default function PlanStatusScreen({
     // clientOptions derived from stable props; intentionally omitted.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [specId, regenerating, routeToLogin]);
+
+  // Refresh from the "stalled" terminal state: reset the poll counters,
+  // re-enter `generating` (which restarts the interval), and poll immediately
+  // instead of waiting a full cadence for the first refreshed read.
+  const handleRefreshStalled = useCallback(async () => {
+    if (!plan?.id) {
+      await load();
+      return;
+    }
+    resetPollCounters();
+    setPhase("generating");
+    await poll(plan.id);
+  }, [plan?.id, poll, load]);
 
   /* ── Render ── */
 
@@ -357,6 +427,29 @@ export default function PlanStatusScreen({
         </Text>
         {noticeNode}
         {regenerateButton}
+      </View>
+    );
+  }
+
+  if (phase === "stalled") {
+    return (
+      <View style={styles.centered} testID="plan-status-stalled">
+        <Text style={styles.title}>
+          <FormattedMessage {...M.stalledTitle} />
+        </Text>
+        <Text style={styles.body}>
+          <FormattedMessage {...M.stalledBody} />
+        </Text>
+        <Pressable
+          testID="refresh-btn"
+          style={[styles.btn, styles.btnSecondary]}
+          accessibilityRole="button"
+          onPress={handleRefreshStalled}
+        >
+          <Text style={styles.btnSecondaryText}>
+            <FormattedMessage {...M.refresh} />
+          </Text>
+        </Pressable>
       </View>
     );
   }

@@ -718,7 +718,10 @@
     "regenerate": "Regenerar plan",
     "regenerating": "Regenerando…",
     "retry": "Intentar de nuevo",
-    "error": "Algo salió mal. Inténtalo de nuevo."
+    "error": "Algo salió mal. Inténtalo de nuevo.",
+    "stalledTitle": "Está tardando más de lo esperado",
+    "stalledBody": "Tu plan todavía se está generando — esto está tardando un poco más de lo habitual. Puedes esperar o actualizar para volver a comprobarlo.",
+    "refresh": "Actualizar"
   },
   "exercises": {
     "title": "Ejercicios",

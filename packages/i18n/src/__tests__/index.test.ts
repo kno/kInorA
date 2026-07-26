@@ -237,9 +237,15 @@ describe("@kinora/i18n package assembly", () => {
     // readyTitle, readySessions (with {count}), failedTitle/Body, regenerate,
     // regenerating, retry, error. (The 403 quota notice reuses
     // `adaptation.quotaExhausted`, so no planStatus key duplicates it.)
-    expect(planStatusKeys).toHaveLength(11);
+    // Post-review poll-loop fixes add 3: stalledTitle/Body + refresh (the
+    // "taking longer than expected" terminal state after the poll-attempts cap).
+    expect(planStatusKeys).toHaveLength(14);
     expect(en["planStatus.readySessions"]).toContain("{count}");
     expect(es["planStatus.readySessions"]).toContain("{count}");
+    expect(en["planStatus.stalledTitle"]).toBeTruthy();
+    expect(es["planStatus.stalledTitle"]).toBeTruthy();
+    expect(en["planStatus.refresh"]).toBeTruthy();
+    expect(es["planStatus.refresh"]).toBeTruthy();
   });
 
   it("ships the accepted profile + wizard preference keys in both catalogs", () => {

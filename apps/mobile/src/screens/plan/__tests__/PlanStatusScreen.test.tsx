@@ -154,6 +154,92 @@ describe("PlanStatusScreen (C2 — generating/ready/failed + regenerate)", () =>
     expect(fetchPlanStatus).toHaveBeenCalledTimes(2);
   });
 
+  it("a persistent poll-time error surfaces the error state and stops polling", async () => {
+    vi.useFakeTimers();
+    const fetchPlanStatus = vi
+      .fn()
+      .mockResolvedValueOnce(ok("generating")) // initial load
+      .mockResolvedValueOnce({ kind: "error", message: "api_unreachable" }) // poll 1 — transient
+      .mockResolvedValueOnce({ kind: "error", message: "api_unreachable" }); // poll 2 — persists
+    const client = makeClient({ fetchPlanStatus });
+    const { renderer } = renderScreen({ client });
+    await act(async () => {});
+    expect(has(renderer, "plan-status-generating")).toBe(true);
+
+    // First poll failure is tolerated (transient blip) — stays generating.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(has(renderer, "plan-status-generating")).toBe(true);
+
+    // Second consecutive failure surfaces the error state with Retry.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(has(renderer, "plan-status-error")).toBe(true);
+    expect(fetchPlanStatus).toHaveBeenCalledTimes(3);
+
+    // Polling stopped: further time advances make no more fetch calls.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(fetchPlanStatus).toHaveBeenCalledTimes(3);
+  });
+
+  it("a single transient poll error is tolerated and recovers on the next successful poll", async () => {
+    vi.useFakeTimers();
+    const fetchPlanStatus = vi
+      .fn()
+      .mockResolvedValueOnce(ok("generating")) // initial load
+      .mockResolvedValueOnce({ kind: "error", message: "api_unreachable" }) // poll 1 — transient
+      .mockResolvedValueOnce(ok("ready", { program: program(2) })); // poll 2 — recovers
+    const client = makeClient({ fetchPlanStatus });
+    const { renderer } = renderScreen({ client });
+    await act(async () => {});
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(has(renderer, "plan-status-generating")).toBe(true);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(has(renderer, "plan-status-ready")).toBe(true);
+  });
+
+  it("caps poll attempts and shows a terminal 'still generating' state, then Refresh restarts polling", async () => {
+    vi.useFakeTimers();
+    const fetchPlanStatus = vi
+      .fn()
+      .mockResolvedValueOnce(ok("generating")) // initial load
+      .mockResolvedValueOnce(ok("generating")) // poll 1 — cap reached (max=1)
+      .mockResolvedValueOnce(ok("ready", { program: program(1) })); // after Refresh
+    const client = makeClient({ fetchPlanStatus });
+    const { renderer } = renderScreen({ client, maxPollAttempts: 1 });
+    await act(async () => {});
+    expect(has(renderer, "plan-status-generating")).toBe(true);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(has(renderer, "plan-status-stalled")).toBe(true);
+
+    // Polling stopped at the cap: no further fetch calls while stalled.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(fetchPlanStatus).toHaveBeenCalledTimes(2);
+
+    // Refresh restarts polling immediately.
+    const refresh = renderer.root.find((n) => n.props.testID === "refresh-btn");
+    await act(async () => {
+      await refresh.props.onPress();
+    });
+    expect(has(renderer, "plan-status-ready")).toBe(true);
+    expect(fetchPlanStatus).toHaveBeenCalledTimes(3);
+  });
+
   it("regenerate → 202 transitions to generating and polls the NEW plan to ready", async () => {
     vi.useFakeTimers();
     const fetchPlanStatus = vi
