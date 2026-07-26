@@ -443,6 +443,34 @@ describe("VoiceScreen (D2 native TTS playback of the assistant reply)", () => {
     expect(status(renderer)).toBe("Ready");
   });
 
+  it("recovers to idle when playback fails to start (mic never stuck disabled)", async () => {
+    // The player can reject at load/start (audio-focus denied, a rejected data:
+    // URI). That must fail SILENTLY like every other TTS path — and crucially
+    // must NOT leave `speaking` true, which would keep the push-to-talk mic
+    // disabled for the rest of the session.
+    const synthesize = vi.fn(
+      async (): Promise<SpeechOutcome> => ({
+        kind: "ok",
+        audio: { bytes: new Uint8Array([1]), contentType: "audio/mpeg" },
+      }),
+    );
+    const { player } = fakePlayer({
+      play: vi.fn(async () => {
+        throw new Error("audio focus denied");
+      }),
+    });
+    const { renderer } = renderScreen(voiceTurnProps(synthesize, player));
+    await act(async () => {});
+    await runVoiceTurn(renderer);
+
+    expect(player.play).toHaveBeenCalledTimes(1);
+    // No user-facing error (the text reply already stands), and the screen is
+    // back to idle with the mic re-enabled — not stuck on "Speaking…".
+    expect(renderer.root.findAll((n) => n.props.testID === "voice-notice")).toHaveLength(0);
+    expect(status(renderer)).toBe("Ready");
+    expect(mic(renderer).props.disabled).toBe(false);
+  });
+
   it("skips playback on a 204 opt-out with no error and no crash", async () => {
     const synthesize = vi.fn(async (): Promise<SpeechOutcome> => ({ kind: "opt_out" }));
     const { player } = fakePlayer();
