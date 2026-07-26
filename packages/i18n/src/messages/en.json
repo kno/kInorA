@@ -1087,6 +1087,21 @@
       "toggleAria": "Creation mode"
     }
   },
+  "voice": {
+    "micLabel": "Tap to speak",
+    "startAria": "Start voice input",
+    "stopAria": "Stop recording",
+    "state": {
+      "idle": "Ready",
+      "listening": "Listening…",
+      "processing": "Processing…"
+    },
+    "denied": "Microphone access is required for voice. You can keep typing.",
+    "unsupported": "Voice input isn't available in this browser. You can keep typing.",
+    "offline": "Voice needs a connection. You can keep typing.",
+    "unclear": "I didn't catch that. Please try again.",
+    "error": "Voice input failed. Please try again."
+  },
   "sidebar": {
     "logout": "Log out",
     "logoutLabel": "Log out",

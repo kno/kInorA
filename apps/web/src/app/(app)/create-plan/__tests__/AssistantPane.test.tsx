@@ -391,3 +391,321 @@ describe("AssistantPane — generation gate", () => {
     expect(generate.disabled).toBe(true);
   });
 });
+
+// --- Voice capture sub-mode (13 Slice B1) ---
+
+/**
+ * Minimal MediaRecorder fake: `start()` flips to recording, `stop()` emits one
+ * data chunk then fires `onstop` synchronously (the component builds the Blob
+ * and kicks off transcription from that handler).
+ */
+class FakeMediaRecorder {
+  static isTypeSupported = () => true;
+  state: "inactive" | "recording" = "inactive";
+  mimeType: string;
+  ondataavailable: ((e: { data: Blob }) => void) | null = null;
+  onstop: (() => void) | null = null;
+  constructor(_stream: MediaStream, opts?: { mimeType?: string }) {
+    this.mimeType = opts?.mimeType ?? "audio/webm";
+  }
+  start() {
+    this.state = "recording";
+  }
+  stop() {
+    this.state = "inactive";
+    this.ondataavailable?.({ data: new Blob(["audio-bytes"], { type: this.mimeType }) });
+    this.onstop?.();
+  }
+}
+
+function installVoice(getUserMedia: ReturnType<typeof vi.fn>) {
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia },
+  });
+  vi.stubGlobal("MediaRecorder", FakeMediaRecorder as unknown as typeof MediaRecorder);
+}
+
+function fakeStream(): MediaStream {
+  return { getTracks: () => [{ stop: vi.fn() }] } as unknown as MediaStream;
+}
+
+/** A fake stream whose single track's `stop` is observable (mic-release spy). */
+function streamWithStopSpy(): { stream: MediaStream; stop: ReturnType<typeof vi.fn> } {
+  const stop = vi.fn();
+  return { stream: { getTracks: () => [{ stop }] } as unknown as MediaStream, stop };
+}
+
+/** Route fetch by URL: `/create-plan/transcribe` vs `/create-plan/chat`. */
+function routeFetch(handlers: {
+  transcribe: () => Promise<unknown>;
+  chat?: () => Promise<unknown>;
+}) {
+  const fetchMock = vi.fn((url: string) => {
+    if (String(url).includes("transcribe")) return handlers.transcribe();
+    return (handlers.chat ?? (() => Promise.reject(new Error("no chat handler"))))();
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function renderVoicePane() {
+  renderWithIntl(
+    <AssistantPane
+      spec={{}}
+      onSpecChange={vi.fn()}
+      persistSpec={() => Promise.resolve()}
+      onGenerate={() => Promise.resolve()}
+    />,
+  );
+}
+
+const micStart = () => screen.getByRole("button", { name: /start voice input/i });
+const micStop = () => screen.getByRole("button", { name: /stop recording/i });
+
+afterEach(() => {
+  // installVoice defines a non-global property; vi.unstubAllGlobals (top-level
+  // afterEach) does not remove it, so clear it here.
+  if (Object.getOwnPropertyDescriptor(navigator, "mediaDevices")) {
+    delete (navigator as unknown as { mediaDevices?: unknown }).mediaDevices;
+  }
+});
+
+describe("AssistantPane — voice capture (B1)", () => {
+  it("push-to-talk records, transcribes, and feeds the transcript into the existing chat turn", async () => {
+    const getUserMedia = vi.fn().mockResolvedValue(fakeStream());
+    installVoice(getUserMedia);
+    const fetchMock = routeFetch({
+      transcribe: () =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ text: "build muscle four days a week", unclear: false }),
+        }),
+      chat: () =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          body: eagerStream([
+            'event: draft\ndata: {"draftSpec":{"goal":"hypertrophy"},"missingFields":[],"assistantMessage":"Got it."}\n\n',
+          ]),
+        }),
+    });
+
+    renderVoicePane();
+    // Wait for feature-detection effect to enable the mic.
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(micStart());
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalled());
+    // Recording → the control now offers "stop".
+    await waitFor(() => expect(micStop()).toBeTruthy());
+
+    fireEvent.click(micStop());
+
+    // The transcript is fed into runTurn: it appears as a user bubble and the
+    // terminal assistant reply renders.
+    await waitFor(() => expect(screen.getByText("build muscle four days a week")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Got it.")).toBeTruthy());
+
+    // Two calls: the transcribe proxy, then the existing chat proxy.
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes("/create-plan/transcribe"))).toBe(true);
+    expect(urls.some((u) => u.includes("/create-plan/chat"))).toBe(true);
+  });
+
+  it("an unclear/empty transcript re-prompts and does NOT start a chat turn", async () => {
+    const getUserMedia = vi.fn().mockResolvedValue(fakeStream());
+    installVoice(getUserMedia);
+    const fetchMock = routeFetch({
+      transcribe: () =>
+        Promise.resolve({ ok: true, status: 200, json: async () => ({ text: "", unclear: true }) }),
+    });
+
+    renderVoicePane();
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(micStart());
+    await waitFor(() => expect(micStop()).toBeTruthy());
+    fireEvent.click(micStop());
+
+    await waitFor(() => expect(screen.getByText(/didn't catch that/i)).toBeTruthy());
+    // Only the transcribe call happened — no chat turn was started.
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes("/create-plan/chat"))).toBe(false);
+  });
+
+  it("shows a processing state during transcription and disables the mic until it resolves", async () => {
+    const getUserMedia = vi.fn().mockResolvedValue(fakeStream());
+    installVoice(getUserMedia);
+    let resolveTranscribe!: (v: unknown) => void;
+    const pending = new Promise((resolve) => {
+      resolveTranscribe = resolve;
+    });
+    routeFetch({
+      transcribe: () => pending as Promise<unknown>,
+      chat: () =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          body: eagerStream([
+            'event: draft\ndata: {"draftSpec":{},"missingFields":[],"assistantMessage":"ok"}\n\n',
+          ]),
+        }),
+    });
+
+    renderVoicePane();
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(micStart());
+    await waitFor(() => expect(micStop()).toBeTruthy());
+    fireEvent.click(micStop());
+
+    // Transcription in flight → processing status + disabled mic.
+    await waitFor(() => expect(screen.getByText(/processing/i)).toBeTruthy());
+    expect((micStart() as HTMLButtonElement).disabled).toBe(true);
+
+    resolveTranscribe({ ok: true, status: 200, json: async () => ({ text: "hi", unclear: false }) });
+    await waitFor(() => expect(screen.getByText("hi")).toBeTruthy());
+  });
+
+  it("microphone permission denied shows a message, keeps text usable, and stays retry-able", async () => {
+    const getUserMedia = vi.fn().mockRejectedValue(new DOMException("denied", "NotAllowedError"));
+    installVoice(getUserMedia);
+    routeFetch({ transcribe: () => Promise.reject(new Error("should not be called")) });
+
+    renderVoicePane();
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(micStart());
+
+    await waitFor(() => expect(screen.getByText(/microphone access/i)).toBeTruthy());
+    // The mic is NOT permanently disabled — it stays clickable so a later grant
+    // can recover voice in-session (no reload).
+    expect((micStart() as HTMLButtonElement).disabled).toBe(false);
+    // …and the text input stays fully usable regardless.
+    const input = screen.getByRole("textbox", { name: /chat message/i }) as HTMLTextAreaElement;
+    expect(input.disabled).toBe(false);
+    fireEvent.change(input, { target: { value: "typed instead" } });
+    expect(input.value).toBe("typed instead");
+  });
+
+  it("recovers in-session: a retry after the user grants permission starts recording", async () => {
+    const getUserMedia = vi
+      .fn()
+      .mockRejectedValueOnce(new DOMException("denied", "NotAllowedError"))
+      .mockResolvedValueOnce(fakeStream());
+    installVoice(getUserMedia);
+    routeFetch({
+      transcribe: () =>
+        Promise.resolve({ ok: true, status: 200, json: async () => ({ text: "", unclear: true }) }),
+    });
+
+    renderVoicePane();
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(micStart()); // first attempt → denied
+    await waitFor(() => expect(screen.getByText(/microphone access/i)).toBeTruthy());
+
+    fireEvent.click(micStart()); // retry → granted → recording
+    await waitFor(() => expect(micStop()).toBeTruthy());
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+  });
+
+  it("auto-stops and releases the mic when the connection drops mid-recording (no hot-mic lockout)", async () => {
+    const { stream, stop } = streamWithStopSpy();
+    const getUserMedia = vi.fn().mockResolvedValue(stream);
+    installVoice(getUserMedia);
+    // Transcribe must NOT be attempted on the dead link.
+    const fetchMock = routeFetch({ transcribe: () => Promise.reject(new Error("offline")) });
+
+    renderVoicePane();
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(micStart());
+    await waitFor(() => expect(micStop()).toBeTruthy()); // recording
+
+    act(() => {
+      window.dispatchEvent(new Event("offline"));
+    });
+
+    // The mic track is released immediately — not left hot.
+    await waitFor(() => expect(stop).toHaveBeenCalled());
+    // UI recovers to a usable state: no lingering "stop" control, text usable.
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /stop recording/i })).toBeNull(),
+    );
+    expect(
+      (screen.getByRole("textbox", { name: /chat message/i }) as HTMLTextAreaElement).disabled,
+    ).toBe(false);
+    // No transcription was attempted over the dead connection.
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("transcribe"))).toBe(false);
+  });
+
+  it("releases the mic and recovers to idle when MediaRecorder construction throws", async () => {
+    const { stream, stop } = streamWithStopSpy();
+    const getUserMedia = vi.fn().mockResolvedValue(stream);
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia },
+    });
+    class ThrowingMediaRecorder {
+      static isTypeSupported = () => true;
+      constructor() {
+        throw new Error("cannot construct");
+      }
+    }
+    vi.stubGlobal("MediaRecorder", ThrowingMediaRecorder as unknown as typeof MediaRecorder);
+    routeFetch({ transcribe: () => Promise.reject(new Error("unused")) });
+
+    renderVoicePane();
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(micStart());
+
+    // The acquired stream is released — no leaked hot mic — and voice recovers.
+    await waitFor(() => expect(stop).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText(/voice input failed/i)).toBeTruthy());
+    // Still idle + retry-able, and text usable.
+    expect((micStart() as HTMLButtonElement).disabled).toBe(false);
+    expect(
+      (screen.getByRole("textbox", { name: /chat message/i }) as HTMLTextAreaElement).disabled,
+    ).toBe(false);
+  });
+
+  it("offline disables voice with a text fallback, and reconnecting re-enables it without a reload", async () => {
+    const getUserMedia = vi.fn().mockResolvedValue(fakeStream());
+    installVoice(getUserMedia);
+    routeFetch({ transcribe: () => Promise.resolve({ ok: true, status: 200, json: async () => ({}) }) });
+
+    renderVoicePane();
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+
+    act(() => {
+      window.dispatchEvent(new Event("offline"));
+    });
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(true));
+    expect(screen.getByText(/needs a connection/i)).toBeTruthy();
+    // Text input remains usable while offline.
+    expect((screen.getByRole("textbox", { name: /chat message/i }) as HTMLTextAreaElement).disabled).toBe(
+      false,
+    );
+
+    act(() => {
+      window.dispatchEvent(new Event("online"));
+    });
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it("disables the mic when voice is unsupported (no MediaRecorder/getUserMedia) and keeps text usable", async () => {
+    // No installVoice() → jsdom has neither mediaDevices nor MediaRecorder.
+    routeFetch({ transcribe: () => Promise.reject(new Error("unused")) });
+    renderVoicePane();
+    await waitFor(() =>
+      expect(screen.getByText(/isn't available in this browser/i)).toBeTruthy(),
+    );
+    expect((micStart() as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("textbox", { name: /chat message/i }) as HTMLTextAreaElement).disabled).toBe(
+      false,
+    );
+  });
+});
