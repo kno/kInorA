@@ -51,9 +51,27 @@ export interface OpenAIAudioClient {
 /** Builds a client for the given API key. Injected for testability. */
 export type OpenAIAudioClientFactory = (apiKey: string | undefined) => OpenAIAudioClient;
 
+/**
+ * Bounded timeout + limited retries (review fix, resilience — mirrors the
+ * Stripe gateway's `{ timeout: 10_000, maxNetworkRetries: 1 }`). The SDK
+ * default (`timeout: 600_000` / 10 min, `maxRetries: 2`) would let a hung
+ * Whisper call hold the route handler AND the in-memory 15 MB audio buffer for
+ * up to 10 minutes, and a degraded provider would triple the upstream request
+ * volume via silent retries. A short push-to-talk transcription has no reason
+ * to wait that long — 45 s comfortably covers a slow real call while bounding
+ * the worst case; at most one retry avoids amplifying an already-degraded
+ * provider.
+ */
+const OPENAI_CLIENT_TIMEOUT_MS = 45_000;
+const OPENAI_CLIENT_MAX_RETRIES = 1;
+
 /** Production factory: reads the dedicated OPENAI_API_KEY at call time. */
 const defaultClientFactory: OpenAIAudioClientFactory = (apiKey) =>
-  new OpenAI({ apiKey: apiKey ?? "placeholder-key" }) as unknown as OpenAIAudioClient;
+  new OpenAI({
+    apiKey: apiKey ?? "placeholder-key",
+    timeout: OPENAI_CLIENT_TIMEOUT_MS,
+    maxRetries: OPENAI_CLIENT_MAX_RETRIES,
+  }) as unknown as OpenAIAudioClient;
 
 /** Map a validated audio content type to a Whisper-friendly filename extension. */
 function extensionFor(contentType: string): string {
