@@ -21,6 +21,27 @@ function eagerStream(frames: string[]): ReadableStream<Uint8Array> {
   });
 }
 
+/**
+ * A stream that emits the given frames then ERRORS mid-flight — a simulated
+ * connectivity loss (the browser's `ReadableStream` reader rejects), distinct
+ * from a graceful terminal `error` SSE frame. Used to prove the consumer
+ * recovers from a dropped connection.
+ */
+function droppingStream(frames: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  let i = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (i < frames.length) {
+        controller.enqueue(encoder.encode(frames[i]!));
+        i += 1;
+      } else {
+        controller.error(new Error("network dropped mid-stream"));
+      }
+    },
+  });
+}
+
 /** A stream the test drives frame-by-frame and closes on demand. */
 function controllableStream() {
   const encoder = new TextEncoder();
@@ -164,6 +185,47 @@ describe("AssistantPane — SSE consumer", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("recovers from a mid-stream connection drop: surfaces retry with the prior draft intact, then a retry restores the stream", async () => {
+    // First turn: some prose streams, then the connection DROPS mid-stream (the
+    // reader rejects) — not a graceful terminal `error` frame. The retry then
+    // succeeds. This is the simulated connectivity-loss/restore path (reliability
+    // review gap: manual retry was covered, a dropped connection was not).
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: droppingStream(['event: token\ndata: {"delta":"Draftin"}\n\n']),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: eagerStream([
+          'event: draft\ndata: {"draftSpec":{},"missingFields":[],"assistantMessage":"Recovered."}\n\n',
+        ]),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // A prior draft field is already captured; it must survive the drop.
+    setup({ spec: { goal: "strength" } });
+    await sendTurn();
+
+    // The drop surfaces the retry affordance…
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /retry/i })).toBeTruthy();
+    });
+    // …and the previously-captured draft is still shown (the panel is unaffected).
+    expect(screen.getByText(/Strength/i)).toBeTruthy();
+
+    // Retry restores the stream and the reply renders.
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Recovered.")).toBeTruthy();
+    });
+    // Original attempt + one retry.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("serializes turns: the send control is disabled while a stream is in flight", async () => {
     const driver = controllableStream();
     mockFetchOnce(driver.stream);
@@ -280,6 +342,182 @@ describe("AssistantPane — Datos extraídos panel field edits", () => {
       />,
     );
     expect(screen.getByText("intermediate")).toBeTruthy();
+  });
+});
+
+describe("AssistantPane — Datos extraídos panel array editing (equipment / limitations)", () => {
+  const equipInput = () => screen.getByRole("textbox", { name: /add equipment/i });
+  const equipAdd = () => screen.getAllByRole("button", { name: /^add$/i })[0]!;
+  const limitInput = () => screen.getByRole("textbox", { name: /add a limitation/i });
+  const limitAdd = () => screen.getAllByRole("button", { name: /^add$/i })[1]!;
+
+  it("adds an equipment item via the Add button and persists the new array", async () => {
+    const onSpecChange = vi.fn();
+    const persistSpec = vi.fn().mockResolvedValue(undefined);
+    setup({ onSpecChange, persistSpec, spec: {} });
+
+    fireEvent.change(equipInput(), { target: { value: "sled" } });
+    fireEvent.click(equipAdd());
+
+    expect(onSpecChange).toHaveBeenCalledWith({ equipment: ["sled"] });
+    await waitFor(() => expect(persistSpec).toHaveBeenCalledWith({ equipment: ["sled"] }));
+    // The add-input clears after a commit (chip rendering is proven by the
+    // remove tests, which render a pre-populated controlled spec — onSpecChange
+    // is a mock here and does not feed the controlled `spec` prop back).
+    expect((equipInput() as HTMLInputElement).value).toBe("");
+  });
+
+  it("adds an equipment item on Enter, appending to the existing array", () => {
+    const onSpecChange = vi.fn();
+    setup({ onSpecChange, spec: { equipment: ["barbell"] } });
+
+    fireEvent.change(equipInput(), { target: { value: "bench" } });
+    fireEvent.keyDown(equipInput(), { key: "Enter", shiftKey: false });
+
+    expect(onSpecChange).toHaveBeenCalledWith({ equipment: ["barbell", "bench"] });
+  });
+
+  it("ignores a blank equipment entry (no persist, no chip)", () => {
+    const onSpecChange = vi.fn();
+    const persistSpec = vi.fn().mockResolvedValue(undefined);
+    setup({ onSpecChange, persistSpec, spec: {} });
+
+    fireEvent.change(equipInput(), { target: { value: "   " } });
+    fireEvent.click(equipAdd());
+
+    expect(onSpecChange).not.toHaveBeenCalled();
+    expect(persistSpec).not.toHaveBeenCalled();
+  });
+
+  it("de-duplicates equipment case-insensitively (no duplicate committed)", () => {
+    const onSpecChange = vi.fn();
+    setup({ onSpecChange, spec: { equipment: ["Barbell"] } });
+
+    fireEvent.change(equipInput(), { target: { value: "barbell" } });
+    fireEvent.click(equipAdd());
+
+    expect(onSpecChange).not.toHaveBeenCalled();
+    // The input still clears even on a rejected duplicate.
+    expect((equipInput() as HTMLInputElement).value).toBe("");
+  });
+
+  it("removes an equipment item via its remove control", async () => {
+    const onSpecChange = vi.fn();
+    const persistSpec = vi.fn().mockResolvedValue(undefined);
+    setup({ onSpecChange, persistSpec, spec: { equipment: ["barbell", "bench"] } });
+
+    fireEvent.click(screen.getByRole("button", { name: /remove barbell/i }));
+
+    expect(onSpecChange).toHaveBeenCalledWith({ equipment: ["bench"] });
+    await waitFor(() => expect(persistSpec).toHaveBeenCalledWith({ equipment: ["bench"] }));
+  });
+
+  it("removes ONLY the clicked duplicate equipment entry (index-based, no colliding React keys)", async () => {
+    // A draft can populate duplicate equipment strings (the schema's string[] has
+    // no uniqueness and the panel dedup only guards adds). Removing one must
+    // remove that entry alone, not every value-equal duplicate.
+    const onSpecChange = vi.fn();
+    const persistSpec = vi.fn().mockResolvedValue(undefined);
+    setup({ onSpecChange, persistSpec, spec: { equipment: ["barbell", "barbell", "bench"] } });
+
+    const removeBarbell = screen.getAllByRole("button", { name: /remove barbell/i });
+    expect(removeBarbell.length).toBe(2);
+    fireEvent.click(removeBarbell[0]!);
+
+    // The first duplicate is gone; the second "barbell" and "bench" remain.
+    expect(onSpecChange).toHaveBeenCalledWith({ equipment: ["barbell", "bench"] });
+    await waitFor(() =>
+      expect(persistSpec).toHaveBeenCalledWith({ equipment: ["barbell", "bench"] }),
+    );
+  });
+
+  it("disables the panel array editors while a stream is in flight so a terminal draft cannot clobber a mid-stream edit", async () => {
+    const driver = controllableStream();
+    mockFetchOnce(driver.stream);
+    setup({
+      spec: { equipment: ["barbell"], limitations: [{ text: "knee pain", isWarning: true }] },
+    });
+    await sendTurn();
+    // First token flushed, stream still open → streaming is true.
+    driver.push('event: token\ndata: {"delta":"…"}\n\n');
+
+    await waitFor(() => {
+      expect(
+        (screen.getByRole("textbox", { name: /add equipment/i }) as HTMLInputElement).disabled,
+      ).toBe(true);
+    });
+    const addButtons = screen.getAllByRole("button", { name: /^add$/i }) as HTMLButtonElement[];
+    expect(addButtons[0]!.disabled).toBe(true); // equipment add
+    expect(addButtons[1]!.disabled).toBe(true); // limitations add
+    expect(
+      (screen.getByRole("textbox", { name: /add a limitation/i }) as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: /remove barbell/i }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: /remove knee pain/i }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    // Close the stream so the turn settles cleanly.
+    driver.push('event: draft\ndata: {"draftSpec":{},"missingFields":[],"assistantMessage":"ok"}\n\n');
+    driver.close();
+  });
+
+  it("adds a limitation as { text, isWarning: true } and persists it", async () => {
+    const onSpecChange = vi.fn();
+    const persistSpec = vi.fn().mockResolvedValue(undefined);
+    setup({ onSpecChange, persistSpec, spec: {} });
+
+    fireEvent.change(limitInput(), { target: { value: "knee pain" } });
+    fireEvent.click(limitAdd());
+
+    expect(onSpecChange).toHaveBeenCalledWith({
+      limitations: [{ text: "knee pain", isWarning: true }],
+    });
+    await waitFor(() =>
+      expect(persistSpec).toHaveBeenCalledWith({
+        limitations: [{ text: "knee pain", isWarning: true }],
+      }),
+    );
+    // The add-input clears after a commit.
+    expect((limitInput() as HTMLInputElement).value).toBe("");
+  });
+
+  it("ignores a blank limitation entry", () => {
+    const onSpecChange = vi.fn();
+    setup({ onSpecChange, spec: {} });
+
+    fireEvent.change(limitInput(), { target: { value: "  " } });
+    fireEvent.click(limitAdd());
+
+    expect(onSpecChange).not.toHaveBeenCalled();
+  });
+
+  it("removes a limitation by index (preserving the rest)", async () => {
+    const onSpecChange = vi.fn();
+    const persistSpec = vi.fn().mockResolvedValue(undefined);
+    setup({
+      onSpecChange,
+      persistSpec,
+      spec: {
+        limitations: [
+          { text: "knee pain", isWarning: true },
+          { text: "shoulder", isWarning: true },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /remove knee pain/i }));
+
+    expect(onSpecChange).toHaveBeenCalledWith({
+      limitations: [{ text: "shoulder", isWarning: true }],
+    });
+    await waitFor(() =>
+      expect(persistSpec).toHaveBeenCalledWith({
+        limitations: [{ text: "shoulder", isWarning: true }],
+      }),
+    );
   });
 });
 
