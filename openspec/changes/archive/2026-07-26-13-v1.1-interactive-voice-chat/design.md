@@ -387,5 +387,3 @@ C2a SSE transport+turn lifecycle / C2b Asistente/extraction UI+i18n).
       deprecated on `expo ~53`); confirm it is available on the pinned SDK at D1.
 - [ ] Truncation strategy for TTS `input` > ~4096 chars (sentence-boundary cut server-side) —
       create-plan replies are short, so this is a guard, not a common path.
-</content>
-</invoke>
