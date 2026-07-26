@@ -707,6 +707,22 @@
     "upToDate": "Your plan already looks like a good fit — nothing to change right now.",
     "error": "We couldn't adjust your plan — it's unchanged. Please try again."
   },
+  "planStatus": {
+    "loading": "Loading your plan…",
+    "generatingTitle": "Building your plan",
+    "generatingBody": "Hang tight — we're putting your workouts together.",
+    "readyTitle": "Your plan is ready",
+    "readySessions": "{count} sessions per week",
+    "failedTitle": "We couldn't build your plan",
+    "failedBody": "Something went wrong while generating. You can try again.",
+    "regenerate": "Regenerate plan",
+    "regenerating": "Regenerating…",
+    "retry": "Try again",
+    "error": "Something went wrong. Please try again.",
+    "stalledTitle": "Taking longer than expected",
+    "stalledBody": "Your plan is still generating — this is taking a bit longer than usual. You can wait or refresh to check again.",
+    "refresh": "Refresh"
+  },
   "exercises": {
     "title": "Exercises",
     "description": "Browse and search the exercise library for your workouts.",

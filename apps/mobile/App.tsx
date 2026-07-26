@@ -56,6 +56,9 @@ import WorkoutTrackerScreen, {
 import HistoryScreen from "./src/screens/HistoryScreen";
 import AssistantScreen from "./src/screens/create-plan/AssistantScreen";
 import VoiceScreen from "./src/screens/voice/VoiceScreen";
+import PlanStatusScreen, {
+  type PlanStatusRouteParams,
+} from "./src/screens/plan/PlanStatusScreen";
 
 import {
   getSessionToken,
@@ -78,6 +81,7 @@ type RootStackParamList = {
   History: undefined;
   CreatePlanAssistant: undefined;
   CreatePlanVoice: undefined;
+  PlanStatus: PlanStatusRouteParams;
 };
 
 /** Routes that require an authenticated session; auth routes are never guarded. */
@@ -87,6 +91,7 @@ const PROTECTED_ROUTES: (keyof RootStackParamList)[] = [
   "History",
   "CreatePlanAssistant",
   "CreatePlanVoice",
+  "PlanStatus",
 ];
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -208,6 +213,11 @@ export default function App() {
             name="CreatePlanVoice"
             component={VoiceScreen}
             options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="PlanStatus"
+            component={PlanStatusScreen}
+            options={{ title: "Your plan" }}
           />
         </Stack.Navigator>
       </NavigationContainer>
