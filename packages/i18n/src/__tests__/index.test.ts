@@ -113,7 +113,10 @@ describe("@kinora/i18n package assembly", () => {
     // here, instead of bumping this number.
     const flat = flattenMessages(catalogs.en);
     const nonBillingKeys = Object.keys(flat).filter(
-      (key) => !key.startsWith("billing.") && !key.startsWith("chat."),
+      (key) =>
+        !key.startsWith("billing.") &&
+        !key.startsWith("chat.") &&
+        !key.startsWith("voice."),
     );
     expect(nonBillingKeys).toHaveLength(609);
   });
@@ -125,6 +128,23 @@ describe("@kinora/i18n package assembly", () => {
     const result = validateCatalogParity(catalogs.en, catalogs.es);
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
+  });
+
+  it("the voice namespace is present with EN+ES parity (13 Slice B1)", () => {
+    expect(catalogs.en.voice).toBeDefined();
+    expect(catalogs.es.voice).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+
+    const en = flattenMessages(catalogs.en);
+    const es = flattenMessages(catalogs.es);
+    const voiceKeys = Object.keys(en).filter((key) => key.startsWith("voice."));
+    // 8 scalar keys (micLabel, startAria, stopAria, denied, unsupported,
+    // offline, unclear, error) + 3 `voice.state.*` (idle/listening/processing).
+    expect(voiceKeys).toHaveLength(11);
+    expect(en["voice.state.listening"]).toBe("Listening…");
+    expect(es["voice.state.listening"]).toBe("Escuchando…");
   });
 
   it("the billing namespace is present with EN+ES parity (11a Phase 4 / Slice 4)", () => {
