@@ -185,6 +185,34 @@ describe("PUT /user-preferences", () => {
     expect(res.statusCode).toBe(422);
   });
 
+  // Review fix: a non-boolean ttsEnabled MUST be rejected with 422 BEFORE it
+  // reaches the repo/DB boolean column (which would otherwise 500).
+  it("returns 422 when ttsEnabled is a non-boolean value", async () => {
+    const repo = buildRepo();
+    app = await buildTestApp(repo);
+    const res = await app.inject({
+      method: "PUT",
+      url: "/user-preferences",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { ttsEnabled: "yes" },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toEqual({ error: "invalid_tts_enabled" });
+    expect(repo.upsertPreferences).not.toHaveBeenCalled();
+  });
+
+  it("returns 422 when ttsEnabled is a number", async () => {
+    app = await buildTestApp();
+    const res = await app.inject({
+      method: "PUT",
+      url: "/user-preferences",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { ttsEnabled: 1 },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toEqual({ error: "invalid_tts_enabled" });
+  });
+
   it("returns 422 when defaultDuration is negative", async () => {
     app = await buildTestApp();
     const res = await app.inject({

@@ -246,6 +246,36 @@ describe("OpenAIAudioAdapter — synthesize (TTS)", () => {
     expect(sent.trimEnd().endsWith(".")).toBe(true);
   });
 
+  it("falls back to a hard cut at exactly the cap when the 'first sentence' itself exceeds 4096 chars (no boundary reachable)", async () => {
+    const { client, calls } = makeFakeSpeechClient();
+    const adapter = new OpenAIAudioAdapter(() => client);
+
+    // No sentence-ending punctuation anywhere within the first 4096 chars —
+    // the very first "sentence" is longer than the cap, so no boundary
+    // exists to cut on. Must NOT crash and must NOT exceed the cap.
+    const noBoundaryText = "a".repeat(5000);
+    await adapter.synthesize(noBoundaryText);
+
+    const sent = calls[0]!["input"] as string;
+    expect(sent.length).toBe(4096);
+    expect(sent).toBe("a".repeat(4096));
+  });
+
+  it("never sends an empty/whitespace-only payload when the sentence-boundary cut would otherwise be blank", async () => {
+    const { client, calls } = makeFakeSpeechClient();
+    const adapter = new OpenAIAudioAdapter(() => client);
+
+    // Pathological input: the first 4096 chars are entirely whitespace/
+    // newlines (so the naive boundary cut on "\n" would be blank), followed
+    // by real content. The adapter must still forward a non-empty payload.
+    const pathological = "\n".repeat(5000) + "actual reply content here.";
+    await adapter.synthesize(pathological);
+
+    const sent = calls[0]!["input"] as string;
+    expect(sent.trim().length).toBeGreaterThan(0);
+    expect(sent.length).toBeLessThanOrEqual(4096);
+  });
+
   it("reads OPENAI_API_KEY at call time, not at construction", async () => {
     delete process.env["OPENAI_API_KEY"];
     const seenKeys: Array<string | undefined> = [];

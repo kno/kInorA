@@ -202,13 +202,6 @@ const ALLOWED_AUDIO_TYPES = new Set<string>([
   "audio/wav",
 ]);
 
-/**
- * TTS input character cap for `POST /plan-specs/speech` (13, A3 — design.md
- * "OpenAI's ~4096-char cap"). The route bounds the input defensively BEFORE any
- * OpenAI call; the adapter additionally truncates at a sentence boundary. A
- * create-plan terminal reply is short, so this is a guard, not a common path.
- */
-const MAX_TTS_INPUT_CHARS = 4096;
 
 /**
  * Structurally compare two drafts over the allow-listed fields to decide whether
@@ -1008,10 +1001,13 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   //   3. resolve tts_enabled       — `false` → 204 No Content (opted out; the
   //                                  synthesizer is NEVER called). `null`/`true`
   //                                  → proceed (opt-out default is ON).
-  //   4. truncate text to the cap  — bound to MAX_TTS_INPUT_CHARS BEFORE the call.
-  //   5. SpeechSynthesizer.synthesize(text, signal) — gpt-4o-mini-tts/mp3 in the
-  //      adapter; a transport failure → 502 synthesis_failed (generic — no
-  //      provider detail/stack leaked). On success → 200 audio/mpeg body.
+  //   4. SpeechSynthesizer.synthesize(text, signal) — gpt-4o-mini-tts/mp3 in the
+  //      adapter, which truncates at a sentence boundary to the ~4096-char
+  //      OpenAI cap (the adapter is the SINGLE SOURCE OF TRUTH for that cap —
+  //      review fix: a route-level pre-slice made the boundary logic
+  //      unreachable and cut mid-word). A transport failure → 502
+  //      synthesis_failed (generic — no provider detail/stack leaked). On
+  //      success → 200 audio/mpeg body.
   //
   // JSON body (default parser); registered only when the gate, synthesizer, and
   // preference reader are ALL wired (they are, in app.ts). Absent them the
@@ -1045,9 +1041,14 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         }
 
         const body = request.body as { text: string };
-        // Bound the input to the OpenAI cap BEFORE any TTS call. The adapter also
-        // truncates at a sentence boundary; this is the route-level guard.
-        const text = body.text.slice(0, MAX_TTS_INPUT_CHARS);
+        // Review fix: do NOT hard-slice here. `SpeechSynthesizer.synthesize`
+        // (the OpenAI adapter's `truncateForTts`) is the SINGLE SOURCE OF TRUTH
+        // for the ~4096-char OpenAI TTS cap, cutting at a sentence boundary
+        // rather than mid-word. A route-level slice BEFORE that call would make
+        // the sentence-boundary logic unreachable. The schema's `maxLength`
+        // (100_000) is the only route-level bound — it rejects an absurd
+        // payload before it even reaches here.
+        const text = body.text;
 
         // Abort the in-flight synthesis if the client disconnects. The audio is
         // processed in-flight ONLY — never persisted anywhere.

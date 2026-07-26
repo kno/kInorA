@@ -7,6 +7,7 @@ import type {
   SpeechSynthesizer,
   SynthesizeResult,
 } from "../../ai/speech-synthesizer-port.js";
+import { OpenAIAudioAdapter, type OpenAIAudioClient } from "../../ai/openai-audio-adapter.js";
 import type { Database } from "../../db/client.js";
 import {
   createAuthMockDb,
@@ -380,9 +381,16 @@ describe("POST /plan-specs/speech (Pro-gated, opt-out-aware, no-persistence TTS)
     expect(synthesizer.synthesize).not.toHaveBeenCalled();
   });
 
-  // --- Input cap ----------------------------------------------------------
+  // --- Input cap (truncation is the SYNTHESIZER's responsibility) ----------
+  //
+  // Review fix: the route previously did `text.slice(0, 4096)` BEFORE calling
+  // the synthesizer, making the adapter's sentence-boundary truncation
+  // unreachable dead code and cutting replies mid-word. The route now forwards
+  // the raw (schema-length-bounded) text UNCHANGED — `SpeechSynthesizer` (the
+  // real `OpenAIAudioAdapter`) is the single source of truth for the
+  // ~4096-char OpenAI cap and its sentence-boundary cut.
 
-  it("truncates over-length text to the OpenAI cap BEFORE calling the synthesizer", async () => {
+  it("forwards over-length text to the synthesizer UNCHANGED — the route does NOT pre-truncate", async () => {
     const synthesizer = fakeSynthesizer();
     app = await buildTestApp({
       db: buildSessionDb(),
@@ -401,7 +409,63 @@ describe("POST /plan-specs/speech (Pro-gated, opt-out-aware, no-persistence TTS)
     expect(res.statusCode).toBe(200);
     expect(synthesizer.synthesize).toHaveBeenCalledTimes(1);
     const [textArg] = synthesizer.synthesize.mock.calls[0]!;
-    expect((textArg as string).length).toBeLessThanOrEqual(4096);
+    // Full 8000 chars reach the port — truncation happens INSIDE the real
+    // adapter, never at the route boundary.
+    expect(textArg).toBe(longText);
+  });
+
+  it("end-to-end (route + REAL OpenAIAudioAdapter): a >4096-char multi-sentence reply is truncated at a SENTENCE BOUNDARY, not mid-word — fails against a route-level mid-word slice", async () => {
+    // A fake OpenAI-audio client (no network) whose speech.create records the
+    // exact `input` the adapter sent it — this is the byte that would have
+    // been a mid-word cut under the old buggy route (`text.slice(0, 4096)`
+    // performed BEFORE the adapter ever saw the text).
+    const speechCalls: Array<{ input: string }> = [];
+    const fakeOpenAIClient: OpenAIAudioClient = {
+      audio: {
+        transcriptions: { create: vi.fn(async () => ({ text: "" })) },
+        speech: {
+          create: vi.fn(async (body: { input: string }) => {
+            speechCalls.push({ input: body.input });
+            return {
+              arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+            };
+          }),
+        },
+      },
+    };
+    const realAdapter = new OpenAIAudioAdapter(() => fakeOpenAIClient);
+
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      chatEntitlement: allowGate(),
+      synthesizer: realAdapter,
+    });
+
+    // Build text where the LAST sentence boundary before char 4096 lands well
+    // before the 4096 mark, so a naive mid-word `slice(0, 4096)` would NOT
+    // end on `.`/`!`/`?` — proving the boundary-vs-mid-word distinction.
+    const sentence = "kInorA replies with a full training sentence here. ";
+    const longMultiSentence = sentence.repeat(120); // > 4096 chars, many sentences
+    expect(longMultiSentence.length).toBeGreaterThan(4096);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/speech",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { text: longMultiSentence },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(speechCalls).toHaveLength(1);
+    const sent = speechCalls[0]!.input;
+    expect(sent.length).toBeLessThanOrEqual(4096);
+    // The forwarded text ends at a sentence boundary (`.`), never mid-word —
+    // this assertion FAILS if the route reintroduces a mid-word
+    // `slice(0, 4096)` ahead of the synthesizer call, because a raw character
+    // slice of this repeating sentence lands mid-word, not on the period.
+    expect(sent.trimEnd().endsWith(".")).toBe(true);
+    // And it is NOT simply the naive mid-word slice of the full text.
+    expect(sent).not.toBe(longMultiSentence.slice(0, 4096));
   });
 
   // --- Fail-soft taxonomy --------------------------------------------------
