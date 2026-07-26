@@ -696,6 +696,16 @@
     "emptyBody": "Crea un plan o empieza un entrenamiento para ver tu progreso aquí.",
     "emptyCta": "Crear plan"
   },
+  "home": {
+    "title": "Bienvenido a kInorA",
+    "subtitle": "Entrenamiento personalizado con IA",
+    "loading": "Cargando tu entrenamiento…",
+    "error": "No pudimos cargar tu entrenamiento ahora. Inténtalo de nuevo.",
+    "retry": "Reintentar",
+    "viewPlan": "Ver tu plan",
+    "noPlanTitle": "Aún no tienes un plan",
+    "noPlanBody": "Crea tu primer plan para empezar a entrenar."
+  },
   "adaptation": {
     "title": "¿Te apetece una semana más ligera?",
     "suggestion": "¿Quieres probar {toDays} días por semana en lugar de {fromDays}?",
