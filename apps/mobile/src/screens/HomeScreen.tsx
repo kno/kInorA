@@ -1,105 +1,179 @@
 /**
- * Mobile home screen — authenticated landing + entry to the workout tracker.
+ * Mobile home screen — authenticated landing + entry to the workout plan.
  *
- * INFRA GAP (documented, not faked): the mobile app has no plan-generation or
- * plan-list surface yet, so there is no in-app way to *browse* a ready plan.
- * To reach the live tracker we therefore take a `workoutPlanId` (+ day) as
- * input and start/resume a real session against it via the API. The planId
- * can be prefilled from `EXPO_PUBLIC_DEMO_PLAN_ID` for local testing, or a
- * plan id obtained from the web app / API. Once a mobile plan-list screen
- * exists, this input is replaced by a real selection.
+ * 14a Track C3: this screen now fetches the dashboard summary
+ * (`GET /progress/dashboard`, via the C1 `fetchDashboardSummary` client — no
+ * new API route) on mount and offers a REAL navigation entry into the
+ * `PlanStatus` screen for the user's current plan, resolved from the summary's
+ * `adaptation.planSpecId` (attached by the API whenever a ready plan exists,
+ * at any adaptation level). This REPLACES the pre-14a manual `workoutPlanId`
+ * paste input that only existed while the app had no plan-list/plan surface.
+ *
+ * States:
+ *   - loading      → while the dashboard read is in flight;
+ *   - error        → the summary fetch failed (non-session) → graceful notice + Retry;
+ *   - sessionExpired (401 / missing token) → clear the stored token and reset
+ *     navigation to Login exactly once (mirrors `PlanStatusScreen` /
+ *     `WorkoutTrackerScreen`);
+ *   - ready + plan → a "View your plan" entry that navigates to `PlanStatus`
+ *     with `{ planSpecId }`;
+ *   - ready, no plan → a sensible empty state (create a plan to start).
+ *
+ * Architecture — thin glue over tested modules (same pattern as
+ * `PlanStatusScreen`): ALL network/result-mapping logic lives in the injected
+ * C1 client (`plan-status-client.ts`); this component only owns the small
+ * state machine and the nav wiring.
+ *
+ * NOTE (D1 seam): `summary.adaptation` is deliberately left UNUSED here beyond
+ * resolving `planSpecId`. Track D1 will render the adherence suggestion banner
+ * from `summary.adaptation` (level === "low") — see the TODO(D1) marker below.
  */
 
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  Alert,
-} from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { View, Text, Pressable, ActivityIndicator } from "react-native";
 import { useIntl } from "react-intl";
-import { deleteSessionToken } from "../auth/session-storage";
-import { colors } from "../theme/tokens";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { DashboardSummaryDTO } from "@kinora/contracts";
+
+import { deleteSessionToken } from "../auth/session-storage";
+import {
+  fetchDashboardSummary as defaultFetchDashboardSummary,
+  type ClientOptions,
+  type FetchDashboardResult,
+} from "../api/plan-status-client";
 import { styles } from "./HomeScreen.styles";
+
+/** The single C1 client call the screen depends on — injectable for tests. */
+interface HomeClientApi {
+  fetchDashboardSummary: (
+    options?: ClientOptions,
+  ) => Promise<FetchDashboardResult>;
+}
 
 type HomeScreenProps = {
   navigation: NativeStackNavigationProp<any>;
+  /** Dashboard client — defaults to the real C1 module; injected in tests. */
+  client?: Partial<HomeClientApi>;
+  /** Clear the stored session on expiry/logout — defaults to `deleteSessionToken`. */
+  clearSession?: () => Promise<void>;
+  apiBaseUrl?: string;
+  getToken?: () => Promise<string | null>;
 };
 
-export default function HomeScreen({ navigation }: HomeScreenProps) {
-  // First screen to consume `@kinora/i18n` directly via `useIntl()` (proof
-  // screen for change 100 slice 9, tasks 9.4.1/9.4.2) — no `messages` prop
-  // drilled in from a parent; `LocaleProvider` (mounted in App.tsx) supplies
-  // it via context.
+type Phase = "loading" | "error" | "ready";
+
+export default function HomeScreen({
+  navigation,
+  client,
+  clearSession,
+  apiBaseUrl,
+  getToken,
+}: HomeScreenProps) {
   const intl = useIntl();
   const logoutLabel = intl.formatMessage({ id: "dashboard.logout" });
   const historyLabel = intl.formatMessage({ id: "history.title" });
   const createPlanLabel = intl.formatMessage({ id: "chat.teaser.title" });
   const voiceLabel = intl.formatMessage({ id: "voice.screenTitle" });
 
-  const [planId, setPlanId] = useState(
-    process.env.EXPO_PUBLIC_DEMO_PLAN_ID ?? "",
-  );
-  const [day, setDay] = useState("1");
+  const [phase, setPhase] = useState<Phase>("loading");
+  const [summary, setSummary] = useState<DashboardSummaryDTO | undefined>();
 
-  const handleLogout = async () => {
-    await deleteSessionToken();
-    navigation.replace("Login");
+  // Stable, ref-captured deps so the client/navigation objects can change
+  // identity across renders without re-creating callbacks.
+  const clientRef = useRef<HomeClientApi>({
+    fetchDashboardSummary:
+      client?.fetchDashboardSummary ?? defaultFetchDashboardSummary,
+  });
+  clientRef.current = {
+    fetchDashboardSummary:
+      client?.fetchDashboardSummary ?? defaultFetchDashboardSummary,
   };
+  const navigationRef = useRef(navigation);
+  navigationRef.current = navigation;
+  const clearSessionRef = useRef(clearSession ?? deleteSessionToken);
+  clearSessionRef.current = clearSession ?? deleteSessionToken;
 
-  const handleStartWorkout = () => {
-    const trimmed = planId.trim();
-    if (!trimmed) {
-      Alert.alert("Falta el plan", "Ingresá un workoutPlanId para empezar.");
+  const clientOptions: ClientOptions = { apiBaseUrl, getToken };
+
+  // Mount status — every post-await `setState` is guarded so a late fetch (a
+  // navigate-away mid-request) never writes into a torn-down tree.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // A missing/expired token is unrecoverable by retrying the same tokenless
+  // request — clear the stored token and route to Login EXACTLY once.
+  const loggedOutRef = useRef(false);
+  const routeToLogin = useCallback(() => {
+    if (loggedOutRef.current) return;
+    loggedOutRef.current = true;
+    void clearSessionRef.current().finally(() => {
+      if (!mountedRef.current) return;
+      navigationRef.current.reset({ index: 0, routes: [{ name: "Login" }] });
+    });
+  }, []);
+
+  const load = useCallback(async () => {
+    if (!mountedRef.current) return;
+    setPhase("loading");
+
+    const result = await clientRef.current.fetchDashboardSummary(clientOptions);
+    if (!mountedRef.current) return;
+    if (result.kind === "error") {
+      if (result.sessionExpired) {
+        routeToLogin();
+        return;
+      }
+      setPhase("error");
       return;
     }
-    const parsedDay = Number.parseInt(day, 10);
-    navigation.navigate("Tracker", {
-      planId: trimmed,
-      day: Number.isNaN(parsedDay) ? 1 : parsedDay,
-    });
-  };
+    setSummary(result.summary);
+    setPhase("ready");
+    // clientOptions is derived from stable props; intentionally omitted from deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeToLogin]);
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome to kInorA</Text>
-      <Text style={styles.subtitle}>Personalized training powered by AI</Text>
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-      <View style={styles.form}>
-        <Text style={styles.fieldLabel}>workoutPlanId</Text>
-        <TextInput
-          style={styles.input}
-          value={planId}
-          onChangeText={setPlanId}
-          placeholder="plan_..."
-          placeholderTextColor={colors.muted}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <Text style={styles.fieldLabel}>Día</Text>
-        <TextInput
-          style={styles.input}
-          value={day}
-          onChangeText={setDay}
-          placeholder="1"
-          placeholderTextColor={colors.muted}
-          keyboardType="number-pad"
-        />
-        <Pressable
-          style={({ pressed }) => [styles.startButton, pressed && styles.startButtonPressed]}
-          onPress={handleStartWorkout}
-          accessibilityRole="button"
-          accessibilityLabel="Empezar entrenamiento"
-        >
-          <Text style={styles.startButtonText}>Start workout</Text>
-        </Pressable>
+  // The current plan's spec, resolved from the dashboard read. The API attaches
+  // `adaptation.planSpecId` whenever a ready plan exists (any adaptation level),
+  // so its presence is the "user has a plan" signal for the entry point.
+  const planSpecId = summary?.adaptation?.planSpecId;
+
+  const handleViewPlan = useCallback(() => {
+    if (!planSpecId) return;
+    navigationRef.current.navigate("PlanStatus", { planSpecId });
+  }, [planSpecId]);
+
+  const handleLogout = useCallback(async () => {
+    await clearSessionRef.current();
+    navigationRef.current.replace("Login");
+  }, []);
+
+  /* ── Render ── */
+
+  if (phase === "loading") {
+    return (
+      <View style={styles.centered} testID="home-loading">
+        <ActivityIndicator color={styles.title.color} />
+        <Text style={styles.subtitle}>
+          {intl.formatMessage({ id: "home.loading" })}
+        </Text>
       </View>
+    );
+  }
 
+  const secondaryMenu = (
+    <>
       <Pressable
         style={({ pressed }) => [styles.historyButton, pressed && styles.historyButtonPressed]}
-        onPress={() => navigation.navigate("CreatePlanAssistant")}
+        onPress={() => navigationRef.current.navigate("CreatePlanAssistant")}
         accessibilityRole="button"
         accessibilityLabel={createPlanLabel}
       >
@@ -108,7 +182,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 
       <Pressable
         style={({ pressed }) => [styles.historyButton, pressed && styles.historyButtonPressed]}
-        onPress={() => navigation.navigate("CreatePlanVoice")}
+        onPress={() => navigationRef.current.navigate("CreatePlanVoice")}
         accessibilityRole="button"
         accessibilityLabel={voiceLabel}
       >
@@ -117,7 +191,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 
       <Pressable
         style={({ pressed }) => [styles.historyButton, pressed && styles.historyButtonPressed]}
-        onPress={() => navigation.navigate("History")}
+        onPress={() => navigationRef.current.navigate("History")}
         accessibilityRole="button"
         accessibilityLabel={historyLabel}
       >
@@ -132,6 +206,68 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       >
         <Text style={styles.logoutText}>{logoutLabel}</Text>
       </Pressable>
+    </>
+  );
+
+  if (phase === "error") {
+    return (
+      <View style={styles.container} testID="home-error">
+        <Text style={styles.title}>{intl.formatMessage({ id: "home.title" })}</Text>
+        <Text style={styles.errorText} accessibilityRole="alert">
+          {intl.formatMessage({ id: "home.error" })}
+        </Text>
+        <Pressable
+          testID="home-retry"
+          style={({ pressed }) => [styles.startButton, pressed && styles.startButtonPressed]}
+          onPress={load}
+          accessibilityRole="button"
+          accessibilityLabel={intl.formatMessage({ id: "home.retry" })}
+        >
+          <Text style={styles.startButtonText}>
+            {intl.formatMessage({ id: "home.retry" })}
+          </Text>
+        </Pressable>
+        {secondaryMenu}
+      </View>
+    );
+  }
+
+  /* ── Ready ── */
+  // TODO(D1): render the adherence suggestion banner from `summary.adaptation`
+  // (when `adaptation.level === "low"` with a `suggestedChange`) using the
+  // `adaptation.*` i18n namespace and `plan-status-client`'s `adaptPlan`. C3
+  // deliberately leaves `summary.adaptation` otherwise unused — the banner is
+  // Track D1's concern; the plan-status screen never renders it either.
+
+  return (
+    <View style={styles.container} testID="home-ready">
+      <Text style={styles.title}>{intl.formatMessage({ id: "home.title" })}</Text>
+      <Text style={styles.subtitle}>{intl.formatMessage({ id: "home.subtitle" })}</Text>
+
+      {planSpecId ? (
+        <Pressable
+          testID="home-view-plan"
+          style={({ pressed }) => [styles.startButton, pressed && styles.startButtonPressed]}
+          onPress={handleViewPlan}
+          accessibilityRole="button"
+          accessibilityLabel={intl.formatMessage({ id: "home.viewPlan" })}
+        >
+          <Text style={styles.startButtonText}>
+            {intl.formatMessage({ id: "home.viewPlan" })}
+          </Text>
+        </Pressable>
+      ) : (
+        <View style={styles.emptyState} testID="home-no-plan">
+          <Text style={styles.emptyTitle}>
+            {intl.formatMessage({ id: "home.noPlanTitle" })}
+          </Text>
+          <Text style={styles.emptyBody}>
+            {intl.formatMessage({ id: "home.noPlanBody" })}
+          </Text>
+        </View>
+      )}
+
+      {secondaryMenu}
     </View>
   );
 }

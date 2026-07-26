@@ -1,26 +1,30 @@
 import React from "react";
-import { act, create } from "react-test-renderer";
+import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { IntlProvider } from "react-intl";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveMessages } from "../../i18n/locale.js";
+import type { AdaptationRecommendation } from "@kinora/contracts";
+import type { FetchDashboardResult } from "../../api/plan-status-client";
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-// `react-native`'s entry point uses Flow's `import typeof` syntax that
-// Vite/Rollup cannot parse (no jest-expo/Metro Babel transform in this
-// Vitest environment) — same constraint as `@react-navigation/native` in
-// `LocaleProvider.test.tsx`. Stub the handful of primitives HomeScreen uses
-// with passthrough host-agnostic elements so the REAL component tree
-// (including its `useIntl()` call) still renders and can be asserted on.
+// `react-native`'s entry point uses Flow's `import typeof` syntax Vite/Rollup
+// cannot parse (no Metro/Babel transform in this Vitest env) — same constraint
+// AssistantScreen.test.tsx / PlanStatusScreen.test.tsx document. Stub the
+// handful of primitives HomeScreen uses with passthrough host elements so the
+// REAL component tree (its `useIntl()` calls, state, dashboard fetch) still
+// renders and asserts. NOTE: `TextInput` is deliberately NOT stubbed — C3
+// removes the manual `workoutPlanId` paste input, so the screen must no longer
+// reference it (a lingering `<TextInput>` would render `undefined` and throw).
 vi.mock("react-native", () => ({
   View: "View",
   Text: "Text",
-  TextInput: "TextInput",
-  Pressable: ({ children, style, ...rest }: any) => (
-    <button type="button" {...rest}>
+  Pressable: ({ children, style, onPress, ...rest }: any) => (
+    <button type="button" onClick={onPress} {...rest}>
       {typeof children === "function" ? children({ pressed: false }) : children}
     </button>
   ),
+  ActivityIndicator: "ActivityIndicator",
   StyleSheet: { create: (styles: unknown) => styles },
   Alert: { alert: vi.fn() },
 }));
@@ -28,47 +32,223 @@ vi.mock("react-native", () => ({
 // `../auth/session-storage` transitively imports `expo-secure-store` →
 // `expo-modules-core`, which reads the RN global `__DEV__` at module scope —
 // not defined outside a real RN/Expo runtime. HomeScreen only calls
-// `deleteSessionToken` (on logout, not exercised by these render assertions).
+// `deleteSessionToken` on logout / session-expiry; stub it (and inject
+// `clearSession` in the sessionExpired test).
 vi.mock("../../auth/session-storage.js", () => ({
-  deleteSessionToken: vi.fn(),
+  deleteSessionToken: vi.fn(async () => {}),
 }));
 
 const HomeScreen = (await import("../HomeScreen.js")).default;
 
-// Pure UI screen — a minimal stub satisfies the `navigation` prop's shape.
-const navigation = { replace: vi.fn(), navigate: vi.fn() } as any;
+/** Build a minimal `DashboardSummaryDTO` ok result, optionally with `adaptation`. */
+const dashboard = (
+  adaptation?: AdaptationRecommendation,
+): FetchDashboardResult => ({
+  kind: "ok",
+  summary: {
+    streak: 0,
+    recentDailyCompletion: [],
+    weeklyCompleted: 0,
+    weeklyPlanned: 0,
+    weeklyRollup: [],
+    ...(adaptation !== undefined ? { adaptation } : {}),
+  },
+});
 
-function renderWithLocale(locale: "en" | "es") {
-  let renderer!: ReturnType<typeof create>;
-  act(() => {
-    renderer = create(
-      <IntlProvider locale={locale} defaultLocale="en" messages={resolveMessages(locale)}>
-        <HomeScreen navigation={navigation} />
-      </IntlProvider>
-    );
-  });
-  return renderer;
+/** A `low` adherence recommendation carrying the spec to open on the plan entry. */
+const lowWithPlan = (planSpecId: string): AdaptationRecommendation => ({
+  source: "adherence",
+  level: "low",
+  planSpecId,
+  suggestedChange: { kind: "reduce_frequency", fromDays: 4, toDays: 3 },
+  rationaleKey: "adaptation.adherence.reduceFrequency",
+});
+
+/** An `ok` recommendation that still carries the current ready plan's spec. */
+const okWithPlan = (planSpecId: string): AdaptationRecommendation => ({
+  source: "adherence",
+  level: "ok",
+  planSpecId,
+});
+
+/** `insufficient_data` — no ready plan, so no `planSpecId` (the no-plan case). */
+const noPlan: AdaptationRecommendation = {
+  source: "adherence",
+  level: "insufficient_data",
+};
+
+function makeClient(
+  overrides: {
+    fetchDashboardSummary?: (...a: any[]) => Promise<FetchDashboardResult>;
+  } = {},
+) {
+  return {
+    fetchDashboardSummary:
+      overrides.fetchDashboardSummary ??
+      vi.fn(async () => dashboard(okWithPlan("spec_1"))),
+  };
 }
 
-describe("HomeScreen (first mobile screen migrated off prop-drilled copy — 9.4.1/9.4.2)", () => {
-  it("renders the logout control via useIntl().formatMessage, not a hardcoded literal, in EN", () => {
-    const renderer = renderWithLocale("en");
-    const text = renderer.root.findAllByProps({ children: "Log out" });
-    expect(text.length).toBeGreaterThan(0);
+function renderScreen(props: Record<string, unknown> = {}) {
+  const navigation = {
+    navigate: vi.fn(),
+    reset: vi.fn(),
+    replace: vi.fn(),
+  } as any;
+  const clearSession = vi.fn(async () => {});
+  // Always inject a client so no test hits the real SecureStore/network path.
+  const { locale, ...rest } = props as { locale?: "en" | "es" } & Record<string, unknown>;
+  const client = (rest.client as unknown) ?? makeClient();
+  let renderer!: ReactTestRenderer;
+  act(() => {
+    renderer = create(
+      <IntlProvider locale={locale ?? "en"} defaultLocale="en" messages={resolveMessages(locale ?? "en")}>
+        <HomeScreen
+          navigation={navigation}
+          clearSession={clearSession}
+          {...rest}
+          client={client as any}
+        />
+      </IntlProvider>,
+    );
+  });
+  return { renderer, navigation, clearSession };
+}
+
+const has = (r: ReactTestRenderer, id: string) =>
+  r.root.findAll((n) => n.props.testID === id).length > 0;
+
+async function settle() {
+  await act(async () => {});
+}
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("HomeScreen (C3 — dashboard fetch + plan-status nav entry)", () => {
+  it("fetches the dashboard summary and shows a plan entry that navigates to PlanStatus with the resolved planSpecId", async () => {
+    const client = makeClient({
+      fetchDashboardSummary: vi.fn(async () => dashboard(lowWithPlan("spec_42"))),
+    });
+    const { renderer, navigation } = renderScreen({ client });
+    await settle();
+
+    expect(client.fetchDashboardSummary).toHaveBeenCalledTimes(1);
+    expect(has(renderer, "home-view-plan")).toBe(true);
+
+    const entry = renderer.root.find((n) => n.props.testID === "home-view-plan");
+    await act(async () => {
+      await entry.props.onPress();
+    });
+    expect(navigation.navigate).toHaveBeenCalledWith("PlanStatus", {
+      planSpecId: "spec_42",
+    });
   });
 
-  it("renders the same key's ES translation under the es locale, with no prop-drilled messages", () => {
-    const renderer = renderWithLocale("es");
-    const text = renderer.root.findAllByProps({ children: "Cerrar sesión" });
-    expect(text.length).toBeGreaterThan(0);
+  it("resolves the plan entry from an `ok`-level summary too (planSpecId present without a suggestion)", async () => {
+    const client = makeClient({
+      fetchDashboardSummary: vi.fn(async () => dashboard(okWithPlan("spec_7"))),
+    });
+    const { renderer, navigation } = renderScreen({ client });
+    await settle();
+
+    expect(has(renderer, "home-view-plan")).toBe(true);
+    const entry = renderer.root.find((n) => n.props.testID === "home-view-plan");
+    await act(async () => {
+      await entry.props.onPress();
+    });
+    expect(navigation.navigate).toHaveBeenCalledWith("PlanStatus", {
+      planSpecId: "spec_7",
+    });
   });
 
-  it("navigates to the History screen when the history entry point is pressed (09b nav wiring)", () => {
-    const renderer = renderWithLocale("en");
+  it("shows a no-plan empty state (no crash, no plan entry) when the summary carries no planSpecId", async () => {
+    const client = makeClient({
+      fetchDashboardSummary: vi.fn(async () => dashboard(noPlan)),
+    });
+    const { renderer } = renderScreen({ client });
+    await settle();
+
+    expect(has(renderer, "home-no-plan")).toBe(true);
+    expect(has(renderer, "home-view-plan")).toBe(false);
+  });
+
+  it("degrades gracefully to an error+retry state when the summary fetch fails, then recovers on retry", async () => {
+    const fetchDashboardSummary = vi
+      .fn()
+      .mockResolvedValueOnce({ kind: "error", message: "api_unreachable" })
+      .mockResolvedValueOnce(dashboard(lowWithPlan("spec_9")));
+    const client = makeClient({ fetchDashboardSummary });
+    const { renderer } = renderScreen({ client });
+    await settle();
+
+    expect(has(renderer, "home-error")).toBe(true);
+    const retry = renderer.root.find((n) => n.props.testID === "home-retry");
+    await act(async () => {
+      await retry.props.onPress();
+    });
+    expect(has(renderer, "home-view-plan")).toBe(true);
+    expect(fetchDashboardSummary).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears the session and resets navigation to Login exactly once on a sessionExpired fetch", async () => {
+    const client = makeClient({
+      fetchDashboardSummary: vi.fn(async () => ({
+        kind: "error" as const,
+        message: "no_session",
+        sessionExpired: true as const,
+      })),
+    });
+    const { navigation, clearSession } = renderScreen({ client });
+    await settle();
+    await settle();
+
+    expect(clearSession).toHaveBeenCalledTimes(1);
+    expect(navigation.reset).toHaveBeenCalledTimes(1);
+    expect(navigation.reset).toHaveBeenCalledWith({
+      index: 0,
+      routes: [{ name: "Login" }],
+    });
+  });
+
+  it("no longer renders the manual workoutPlanId paste affordance (no TextInput, no 'Start workout')", async () => {
+    const { renderer } = renderScreen();
+    await settle();
+
+    // The removed `<TextInput>` primitive is not even stubbed in this test's
+    // react-native mock — a lingering reference would have thrown on render.
+    const inputs = renderer.root.findAll(
+      (n) => (n.type as unknown) === "TextInput",
+    );
+    expect(inputs).toHaveLength(0);
+    const startWorkout = renderer.root.findAll(
+      (n) =>
+        typeof n.props.children === "string" &&
+        /start workout/i.test(n.props.children),
+    );
+    expect(startWorkout).toHaveLength(0);
+  });
+
+  it("keeps i18n wiring: renders the logout control via useIntl (EN) and navigates to History", async () => {
+    const { renderer, navigation } = renderScreen();
+    await settle();
+
+    const logout = renderer.root.findAllByProps({ children: "Log out" });
+    expect(logout.length).toBeGreaterThan(0);
+
     const historyButton = renderer.root.find(
-      (n) => n.props.accessibilityLabel === "History"
+      (n) => n.props.accessibilityLabel === "History",
     );
     historyButton.props.onPress();
     expect(navigation.navigate).toHaveBeenCalledWith("History");
+  });
+
+  it("renders the ES logout translation under the es locale", async () => {
+    const { renderer } = renderScreen({ locale: "es" });
+    await settle();
+
+    const logout = renderer.root.findAllByProps({ children: "Cerrar sesión" });
+    expect(logout.length).toBeGreaterThan(0);
   });
 });
