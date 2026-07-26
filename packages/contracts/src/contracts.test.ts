@@ -1,6 +1,12 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import * as contracts from "./index";
 import type {
+  AdaptationSignalSource,
+  AdaptationLevel,
+  AdherenceSnapshot,
+  SuggestedChange,
+  AdaptationRecommendation,
+  DashboardSummaryDTO,
   CreateUserMemoryRequest,
   CreateUserMemoryResponse,
   DefaultVectorMemoryEmbeddingConfig,
@@ -262,6 +268,43 @@ describe("shared contracts boundary", () => {
     expectTypeOf<DeleteUserMemoryResponse>().toEqualTypeOf<{
       deleted: true;
     }>();
+  });
+
+  // ---------------------------------------------------------------------------
+  // 14a-v1.1-adaptation-adherence — shared, type-only adaptation contract
+  // ---------------------------------------------------------------------------
+
+  it("defines the type-only AdaptationRecommendation contract (14a; 'rpe' reserved for 14b)", () => {
+    expectTypeOf<AdaptationSignalSource>().toEqualTypeOf<"adherence" | "rpe">();
+    expectTypeOf<AdaptationLevel>().toEqualTypeOf<"ok" | "low" | "insufficient_data">();
+
+    expectTypeOf<AdherenceSnapshot>().toEqualTypeOf<{
+      adherence: number;
+      periodWeeks: number;
+      completedInWindow: number;
+      plannedInWindow: number;
+    }>();
+
+    expectTypeOf<SuggestedChange>().toEqualTypeOf<{
+      kind: "reduce_frequency";
+      fromDays: number;
+      toDays: number;
+    }>();
+
+    expectTypeOf<AdaptationRecommendation>().toEqualTypeOf<{
+      source: AdaptationSignalSource;
+      level: AdaptationLevel;
+      suggestedChange?: SuggestedChange;
+      rationaleKey?: string;
+      planSpecId?: string;
+      adherence?: AdherenceSnapshot;
+    }>();
+  });
+
+  it("adds an optional adaptation field to DashboardSummaryDTO (additive, type-only)", () => {
+    expectTypeOf<DashboardSummaryDTO>()
+      .toHaveProperty("adaptation")
+      .toEqualTypeOf<AdaptationRecommendation | undefined>();
   });
 
   it("exposes the configurable default vector embedding metadata", () => {

@@ -836,6 +836,50 @@ export interface KpiWithDelta {
   deltaVsPreviousPeriod: number | null;
 }
 
+// -----------------------------------------------------------------------------
+// 14a-v1.1-adaptation-adherence — shared adaptation recommendation contract.
+//
+// TYPE-ONLY (no Zod, no runtime export): the shape is server-produced and
+// server-consumed on confirm, never parsed from an untrusted boundary, so it
+// adds no runtime value and keeps the public-surface export guard
+// (contracts.test.ts / billing-dto.test.ts) unchanged. If a future slice ever
+// adds a runtime export here, both guard arrays MUST be updated in that slice.
+// -----------------------------------------------------------------------------
+
+/** Which signal produced an adaptation recommendation. `"adherence"` ships in 14a; `"rpe"` is reserved for 14b feeding the same banner slot. */
+export type AdaptationSignalSource = "adherence" | "rpe";
+
+/** Adaptation recommendation level. A banner renders only when `"low"`; `"ok"`/`"insufficient_data"` render nothing. */
+export type AdaptationLevel = "ok" | "low" | "insufficient_data";
+
+/** Signal context for an adherence-based recommendation over the rolling window. */
+export interface AdherenceSnapshot {
+  /** 0..1 completed/planned over the window. */
+  adherence: number;
+  /** Rolling window length in weeks (default 4). */
+  periodWeeks: number;
+  completedInWindow: number;
+  /** `plannedSessionsPerWeek * periodWeeks`. */
+  plannedInWindow: number;
+}
+
+/** The only adaptation Slice 1 may suggest: a frequency reduction (`daysPerWeek`). */
+export type SuggestedChange = { kind: "reduce_frequency"; fromDays: number; toDays: number };
+
+/** Single shared adaptation recommendation carried on the dashboard read; both 14a (adherence) and 14b (rpe) compose into ONE banner via this shape. */
+export interface AdaptationRecommendation {
+  source: AdaptationSignalSource;
+  level: AdaptationLevel;
+  /** Present only when `level === "low"` and a real reduction exists (`toDays < fromDays`). */
+  suggestedChange?: SuggestedChange;
+  /** i18n key, never raw prose (API-attached). */
+  rationaleKey?: string;
+  /** The spec to `POST /plan-specs/:id/adapt` on confirm (API-attached). */
+  planSpecId?: string;
+  /** Signal context for the adherence source (14a); 14b adds its own. */
+  adherence?: AdherenceSnapshot;
+}
+
 /** Dashboard summary DTO. Weekly progress is always measured in sessions, never any other unit (design.md "Dashboard"). */
 export interface DashboardSummaryDTO {
   /** Consecutive calendar days (UTC) with at least one completed session. */
@@ -854,6 +898,12 @@ export interface DashboardSummaryDTO {
    * active ready plan.
    */
   weeklyRollup: Array<{ dayIndex: number; focus?: string; loadKg: number; loadPercent: number }>;
+  /**
+   * Optional adherence/adaptation recommendation (14a). Additive and optional so
+   * existing consumers are unaffected; the banner renders only when
+   * `adaptation.level === "low"`. Attached by the read; consumes no quota.
+   */
+  adaptation?: AdaptationRecommendation;
 }
 
 /** Statistics summary DTO. Deliberately carries no adherence KPI (design.md "Adherence lives on the Dashboard, not Statistics"). */
