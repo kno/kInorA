@@ -12,6 +12,7 @@
 export {
   computeStreak,
   computeAdherence,
+  computeAdherenceAdaptation,
   computeWeeklyRollup,
   delta,
   computeMuscleGroupDistribution,

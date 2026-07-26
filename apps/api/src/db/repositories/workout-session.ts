@@ -4,6 +4,7 @@ import { classifyExerciseMuscleGroup } from "../muscle-classifier.js";
 import {
   addUtcDays as domainAddUtcDays,
   computeAdherence,
+  computeAdherenceAdaptation,
   computeMuscleGroupDistribution,
   computePersonalRecords,
   computeStreak,
@@ -16,6 +17,7 @@ import {
   type PersonalRecordSetInput,
 } from "../progress-domain.js";
 import type {
+  AdaptationRecommendation,
   DashboardSummaryDTO,
   DeleteSessionOutcome,
   ExerciseDetailDTO,
@@ -39,8 +41,12 @@ interface WorkoutPlanRow {
   id: string;
   tenantId: string;
   userId: string;
+  /** FK to the confirmed `plan_specs` row; the `/adapt` confirm target (14a). */
+  planSpecId: string;
   status: "generating" | "ready" | "failed";
   programJson: WorkoutProgram | null;
+  /** Plan creation instant; guards a brand-new plan from a false `low` (14a). */
+  createdAt: Date;
 }
 
 interface WorkoutSessionRow {
@@ -716,6 +722,30 @@ export class WorkoutSessionRepository {
       now
     );
 
+    // 14a-v1.1 Slice A2 — fold the adherence adaptation recommendation into the
+    // already-fetched read (no new query, no quota). The pure domain policy
+    // decides low/ok/insufficient from the same 60-session history + latest
+    // ready plan; the repo layer only attaches the identity the confirm route
+    // and i18n need (`planSpecId`, `rationaleKey`). A banner renders only when
+    // `level === "low"` with a `suggestedChange`; `ok`/`insufficient_data`
+    // carry no actionable change (design.md "Fold the recommendation").
+    const adaptationResult = computeAdherenceAdaptation(
+      {
+        completedAtDates,
+        plannedSessionsPerWeek,
+        planCreatedAt: latestReadyPlan?.createdAt?.toISOString(),
+        periodWeeks: 4,
+      },
+      now
+    );
+    const adaptation: AdaptationRecommendation = {
+      ...adaptationResult,
+      ...(latestReadyPlan ? { planSpecId: latestReadyPlan.planSpecId } : {}),
+      ...(adaptationResult.level === "low" && adaptationResult.suggestedChange
+        ? { rationaleKey: "adaptation.adherence.reduceFrequency" }
+        : {}),
+    };
+
     const { start: weekStart, end: weekEnd } = utcWeekBounds(now);
     const weeklyCompletedRows = completedRows.filter(
       (row) => row.completedAt && row.completedAt >= weekStart && row.completedAt <= weekEnd
@@ -738,6 +768,7 @@ export class WorkoutSessionRepository {
       weeklyCompleted,
       weeklyPlanned,
       weeklyRollup: computeWeeklyRollup({ planDays, sessions: weeklySessions }, now),
+      adaptation,
     };
   }
 
