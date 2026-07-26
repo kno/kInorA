@@ -115,13 +115,19 @@ export function AssistantPane({
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceNotice, setVoiceNotice] = useState<VoiceNotice>(null);
   const [voiceSupported, setVoiceSupported] = useState(false);
-  const [micDenied, setMicDenied] = useState(false);
   const [online, setOnline] = useState(true);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const voiceAbortRef = useRef<AbortController | null>(null);
+  // Whether the NEXT `onstop` should transcribe. A user-initiated stop
+  // transcribes; an auto-stop (connectivity dropped mid-recording) only
+  // releases the mic and returns to idle, never sending audio over a dead link.
+  const shouldTranscribeRef = useRef(true);
+  // Latest "cancel the current recording" closure, kept fresh so the stable
+  // offline listener can release a hot mic without re-subscribing.
+  const cancelRecordingRef = useRef<() => void>(() => {});
 
   // Abort any in-flight stream on unmount/navigation so no token write lands in
   // an unmounted tree and the upstream API sees the disconnect.
@@ -143,14 +149,19 @@ export function AssistantPane({
 
   // Track connectivity so voice degrades to disabled offline and recovers
   // gracefully (no reload) when the connection returns — text input is never
-  // affected either way.
+  // affected either way. Losing the connection MID-RECORDING auto-stops so the
+  // mic is released immediately (the button that could stop it is otherwise
+  // disabled while offline — a hot-mic lockout otherwise).
   useEffect(() => {
     if (typeof navigator !== "undefined") setOnline(navigator.onLine);
     const goOnline = () => {
       setOnline(true);
       setVoiceNotice((prev) => (prev === "offline" ? null : prev));
     };
-    const goOffline = () => setOnline(false);
+    const goOffline = () => {
+      setOnline(false);
+      cancelRecordingRef.current();
+    };
     window.addEventListener("online", goOnline);
     window.addEventListener("offline", goOffline);
     return () => {
@@ -158,6 +169,22 @@ export function AssistantPane({
       window.removeEventListener("offline", goOffline);
     };
   }, []);
+
+  // Keep the cancel-recording closure current for the stable offline listener.
+  // Auto-stop halts capture WITHOUT transcribing (network is gone) and releases
+  // the mic; if no recorder is active it still clears any held stream.
+  useEffect(() => {
+    cancelRecordingRef.current = () => {
+      const recorder = recorderRef.current;
+      if (recorder && recorder.state !== "inactive") {
+        shouldTranscribeRef.current = false;
+        recorder.stop();
+      } else {
+        releaseMic();
+      }
+      setVoiceState("idle");
+    };
+  });
 
   // Release the mic + abort any in-flight transcription on unmount.
   useEffect(() => {
@@ -281,38 +308,57 @@ export function AssistantPane({
   );
 
   const startRecording = useCallback(async () => {
+    // Clear any prior notice (incl. a previous denial) so a retry can recover
+    // in-session once the user grants permission.
     setVoiceNotice(null);
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      // Permission denied or unavailable → disable voice, keep text usable.
-      setMicDenied(true);
+      // Permission denied or unavailable → show the message, keep text usable.
+      // The mic stays retry-able (a later grant recovers without a reload).
       setVoiceNotice("denied");
       return;
     }
+    // The stream is acquired: hold it BEFORE building the recorder so any
+    // failure below still releases the mic (no leaked hot mic / second stream).
     streamRef.current = stream;
     chunksRef.current = [];
-    const mimeType = selectMimeType();
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-    recorder.ondataavailable = (event) => {
-      if (event.data && event.data.size > 0) chunksRef.current.push(event.data);
-    };
-    recorder.onstop = () => {
-      const type = recorder.mimeType || mimeType || "audio/webm";
-      const blob = new Blob(chunksRef.current, { type });
+    try {
+      const mimeType = selectMimeType();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const type = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type });
+        releaseMic();
+        // Auto-stop (offline) only releases the mic; a user stop transcribes.
+        if (shouldTranscribeRef.current) {
+          void transcribeAndRun(blob);
+        } else {
+          setVoiceState("idle");
+        }
+      };
+      recorderRef.current = recorder;
+      shouldTranscribeRef.current = true;
+      recorder.start();
+      setVoiceState("listening");
+    } catch {
+      // Constructor/start() threw (e.g. an unconstructable mimeType) — release
+      // the acquired stream so the mic never stays hot, and recover to idle.
       releaseMic();
-      void transcribeAndRun(blob);
-    };
-    recorderRef.current = recorder;
-    recorder.start();
-    setVoiceState("listening");
+      setVoiceState("idle");
+      setVoiceNotice("error");
+    }
   }, [releaseMic, transcribeAndRun]);
 
   const stopRecording = useCallback(() => {
-    // The recorder's `onstop` handler drives transcription; here we only halt
-    // capture and move the UI into the processing state.
+    // A user stop transcribes; the recorder's `onstop` handler drives it. Here
+    // we only halt capture and move the UI into the processing state.
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
+      shouldTranscribeRef.current = true;
       recorderRef.current.stop();
     }
     setVoiceState("processing");
@@ -327,8 +373,16 @@ export function AssistantPane({
     // While "processing" the mic is disabled; ignore clicks.
   };
 
-  const voiceDisabled =
-    streaming || generating || !online || !voiceSupported || micDenied || voiceState === "processing";
+  // Conditions that block STARTING a recording. They deliberately do NOT block
+  // STOPPING one already in flight — otherwise dropping offline mid-recording
+  // would strand a hot mic with no way to release it from the UI.
+  const voiceStartDisabled = streaming || generating || !online || !voiceSupported;
+  const micButtonDisabled =
+    voiceState === "listening"
+      ? false
+      : voiceState === "processing"
+        ? true
+        : voiceStartDisabled;
 
   const voiceStatusLabel =
     voiceState === "listening"
@@ -448,7 +502,7 @@ export function AssistantPane({
             aria-label={voiceState === "listening" ? t("voice.stopAria") : t("voice.startAria")}
             aria-pressed={voiceState === "listening"}
             title={t("voice.micLabel")}
-            disabled={voiceDisabled}
+            disabled={micButtonDisabled}
             onClick={handleMicClick}
           >
             <span aria-hidden="true">{voiceState === "listening" ? "■" : "🎤"}</span>
