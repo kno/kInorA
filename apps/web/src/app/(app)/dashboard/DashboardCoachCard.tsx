@@ -66,9 +66,33 @@ interface AdaptationBannerProps {
   onAccept?: (planSpecId: string) => Promise<AdaptAcceptResult>;
 }
 
+/**
+ * Map an accept failure code (from `adaptPlan`/`adaptPlanAction`) to a distinct,
+ * coaching-tone i18n key. B2 surfaces three shapes:
+ * - `403` quota/allocation exhausted → "you've used your plan change / upgrade";
+ * - `409` `no_adaptation` (recommendation went stale, plan already fine) →
+ *   "your plan already looks like a good fit";
+ * - anything else (network, unknown API error) → the generic retry error.
+ */
+function errorCopyKey(message: string): "quotaExhausted" | "upToDate" | "error" {
+  if (message === "tenant_quota_exhausted" || message === "member_allocation_exhausted") {
+    return "quotaExhausted";
+  }
+  if (message === "no_adaptation") {
+    return "upToDate";
+  }
+  return "error";
+}
+
+type BannerState =
+  | { phase: "idle" }
+  | { phase: "submitting" }
+  | { phase: "regenerating" }
+  | { phase: "error"; message: string };
+
 function AdaptationBanner({ planSpecId, fromDays, toDays, onAccept }: AdaptationBannerProps) {
   const t = useTranslations("adaptation");
-  const [state, setState] = useState<"idle" | "submitting" | "regenerating" | "error">("idle");
+  const [state, setState] = useState<BannerState>({ phase: "idle" });
   const [dismissed, setDismissed] = useState(false);
 
   if (dismissed) return null;
@@ -77,18 +101,23 @@ function AdaptationBanner({ planSpecId, fromDays, toDays, onAccept }: Adaptation
   // in flight so a rapid double-click fires only ONE accept — otherwise a
   // second click starts a second generation (and, per the API-side fresh-nonce
   // fix, consumes a second quota unit) before the first request settles.
-  const isSubmitting = state === "submitting";
+  const isSubmitting = state.phase === "submitting";
 
   async function handleAccept() {
     if (!onAccept || isSubmitting) return;
-    setState("submitting");
+    setState({ phase: "submitting" });
     const result = await onAccept(planSpecId);
-    // A failed accept (quota exhausted, 409, network) leaves the plan unchanged;
-    // surface the error inline and keep the accept action for a retry.
-    setState(result.kind === "ok" ? "regenerating" : "error");
+    // A failed accept (quota exhausted, 409 stale, network) leaves the plan
+    // unchanged; surface the mapped error inline and keep the accept action so
+    // the user can retry.
+    setState(
+      result.kind === "ok"
+        ? { phase: "regenerating" }
+        : { phase: "error", message: result.message },
+    );
   }
 
-  if (state === "regenerating") {
+  if (state.phase === "regenerating") {
     return (
       <article className="dash-card dash-coach-card" aria-live="polite">
         <p className="dash-coach-text">{t("regenerating")}</p>
@@ -119,9 +148,14 @@ function AdaptationBanner({ planSpecId, fromDays, toDays, onAccept }: Adaptation
             {t("dismiss")}
           </button>
         </div>
-        {state === "error" ? (
+        {isSubmitting ? (
+          <p className="dash-coach-text" aria-live="polite">
+            {t("submitting")}
+          </p>
+        ) : null}
+        {state.phase === "error" ? (
           <p className="dash-coach-error" role="alert">
-            {t("error")}
+            {t(errorCopyKey(state.message))}
           </p>
         ) : null}
       </div>
