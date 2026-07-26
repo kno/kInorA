@@ -38,4 +38,14 @@ describe("user_preferences schema shape", () => {
     expect(cols.createdAt).toBeDefined();
     expect(cols.updatedAt).toBeDefined();
   });
+
+  // A3 (13-v1.1-interactive-voice-chat): additive nullable TTS opt-out column.
+  it("userPreferences table has a nullable ttsEnabled boolean column", () => {
+    const cols = getTableColumns(userPreferences);
+    expect(cols.ttsEnabled).toBeDefined();
+    expect(cols.ttsEnabled.columnType).toBe("PgBoolean");
+    // Nullable, no default — NULL = enabled (opt-out default ON).
+    expect(cols.ttsEnabled.notNull).toBe(false);
+    expect(cols.ttsEnabled.hasDefault).toBe(false);
+  });
 });

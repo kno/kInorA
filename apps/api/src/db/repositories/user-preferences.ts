@@ -12,6 +12,8 @@ export interface UserPreferencesRecord {
   defaultLocation: string | null;
   defaultDuration: number | null;
   defaultEquipment: string[] | null;
+  /** TTS opt-out (A3). NULL/true = enabled (default ON); false = opted out. */
+  ttsEnabled: boolean | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,6 +33,7 @@ export interface UserPreferencesUpsertInput {
   defaultLocation?: string | null;
   defaultDuration?: number | null;
   defaultEquipment?: string[] | null;
+  ttsEnabled?: boolean | null;
 }
 
 /**
@@ -108,6 +111,9 @@ export class UserPreferencesRepository {
     if ("defaultEquipment" in input) {
       set.defaultEquipment = input.defaultEquipment ?? null;
     }
+    if ("ttsEnabled" in input) {
+      set.ttsEnabled = input.ttsEnabled ?? null;
+    }
 
     // INSERT values: un-sent columns are simply absent (default NULL).
     const values: PreferencesInsert = { userId };
@@ -119,6 +125,9 @@ export class UserPreferencesRepository {
     }
     if ("defaultEquipment" in input) {
       values.defaultEquipment = input.defaultEquipment ?? null;
+    }
+    if ("ttsEnabled" in input) {
+      values.ttsEnabled = input.ttsEnabled ?? null;
     }
 
     const rows = await this.db

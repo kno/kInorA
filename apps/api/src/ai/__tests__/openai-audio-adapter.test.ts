@@ -171,3 +171,104 @@ describe("OpenAIAudioAdapter — transcribe", () => {
     expect(options["maxRetries"] as number).toBeLessThanOrEqual(1);
   });
 });
+
+/**
+ * A fake OpenAI-audio client for the TTS (speech) half. Records the create call
+ * args and returns canned mp3 bytes via an `arrayBuffer()`-bearing response,
+ * mirroring the real SDK's `audio.speech.create` return shape. No network.
+ */
+function makeFakeSpeechClient(bytes: Uint8Array = new Uint8Array([0x49, 0x44, 0x33])): {
+  client: OpenAIAudioClient;
+  calls: Array<Record<string, unknown>>;
+} {
+  const calls: Array<Record<string, unknown>> = [];
+  const client: OpenAIAudioClient = {
+    audio: {
+      transcriptions: {
+        create: vi.fn(async () => ({ text: "" })),
+      },
+      speech: {
+        create: vi.fn(async (body: Record<string, unknown>, options?: Record<string, unknown>) => {
+          calls.push({ ...body, ...(options ?? {}) });
+          return {
+            arrayBuffer: async () =>
+              bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+          };
+        }),
+      },
+    },
+  };
+  return { client, calls };
+}
+
+describe("OpenAIAudioAdapter — synthesize (TTS)", () => {
+  const OLD_ENV = process.env["OPENAI_API_KEY"];
+
+  beforeEach(() => {
+    process.env["OPENAI_API_KEY"] = "sk-test-key";
+  });
+
+  afterEach(() => {
+    if (OLD_ENV === undefined) delete process.env["OPENAI_API_KEY"];
+    else process.env["OPENAI_API_KEY"] = OLD_ENV;
+    vi.restoreAllMocks();
+  });
+
+  it("pins model gpt-4o-mini-tts, voice alloy, response_format mp3 and returns audio/mpeg bytes", async () => {
+    const { client, calls } = makeFakeSpeechClient(new Uint8Array([1, 2, 3, 4, 5]));
+    const adapter = new OpenAIAudioAdapter(() => client);
+
+    const result = await adapter.synthesize("great, four days a week");
+
+    expect(result.contentType).toBe("audio/mpeg");
+    expect(result.audio).toBeInstanceOf(Uint8Array);
+    expect(Array.from(result.audio)).toEqual([1, 2, 3, 4, 5]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!["model"]).toBe("gpt-4o-mini-tts");
+    expect(calls[0]!["voice"]).toBe("alloy");
+    expect(calls[0]!["response_format"]).toBe("mp3");
+    expect(calls[0]!["input"]).toBe("great, four days a week");
+  });
+
+  it("truncates input beyond the ~4096-char cap at a sentence boundary BEFORE calling the client", async () => {
+    const { client, calls } = makeFakeSpeechClient();
+    const adapter = new OpenAIAudioAdapter(() => client);
+
+    // Build > 4096 chars ending with sentences so a sentence boundary exists
+    // within the cap window.
+    const sentence = "This is a spoken reply sentence. ";
+    const long = sentence.repeat(200); // ~6600 chars
+    await adapter.synthesize(long);
+
+    const sent = calls[0]!["input"] as string;
+    expect(sent.length).toBeLessThanOrEqual(4096);
+    // Cut at a sentence boundary — ends with the punctuation, not mid-word.
+    expect(sent.trimEnd().endsWith(".")).toBe(true);
+  });
+
+  it("reads OPENAI_API_KEY at call time, not at construction", async () => {
+    delete process.env["OPENAI_API_KEY"];
+    const seenKeys: Array<string | undefined> = [];
+    const adapter = new OpenAIAudioAdapter((apiKey) => {
+      seenKeys.push(apiKey);
+      return makeFakeSpeechClient().client;
+    });
+
+    expect(seenKeys).toHaveLength(0);
+
+    process.env["OPENAI_API_KEY"] = "sk-late-key";
+    await adapter.synthesize("hi");
+
+    expect(seenKeys).toEqual(["sk-late-key"]);
+  });
+
+  it("forwards the AbortSignal into the SDK speech call", async () => {
+    const { client, calls } = makeFakeSpeechClient();
+    const adapter = new OpenAIAudioAdapter(() => client);
+    const controller = new AbortController();
+
+    await adapter.synthesize("ok", controller.signal);
+
+    expect(calls[0]!["signal"]).toBe(controller.signal);
+  });
+});

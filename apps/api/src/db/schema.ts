@@ -923,6 +923,9 @@ export const userPreferences = pgTable(
     defaultLocation: text("default_location"),
     defaultDuration: integer("default_duration"),
     defaultEquipment: jsonb("default_equipment").$type<string[]>(),
+    // TTS opt-out (13-v1.1-interactive-voice-chat, A3). Nullable, no backfill:
+    // NULL or true = TTS enabled (opt-out default ON); false = opted out.
+    ttsEnabled: boolean("tts_enabled"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
