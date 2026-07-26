@@ -37,6 +37,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const logoutLabel = intl.formatMessage({ id: "dashboard.logout" });
   const historyLabel = intl.formatMessage({ id: "history.title" });
   const createPlanLabel = intl.formatMessage({ id: "chat.teaser.title" });
+  const voiceLabel = intl.formatMessage({ id: "voice.screenTitle" });
 
   const [planId, setPlanId] = useState(
     process.env.EXPO_PUBLIC_DEMO_PLAN_ID ?? "",
@@ -103,6 +104,15 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         accessibilityLabel={createPlanLabel}
       >
         <Text style={styles.historyText}>{createPlanLabel}</Text>
+      </Pressable>
+
+      <Pressable
+        style={({ pressed }) => [styles.historyButton, pressed && styles.historyButtonPressed]}
+        onPress={() => navigation.navigate("CreatePlanVoice")}
+        accessibilityRole="button"
+        accessibilityLabel={voiceLabel}
+      >
+        <Text style={styles.historyText}>{voiceLabel}</Text>
       </Pressable>
 
       <Pressable

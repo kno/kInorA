@@ -143,7 +143,10 @@ describe("@kinora/i18n package assembly", () => {
     // B1: 8 scalar (micLabel, startAria, stopAria, denied, unsupported, offline,
     // unclear, error) + 3 `voice.state.*` (idle/listening/processing).
     // B2: +2 scalar (stopSpeaking, stopSpeakingAria) + 1 `voice.state.speaking`.
-    expect(voiceKeys).toHaveLength(14);
+    // D1 (mobile voice screen): +8 scalar (screenTitle, hold, backAria,
+    // keyboardAria, endSession, endSessionAria, roleYou, roleCoach)
+    // + 1 `voice.state.responding`.
+    expect(voiceKeys).toHaveLength(23);
     expect(en["voice.state.listening"]).toBe("Listening…");
     expect(es["voice.state.listening"]).toBe("Escuchando…");
     // B2 playback copy — the speaking state and the stop-speaking control.
@@ -153,6 +156,13 @@ describe("@kinora/i18n package assembly", () => {
     expect(es["voice.stopSpeaking"]).toBeTruthy();
     expect(en["voice.stopSpeakingAria"]).toBeTruthy();
     expect(es["voice.stopSpeakingAria"]).toBeTruthy();
+    // D1 mobile voice screen copy — the responding state + screen chrome.
+    expect(en["voice.state.responding"]).toBe("kInorA is responding…");
+    expect(es["voice.state.responding"]).toBe("kInorA responde…");
+    expect(en["voice.screenTitle"]).toBeTruthy();
+    expect(es["voice.screenTitle"]).toBeTruthy();
+    expect(en["voice.hold"]).toBeTruthy();
+    expect(es["voice.hold"]).toBeTruthy();
   });
 
   it("the billing namespace is present with EN+ES parity (11a Phase 4 / Slice 4)", () => {

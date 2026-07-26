@@ -55,6 +55,7 @@ import WorkoutTrackerScreen, {
 } from "./src/screens/WorkoutTrackerScreen";
 import HistoryScreen from "./src/screens/HistoryScreen";
 import AssistantScreen from "./src/screens/create-plan/AssistantScreen";
+import VoiceScreen from "./src/screens/voice/VoiceScreen";
 
 import {
   getSessionToken,
@@ -76,6 +77,7 @@ type RootStackParamList = {
   Tracker: TrackerRouteParams;
   History: undefined;
   CreatePlanAssistant: undefined;
+  CreatePlanVoice: undefined;
 };
 
 /** Routes that require an authenticated session; auth routes are never guarded. */
@@ -84,6 +86,7 @@ const PROTECTED_ROUTES: (keyof RootStackParamList)[] = [
   "Tracker",
   "History",
   "CreatePlanAssistant",
+  "CreatePlanVoice",
 ];
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -200,6 +203,11 @@ export default function App() {
             name="CreatePlanAssistant"
             component={AssistantScreen}
             options={{ title: "kInorA Coach" }}
+          />
+          <Stack.Screen
+            name="CreatePlanVoice"
+            component={VoiceScreen}
+            options={{ headerShown: false }}
           />
         </Stack.Navigator>
       </NavigationContainer>
