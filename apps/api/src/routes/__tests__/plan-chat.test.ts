@@ -53,6 +53,9 @@ type PlanRepoMock = { [K in keyof PlanRouteRepo]: ReturnType<typeof vi.fn> };
 function buildPlanRepo(): PlanRepoMock {
   return {
     upsertDraft: vi.fn().mockResolvedValue({ step: 1, specJson: {} }),
+    // #215: chat commits go through the version-guarded commitDraft. Default is
+    // a successful commit (no conflict) returning a bumped version.
+    commitDraft: vi.fn().mockResolvedValue({ step: 1, specJson: {}, version: 1 }),
     findCurrentDraft: vi.fn().mockResolvedValue(null),
     promoteDraftToSpec: vi.fn(),
     findPlanById: vi.fn(),
@@ -103,6 +106,11 @@ async function buildTestApp(opts: {
   chatEntitlement: ChatEntitlementPort;
   chatExtractor: PlanSpecExtractor;
   chatStreamTimeoutMs?: number;
+  /**
+   * Optional plan_generation quota gate (#214). Wired exactly as production
+   * wires it, so a test can assert a chat turn NEVER consumes quota.
+   */
+  billing?: { checkAndConsume: ReturnType<typeof vi.fn> };
 }): Promise<FastifyInstance> {
   const app = Fastify();
   app.setErrorHandler((error, _request, reply) => {
@@ -115,6 +123,7 @@ async function buildTestApp(opts: {
   await app.register(planRoutes, {
     repo: opts.repo ?? buildPlanRepo(),
     generationService: noopGenerationService,
+    billing: opts.billing,
     chatEntitlement: opts.chatEntitlement,
     chatExtractor: opts.chatExtractor,
     chatStreamTimeoutMs: opts.chatStreamTimeoutMs,
@@ -268,7 +277,7 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
       "limitations",
     ]);
     // Empty/no-op extraction never touches `plan_drafts`.
-    expect(repo.upsertDraft).not.toHaveBeenCalled();
+    expect(repo.commitDraft).not.toHaveBeenCalled();
     // The extractor received the streaming AbortSignal.
     const [, signalArg] = extractor.streamReply.mock.calls[0]!;
     expect(signalArg).toBeInstanceOf(AbortSignal);
@@ -326,7 +335,7 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     ]);
 
     expect(observed).toBe(true);
-    expect(repo.upsertDraft).not.toHaveBeenCalled();
+    expect(repo.commitDraft).not.toHaveBeenCalled();
   });
 
   it("cleans up quietly on a socket-level error without crashing the process", async () => {
@@ -428,7 +437,7 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
       new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 500)),
     ]);
     expect(observed).toBe(true);
-    expect(repo.upsertDraft).not.toHaveBeenCalled();
+    expect(repo.commitDraft).not.toHaveBeenCalled();
   });
 
   it("rejects an over-limit message with 400 before any streaming/LLM work", async () => {
@@ -472,7 +481,7 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     const extractor = richExtractor({ goal: "hypertrophy", daysPerWeek: 4, equipment: ["dumbbells"] });
     const repo = buildPlanRepo();
     // Current draft already has a location; the merge must preserve it.
-    repo.findCurrentDraft.mockResolvedValue({ step: 2, specJson: { location: "gym" } });
+    repo.findCurrentDraft.mockResolvedValue({ step: 2, specJson: { location: "gym" }, version: 4 });
 
     app = await buildTestApp({
       db: buildSessionDb(),
@@ -504,9 +513,12 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     });
     expect(terminal.missingFields).toEqual(["sessionDurationMinutes", "limitations"]);
     expect(terminal.assistantMessage).toBe("Got it.");
-    // Committed exactly once, only on the terminal event, with the merged spec.
-    expect(repo.upsertDraft).toHaveBeenCalledTimes(1);
-    expect(repo.upsertDraft).toHaveBeenCalledWith(TENANT_A, USER_A, 2, terminal.draftSpec);
+    // Committed exactly once, only on the terminal event, with the merged spec,
+    // under the version read at the start of the turn (#215 optimistic guard).
+    expect(repo.commitDraft).toHaveBeenCalledTimes(1);
+    expect(repo.commitDraft).toHaveBeenCalledWith(TENANT_A, USER_A, 2, terminal.draftSpec, 4);
+    // The blind wizard upsert is never used by a chat turn.
+    expect(repo.upsertDraft).not.toHaveBeenCalled();
   });
 
   it("mid-stream extraction (Pass 2) failure → terminal error and the draft is NOT written", async () => {
@@ -520,7 +532,7 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
       extract: vi.fn().mockRejectedValue(new Error("provider 500")),
     };
     const repo = buildPlanRepo();
-    repo.findCurrentDraft.mockResolvedValue({ step: 1, specJson: { goal: "strength" } });
+    repo.findCurrentDraft.mockResolvedValue({ step: 1, specJson: { goal: "strength" }, version: 0 });
 
     app = await buildTestApp({
       db: buildSessionDb(),
@@ -543,14 +555,14 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     expect(JSON.parse(frames.at(-1)!.data)).toEqual({ error: "chat_stream_failed" });
     expect(frames.some((f) => f.event === "draft")).toBe(false);
     // Draft untouched.
-    expect(repo.upsertDraft).not.toHaveBeenCalled();
+    expect(repo.commitDraft).not.toHaveBeenCalled();
   });
 
   it("empty/whitespace message → NO LLM work, a clarifying draft, draft unchanged", async () => {
     const extractor = richExtractor({ goal: "strength" });
     const streamSpy = vi.spyOn(extractor, "streamReply");
     const repo = buildPlanRepo();
-    repo.findCurrentDraft.mockResolvedValue({ step: 1, specJson: { daysPerWeek: 3 } });
+    repo.findCurrentDraft.mockResolvedValue({ step: 1, specJson: { daysPerWeek: 3 }, version: 0 });
 
     app = await buildTestApp({
       db: buildSessionDb(),
@@ -575,7 +587,7 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     // No extractor call, no write.
     expect(streamSpy).not.toHaveBeenCalled();
     expect(extractor.extract).not.toHaveBeenCalled();
-    expect(repo.upsertDraft).not.toHaveBeenCalled();
+    expect(repo.commitDraft).not.toHaveBeenCalled();
   });
 
   it("stream timeout → terminal error, LLM aborted, draft NOT written", async () => {
@@ -617,7 +629,7 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     expect(sawAbort).toBe(true);
     // Timed out before Pass 2 / commit.
     expect(extractor.extract).not.toHaveBeenCalled();
-    expect(repo.upsertDraft).not.toHaveBeenCalled();
+    expect(repo.commitDraft).not.toHaveBeenCalled();
   });
 
   it("honors backpressure: when raw.write() returns false it awaits drain, losing no token", async () => {
@@ -674,7 +686,7 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     // Privacy/Threat Matrix: raw-transcript embedding. The route is wired with
     // ONLY the draft repo, gate and extractor — there is no embedding/vector
     // seam reachable from a chat turn. This guards that the turn's persistence
-    // surface stays limited to `plan_drafts` (upsertDraft) and nothing else.
+    // surface stays limited to `plan_drafts` (commitDraft) and nothing else.
     const extractor = richExtractor({ goal: "hypertrophy", limitations: [{ text: "bad knee", isWarning: true }] });
     const repo = buildPlanRepo();
     app = await buildTestApp({
@@ -691,8 +703,10 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
       payload: { message: "build muscle, I have a bad knee" },
     });
 
-    // The only write is the draft upsert — no other repo method wrote anything.
-    expect(repo.upsertDraft).toHaveBeenCalledTimes(1);
+    // The only write is the version-guarded draft commit — no other repo method
+    // wrote anything, and the blind wizard upsert is never used by chat.
+    expect(repo.commitDraft).toHaveBeenCalledTimes(1);
+    expect(repo.upsertDraft).not.toHaveBeenCalled();
     expect(repo.promoteDraftToSpec).not.toHaveBeenCalled();
   });
 
@@ -797,7 +811,7 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     // Resolved promptly (well within a generous bound), not after some much
     // longer/never-resolving wait — proves Pass 2 was actually cancelled.
     expect(elapsedMs).toBeLessThan(2000);
-    expect(repo.upsertDraft).not.toHaveBeenCalled();
+    expect(repo.commitDraft).not.toHaveBeenCalled();
   });
 
   it("writeFrame does not hang when the signal is ALREADY aborted and write() returns false", async () => {
@@ -859,5 +873,154 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     } finally {
       http.ServerResponse.prototype.write = originalWrite;
     }
+  });
+
+  // --- #215: server-side lost-update guard for concurrent chat turns --------
+
+  it("recovers from a concurrent commit without losing the other turn's field (#215)", async () => {
+    // Turn A extracts { goal }. A CONCURRENT turn B committed { daysPerWeek }
+    // AFTER A read the shared draft but BEFORE A's commit. A's first
+    // version-guarded commit therefore conflicts (the row moved from v5 → v6);
+    // the guard re-reads B's draft, re-merges A's goal onto it, and commits the
+    // SUPERSET — so B's daysPerWeek is preserved, not clobbered (the exact
+    // lost-update this issue fixes).
+    const extractor = richExtractor({ goal: "hypertrophy" });
+    const repo = buildPlanRepo();
+
+    repo.findCurrentDraft
+      // Initial read at the start of turn A: an in-progress draft at version 5.
+      .mockResolvedValueOnce({ step: 1, specJson: {}, version: 5 })
+      // Re-read after the conflict: now carries turn B's field at version 6.
+      .mockResolvedValueOnce({ step: 1, specJson: { daysPerWeek: 3 }, version: 6 });
+
+    repo.commitDraft
+      // First attempt (expectedVersion 5) loses the race → conflict.
+      .mockResolvedValueOnce(null)
+      // Retry (expectedVersion 6) succeeds with the merged superset.
+      .mockResolvedValueOnce({
+        step: 1,
+        specJson: { daysPerWeek: 3, goal: "hypertrophy" },
+        version: 7,
+      });
+
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      chatEntitlement: allowGate(),
+      chatExtractor: extractor,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/chat",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { message: "build muscle" },
+    });
+
+    const frames = parseSse(res.payload);
+    const terminal = JSON.parse(frames.at(-1)!.data);
+    // BOTH the concurrent turn's field AND this turn's extraction survive.
+    expect(frames.at(-1)?.event).toBe("draft");
+    expect(terminal.draftSpec).toEqual({ daysPerWeek: 3, goal: "hypertrophy" });
+
+    // Retried exactly once: first with the version read at turn start, then with
+    // the re-read version after re-merging onto the concurrent draft.
+    expect(repo.commitDraft).toHaveBeenCalledTimes(2);
+    expect(repo.commitDraft.mock.calls[0]).toEqual([
+      TENANT_A,
+      USER_A,
+      1,
+      { goal: "hypertrophy" },
+      5,
+    ]);
+    expect(repo.commitDraft.mock.calls[1]).toEqual([
+      TENANT_A,
+      USER_A,
+      1,
+      { daysPerWeek: 3, goal: "hypertrophy" },
+      6,
+    ]);
+    expect(repo.findCurrentDraft).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects the turn with a terminal error when the retry also conflicts — never a silent drop (#215)", async () => {
+    // If a second overlapping turn ALSO wins the race during the retry, the
+    // guard refuses to clobber it: it emits a deterministic terminal error and
+    // writes nothing, rather than silently dropping either turn's fields. The
+    // client can re-submit; no data was lost.
+    const extractor = richExtractor({ goal: "hypertrophy" });
+    const repo = buildPlanRepo();
+    repo.findCurrentDraft
+      .mockResolvedValueOnce({ step: 1, specJson: {}, version: 5 })
+      .mockResolvedValueOnce({ step: 1, specJson: { daysPerWeek: 3 }, version: 6 });
+    // Both the initial commit and the retry conflict.
+    repo.commitDraft.mockResolvedValue(null);
+
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      chatEntitlement: allowGate(),
+      chatExtractor: extractor,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/chat",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { message: "build muscle" },
+    });
+
+    const frames = parseSse(res.payload);
+    expect(frames.at(-1)?.event).toBe("error");
+    expect(JSON.parse(frames.at(-1)!.data)).toEqual({ error: "chat_draft_conflict" });
+    // Tried once, retried once, then gave up — no third attempt.
+    expect(repo.commitDraft).toHaveBeenCalledTimes(2);
+    // Nothing was committed as a `draft`, so nothing was silently dropped.
+    expect(frames.some((f) => f.event === "draft")).toBe(false);
+  });
+
+  // --- #214: chat turns consume NO billing quota ----------------------------
+
+  it("consumes NO plan_generation quota during a chat turn, including the terminal commit (#214)", async () => {
+    // The quota boundary — "chat/voice turns consume no quota; only
+    // confirm→generate consumes plan_generation" — is asserted at RUNTIME here.
+    // The chat route is wired with the SAME plan_generation gate production
+    // uses; a full Pro happy-path turn (through the committed draft) must never
+    // touch it. The complementary "confirm consumes exactly one plan_generation"
+    // assertion lives in plan-generation.test.ts.
+    const billing = {
+      checkAndConsume: vi.fn().mockResolvedValue({
+        allowed: true,
+        tier: "pro",
+        source: "subscription",
+        period: "2026-07",
+        replayed: false,
+      }),
+    };
+    const extractor = richExtractor({ goal: "hypertrophy", daysPerWeek: 4 });
+    const repo = buildPlanRepo();
+    repo.findCurrentDraft.mockResolvedValue({ step: 1, specJson: {}, version: 0 });
+
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      chatEntitlement: allowGate(),
+      chatExtractor: extractor,
+      billing,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/chat",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { message: "build muscle 4 days a week" },
+    });
+
+    const frames = parseSse(res.payload);
+    // The turn ran to completion and committed the merged draft ...
+    expect(frames.at(-1)?.event).toBe("draft");
+    expect(repo.commitDraft).toHaveBeenCalledTimes(1);
+    // ... yet the plan_generation meter was NEVER consumed by a chat turn.
+    expect(billing.checkAndConsume).not.toHaveBeenCalled();
   });
 });

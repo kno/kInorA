@@ -201,6 +201,9 @@ async function buildTestApp(opts: {
     upsertDraft: vi.fn(() => {
       throw new Error("unexpected call: upsertDraft");
     }),
+    commitDraft: vi.fn(() => {
+      throw new Error("unexpected call: commitDraft");
+    }),
     findCurrentDraft: vi.fn(() => {
       throw new Error("unexpected call: findCurrentDraft");
     }),

@@ -23,7 +23,10 @@ import { defaultPlanName } from "@kinora/domain";
 export function createPlanRouteRepo(deps: {
   database: Pick<Database, "transaction">;
   planSpecRepo: Pick<PlanSpecRepository, "create">;
-  planDraftRepo: Pick<PlanDraftRepository, "upsert" | "findCurrent" | "delete">;
+  planDraftRepo: Pick<
+    PlanDraftRepository,
+    "upsert" | "commitWithVersion" | "findCurrent" | "delete"
+  >;
   workoutPlanRepo: Pick<
     WorkoutPlanRepository,
     "findById" | "findLatestByPlanSpec" | "findAllByUser"
@@ -35,10 +38,20 @@ export function createPlanRouteRepo(deps: {
       planDraftRepo
         .upsert(tenantId, userId, step, spec)
         .then((d) => ({ step: d.step, specJson: d.specJson })),
+    // #215: version-guarded commit for the chat read-modify-write. Returns null
+    // on a version conflict so the route can re-read + re-merge + retry once.
+    commitDraft: (tenantId, userId, step, spec, expectedVersion) =>
+      planDraftRepo
+        .commitWithVersion(tenantId, userId, step, spec, expectedVersion)
+        .then((d) =>
+          d ? { step: d.step, specJson: d.specJson, version: d.version } : null,
+        ),
     findCurrentDraft: (tenantId, userId) =>
       planDraftRepo
         .findCurrent(tenantId, userId)
-        .then((d) => (d ? { step: d.step, specJson: d.specJson } : null)),
+        .then((d) =>
+          d ? { step: d.step, specJson: d.specJson, version: d.version } : null,
+        ),
     promoteDraftToSpec: (tenantId, userId, spec: PlanSpec) =>
       database.transaction(async (tx) => {
         // BOTH writes MUST receive the SAME tx executor so they are atomic. The

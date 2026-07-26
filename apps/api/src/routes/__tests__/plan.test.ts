@@ -111,6 +111,9 @@ function buildPlanRepo(overrides: Partial<PlanRepoMock> = {}): PlanRepoMock {
     upsertDraft: vi
       .fn()
       .mockResolvedValue({ step: draftRow.step, specJson: draftRow.specJson }),
+    commitDraft: vi
+      .fn()
+      .mockResolvedValue({ step: draftRow.step, specJson: draftRow.specJson, version: 1 }),
     findCurrentDraft: vi.fn().mockResolvedValue(null),
     promoteDraftToSpec: vi.fn().mockResolvedValue(planSpecRow),
     findPlanById: vi.fn().mockResolvedValue(undefined),
