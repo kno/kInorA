@@ -22,7 +22,7 @@ import { defaultPlanName } from "@kinora/domain";
  */
 export function createPlanRouteRepo(deps: {
   database: Pick<Database, "transaction">;
-  planSpecRepo: Pick<PlanSpecRepository, "create">;
+  planSpecRepo: Pick<PlanSpecRepository, "create" | "updateSpecDaysPerWeek">;
   planDraftRepo: Pick<
     PlanDraftRepository,
     "upsert" | "commitWithVersion" | "findCurrent" | "delete"
@@ -84,5 +84,9 @@ export function createPlanRouteRepo(deps: {
           name: defaultPlanName(row.name, row.createdAt),
         }))
       ),
+    // 14a-v1.1 Slice B1 — the adherence-adaptation confirm write. Delegates
+    // directly to the tenant/user-scoped in-place `spec_json.daysPerWeek` update.
+    updateSpecDaysPerWeek: (tenantId, userId, specId, toDays) =>
+      planSpecRepo.updateSpecDaysPerWeek(tenantId, userId, specId, toDays),
   };
 }

@@ -230,6 +230,60 @@ export async function regeneratePlan(
 }
 
 /**
+ * Confirm an adherence adaptation via `POST /plan-specs/:specId/adapt`
+ * (14a-v1.1 Slice B1). The body is empty — the server re-derives the reduced
+ * `daysPerWeek` and ignores any client-supplied frequency, so this mirrors
+ * `regeneratePlan` but sends only the spec id. A `409` (`no_adaptation`, the
+ * recommendation went stale) or `403` (quota exhausted) maps to an error result
+ * so the banner can show it inline with the plan unchanged.
+ */
+export type AdaptResult =
+  | { kind: "ok"; planId: string; status: string }
+  | { kind: "error"; message: string };
+
+export async function adaptPlan(
+  specId: string,
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<AdaptResult> {
+  if (!token) {
+    return { kind: "error", message: "no_session" };
+  }
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}/plan-specs/${specId}/adapt`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({}),
+    });
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? "adapt_failed" };
+  }
+
+  const body = (await res.json().catch(() => ({}))) as {
+    planId?: string;
+    status?: string;
+  };
+  if (!body.planId) {
+    return { kind: "error", message: "no_plan_id" };
+  }
+
+  return { kind: "ok", planId: body.planId, status: body.status ?? "generating" };
+}
+
+/**
  * Fetch the current status of a workout plan via `GET /workout-plans/:planId`.
  */
 export interface PlanStatusResponse {

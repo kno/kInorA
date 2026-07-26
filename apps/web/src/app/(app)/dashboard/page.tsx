@@ -1,6 +1,6 @@
 import { getLocale, getTranslations } from "next-intl/server";
 import type { DashboardSummaryDTO } from "@kinora/contracts";
-import { getDashboardAction } from "./actions";
+import { getDashboardAction, adaptPlanAction } from "./actions";
 import { DashboardCoachCard } from "./DashboardCoachCard";
 import { DashboardTodayBlock } from "./DashboardTodayBlock";
 
@@ -158,7 +158,7 @@ export default async function DashboardPage() {
           </section>
 
           <aside className="dash-stack">
-            <DashboardCoachCard />
+            <DashboardCoachCard adaptation={summary.adaptation} onAccept={adaptPlanAction} />
 
             {/* "Siguiente sesión" — presentational only, no data model yet */}
             <article className="dash-card dash-next-card">

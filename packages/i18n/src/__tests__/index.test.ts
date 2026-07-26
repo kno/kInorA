@@ -116,7 +116,10 @@ describe("@kinora/i18n package assembly", () => {
       (key) =>
         !key.startsWith("billing.") &&
         !key.startsWith("chat.") &&
-        !key.startsWith("voice."),
+        !key.startsWith("voice.") &&
+        // 14a-v1.1 Slice B1: the `adaptation.*` namespace has its own scoped
+        // count test below, per the frozen-total convention noted above.
+        !key.startsWith("adaptation."),
     );
     expect(nonBillingKeys).toHaveLength(609);
   });
@@ -185,6 +188,23 @@ describe("@kinora/i18n package assembly", () => {
     expect(billingKeys).toHaveLength(97);
     expect(en["billing.tier.free"]).toBe("Free");
     expect(es["billing.tier.free"]).toBe("Gratis");
+  });
+
+  it("the adaptation namespace is present with EN+ES parity (14a-v1.1 Slice B1)", () => {
+    expect(catalogs.en.adaptation).toBeDefined();
+    expect(catalogs.es.adaptation).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+
+    const en = flattenMessages(catalogs.en);
+    const es = flattenMessages(catalogs.es);
+    const adaptationKeys = Object.keys(en).filter((key) => key.startsWith("adaptation."));
+    // B1 minimal banner copy: title, suggestion (option-framed), accept,
+    // dismiss, regenerating, error. Fuller state/i18n polish is B2.
+    expect(adaptationKeys).toHaveLength(6);
+    expect(en["adaptation.suggestion"]).toContain("{toDays}");
+    expect(es["adaptation.suggestion"]).toContain("{toDays}");
   });
 
   it("ships the accepted profile + wizard preference keys in both catalogs", () => {
