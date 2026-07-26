@@ -1105,6 +1105,7 @@
     "offline": "Voice needs a connection. You can keep typing.",
     "unclear": "I didn't catch that. Please try again.",
     "error": "Voice input failed. Please try again.",
+    "premium": "Voice is a Pro feature. Upgrade to Pro to use it. You can keep typing.",
     "screenTitle": "kInorA Assistant",
     "hold": "Hold to speak",
     "backAria": "Go back",

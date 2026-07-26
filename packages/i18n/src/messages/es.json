@@ -1105,6 +1105,7 @@
     "offline": "La voz necesita conexión. Podés seguir escribiendo.",
     "unclear": "No te entendí. Intentá de nuevo.",
     "error": "Falló la entrada de voz. Intentá de nuevo.",
+    "premium": "La voz es una función Pro. Mejorá tu plan para usarla. Podés seguir escribiendo.",
     "screenTitle": "Asistente kInorA",
     "hold": "Mantené para hablar",
     "backAria": "Volver",

@@ -9,9 +9,10 @@ import { colors, fonts, radius, spacing } from "../../theme/tokens";
  * voice orb with a static waveform, the transcript, and pinned bottom controls
  * (keyboard fallback / push-to-talk mic / end session).
  *
- * RN has no CSS keyframes, so the OD ring/wave animations are represented as
- * static state-styled elements (the orb + waveform change color/opacity by
- * status) rather than animated loops — behavior parity, not motion parity.
+ * Motion (follow-up #230) is driven imperatively by `orb-animation.ts` through
+ * `Animated.Value`s; these styles carry only the static layout + rest pose (the
+ * orb + waveform still change color/opacity by status), while the pulsing rings
+ * and rippling waveform are layered on via animated transform/opacity.
  */
 export const styles = StyleSheet.create({
   container: {
@@ -82,6 +83,23 @@ export const styles = StyleSheet.create({
     paddingHorizontal: spacing[3],
     gap: spacing[4],
   },
+  // Fixed-size stage that centers the pulsing rings behind the orb core, so the
+  // rings can scale up (via Animated transform) without shifting the layout.
+  orbContainer: {
+    width: 200,
+    height: 200,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // One concentric ring; opacity + scale are driven by the animation values.
+  orbRing: {
+    position: "absolute",
+    width: 120,
+    height: 120,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
   orbCore: {
     width: 120,
     height: 120,
@@ -107,6 +125,9 @@ export const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: colors.accent,
     opacity: 0.25,
+    // Scale the bars from the baseline so the waveform grows upward, matching
+    // the OD `transform-origin: bottom center`.
+    transformOrigin: "bottom",
   },
   waveBarActive: {
     opacity: 0.95,

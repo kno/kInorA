@@ -56,8 +56,17 @@ describe("transcribeAudio (D1 direct mobile → /plan-specs/transcribe)", () => 
     expect(outcome).toEqual({ kind: "error", status: 401, sessionExpired: true });
   });
 
-  it("surfaces the Pro gate (403) and other non-2xx by status without a session signal", async () => {
-    for (const status of [403, 413, 415, 502]) {
+  it("maps the Pro gate (403) to a premium-required error, NOT a session signal", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(403, { error: "premium_required" }));
+    const outcome = await transcribeAudio(AUDIO, {
+      fetchImpl,
+      getToken: async () => "tok",
+    });
+    expect(outcome).toEqual({ kind: "error", status: 403, premiumRequired: true });
+  });
+
+  it("surfaces size/format/upstream non-2xx (413/415/502) by status alone", async () => {
+    for (const status of [413, 415, 502]) {
       const fetchImpl = vi.fn(async () => jsonResponse(status, { error: "x" }));
       const outcome = await transcribeAudio(AUDIO, {
         fetchImpl,
