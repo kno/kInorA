@@ -190,7 +190,7 @@ describe("@kinora/i18n package assembly", () => {
     expect(es["billing.tier.free"]).toBe("Gratis");
   });
 
-  it("the adaptation namespace is present with EN+ES parity (14a-v1.1 Slice B1)", () => {
+  it("the adaptation namespace is present with EN+ES parity (14a-v1.1 Slice B2)", () => {
     expect(catalogs.en.adaptation).toBeDefined();
     expect(catalogs.es.adaptation).toBeDefined();
 
@@ -200,11 +200,22 @@ describe("@kinora/i18n package assembly", () => {
     const en = flattenMessages(catalogs.en);
     const es = flattenMessages(catalogs.es);
     const adaptationKeys = Object.keys(en).filter((key) => key.startsWith("adaptation."));
-    // B1 minimal banner copy: title, suggestion (option-framed), accept,
-    // dismiss, regenerating, error. Fuller state/i18n polish is B2.
-    expect(adaptationKeys).toHaveLength(6);
+    // B1 shipped 6 minimal banner keys (title, suggestion, accept, dismiss,
+    // regenerating, error). B2 rounds the namespace out to 9 by adding the
+    // distinct UX-state copy: `submitting` (pending affordance while the accept
+    // POST is in flight), `quotaExhausted` (403 — plan change used this period /
+    // upgrade), and `upToDate` (409 no_adaptation — plan already a good fit).
+    expect(adaptationKeys).toHaveLength(9);
+    // The from→to interpolation is the option-framed suggestion.
     expect(en["adaptation.suggestion"]).toContain("{toDays}");
+    expect(en["adaptation.suggestion"]).toContain("{fromDays}");
     expect(es["adaptation.suggestion"]).toContain("{toDays}");
+    expect(es["adaptation.suggestion"]).toContain("{fromDays}");
+    // B2 distinct result-code copy present in BOTH locales.
+    for (const key of ["adaptation.submitting", "adaptation.quotaExhausted", "adaptation.upToDate"]) {
+      expect(en[key]).toBeTruthy();
+      expect(es[key]).toBeTruthy();
+    }
   });
 
   it("ships the accepted profile + wizard preference keys in both catalogs", () => {

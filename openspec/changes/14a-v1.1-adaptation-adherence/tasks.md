@@ -66,11 +66,11 @@ entry point) before Track D (mobile banner) can exist.
 
 ## Phase 4: Slice B2 — Web i18n + Loading/Empty/Error States [Requirements: Coaching Tone and Internationalization, Web Adherence Suggestion Surface]
 
-- [ ] 4.1 RED: Add failing i18n parity test asserting the new `adaptation` namespace has identical key sets in `packages/i18n/src/messages/en.json` and `es.json`, covering suggestion, insufficient-data, empty/no-recommendation (`ok`), regenerate-error, quota-exhausted, and coaching-tone copy.
-- [ ] 4.2 GREEN: Add the `adaptation` namespace to `packages/i18n/src/messages/{en,es}.json` (e.g. "Want to try 3 days/week?" framed as an option, never a diagnosis).
-- [ ] 4.3 RED: Extend `DashboardCoachCard` tests: a loading state while the read is in flight shows an affordance and no premature banner/action; `level: "ok"` or `"insufficient_data"` → no banner rendered; suggestion copy asserted as option-framed (not diagnostic) via the new i18n keys.
-- [ ] 4.4 GREEN: Wire the loading/insufficient/ok/error/exhausted states and the `adaptation` i18n keys into `DashboardCoachCard.tsx`.
-- [ ] 4.5 TRIANGLE: Run `pnpm --filter web test -- DashboardCoachCard` and `pnpm --filter i18n test` green; `scripts/deps-guard.mjs` clean; `pnpm --filter web build`; manual smoke on the dashboard for low/ok/insufficient/error in EN and ES.
+- [x] 4.1 RED: Add failing i18n parity test asserting the new `adaptation` namespace has identical key sets in `packages/i18n/src/messages/en.json` and `es.json`, covering suggestion, insufficient-data, empty/no-recommendation (`ok`), regenerate-error, quota-exhausted, and coaching-tone copy.
+- [x] 4.2 GREEN: Add the `adaptation` namespace to `packages/i18n/src/messages/{en,es}.json` (e.g. "Want to try 3 days/week?" framed as an option, never a diagnosis). B2 rounds the B1 6-key namespace out to 9: adds `submitting` (in-flight pending copy), `quotaExhausted` (403 upgrade copy), `upToDate` (409 `no_adaptation`); EN/ES parity held via the scoped count test (6→9).
+- [x] 4.3 RED: Extend `DashboardCoachCard` tests: a loading state while the read is in flight shows an affordance and no premature banner/action; `level: "ok"` or `"insufficient_data"` → no banner rendered; suggestion copy asserted as option-framed (not diagnostic) via the new i18n keys. (Read-in-flight loading lives at the page level — this banner is presentational; added tests for `insufficient_data` no-banner, submitting pending affordance, from→to interpolation, and the 403/409/generic result-code copy mapping.)
+- [x] 4.4 GREEN: Wire the loading/insufficient/ok/error/exhausted states and the `adaptation` i18n keys into `DashboardCoachCard.tsx`. (Distinct submitting pending message + `errorCopyKey` mapping 403 `tenant_quota_exhausted`/`member_allocation_exhausted`→`quotaExhausted`, 409 `no_adaptation`→`upToDate`, else→`error`; `ok`/`insufficient_data` render the static coach card with no banner leak.)
+- [x] 4.5 TRIANGLE: Run `pnpm --filter web test -- DashboardCoachCard` and `pnpm --filter i18n test` green; `scripts/deps-guard.mjs` clean; `pnpm --filter web build`; manual smoke on the dashboard for low/ok/insufficient/error in EN and ES.
 
 ## Phase 5: Slice C1 — Mobile Plan-Status + Adapt Client (port, no UI) [Requirements: Mobile Adherence Suggestion Surface (prerequisite infra)]
 
