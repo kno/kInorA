@@ -68,14 +68,20 @@ interface AdaptationBannerProps {
 
 function AdaptationBanner({ planSpecId, fromDays, toDays, onAccept }: AdaptationBannerProps) {
   const t = useTranslations("adaptation");
-  const [state, setState] = useState<"idle" | "regenerating" | "error">("idle");
+  const [state, setState] = useState<"idle" | "submitting" | "regenerating" | "error">("idle");
   const [dismissed, setDismissed] = useState(false);
 
   if (dismissed) return null;
 
+  // Review fix (B1 4R reliability WARNING): guard + disable while a request is
+  // in flight so a rapid double-click fires only ONE accept — otherwise a
+  // second click starts a second generation (and, per the API-side fresh-nonce
+  // fix, consumes a second quota unit) before the first request settles.
+  const isSubmitting = state === "submitting";
+
   async function handleAccept() {
-    if (!onAccept) return;
-    setState("idle");
+    if (!onAccept || isSubmitting) return;
+    setState("submitting");
     const result = await onAccept(planSpecId);
     // A failed accept (quota exhausted, 409, network) leaves the plan unchanged;
     // surface the error inline and keep the accept action for a retry.
@@ -96,10 +102,20 @@ function AdaptationBanner({ planSpecId, fromDays, toDays, onAccept }: Adaptation
         <div className="dash-eyebrow">{t("title")}</div>
         <p className="dash-coach-text">{t("suggestion", { fromDays, toDays })}</p>
         <div className="dash-coach-actions">
-          <button type="button" className="kin-btn kin-btn--accent" onClick={handleAccept}>
+          <button
+            type="button"
+            className="kin-btn kin-btn--accent"
+            onClick={handleAccept}
+            disabled={isSubmitting}
+          >
             {t("accept", { toDays })}
           </button>
-          <button type="button" className="kin-btn" onClick={() => setDismissed(true)}>
+          <button
+            type="button"
+            className="kin-btn"
+            onClick={() => setDismissed(true)}
+            disabled={isSubmitting}
+          >
             {t("dismiss")}
           </button>
         </div>

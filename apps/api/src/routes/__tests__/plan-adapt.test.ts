@@ -310,7 +310,19 @@ describe("POST /plan-specs/:id/adapt", () => {
     expect(update).toHaveBeenCalledWith(TENANT_A, USER_A, SPEC_ID, 3);
   });
 
-  it("a double-POST reuses ONE stable operation key so the ledger consumes a single unit", async () => {
+  // --- Review fix (B1 4R risk+reliability, CRITICAL) ---------------------
+  //
+  // An `/adapt` accept is a REGENERATION and must cost one `plan_regeneration`
+  // unit EACH time, exactly like `/regenerate` (plan.ts:628 appends a fresh
+  // `randomUUID()`). The recommendation is re-derived from `latestReadyPlan`,
+  // NOT the just-written spec, so it stays confirmable for the entire async
+  // generation window — a STABLE default key would let every repeated POST in
+  // that window replay the ledger (zero further consume) while still firing a
+  // fresh, expensive LLM regeneration: N regenerations for 1 quota unit. The
+  // default MUST be a fresh nonce per request so the quota genuinely bounds
+  // repeated accepts; a caller-supplied `Idempotency-Key` header (a genuine
+  // client retry) is still honored and replays as before.
+  it("two distinct accepts consume TWO separate units (no default replay) via fresh idempotency keys", async () => {
     const billing = buildAllowBilling();
     app = await buildTestApp({
       db: buildSessionOnlyDb(buildSessionRow()),
@@ -321,10 +333,81 @@ describe("POST /plan-specs/:id/adapt", () => {
     await post(app);
 
     expect(billing.checkAndConsume).toHaveBeenCalledTimes(2);
-    // Same deterministic operation key both times → the real ledger replays the
-    // second and charges exactly one unit (idempotency gate).
     const key1 = billing.checkAndConsume.mock.calls[0][2];
     const key2 = billing.checkAndConsume.mock.calls[1][2];
-    expect(key1).toBe(key2);
+    // DIFFERENT keys → the real ledger charges TWO units, not one.
+    expect(key1).not.toBe(key2);
+  });
+
+  it("a Free user's 2nd accept in the same period is denied with 403 and starts NO extra generation (bounds the amplification)", async () => {
+    const generationService = buildGenerationService();
+    const checkAndConsume = vi
+      .fn()
+      .mockResolvedValueOnce({ allowed: true, tier: "free", source: "backfill", period: "2026-07" })
+      .mockResolvedValueOnce({ allowed: false, reason: "tenant_quota_exhausted" });
+    const billing = { checkAndConsume };
+    const update = vi.fn().mockResolvedValue(1);
+    app = await buildTestApp({
+      db: buildSessionOnlyDb(buildSessionRow()),
+      generationService,
+      billing,
+      repo: buildRepo(update),
+    });
+
+    const res1 = await post(app);
+    const res2 = await post(app);
+
+    expect(res1.statusCode).toBe(202);
+    expect(res2.statusCode).toBe(403);
+    expect(res2.json()).toEqual({ error: "tenant_quota_exhausted" });
+    // Only the FIRST accept wrote the spec and started generation; the denied
+    // 2nd accept touches neither — no free extra regeneration.
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(generationService.startGeneration).toHaveBeenCalledTimes(1);
+  });
+
+  it("honors a client-supplied Idempotency-Key header for a genuine retry (replays the same decision)", async () => {
+    const billing = buildAllowBilling();
+    app = await buildTestApp({
+      db: buildSessionOnlyDb(buildSessionRow()),
+      billing,
+    });
+
+    await post(app, { "idempotency-key": "client-retry-key-1" });
+    await post(app, { "idempotency-key": "client-retry-key-1" });
+
+    expect(billing.checkAndConsume).toHaveBeenCalledTimes(2);
+    const key1 = billing.checkAndConsume.mock.calls[0][2];
+    const key2 = billing.checkAndConsume.mock.calls[1][2];
+    expect(key1).toBe("client-retry-key-1");
+    expect(key2).toBe("client-retry-key-1");
+  });
+
+  // --- Review fix (B1 4R, atomicity WARNING — minimal) --------------------
+  //
+  // consume → write(daysPerWeek) → startGeneration is non-atomic. At minimum a
+  // synchronous startGeneration failure (after a successful consume + write)
+  // MUST surface as an error to the caller — never a silent 202 — so the
+  // caller knows to retry. No transaction is required (matches the accepted
+  // `/regenerate` shape).
+  it("a synchronous startGeneration failure surfaces an error (not a silent 202) after quota was consumed and the spec was written", async () => {
+    const update = vi.fn().mockResolvedValue(1);
+    const billing = buildAllowBilling();
+    const generationService = buildGenerationService({ result: new Error("generation boom") });
+    app = await buildTestApp({
+      db: buildSessionOnlyDb(buildSessionRow()),
+      generationService,
+      billing,
+      repo: buildRepo(update),
+    });
+
+    const res = await post(app);
+
+    expect(res.statusCode).not.toBe(202);
+    expect(res.statusCode).toBeGreaterThanOrEqual(500);
+    // The consume and the write already happened (non-atomic, matches
+    // /regenerate) — only the generation start itself failed.
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(billing.checkAndConsume).toHaveBeenCalledTimes(1);
   });
 });
