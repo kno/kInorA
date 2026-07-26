@@ -119,9 +119,12 @@ export interface XhrLike {
   responseText: string;
   readyState: number;
   status: number;
+  /** Wall-clock timeout in ms; `0` disables. Fires `ontimeout` when exceeded. */
+  timeout: number;
   onreadystatechange: (() => void) | null;
   onprogress: (() => void) | null;
   onerror: (() => void) | null;
+  ontimeout: (() => void) | null;
   open(method: string, url: string): void;
   setRequestHeader(name: string, value: string): void;
   send(body?: string): void;
@@ -137,6 +140,13 @@ export interface ChatStreamOptions {
   getToken?: () => Promise<string | null>;
   /** Abort the in-flight turn (unmount/navigation). */
   signal?: AbortSignal;
+  /**
+   * Wall-clock timeout in ms for a hung/half-open connection (socket accepted,
+   * no bytes, never closes). Defaults to {@link DEFAULT_TIMEOUT_MS}, aligned
+   * with the API's server-side chat-stream timeout so the client does not give
+   * up before the server does.
+   */
+  timeoutMs?: number;
   /** Called with each parsed SSE event (token / draft / error) in order. */
   onEvent: (event: ChatSSEEvent) => void;
   /** XHR factory — overridable for tests. */
@@ -151,6 +161,15 @@ export interface ChatStreamResult {
 }
 
 const DEFAULT_API_BASE_URL = "http://localhost:4000";
+
+/**
+ * Default XHR wall-clock timeout (ms). A hung/half-open mobile connection never
+ * reaches readyState 4 and never fires `onerror`, so WITHOUT a timeout the
+ * Promise would never settle — the store's `streaming` guard would then wedge
+ * and silently drop every future turn (stuck spinner). 60s is aligned with the
+ * API's server-side chat-stream timeout so the client never gives up first.
+ */
+const DEFAULT_TIMEOUT_MS = 60_000;
 
 /**
  * Default token source. Imported lazily so this module's graph does not pull in
@@ -189,6 +208,7 @@ export function runChatStream(options: ChatStreamOptions): Promise<ChatStreamRes
     apiBaseUrl,
     signal,
     onEvent,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
     getToken = defaultGetToken,
     xhrFactory = () => new XMLHttpRequest() as unknown as XhrLike,
   } = options;
@@ -237,6 +257,15 @@ export function runChatStream(options: ChatStreamOptions): Promise<ChatStreamRes
 
       // Consume any newly-arrived responseText bytes (idempotent via `consumed`
       // offset, so onprogress + readyState-3 double-firing never double-emits).
+      //
+      // No TextDecoder is needed here (unlike the web reader, which decodes raw
+      // Uint8Array chunks with `TextDecoder({ stream: true })`): XHR
+      // `responseText` is ALREADY incrementally/stream-decoded by the platform —
+      // an incomplete trailing multibyte UTF-8 sequence is held back internally,
+      // not surfaced as a partial char / U+FFFD. Combined with only ever slicing
+      // at `responseText.length` and emitting on complete `\n\n` boundaries, a
+      // code point can never be split. (D real-device smoke should still confirm
+      // Spanish accented tokens — í/ñ/á — render correctly against the real API.)
       const pump = () => {
         if (aborted || finished) return;
         if (xhr.status !== 200) return;
@@ -281,7 +310,20 @@ export function runChatStream(options: ChatStreamOptions): Promise<ChatStreamRes
         settle({ aborted: false, sessionExpired: false });
       };
 
+      // Half-open connection: no bytes, no DONE, no onerror. Without this the
+      // Promise never settles and the store's `streaming` guard wedges forever.
+      // Settle exactly once with a retry-able terminal error.
+      xhr.ontimeout = () => {
+        if (finished) return;
+        finished = true;
+        signal?.removeEventListener("abort", onAbort);
+        onEvent({ type: "error", reason: "chat_stream_timeout" });
+        settle({ aborted: false, sessionExpired: false });
+      };
+
       xhr.open("POST", `${base}/plan-specs/chat`);
+      // `timeout` must be set AFTER open() per the XHR spec.
+      xhr.timeout = timeoutMs;
       xhr.setRequestHeader("authorization", `Bearer ${token}`);
       xhr.setRequestHeader("content-type", "application/json");
       xhr.send(JSON.stringify({ message }));

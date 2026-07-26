@@ -126,10 +126,12 @@ class MockXhr implements XhrLike {
   responseText = "";
   readyState = 0;
   status = 0;
+  timeout = 0;
   aborted = false;
   onreadystatechange: (() => void) | null = null;
   onprogress: (() => void) | null = null;
   onerror: (() => void) | null = null;
+  ontimeout: (() => void) | null = null;
 
   open(method: string, url: string): void {
     this.method = method;
@@ -167,6 +169,11 @@ class MockXhr implements XhrLike {
 
   emitError(): void {
     this.onerror?.();
+  }
+
+  /** Fire the XHR wall-clock timeout (half-open socket: no DONE, no error). */
+  emitTimeout(): void {
+    this.ontimeout?.();
   }
 }
 
@@ -370,6 +377,48 @@ describe("runChatStream (XHR-chunked SSE reader)", () => {
 
     expect(result).toEqual({ aborted: false, sessionExpired: false });
     expect(events).toEqual([{ type: "error", reason: "chat_stream_failed" }]);
+  });
+
+  it("sets a default wall-clock timeout on the XHR", async () => {
+    const xhr = new MockXhr();
+    const done = runChatStream({
+      message: "m",
+      getToken: token,
+      onEvent: () => {},
+      xhrFactory: () => xhr,
+    });
+    await tick();
+    expect(xhr.timeout).toBe(60_000);
+    xhr.emitDone(200);
+    await done;
+  });
+
+  it("settles once with a timeout error when the connection hangs (ontimeout), leaving the turn retry-able", async () => {
+    const xhr = new MockXhr();
+    const events: ChatSSEEvent[] = [];
+    const done = runChatStream({
+      message: "m",
+      getToken: token,
+      timeoutMs: 1234,
+      onEvent: (e) => events.push(e),
+      xhrFactory: () => xhr,
+    });
+    await tick();
+    expect(xhr.timeout).toBe(1234);
+
+    // A half-open socket: bytes never arrive, DONE/onerror never fire — only
+    // the wall-clock timeout trips. Without this the Promise would hang forever
+    // and the store's `streaming` guard would drop every future turn.
+    xhr.emitTimeout();
+
+    // A late DONE/progress arriving after the timeout must NOT double-settle or
+    // double-emit.
+    xhr.emitProgress('event: token\ndata: {"delta":"late"}\n\n');
+    xhr.emitDone(200);
+    const result = await done;
+
+    expect(events).toEqual([{ type: "error", reason: "chat_stream_timeout" }]);
+    expect(result).toEqual({ aborted: false, sessionExpired: false });
   });
 
   it("surfaces sessionExpired when no token is stored, without opening the XHR", async () => {
