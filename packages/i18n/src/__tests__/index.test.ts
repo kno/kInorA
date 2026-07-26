@@ -146,7 +146,8 @@ describe("@kinora/i18n package assembly", () => {
     // D1 (mobile voice screen): +8 scalar (screenTitle, hold, backAria,
     // keyboardAria, endSession, endSessionAria, roleYou, roleCoach)
     // + 1 `voice.state.responding`.
-    expect(voiceKeys).toHaveLength(23);
+    // #231 (mobile Free-tier Pro gate): +1 scalar (premium).
+    expect(voiceKeys).toHaveLength(24);
     expect(en["voice.state.listening"]).toBe("Listening…");
     expect(es["voice.state.listening"]).toBe("Escuchando…");
     // B2 playback copy — the speaking state and the stop-speaking control.
