@@ -82,11 +82,11 @@ entry point) before Track D (mobile banner) can exist.
 
 ## Phase 6: Slice C2 — Mobile Plan-Status Screen (generating/ready/failed) [Requirements: Mobile Adherence Suggestion Surface (prerequisite infra)]
 
-- [ ] 6.1 RED: Add failing screen test for a plan-status screen: renders `generating`/`ready`/`failed` states driven by `fetchPlanStatus` (reusing item-13's screen patterns); a fetch error/offline condition degrades gracefully without crashing.
-- [ ] 6.2 GREEN: Create `apps/mobile/src/screens/plan/PlanStatusScreen.tsx` consuming `plan-status-client.ts`'s `fetchPlanStatus`.
-- [ ] 6.3 RED: Extend the screen test: a regenerate/adapt action available in the `ready` state calls `confirmAdapt`, transitions the UI to `generating` on success, and surfaces a clear error on `403`/`409`.
-- [ ] 6.4 GREEN: Wire the regenerate/adapt action (via `confirmAdapt`) into `PlanStatusScreen.tsx`'s ready-state UI.
-- [ ] 6.5 TRIANGLE: Run `pnpm --filter mobile test -- PlanStatusScreen` green; `pnpm -w typecheck`; manual smoke via the Expo dev client (generating → ready transition; regenerate/adapt action success and error paths).
+- [x] 6.1 RED: Added failing screen test `apps/mobile/src/screens/plan/__tests__/PlanStatusScreen.test.tsx`: renders `generating`/`ready`/`failed` states driven by injected `fetchPlanStatus`/`fetchLatestPlanForSpec`; a `sessionExpired` load routes to Login once; a network error degrades to a graceful error+retry state without crashing.
+- [x] 6.2 GREEN: Created `apps/mobile/src/screens/plan/PlanStatusScreen.tsx` (+ `PlanStatusScreen.styles.ts`, `messages.ts`) consuming `plan-status-client.ts`'s `fetchPlanStatus`/`fetchLatestPlanForSpec`; generating-state poll loop (`setInterval` → `fetchPlanStatus` until ready/failed) with mount-guard + interval cleanup on unmount / phase-change; registered `PlanStatus` in `App.tsx` (PROTECTED_ROUTES + `Stack.Screen`); added `planStatus.*` i18n namespace (EN/ES parity, own scoped count test).
+- [x] 6.3 RED: Extended the screen test: a **Regenerate** action in the `ready` state calls `regeneratePlan(specId)`, transitions the UI to `generating` on `202` and re-points the poll loop at the new plan id; a `403` surfaces a clear quota-exhausted notice with the plan left unchanged. (Orchestrator scope: C2 uses `regeneratePlan`; the adherence-adapt CONFIRM banner / `409 no_adaptation` UX is D1. `409` is not reachable from regenerate.)
+- [x] 6.4 GREEN: Wired the Regenerate action (via `regeneratePlan`, in-flight disabled, `403`→`adaptation.quotaExhausted` notice, other error→`planStatus.error` notice, `sessionExpired`→Login) into `PlanStatusScreen.tsx`'s ready/failed UI.
+- [x] 6.5 TRIANGLE: `pnpm --filter mobile test` green (48 files / 398 tests; 8 new PlanStatusScreen tests); `pnpm --filter mobile type-check` clean; `pnpm --filter @kinora/i18n test` green (66 tests, planStatus parity+count); `pnpm deps-guard` clean; `pnpm architecture` clean. Manual Expo dev-client smoke is out of scope for this executor (no device/e2e); the generating→ready transition, regenerate success, and 403/network error paths are covered by the automated screen tests.
 
 ## Phase 7: Slice C3 — Mobile Nav Entry + Dashboard Summary Fetch [Requirements: Mobile Adherence Suggestion Surface (prerequisite infra)]
 

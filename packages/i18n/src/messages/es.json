@@ -707,6 +707,19 @@
     "upToDate": "Tu plan ya parece encajar bien; no hay nada que cambiar ahora mismo.",
     "error": "No pudimos ajustar tu plan; sigue igual. Inténtalo de nuevo."
   },
+  "planStatus": {
+    "loading": "Cargando tu plan…",
+    "generatingTitle": "Creando tu plan",
+    "generatingBody": "Un momento — estamos armando tus entrenamientos.",
+    "readyTitle": "Tu plan está listo",
+    "readySessions": "{count} sesiones por semana",
+    "failedTitle": "No pudimos crear tu plan",
+    "failedBody": "Algo salió mal al generarlo. Puedes intentarlo de nuevo.",
+    "regenerate": "Regenerar plan",
+    "regenerating": "Regenerando…",
+    "retry": "Intentar de nuevo",
+    "error": "Algo salió mal. Inténtalo de nuevo."
+  },
   "exercises": {
     "title": "Ejercicios",
     "description": "Explora y busca en la biblioteca de ejercicios para tus entrenamientos.",

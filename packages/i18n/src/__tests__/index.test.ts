@@ -119,7 +119,10 @@ describe("@kinora/i18n package assembly", () => {
         !key.startsWith("voice.") &&
         // 14a-v1.1 Slice B1: the `adaptation.*` namespace has its own scoped
         // count test below, per the frozen-total convention noted above.
-        !key.startsWith("adaptation."),
+        !key.startsWith("adaptation.") &&
+        // 14a-v1.1 Slice C2: the `planStatus.*` mobile plan-status-screen
+        // namespace has its own scoped count test below.
+        !key.startsWith("planStatus."),
     );
     expect(nonBillingKeys).toHaveLength(609);
   });
@@ -216,6 +219,27 @@ describe("@kinora/i18n package assembly", () => {
       expect(en[key]).toBeTruthy();
       expect(es[key]).toBeTruthy();
     }
+  });
+
+  it("the planStatus namespace is present with EN+ES parity (14a-v1.1 Slice C2)", () => {
+    expect(catalogs.en.planStatus).toBeDefined();
+    expect(catalogs.es.planStatus).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+
+    const en = flattenMessages(catalogs.en);
+    const es = flattenMessages(catalogs.es);
+    const planStatusKeys = Object.keys(en).filter((key) =>
+      key.startsWith("planStatus."),
+    );
+    // C2 mobile plan-status screen copy: loading, generatingTitle/Body,
+    // readyTitle, readySessions (with {count}), failedTitle/Body, regenerate,
+    // regenerating, retry, error. (The 403 quota notice reuses
+    // `adaptation.quotaExhausted`, so no planStatus key duplicates it.)
+    expect(planStatusKeys).toHaveLength(11);
+    expect(en["planStatus.readySessions"]).toContain("{count}");
+    expect(es["planStatus.readySessions"]).toContain("{count}");
   });
 
   it("ships the accepted profile + wizard preference keys in both catalogs", () => {
