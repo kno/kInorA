@@ -1259,6 +1259,128 @@ describe("WorkoutSessionRepository", () => {
       expect(summary.weeklyCompleted).toBe(0);
       expect(summary.weeklyPlanned).toBe(0);
     });
+
+    // 14a-v1.1 Slice A2 — the read folds a pure adherence adaptation
+    // recommendation into the DTO. windowStart for NOW (2026-07-17) is
+    // 2026-06-19T00:00:00Z (28 days back); the current UTC week is
+    // 2026-07-13..2026-07-19. In-window/out-of-current-week completions keep
+    // the exercise/set follow-up queries out of the way so we can assert the
+    // read adds ZERO extra round-trip (and consumes no quota — the repo has no
+    // billing dependency on this path at all).
+    const ADAPT_PLAN_CREATED_BEFORE_WINDOW = new Date("2026-05-01T08:00:00Z");
+
+    function buildProgramWithDays(days: number): WorkoutProgram {
+      return {
+        weeklySessions: Array.from({ length: days }, (_unused, index) => ({
+          day: index + 1,
+          title: `Day ${index + 1}`,
+          exercises: [{ name: "Row", sets: 1, reps: "10", restSeconds: 60 }],
+        })),
+        limitationWarnings: [],
+      };
+    }
+
+    function buildInWindowSessions(dates: string[], prefix: string) {
+      return dates.map((date, index) =>
+        buildDashSessionRow(`${prefix}${index + 1}`, new Date(`${date}T08:00:00Z`))
+      );
+    }
+
+    it("attaches a low-adherence adaptation with source, suggestedChange, planSpecId and rationaleKey", async () => {
+      const lowPlanRow = {
+        ...readyPlanRow,
+        planSpecId: "spec-low-1",
+        programJson: buildProgramWithDays(4),
+        createdAt: ADAPT_PLAN_CREATED_BEFORE_WINDOW,
+      };
+      // 5 completions inside [2026-06-19, 2026-07-17] but before the current
+      // week (2026-07-13) → 5 / (4 * 4) = 31.25% < 70% → low.
+      const lowSessions = buildInWindowSessions(
+        ["2026-06-20", "2026-06-25", "2026-07-01", "2026-07-05", "2026-07-10"],
+        "aaaaaaaa-2222-0000-0000-00000000000"
+      );
+      const { select } = createDashboardDb({ sessionRows: lowSessions, planRows: [lowPlanRow] });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const summary = await repo.getDashboardSummary(TENANT_A, USER_A, NOW);
+
+      expect(summary.adaptation).toBeDefined();
+      expect(summary.adaptation!.source).toBe("adherence");
+      expect(summary.adaptation!.level).toBe("low");
+      expect(summary.adaptation!.suggestedChange).toEqual({
+        kind: "reduce_frequency",
+        fromDays: 4,
+        toDays: 3,
+      });
+      expect(summary.adaptation!.planSpecId).toBe("spec-low-1");
+      expect(summary.adaptation!.rationaleKey).toBe("adaptation.adherence.reduceFrequency");
+      expect(summary.adaptation!.adherence).toMatchObject({
+        periodWeeks: 4,
+        completedInWindow: 5,
+        plannedInWindow: 16,
+      });
+      // Pre-existing dashboard fields remain intact and additive — the
+      // recommendation never mutates the week board (no "missed" state).
+      expect(summary.weeklyPlanned).toBe(4);
+      // No new DB round-trip and no quota consumer: still exactly the two
+      // lookup queries (sessions, plans); no billing table is ever selected.
+      expect(select).toHaveBeenCalledTimes(2);
+    });
+
+    it("attaches an ok adaptation with no suggestedChange at/above the threshold", async () => {
+      const okPlanRow = {
+        ...readyPlanRow,
+        planSpecId: "spec-ok-1",
+        programJson: buildProgramWithDays(1),
+        createdAt: ADAPT_PLAN_CREATED_BEFORE_WINDOW,
+      };
+      // 3 completions / (1 * 4) = 75% >= 70% → ok.
+      const okSessions = buildInWindowSessions(
+        ["2026-06-20", "2026-07-01", "2026-07-10"],
+        "aaaaaaaa-3333-0000-0000-00000000000"
+      );
+      const { select } = createDashboardDb({ sessionRows: okSessions, planRows: [okPlanRow] });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const summary = await repo.getDashboardSummary(TENANT_A, USER_A, NOW);
+
+      expect(summary.adaptation!.source).toBe("adherence");
+      expect(summary.adaptation!.level).toBe("ok");
+      expect(summary.adaptation!.suggestedChange).toBeUndefined();
+      expect(summary.adaptation!.rationaleKey).toBeUndefined();
+      expect(summary.adaptation!.planSpecId).toBe("spec-ok-1");
+      expect(select).toHaveBeenCalledTimes(2);
+    });
+
+    it("reports insufficient_data when the latest ready plan is younger than the window", async () => {
+      // dashReadyPlanRow.createdAt (2026-07-04) is inside the window, so the
+      // user has not had a full window to adhere → insufficient_data.
+      const { select } = createDashboardDb({
+        sessionRows: [dashSessionMon],
+        planRows: [dashReadyPlanRow],
+        exerciseRows: [dashExerciseMon],
+        setRows: [dashSetMon],
+      });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const summary = await repo.getDashboardSummary(TENANT_A, USER_A, NOW);
+
+      expect(summary.adaptation!.level).toBe("insufficient_data");
+      expect(summary.adaptation!.suggestedChange).toBeUndefined();
+      expect(summary.adaptation!.adherence).toBeUndefined();
+    });
+
+    it("reports insufficient_data with no planSpecId when there is no active ready plan", async () => {
+      const { select } = createDashboardDb({ sessionRows: [], planRows: [] });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const summary = await repo.getDashboardSummary(TENANT_A, USER_A, NOW);
+
+      expect(summary.adaptation!.source).toBe("adherence");
+      expect(summary.adaptation!.level).toBe("insufficient_data");
+      expect(summary.adaptation!.planSpecId).toBeUndefined();
+      expect(summary.adaptation!.suggestedChange).toBeUndefined();
+    });
   });
 
   describe("getStatsRange", () => {
