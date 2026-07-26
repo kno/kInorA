@@ -6,7 +6,9 @@ import { resolveMessages } from "../../../i18n/locale.js";
 import type { ChatStreamOptions, ChatStreamResult } from "../../create-plan/chat-stream";
 import type { ChatSSEEvent } from "../../create-plan/chat-types";
 import type { VoiceRecorder } from "../../../audio/recorder";
+import type { AudioPlayer } from "../../../audio/player";
 import type { TranscribeAudio, TranscribeOutcome } from "../../../api/transcribe-client";
+import type { SpeechOutcome } from "../../../api/speech-client";
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -38,6 +40,20 @@ function deferred<T>() {
     resolve = r;
   });
   return { promise, resolve };
+}
+
+/** A fake TTS player capturing the natural-completion callback. */
+function fakePlayer(overrides: Partial<AudioPlayer> = {}) {
+  let ended: () => void = () => {};
+  const player: AudioPlayer = {
+    play: vi.fn(async (_source: unknown, onEnded?: () => void) => {
+      ended = onEnded ?? (() => {});
+    }),
+    stop: vi.fn(async () => {}),
+    release: vi.fn(() => {}),
+    ...overrides,
+  };
+  return { player, fireEnded: () => ended() };
 }
 
 function fakeRecorder(overrides: Partial<VoiceRecorder> = {}): VoiceRecorder {
@@ -364,5 +380,245 @@ describe("VoiceScreen (D1 Expo mic → transcribe → shared chat turn)", () => 
     act(() => renderer.unmount());
     expect(capturedSignal!.aborted).toBe(true);
     expect(recorder.release).toHaveBeenCalled();
+  });
+});
+
+describe("VoiceScreen (D2 native TTS playback of the assistant reply)", () => {
+  const REPLY = "Vamos a por fuerza.";
+
+  function voiceTurnProps(synthesize: unknown, player: AudioPlayer) {
+    return {
+      recorder: fakeRecorder(),
+      transcribe: vi.fn(
+        async (): Promise<TranscribeOutcome> => ({ kind: "ok", text: "arma mi plan", unclear: false }),
+      ),
+      stream: scriptedStream([
+        { type: "draft", draftSpec: {}, missingFields: [], assistantMessage: REPLY },
+      ]),
+      synthesize,
+      player,
+    };
+  }
+
+  /** Drive a full voice turn to its terminal reply, then flush TTS. */
+  async function runVoiceTurn(renderer: ReactTestRenderer) {
+    await act(async () => {
+      await mic(renderer).props.onPressIn();
+    });
+    await act(async () => {
+      await mic(renderer).props.onPressOut();
+    });
+    await act(async () => {}); // flush speakReply (synthesize → player.play)
+  }
+
+  it("synthesizes the terminal reply, plays it, and shows the speaking state", async () => {
+    const synthesize = vi.fn(
+      async (_text: string, _opts: { signal?: AbortSignal }): Promise<SpeechOutcome> => ({
+        kind: "ok",
+        audio: { bytes: new Uint8Array([1, 2, 3]), contentType: "audio/mpeg" },
+      }),
+    );
+    const { player, fireEnded } = fakePlayer();
+    const { renderer } = renderScreen(voiceTurnProps(synthesize, player));
+    await act(async () => {});
+    await runVoiceTurn(renderer);
+
+    // The terminal assistant reply (not the user text) was synthesized, with an
+    // abort signal, then played as the returned mp3 bytes.
+    expect(synthesize).toHaveBeenCalledTimes(1);
+    expect(synthesize.mock.calls[0]![0]).toBe(REPLY);
+    expect(synthesize.mock.calls[0]![1].signal).toBeInstanceOf(AbortSignal);
+    expect(player.play).toHaveBeenCalledTimes(1);
+    expect((player.play as any).mock.calls[0][0]).toEqual({
+      bytes: new Uint8Array([1, 2, 3]),
+      contentType: "audio/mpeg",
+    });
+
+    // The status badge reflects playback (parity with web's "Speaking…").
+    expect(status(renderer)).toBe("Speaking…");
+    // Natural completion returns the badge to idle.
+    await act(async () => {
+      fireEnded();
+    });
+    expect(status(renderer)).toBe("Ready");
+  });
+
+  it("recovers to idle when playback fails to start (mic never stuck disabled)", async () => {
+    // The player can reject at load/start (audio-focus denied, a rejected data:
+    // URI). That must fail SILENTLY like every other TTS path — and crucially
+    // must NOT leave `speaking` true, which would keep the push-to-talk mic
+    // disabled for the rest of the session.
+    const synthesize = vi.fn(
+      async (): Promise<SpeechOutcome> => ({
+        kind: "ok",
+        audio: { bytes: new Uint8Array([1]), contentType: "audio/mpeg" },
+      }),
+    );
+    const { player } = fakePlayer({
+      play: vi.fn(async () => {
+        throw new Error("audio focus denied");
+      }),
+    });
+    const { renderer } = renderScreen(voiceTurnProps(synthesize, player));
+    await act(async () => {});
+    await runVoiceTurn(renderer);
+
+    expect(player.play).toHaveBeenCalledTimes(1);
+    // No user-facing error (the text reply already stands), and the screen is
+    // back to idle with the mic re-enabled — not stuck on "Speaking…".
+    expect(renderer.root.findAll((n) => n.props.testID === "voice-notice")).toHaveLength(0);
+    expect(status(renderer)).toBe("Ready");
+    expect(mic(renderer).props.disabled).toBe(false);
+  });
+
+  it("skips playback on a 204 opt-out with no error and no crash", async () => {
+    const synthesize = vi.fn(async (): Promise<SpeechOutcome> => ({ kind: "opt_out" }));
+    const { player } = fakePlayer();
+    const { renderer } = renderScreen(voiceTurnProps(synthesize, player));
+    await act(async () => {});
+    await runVoiceTurn(renderer);
+
+    expect(synthesize).toHaveBeenCalledTimes(1);
+    expect(player.play).not.toHaveBeenCalled();
+    // No TTS notice: the opt-out is silent, and the text reply still stands.
+    expect(renderer.root.findAll((n) => n.props.testID === "voice-notice")).toHaveLength(0);
+    expect(bubbleTexts(renderer)).toContain(REPLY);
+    expect(status(renderer)).toBe("Ready");
+  });
+
+  it("fails silently on a TTS 502 without disrupting the chat reply", async () => {
+    const synthesize = vi.fn(async (): Promise<SpeechOutcome> => ({ kind: "error", status: 502 }));
+    const { player } = fakePlayer();
+    const { renderer } = renderScreen(voiceTurnProps(synthesize, player));
+    await act(async () => {});
+    await runVoiceTurn(renderer);
+
+    expect(player.play).not.toHaveBeenCalled();
+    expect(renderer.root.findAll((n) => n.props.testID === "voice-notice")).toHaveLength(0);
+    expect(bubbleTexts(renderer)).toContain(REPLY);
+    expect(status(renderer)).toBe("Ready");
+  });
+
+  it("stops playback and aborts the speech fetch when a new turn starts", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    const synthesize = vi.fn(
+      async (_t: string, opts: { signal?: AbortSignal }): Promise<SpeechOutcome> => {
+        capturedSignal = opts.signal;
+        return { kind: "ok", audio: { bytes: new Uint8Array([9]), contentType: "audio/mpeg" } };
+      },
+    );
+    const { player } = fakePlayer();
+    const { renderer } = renderScreen(voiceTurnProps(synthesize, player));
+    await act(async () => {});
+    await runVoiceTurn(renderer);
+    expect(player.play).toHaveBeenCalledTimes(1);
+    expect(capturedSignal!.aborted).toBe(false);
+    const stopsBefore = (player.stop as any).mock.calls.length;
+
+    // A new (typed) turn supersedes the playing reply.
+    act(() => renderer.root.find((n) => n.props.testID === "keyboard-btn").props.onPress());
+    act(() => renderer.root.find((n) => n.props.testID === "voice-text-input").props.onChangeText("otra cosa"));
+    await act(async () => {
+      await renderer.root.find((n) => n.props.testID === "voice-send-btn").props.onPress();
+    });
+
+    expect((player.stop as any).mock.calls.length).toBeGreaterThan(stopsBefore);
+    expect(capturedSignal!.aborted).toBe(true);
+  });
+
+  it("aborts the in-flight speech fetch and releases the player on unmount", async () => {
+    const sx = deferred<SpeechOutcome>();
+    let capturedSignal: AbortSignal | undefined;
+    const synthesize = vi.fn((_t: string, opts: { signal?: AbortSignal }) => {
+      capturedSignal = opts.signal;
+      return sx.promise;
+    });
+    const { player } = fakePlayer();
+    const { renderer } = renderScreen(voiceTurnProps(synthesize, player));
+    await act(async () => {});
+    await runVoiceTurn(renderer); // synthesize now pending (speech in flight)
+
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    expect(capturedSignal!.aborted).toBe(false);
+    expect(player.play).not.toHaveBeenCalled(); // still awaiting synthesis
+
+    act(() => renderer.unmount());
+    expect(capturedSignal!.aborted).toBe(true);
+    expect(player.release).toHaveBeenCalled();
+  });
+
+  it("does not play when connectivity drops before the reply is spoken", async () => {
+    const tx = deferred<TranscribeOutcome>();
+    const transcribe = vi.fn(() => tx.promise);
+    const synthesize = vi.fn(
+      async (): Promise<SpeechOutcome> => ({
+        kind: "ok",
+        audio: { bytes: new Uint8Array([1]), contentType: "audio/mpeg" },
+      }),
+    );
+    const { player } = fakePlayer();
+    const stream = scriptedStream([
+      { type: "draft", draftSpec: {}, missingFields: [], assistantMessage: REPLY },
+    ]);
+    const { renderer, setConnectivity } = renderScreen({
+      recorder: fakeRecorder(),
+      transcribe,
+      stream,
+      synthesize,
+      player,
+    });
+    await act(async () => {});
+
+    await act(async () => {
+      await mic(renderer).props.onPressIn();
+    });
+    act(() => {
+      void mic(renderer).props.onPressOut();
+    });
+    await act(async () => {}); // processing; transcribe pending
+
+    // Connectivity drops mid-turn (between transcribe and the spoken reply).
+    act(() => setConnectivity(false));
+
+    // The transcript resolves → the turn runs, but playback is suppressed offline.
+    await act(async () => {
+      tx.resolve({ kind: "ok", text: "arma mi plan", unclear: false });
+    });
+    await act(async () => {});
+
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(player.play).not.toHaveBeenCalled();
+  });
+
+  it("billing boundary: the whole voice path never hits a plan-generation endpoint", async () => {
+    // The voice loop (transcribe → chat → speak) must consume ZERO billing
+    // units. VoiceScreen only ever calls the transcribe + speech clients and the
+    // (metered-free) chat stream; it NEVER reaches the confirm/generate endpoint,
+    // which is the single `plan_generation`-consuming call (kept in the separate
+    // confirm→generate flow). Assert the screen never invokes a synthesize/
+    // transcribe that targets a generation endpoint, and that a full turn only
+    // drives the two voice clients.
+    const transcribe = vi.fn(
+      async (): Promise<TranscribeOutcome> => ({ kind: "ok", text: "arma mi plan", unclear: false }),
+    );
+    const synthesize = vi.fn(
+      async (): Promise<SpeechOutcome> => ({
+        kind: "ok",
+        audio: { bytes: new Uint8Array([7]), contentType: "audio/mpeg" },
+      }),
+    );
+    const stream = scriptedStream([
+      { type: "draft", draftSpec: {}, missingFields: [], assistantMessage: REPLY },
+    ]);
+    const { player } = fakePlayer();
+    const { renderer } = renderScreen({ recorder: fakeRecorder(), transcribe, stream, synthesize, player });
+    await act(async () => {});
+    await runVoiceTurn(renderer);
+
+    // Exactly one transcribe, one chat stream, one synthesize — no more, no
+    // generation/confirm call anywhere on the voice path.
+    expect(transcribe).toHaveBeenCalledTimes(1);
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(synthesize).toHaveBeenCalledTimes(1);
   });
 });

@@ -22,12 +22,18 @@
  *     when connectivity returns the mic re-enables WITHOUT a reload.
  * The API `403` is the real Pro-gate enforcement (surfaced as an error notice).
  *
- * D2 SEAM: native TTS playback of the assistant reply is NOT in D1 (voice input
- * only). The `speak` prop is the single seam D2 wires to `audio/player.ts` — it
- * is left undefined here so D1 ships no audio output. See `handlePressOut`.
+ * D2: native TTS playback of the assistant reply (voice OUTPUT), parity with
+ * web `AssistantPane`. After a voice turn's terminal assistant reply, the screen
+ * synthesizes it via `api/speech-client.ts` (direct `POST /plan-specs/speech`,
+ * Bearer) and plays the mp3 via `audio/player.ts`. TTS is best-effort over the
+ * already-shown text: the 204 opt-out and every 403/502/network error fail
+ * SILENTLY (no playback, no notice). Playback is stopped + the speech fetch
+ * aborted on a NEW turn, on end-session, and on unmount so audio never bleeds
+ * across turns or into a torn-down tree. Offline → no playback attempt.
  *
- * On unmount the in-flight transcribe is aborted, the recorder is released, and
- * the store is disposed so no late callback mutates a torn-down tree.
+ * On unmount the in-flight transcribe + speech fetch are aborted, the recorder
+ * and player are released, and the store is disposed so no late callback mutates
+ * a torn-down tree.
  */
 
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -42,6 +48,8 @@ import {
   type TranscribeOutcome,
 } from "../../api/transcribe-client";
 import { createRecorder, type VoiceRecorder } from "../../audio/recorder";
+import { synthesizeSpeech as defaultSynthesize, type SpeechOutcome } from "../../api/speech-client";
+import { createPlayer, type AudioPlayer } from "../../audio/player";
 import {
   createChatStore,
   type ChatStore,
@@ -55,6 +63,12 @@ type TranscribeFn = (
   audio: TranscribeAudio,
   options: { apiBaseUrl?: string; getToken?: () => Promise<string | null>; signal?: AbortSignal },
 ) => Promise<TranscribeOutcome>;
+
+/** Injectable direct-synthesize call (defaults to the real speech client). */
+type SynthesizeFn = (
+  text: string,
+  options: { apiBaseUrl?: string; getToken?: () => Promise<string | null>; signal?: AbortSignal },
+) => Promise<SpeechOutcome>;
 
 /** Subscribe to connectivity; the callback receives `true` when online. */
 type SubscribeConnectivity = (onChange: (online: boolean) => void) => () => void;
@@ -75,8 +89,10 @@ export interface VoiceScreenProps {
   subscribeConnectivity?: SubscribeConnectivity;
   /** Assume online until the first connectivity event (default true). */
   initialOnline?: boolean;
-  /** D2 SEAM: native TTS playback of the assistant reply. Undefined in D1. */
-  speak?: (text: string) => void;
+  /** D2: direct TTS synthesis client — defaults to the real one; injected in tests. */
+  synthesize?: SynthesizeFn;
+  /** D2: native audio player — defaults to the real `expo-audio` player; injected in tests. */
+  player?: AudioPlayer;
 }
 
 type LocalStatus = "idle" | "listening" | "processing";
@@ -117,7 +133,8 @@ export default function VoiceScreen({
   clearSession,
   subscribeConnectivity,
   initialOnline = true,
-  speak,
+  synthesize,
+  player,
 }: VoiceScreenProps) {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
@@ -130,8 +147,11 @@ export default function VoiceScreen({
   const clearSessionRef = useRef(clearSession ?? deleteSessionToken);
   const navigationRef = useRef(navigation);
   navigationRef.current = navigation;
-  const speakRef = useRef(speak);
-  speakRef.current = speak;
+  const synthesizeFn = useRef<SynthesizeFn>(synthesize ?? defaultSynthesize);
+  synthesizeFn.current = synthesize ?? defaultSynthesize;
+  const playerRef = useRef<AudioPlayer | null>(null);
+  if (playerRef.current === null) playerRef.current = player ?? createPlayer();
+  const speechAbortRef = useRef<AbortController | null>(null);
 
   const routeToLogin = () => {
     void clearSessionRef.current().finally(() => {
@@ -153,6 +173,7 @@ export default function VoiceScreen({
   const state = useSyncExternalStore(store.subscribe, store.getState);
 
   const [status, setStatus] = useState<LocalStatus>("idle");
+  const [speaking, setSpeaking] = useState(false);
   const [notice, setNotice] = useState<NoticeKey>(null);
   const [micDenied, setMicDenied] = useState(false);
   const [online, setOnline] = useState(initialOnline);
@@ -162,6 +183,58 @@ export default function VoiceScreen({
   const recordingRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const disposedRef = useRef(false);
+  // Live connectivity mirror so `speakReply` (invoked from an in-flight
+  // press-out closure) reads the CURRENT online state, not the value captured
+  // when the recording started — connectivity can drop mid-turn.
+  const onlineRef = useRef(online);
+  onlineRef.current = online;
+
+  // Stop any in-flight/playing TTS: abort the pending speech fetch and stop the
+  // player. Safe when nothing is playing. Used by a new turn, end-session, and
+  // unmount — so a reply never bleeds across turns or into a torn-down tree.
+  const stopSpeaking = () => {
+    speechAbortRef.current?.abort();
+    speechAbortRef.current = null;
+    void playerRef.current?.stop();
+    setSpeaking(false);
+  };
+
+  // Speak the terminal assistant reply (parity with web `playReply`). TTS is a
+  // best-effort enhancement over the already-shown text, so EVERY non-ok path
+  // (offline, a 204 opt-out, a 403/502, a network error, a superseded/aborted
+  // turn) fails SILENTLY — the chat is never disrupted. Any prior playback is
+  // superseded first.
+  const speakReply = async (text: string) => {
+    if (!onlineRef.current) return; // offline → no playback attempt
+    stopSpeaking();
+    const controller = new AbortController();
+    speechAbortRef.current = controller;
+
+    let outcome: SpeechOutcome;
+    try {
+      outcome = await synthesizeFn.current(text, { apiBaseUrl, getToken, signal: controller.signal });
+    } catch {
+      return; // never let a synthesis failure crash the voice turn
+    }
+    // Superseded by a new turn / unmounted while the fetch was in flight, or
+    // opted out / errored → nothing to play.
+    if (disposedRef.current || controller.signal.aborted) return;
+    if (outcome.kind !== "ok") return;
+
+    setSpeaking(true);
+    try {
+      await playerRef.current!.play(outcome.audio, () => {
+        if (!disposedRef.current) setSpeaking(false);
+      });
+    } catch {
+      // Playback failed to start (audio-focus denied, a rejected data: URI).
+      // Fail SILENTLY like every other TTS path and, crucially, clear the
+      // speaking state + release the player so the push-to-talk mic is never
+      // left permanently disabled (`onEnded` never fires on a start failure).
+      void playerRef.current?.stop();
+      if (!disposedRef.current) setSpeaking(false);
+    }
+  };
 
   // Request the mic permission once on mount; denial drives the text fallback.
   useEffect(() => {
@@ -193,12 +266,15 @@ export default function VoiceScreen({
     return unsubscribe;
   }, [subscribeConnectivity]);
 
-  // Teardown: abort the transcribe, release the recorder, dispose the store.
+  // Teardown: abort the transcribe + speech fetch, release the recorder and
+  // player, dispose the store.
   useEffect(
     () => () => {
       disposedRef.current = true;
       abortRef.current?.abort();
+      speechAbortRef.current?.abort();
       recorderRef.current?.release();
+      playerRef.current?.release();
       store.dispose();
     },
     [store],
@@ -211,7 +287,7 @@ export default function VoiceScreen({
   // overwrite the first `AbortController` (leaking the first upload on unmount),
   // and have its transcript silently dropped by the store's serialized runTurn.
   const micDisabled =
-    micDenied || !online || state.streaming || status === "processing";
+    micDenied || !online || state.streaming || status === "processing" || speaking;
 
   const handlePressIn = async () => {
     if (micDisabled || recordingRef.current) return;
@@ -273,14 +349,17 @@ export default function VoiceScreen({
       return;
     }
 
+    // A new turn supersedes any TTS still playing/loading from the prior turn.
+    stopSpeaking();
+
     // Feed the transcript into the SHARED chat turn (identical to a typed send).
     setStatus("idle");
     await store.runTurn(outcome.text, true);
 
-    // D2 SEAM: speak the terminal assistant reply. No-op in D1 (`speak` unset).
+    // D2: speak the terminal assistant reply (best-effort; fails silently).
     if (!disposedRef.current) {
       const reply = latestAssistantText(store.getState().messages);
-      if (reply) speakRef.current?.(reply);
+      if (reply) void speakReply(reply);
     }
   };
 
@@ -289,17 +368,21 @@ export default function VoiceScreen({
     if (message === "" || state.streaming) return;
     setTextInput("");
     setNotice(null);
+    // A typed turn also supersedes any TTS still playing from a prior turn.
+    stopSpeaking();
     await store.runTurn(message, true);
   };
 
   const statusKey = state.streaming
     ? "voice.state.responding"
-    : status === "listening"
-      ? "voice.state.listening"
-      : status === "processing"
-        ? "voice.state.processing"
-        : "voice.state.idle";
-  const statusActive = status === "listening" || state.streaming;
+    : speaking
+      ? "voice.state.speaking"
+      : status === "listening"
+        ? "voice.state.listening"
+        : status === "processing"
+          ? "voice.state.processing"
+          : "voice.state.idle";
+  const statusActive = status === "listening" || state.streaming || speaking;
   const textVisible = showText || micDenied || !online;
 
   return (
@@ -311,7 +394,10 @@ export default function VoiceScreen({
           style={styles.iconBtn}
           accessibilityRole="button"
           accessibilityLabel={t("voice.backAria")}
-          onPress={() => navigationRef.current.goBack()}
+          onPress={() => {
+            stopSpeaking();
+            navigationRef.current.goBack();
+          }}
         >
           <Text style={styles.iconBtnText}>←</Text>
         </Pressable>
@@ -444,7 +530,10 @@ export default function VoiceScreen({
           style={[styles.sideBtn, styles.endBtn]}
           accessibilityRole="button"
           accessibilityLabel={t("voice.endSessionAria")}
-          onPress={() => navigationRef.current.goBack()}
+          onPress={() => {
+            stopSpeaking();
+            navigationRef.current.goBack();
+          }}
         >
           <Text style={[styles.sideBtnText, styles.endBtnText]}>{t("voice.endSession")}</Text>
         </Pressable>
