@@ -25,12 +25,13 @@ describe("user profile + preferences contract types (10a/10b)", () => {
     }>();
   });
 
-  it("UserPreferences carries userId/defaultLocation/defaultDuration/defaultEquipment", () => {
+  it("UserPreferences carries userId/defaultLocation/defaultDuration/defaultEquipment + optional ttsEnabled", () => {
     expectTypeOf<UserPreferences>().toEqualTypeOf<{
       userId: string;
       defaultLocation: string | null;
       defaultDuration: number | null;
       defaultEquipment: string[] | null;
+      ttsEnabled?: boolean | null;
     }>();
   });
 

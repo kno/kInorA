@@ -66,6 +66,7 @@ import {
 } from "./ai/extraction-adapter.js";
 import type { PlanSpecExtractor } from "./ai/extraction-port.js";
 import type { SpeechTranscriber } from "./ai/speech-transcriber-port.js";
+import type { SpeechSynthesizer } from "./ai/speech-synthesizer-port.js";
 import { OpenAIAudioAdapter } from "./ai/openai-audio-adapter.js";
 import { CheckAndConsumeQuota } from "./billing/quota-consumption.js";
 import { SetMemberAllocation, GetTenantUsage } from "./billing/quota-admin.js";
@@ -120,6 +121,13 @@ export interface BuildAppOptions {
    * to avoid network calls in tests.
    */
   transcriber?: SpeechTranscriber;
+  /**
+   * Injectable SpeechSynthesizer for the voice speech endpoint (13, A3).
+   * Defaults to the real `OpenAIAudioAdapter` (gpt-4o-mini-tts, dedicated
+   * OPENAI_API_KEY read at call time) in production. Pass a
+   * `MockSpeechSynthesizer` (or any fake) to avoid network calls in tests.
+   */
+  synthesizer?: SpeechSynthesizer;
   /**
    * Injectable WsRegistry for tests.
    * Defaults to a fresh WsRegistry() in production.
@@ -189,6 +197,7 @@ export async function buildApp(
   let planGenerator: PlanGenerator | undefined;
   let chatExtractorOverride: PlanSpecExtractor | undefined;
   let transcriberOverride: SpeechTranscriber | undefined;
+  let synthesizerOverride: SpeechSynthesizer | undefined;
   let wsRegistry: WsRegistry | undefined;
   let stripeGateway: StripeGateway | undefined;
   let checkoutGateway: CheckoutGateway | undefined;
@@ -221,6 +230,7 @@ export async function buildApp(
     planGenerator = opts.planGenerator;
     chatExtractorOverride = opts.chatExtractor;
     transcriberOverride = opts.transcriber;
+    synthesizerOverride = opts.synthesizer;
     wsRegistry = opts.wsRegistry;
     stripeGateway = opts.stripeGateway;
     checkoutGateway = opts.checkoutGateway;
@@ -374,7 +384,23 @@ export async function buildApp(
   // to a generic 502). Tests inject a deterministic `MockSpeechTranscriber` via
   // the `transcriber` BuildAppOptions override. The transcribe route is
   // registered only when this port is present (it always is here).
-  const transcriber: SpeechTranscriber = transcriberOverride ?? new OpenAIAudioAdapter();
+  // 13-v1.1-interactive-voice-chat (A2 STT + A3 TTS): one OpenAI-audio adapter
+  // implements BOTH ports (whisper-1 transcribe + gpt-4o-mini-tts synthesize).
+  // Like every other adapter it reads the dedicated OPENAI_API_KEY at CALL time,
+  // so the app boots cleanly with the key unset and only a live call fails
+  // (mapped to a generic 502). Tests inject deterministic Mocks via the
+  // `transcriber`/`synthesizer` BuildAppOptions overrides.
+  const audioAdapter = new OpenAIAudioAdapter();
+  const transcriber: SpeechTranscriber = transcriberOverride ?? audioAdapter;
+  const synthesizer: SpeechSynthesizer = synthesizerOverride ?? audioAdapter;
+  // A3: resolve the caller's TTS opt-out from user_preferences. Built here (the
+  // repo is reused below for the /user-preferences routes) and read ONLY for the
+  // authenticated userId inside the route. `null` = enabled (opt-out default ON).
+  const userPreferencesRepo = new UserPreferencesRepository(database);
+  const voicePreferences = {
+    findTtsEnabled: async (id: string) =>
+      (await userPreferencesRepo.findByUserId(id))?.ttsEnabled ?? null,
+  };
   await app.register(planRoutes, {
     repo: planRouteRepo,
     generationService: planGenerationService,
@@ -385,6 +411,8 @@ export async function buildApp(
     chatEntitlement,
     chatExtractor,
     transcriber,
+    synthesizer,
+    voicePreferences,
   });
 
   await app.register(workoutSessionRoutes, {
@@ -417,7 +445,8 @@ export async function buildApp(
   // lazy-provision email lookup) so the route files stay free of any DB-layer
   // import. `adminUserRepo` is reused for the email lookup.
   const userProfileRepo = new UserProfileRepository(database);
-  const userPreferencesRepo = new UserPreferencesRepository(database);
+  // `userPreferencesRepo` is constructed above (reused by the voice speech
+  // route's TTS opt-out reader) — do not re-instantiate.
   const userProfileRouteRepo = {
     findUserEmailById: async (id: string) =>
       (await adminUserRepo.findById(id))?.email ?? null,

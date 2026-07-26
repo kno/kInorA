@@ -182,6 +182,13 @@ export interface UserPreferences {
   defaultLocation: string | null;
   defaultDuration: number | null;
   defaultEquipment: string[] | null;
+  /**
+   * TTS opt-out preference (13-v1.1-interactive-voice-chat, A3). Additive and
+   * backward-compatible — omitting it still validates. Semantics: `null` or
+   * `true` → TTS enabled (opt-out default is ON); `false` → the user has opted
+   * out and the client MUST NOT request or play TTS audio.
+   */
+  ttsEnabled?: boolean | null;
 }
 
 /**

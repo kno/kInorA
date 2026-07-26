@@ -4,6 +4,10 @@ import type {
   TranscribeInput,
   TranscribeResult,
 } from "./speech-transcriber-port.js";
+import type {
+  SpeechSynthesizer,
+  SynthesizeResult,
+} from "./speech-synthesizer-port.js";
 
 /**
  * OpenAI-audio adapter for speech-to-text (13-v1.1-interactive-voice-chat, A1).
@@ -30,6 +34,66 @@ import type {
 const STT_MODEL = "whisper-1";
 
 /**
+ * TTS pinned in one place (design.md — `gpt-4o-mini-tts`, voice `alloy`, mp3).
+ * A later model/voice swap is a one-line change behind the unchanged
+ * `SpeechSynthesizer` port — the route, UI, and tests never see these names.
+ */
+const TTS_MODEL = "gpt-4o-mini-tts";
+const TTS_VOICE = "alloy";
+const TTS_RESPONSE_FORMAT = "mp3";
+
+/**
+ * OpenAI TTS input character cap (design.md — "bounded to OpenAI's ~4096-char
+ * cap; longer replies are truncated at a sentence boundary server-side").
+ * create-plan terminal replies are short, so this is a guard, not a common path.
+ */
+const TTS_MAX_INPUT_CHARS = 4096;
+
+/**
+ * Bound TTS input to the OpenAI cap, preferring a sentence boundary. If the text
+ * is within the cap it is returned unchanged. Otherwise we cut at the last
+ * sentence-ending punctuation (`.`, `!`, `?`) or newline that falls within the
+ * cap; if none exists (the "first sentence" itself exceeds the cap) we hard-cut
+ * at the cap. This keeps a truncated reply coherent instead of ending mid-word,
+ * and NEVER sends an over-cap request.
+ *
+ * This is the SINGLE SOURCE OF TRUTH for TTS truncation (review fix — a route-
+ * level `slice(0, cap)` performed BEFORE this ran made this logic unreachable
+ * dead code and cut replies mid-word). The route no longer pre-truncates; it
+ * only bounds the request body size via the JSON schema's generous
+ * `maxLength` guard.
+ *
+ * Never returns an empty/whitespace-only string for non-empty input: if the
+ * sentence-boundary cut would produce a blank result (a pathological
+ * whitespace-heavy prefix), we fall back to a hard cut of the text with its
+ * leading whitespace stripped first, so real content is never swallowed.
+ */
+function truncateForTts(text: string): string {
+  if (text.length <= TTS_MAX_INPUT_CHARS) return text;
+
+  const window = text.slice(0, TTS_MAX_INPUT_CHARS);
+  const lastBoundary = Math.max(
+    window.lastIndexOf("."),
+    window.lastIndexOf("!"),
+    window.lastIndexOf("?"),
+    window.lastIndexOf("\n"),
+  );
+  if (lastBoundary > 0) {
+    const bounded = window.slice(0, lastBoundary + 1);
+    if (bounded.trim().length > 0) return bounded;
+  }
+
+  // No usable sentence boundary within the cap (the "first sentence" exceeds
+  // 4096 chars), OR the boundary cut was itself blank — hard-cut instead.
+  // Strip leading whitespace from the FULL text first so a pathological
+  // whitespace-heavy prefix cannot swallow the entire cap with nothing but
+  // blank characters.
+  const trimmedLeading = text.replace(/^\s+/, "");
+  const hardCut = trimmedLeading.slice(0, TTS_MAX_INPUT_CHARS);
+  return hardCut.trim().length > 0 ? hardCut : window;
+}
+
+/**
  * Minimal OpenAI-audio client surface the adapter needs. The real `OpenAI`
  * client satisfies this structurally; test fakes implement just this.
  */
@@ -44,6 +108,17 @@ export interface OpenAIAudioClient {
         },
         options?: { signal?: AbortSignal },
       ): Promise<{ text: string }>;
+    };
+    speech: {
+      create(
+        body: {
+          model: string;
+          voice: string;
+          input: string;
+          response_format: string;
+        },
+        options?: { signal?: AbortSignal },
+      ): Promise<{ arrayBuffer(): Promise<ArrayBuffer> }>;
     };
   };
 }
@@ -92,7 +167,7 @@ function extensionFor(contentType: string): string {
   }
 }
 
-export class OpenAIAudioAdapter implements SpeechTranscriber {
+export class OpenAIAudioAdapter implements SpeechTranscriber, SpeechSynthesizer {
   private readonly clientFactory: OpenAIAudioClientFactory;
 
   constructor(clientFactory: OpenAIAudioClientFactory = defaultClientFactory) {
@@ -124,5 +199,28 @@ export class OpenAIAudioAdapter implements SpeechTranscriber {
       return { text: "", unclear: true };
     }
     return { text, unclear: false };
+  }
+
+  async synthesize(text: string, signal?: AbortSignal): Promise<SynthesizeResult> {
+    // Read the dedicated key at call time (never at construction) and build the
+    // client through the injectable factory. Never log the key or the text.
+    const client = this.clientFactory(process.env["OPENAI_API_KEY"]);
+
+    // Bound the input to the OpenAI cap at a sentence boundary BEFORE the call,
+    // so an over-cap reply never reaches OpenAI.
+    const input = truncateForTts(text);
+
+    const response = await client.audio.speech.create(
+      {
+        model: TTS_MODEL,
+        voice: TTS_VOICE,
+        input,
+        response_format: TTS_RESPONSE_FORMAT,
+      },
+      signal ? { signal } : undefined,
+    );
+
+    const buffer = await response.arrayBuffer();
+    return { audio: new Uint8Array(buffer), contentType: "audio/mpeg" };
   }
 }

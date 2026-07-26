@@ -12,6 +12,8 @@ interface UserPreferencesRow {
   defaultLocation: string | null;
   defaultDuration: number | null;
   defaultEquipment: string[] | null;
+  /** TTS opt-out (A3). NULL/true = enabled (default ON); false = opted out. */
+  ttsEnabled: boolean | null;
 }
 
 /**
@@ -24,7 +26,10 @@ interface UserPreferencesRow {
  * additive, null-default model from the design).
  */
 type PreferencesUpdateInput = Partial<
-  Pick<UserPreferencesRow, "defaultLocation" | "defaultDuration" | "defaultEquipment">
+  Pick<
+    UserPreferencesRow,
+    "defaultLocation" | "defaultDuration" | "defaultEquipment" | "ttsEnabled"
+  >
 >;
 
 /**
@@ -48,6 +53,7 @@ interface UpdatePreferencesBody {
   defaultLocation?: string;
   defaultDuration?: number;
   defaultEquipment?: string[];
+  ttsEnabled?: boolean | null;
 }
 
 /**
@@ -59,6 +65,7 @@ function toDTO(row: UserPreferencesRow): UserPreferences {
     defaultLocation: row.defaultLocation,
     defaultDuration: row.defaultDuration,
     defaultEquipment: row.defaultEquipment,
+    ttsEnabled: row.ttsEnabled,
   };
 }
 
@@ -74,6 +81,7 @@ function emptyDTO(userId: string): UserPreferences {
     defaultLocation: null,
     defaultDuration: null,
     defaultEquipment: null,
+    ttsEnabled: null,
   };
 }
 
@@ -127,6 +135,20 @@ export const userPreferencesRoutes: FastifyPluginAsync<UserPreferencesRoutesOpti
         return reply.code(422).send({ error: "invalid_default_duration" });
       }
 
+      // Review fix: ttsEnabled, when present, MUST be a boolean or null.
+      // Without this check a non-boolean (e.g. the string "yes") would reach
+      // the repo's boolean column and Postgres would 500 instead of a clean
+      // 422 — matches the manual-validation style already used above for
+      // defaultDuration.
+      if (
+        body &&
+        "ttsEnabled" in body &&
+        body.ttsEnabled !== null &&
+        typeof body.ttsEnabled !== "boolean"
+      ) {
+        return reply.code(422).send({ error: "invalid_tts_enabled" });
+      }
+
       // Build the partial input: forward ONLY sent fields. The repo's partial
       // merge lives in the ON CONFLICT SET clause — absent keys preserve the
       // stored value. We never forward `undefined` here; we omit the key.
@@ -139,6 +161,11 @@ export const userPreferencesRoutes: FastifyPluginAsync<UserPreferencesRoutesOpti
       }
       if (body && "defaultEquipment" in body) {
         input.defaultEquipment = body.defaultEquipment;
+      }
+      // TTS opt-out (A3). Forward when present; `null`/`true`/`false` are all
+      // valid write intents (false = opted out; null = reset to default ON).
+      if (body && "ttsEnabled" in body) {
+        input.ttsEnabled = body.ttsEnabled;
       }
 
       const updated = await repo.upsertPreferences(userId, input);
