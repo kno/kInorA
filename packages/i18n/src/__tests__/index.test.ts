@@ -130,7 +130,7 @@ describe("@kinora/i18n package assembly", () => {
     expect(result.errors).toEqual([]);
   });
 
-  it("the voice namespace is present with EN+ES parity (13 Slice B1)", () => {
+  it("the voice namespace is present with EN+ES parity (13 Slice B1 + B2)", () => {
     expect(catalogs.en.voice).toBeDefined();
     expect(catalogs.es.voice).toBeDefined();
 
@@ -140,11 +140,19 @@ describe("@kinora/i18n package assembly", () => {
     const en = flattenMessages(catalogs.en);
     const es = flattenMessages(catalogs.es);
     const voiceKeys = Object.keys(en).filter((key) => key.startsWith("voice."));
-    // 8 scalar keys (micLabel, startAria, stopAria, denied, unsupported,
-    // offline, unclear, error) + 3 `voice.state.*` (idle/listening/processing).
-    expect(voiceKeys).toHaveLength(11);
+    // B1: 8 scalar (micLabel, startAria, stopAria, denied, unsupported, offline,
+    // unclear, error) + 3 `voice.state.*` (idle/listening/processing).
+    // B2: +2 scalar (stopSpeaking, stopSpeakingAria) + 1 `voice.state.speaking`.
+    expect(voiceKeys).toHaveLength(14);
     expect(en["voice.state.listening"]).toBe("Listening…");
     expect(es["voice.state.listening"]).toBe("Escuchando…");
+    // B2 playback copy — the speaking state and the stop-speaking control.
+    expect(en["voice.state.speaking"]).toBe("Speaking…");
+    expect(es["voice.state.speaking"]).toBe("Hablando…");
+    expect(en["voice.stopSpeaking"]).toBeTruthy();
+    expect(es["voice.stopSpeaking"]).toBeTruthy();
+    expect(en["voice.stopSpeakingAria"]).toBeTruthy();
+    expect(es["voice.stopSpeakingAria"]).toBeTruthy();
   });
 
   it("the billing namespace is present with EN+ES parity (11a Phase 4 / Slice 4)", () => {
