@@ -119,6 +119,63 @@ describe("GET /progress/dashboard", () => {
     expect(response.json()).toEqual(emptySummary);
     expect(repo.getDashboardSummary).toHaveBeenCalledWith(TENANT_A, USER_A);
   });
+
+  // 14a-v1.1 Slice A2 — the adherence adaptation rides the existing dashboard
+  // read (no new endpoint). The route stays a pass-through; identity is
+  // resolved ONLY from authContext, never from the body/query.
+  it("passes the adaptation recommendation through, scoped to the authenticated tenant/user", async () => {
+    const summaryWithAdaptation: DashboardSummaryDTO = {
+      ...emptySummary,
+      adaptation: {
+        source: "adherence",
+        level: "low",
+        suggestedChange: { kind: "reduce_frequency", fromDays: 4, toDays: 3 },
+        rationaleKey: "adaptation.adherence.reduceFrequency",
+        planSpecId: "spec-1",
+        adherence: { adherence: 0.3125, periodWeeks: 4, completedInWindow: 5, plannedInWindow: 16 },
+      },
+    };
+    const repo = buildRepoMock({
+      getDashboardSummary: vi.fn().mockResolvedValue(summaryWithAdaptation),
+    });
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      // Body/query-injected identity MUST be ignored.
+      method: "GET",
+      url: "/progress/dashboard?tenantId=evil-tenant&userId=evil-user",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().adaptation).toEqual(summaryWithAdaptation.adaptation);
+    // Identity comes only from authContext — never the query/body.
+    expect(repo.getDashboardSummary).toHaveBeenCalledWith(TENANT_A, USER_A);
+  });
+
+  it("omits suggestedChange in the response when level is not low", async () => {
+    const okSummary: DashboardSummaryDTO = {
+      ...emptySummary,
+      adaptation: {
+        source: "adherence",
+        level: "ok",
+        planSpecId: "spec-1",
+        adherence: { adherence: 0.8, periodWeeks: 4, completedInWindow: 13, plannedInWindow: 16 },
+      },
+    };
+    const repo = buildRepoMock({ getDashboardSummary: vi.fn().mockResolvedValue(okSummary) });
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/progress/dashboard",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().adaptation.level).toBe("ok");
+    expect(response.json().adaptation.suggestedChange).toBeUndefined();
+  });
 });
 
 describe("GET /progress/stats", () => {
