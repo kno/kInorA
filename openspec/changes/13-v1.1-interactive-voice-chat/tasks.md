@@ -121,12 +121,12 @@ count, matching item-12's S2/S2b precedent. C2a (RN SSE transport) is called out
 
 ## Phase 8: Slice C2b — RN Asistente + Extraction UI to Web Parity [Requirements: Mobile Create-Plan Voice Parity]
 
-- [ ] 8.1 RED: Add failing `apps/mobile/src/screens/create-plan/__tests__/AssistantScreen.test.tsx` — renders streamed prose incrementally from `chat-store`; the terminal `draft` event populates a "Datos extraídos" extraction panel; a mid-stream error shows a retry affordance without losing the prior draft state; navigation away/unmount aborts the turn.
-- [ ] 8.2 GREEN: Create `apps/mobile/src/screens/create-plan/AssistantScreen.tsx` (chat pane + extraction panel, parity with web `AssistantPane`) consuming `chat-store.ts`/`chat-stream.ts` from C2a and `plan-draft-client.ts` from C1.
-- [ ] 8.3 GREEN: Add screen styles (`*.styles.ts`) and wire `AssistantScreen` into the existing react-navigation entry for create-plan.
-- [ ] 8.4 RED: Add a failing i18n parity test extending the `packages/i18n` suite — the `chat` namespace strings needed by the mobile Asistente/extraction UI are present with EN/ES parity (reuse/extend the item-12 `chat` namespace; no new namespace needed here).
-- [ ] 8.5 GREEN: Extend `packages/i18n/src/messages/{en,es}.json` with any mobile-specific `chat` namespace keys needed for parity.
-- [ ] 8.6 TRIANGLE: Run `pnpm --filter mobile test -- src/screens/create-plan/__tests__/AssistantScreen.test.tsx` + `pnpm --filter i18n test` green; `pnpm -w typecheck`; manual smoke on an Expo dev client/simulator (type-drive a full extraction turn end-to-end, matching web Asistente behavior); confirm Track C now reaches web parity — this MUST be true before Track D (mobile voice) begins.
+- [x] 8.1 RED: Add failing `apps/mobile/src/screens/create-plan/__tests__/AssistantScreen.test.tsx` — renders streamed prose incrementally from `chat-store`; the terminal `draft` event populates a "Datos extraídos" extraction panel; a mid-stream error shows a retry affordance without losing the prior draft state; navigation away/unmount aborts the turn.
+- [x] 8.2 GREEN: Create `apps/mobile/src/screens/create-plan/AssistantScreen.tsx` (chat pane + extraction panel, parity with web `AssistantPane`) consuming `chat-store.ts`/`chat-stream.ts` from C2a and `plan-draft-client.ts` from C1.
+- [x] 8.3 GREEN: Add screen styles (`*.styles.ts`) and wire `AssistantScreen` into the existing react-navigation entry for create-plan.
+- [x] 8.4 RED: Add a failing i18n parity test extending the `packages/i18n` suite — the `chat` namespace strings needed by the mobile Asistente/extraction UI are present with EN/ES parity (reuse/extend the item-12 `chat` namespace; no new namespace needed here).
+- [x] 8.5 GREEN: Extend `packages/i18n/src/messages/{en,es}.json` with any mobile-specific `chat` namespace keys needed for parity.
+- [x] 8.6 TRIANGLE: Run `pnpm --filter mobile test -- src/screens/create-plan/__tests__/AssistantScreen.test.tsx` + `pnpm --filter i18n test` green; `pnpm -w typecheck`; manual smoke on an Expo dev client/simulator (type-drive a full extraction turn end-to-end, matching web Asistente behavior); confirm Track C now reaches web parity — this MUST be true before Track D (mobile voice) begins.
 
 ---
 
