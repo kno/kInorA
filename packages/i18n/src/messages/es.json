@@ -701,7 +701,10 @@
     "suggestion": "¿Quieres probar {toDays} días por semana en lugar de {fromDays}?",
     "accept": "Probar {toDays} días",
     "dismiss": "Ahora no",
+    "submitting": "Ajustando tu plan…",
     "regenerating": "Ajustando tu plan…",
+    "quotaExhausted": "Ya usaste tu cambio de plan de este periodo. Mejora tu plan para ajustarlo más a menudo; tu plan sigue igual.",
+    "upToDate": "Tu plan ya parece encajar bien; no hay nada que cambiar ahora mismo.",
     "error": "No pudimos ajustar tu plan; sigue igual. Inténtalo de nuevo."
   },
   "exercises": {
