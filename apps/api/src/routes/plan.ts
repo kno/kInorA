@@ -661,10 +661,19 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   //   6. startGeneration(id) → 202 { planId, status } (reuses the exact
   //      regenerate pipeline)
   //
-  // The deterministic operation key (`plan_regeneration:adapt:${id}`, overridable
-  // via the Idempotency-Key header) makes a double-accept replay a single unit at
-  // the ledger — a quota race consumes exactly one. Registered only when the
-  // adherence reader AND the repo's `updateSpecDaysPerWeek` are wired.
+  // Review fix (B1 4R risk+reliability, CRITICAL): the operation key defaults
+  // to a FRESH `randomUUID()` per request — exactly like `/regenerate` above —
+  // NOT a stable per-spec key. The recommendation is re-derived from
+  // `latestReadyPlan`, not the just-written spec, so it stays confirmable for
+  // the ENTIRE async generation window; a stable default key would let every
+  // repeated accept in that window replay the ledger (zero further consume)
+  // while still firing a fresh, expensive LLM regeneration — N regenerations
+  // for 1 quota unit. An adapt accept IS a regeneration and must cost one
+  // `plan_regeneration` unit each time, so the quota genuinely bounds repeat
+  // accepts (a Free user's 2nd accept in the period gets 403, not a free
+  // extra generation). A caller-supplied `Idempotency-Key` header (a genuine
+  // client retry) is still honored and replays as before. Registered only
+  // when the adherence reader AND the repo's `updateSpecDaysPerWeek` are wired.
   const adherenceReader = options.adherenceReader;
   if (adherenceReader && repo.updateSpecDaysPerWeek) {
     const updateSpecDaysPerWeek = repo.updateSpecDaysPerWeek.bind(repo);
@@ -701,13 +710,17 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
 
         // Consume BEFORE the write: an exhausted/denied quota returns 403 with
         // the spec untouched, so a failed consume never leaves a mutated spec
-        // without a regeneration. The deterministic key makes a concurrent
-        // double-accept replay one unit at the ledger.
+        // without a regeneration. The DEFAULT key is a fresh nonce per request
+        // (like /regenerate) so EACH accept costs its own unit — a stable key
+        // here would let the ledger replay every repeated accept for free
+        // while a fresh, expensive generation still fires (CRITICAL fix). A
+        // caller-supplied Idempotency-Key header is still honored for a
+        // genuine client retry.
         if (billing) {
           const decision = await billing.checkAndConsume(
             { tenantId, userId },
             "plan_regeneration",
-            resolveOperationKey(request, `plan_regeneration:adapt:${id}`),
+            resolveOperationKey(request, `plan_regeneration:adapt:${id}:${randomUUID()}`),
           );
           if (!decision.allowed) {
             return reply.code(403).send({ error: decision.reason });

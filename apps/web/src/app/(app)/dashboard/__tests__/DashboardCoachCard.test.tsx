@@ -86,4 +86,31 @@ describe("DashboardCoachCard — adherence adaptation banner", () => {
     expect(screen.getByRole("button", { name: "Try 3 days" })).toBeDefined();
     expect(screen.queryByText(/Adjusting your plan/)).toBeNull();
   });
+
+  // Review fix (B1 4R reliability WARNING): a rapid double-click must NOT fire
+  // two POSTs (two generating plan rows, and — with the API-side fresh-nonce
+  // fix — two consumed quota units). The accept (and dismiss) action must
+  // disable while the request is in flight.
+  it("disables the accept button while the request is in flight, so a rapid double-click sends only ONE request", async () => {
+    let resolveAccept: ((result: { kind: "ok" }) => void) | undefined;
+    const onAccept = vi.fn(
+      () =>
+        new Promise<{ kind: "ok" }>((resolve) => {
+          resolveAccept = resolve;
+        }),
+    );
+    renderWithIntl(<DashboardCoachCard adaptation={lowAdaptation} onAccept={onAccept} />);
+
+    const acceptButton = screen.getByRole("button", { name: "Try 3 days" });
+    fireEvent.click(acceptButton);
+    // Rapid second click while the first request is still pending.
+    fireEvent.click(acceptButton);
+
+    expect(onAccept).toHaveBeenCalledTimes(1);
+    expect((acceptButton as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Not now" }) as HTMLButtonElement).disabled).toBe(true);
+
+    resolveAccept?.({ kind: "ok" });
+    expect(await screen.findByText(/Adjusting your plan/)).toBeDefined();
+  });
 });
