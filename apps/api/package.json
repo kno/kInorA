@@ -27,6 +27,7 @@
     "drizzle-orm": "^0.44.2",
     "fastify": "5.8.5",
     "langfuse-langchain": "^3.38.20",
+    "openai": "^6.49.0",
     "openid-client": "^6.8.4",
     "pg": "^8.16.2",
     "stripe": "22.3.2",

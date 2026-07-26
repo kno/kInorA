@@ -42,12 +42,12 @@ count, matching item-12's S2/S2b precedent. C2a (RN SSE transport) is called out
 
 ## Phase 1: Slice A1 — `SpeechTranscriber` Port + OpenAI-Audio Adapter + Mock [Requirements: Speech-to-Text Transcription Endpoint]
 
-- [ ] 1.1 RED: Add failing `apps/api/src/ai/__tests__/mock-speech-transcriber.test.ts` asserting `MockSpeechTranscriber.transcribe` returns a deterministic `{text, unclear}` result for a fixed input, and a fixed "silence" input marker returns `{text:"", unclear:true}` — no network.
-- [ ] 1.2 GREEN: Create `apps/api/src/ai/speech-transcriber-port.ts` (`SpeechTranscriber` interface, `TranscribeInput`/`TranscribeResult`, mirrors `PlanSpecExtractor`) and `apps/api/src/ai/mock-speech-transcriber.ts` implementing it deterministically.
-- [ ] 1.3 RED: Add failing `apps/api/src/ai/__tests__/openai-audio-adapter.test.ts` (transcribe half) asserting the adapter calls an injected OpenAI client's `audio.transcriptions.create` with `model: "whisper-1"`, forwards `contentType`/optional `language`, reads `OPENAI_API_KEY` at call time (not construction — matching `adapter-factory.ts:65`), maps an empty/whitespace transcript to `{text:"", unclear:true}`, and maps an injected client throw to a safe rejection (never an unhandled crash).
-- [ ] 1.4 GREEN: Create `apps/api/src/ai/openai-audio-adapter.ts` implementing `SpeechTranscriber` via the `openai` SDK, constructed with the client injectable for tests.
-- [ ] 1.5 GREEN: Add the `openai` npm package to `apps/api/package.json` only.
-- [ ] 1.6 TRIANGLE: Run `pnpm --filter api test -- src/ai/__tests__/mock-speech-transcriber.test.ts src/ai/__tests__/openai-audio-adapter.test.ts` green; `pnpm -w typecheck`; run `scripts/deps-guard.mjs` and confirm `openai` is confined to `apps/api`; confirm zero HTTP-route/web/mobile touch in this slice's diff.
+- [x] 1.1 RED: Add failing `apps/api/src/ai/__tests__/mock-speech-transcriber.test.ts` asserting `MockSpeechTranscriber.transcribe` returns a deterministic `{text, unclear}` result for a fixed input, and a fixed "silence" input marker returns `{text:"", unclear:true}` — no network.
+- [x] 1.2 GREEN: Create `apps/api/src/ai/speech-transcriber-port.ts` (`SpeechTranscriber` interface, `TranscribeInput`/`TranscribeResult`, mirrors `PlanSpecExtractor`) and `apps/api/src/ai/mock-speech-transcriber.ts` implementing it deterministically.
+- [x] 1.3 RED: Add failing `apps/api/src/ai/__tests__/openai-audio-adapter.test.ts` (transcribe half) asserting the adapter calls an injected OpenAI client's `audio.transcriptions.create` with `model: "whisper-1"`, forwards `contentType`/optional `language`, reads `OPENAI_API_KEY` at call time (not construction — matching `adapter-factory.ts:65`), maps an empty/whitespace transcript to `{text:"", unclear:true}`, and maps an injected client throw to a safe rejection (never an unhandled crash).
+- [x] 1.4 GREEN: Create `apps/api/src/ai/openai-audio-adapter.ts` implementing `SpeechTranscriber` via the `openai` SDK, constructed with the client injectable for tests.
+- [x] 1.5 GREEN: Add the `openai` npm package to `apps/api/package.json` only.
+- [x] 1.6 TRIANGLE: Run `pnpm --filter api test -- src/ai/__tests__/mock-speech-transcriber.test.ts src/ai/__tests__/openai-audio-adapter.test.ts` green; `pnpm -w typecheck`; run `scripts/deps-guard.mjs` and confirm `openai` is confined to `apps/api`; confirm zero HTTP-route/web/mobile touch in this slice's diff.
 
 ## Phase 2: Slice A2 — `POST /plan-specs/transcribe` [Requirements: Speech-to-Text Transcription Endpoint, Audio Upload Validation and Caps, Voice Endpoint Pro Gate (Fail-Closed), Voice Billing Boundary]
 
