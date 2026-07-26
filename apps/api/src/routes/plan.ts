@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
+import fastifyMultipart from "@fastify/multipart";
 import { requireAuth } from "../auth/plugin.js";
 import {
   assertPlanSpecInput,
@@ -13,6 +14,7 @@ import type { PlanGenerationService } from "../ai/generation-service.js";
 import type { ConsumeDecision } from "../billing/types.js";
 import type { ChatEntitlementPort } from "../billing/chat-entitlement.js";
 import type { PlanSpecExtractor } from "../ai/extraction-port.js";
+import type { SpeechTranscriber } from "../ai/speech-transcriber-port.js";
 
 /**
  * A workout plan record as returned to the route (structural shape, declared
@@ -135,10 +137,43 @@ export interface PlanRoutesOptions {
    * small in tests for deterministic timeout coverage.
    */
   chatStreamTimeoutMs?: number;
+  /**
+   * Speech-to-text port for `POST /plan-specs/transcribe`
+   * (13-v1.1-interactive-voice-chat, A2). REQUIRED (alongside `chatEntitlement`)
+   * to register the transcribe route — when absent the route is simply not
+   * registered and every wizard/chat route is unaffected. The route depends ONLY
+   * on this port; the `openai` SDK lives entirely in the injected adapter
+   * (`ai/openai-audio-adapter.ts`), so the route never imports it. Tests inject a
+   * deterministic `MockSpeechTranscriber` (or any fake).
+   */
+  transcriber?: SpeechTranscriber;
 }
 
 /** Default per-turn chat stream deadline (ms). */
 const DEFAULT_CHAT_STREAM_TIMEOUT_MS = 60_000;
+
+/**
+ * Audio upload caps for `POST /plan-specs/transcribe` (13, A2 — design.md
+ * "Audio caps"). Enforced SERVER-SIDE before any OpenAI call: byte size is the
+ * hard gate (duration would require decoding), and the content type must be one
+ * of the recorder-produced container formats. A client-side cap is advisory only.
+ */
+const MAX_AUDIO_BYTES = 15 * 1024 * 1024; // 15 MB
+
+/**
+ * Allow-listed audio container content types (design.md): Chrome/Firefox opus
+ * (`audio/webm`), Safari / iOS PWA (`audio/mp4`, `audio/x-m4a`), Expo RN
+ * (`audio/m4a`), plus `audio/mpeg` and `audio/wav`. Anything else → 415 BEFORE
+ * any transcription.
+ */
+const ALLOWED_AUDIO_TYPES = new Set<string>([
+  "audio/webm",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/m4a",
+  "audio/mpeg",
+  "audio/wav",
+]);
 
 /**
  * Structurally compare two drafts over the allow-listed fields to decide whether
@@ -239,6 +274,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   const billing = options.billing;
   const chatEntitlement = options.chatEntitlement;
   const chatExtractor = options.chatExtractor;
+  const transcriber = options.transcriber;
 
   /**
    * Read a client-supplied idempotency key (Idempotency-Key header), falling
@@ -757,5 +793,140 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         }
       }
     );
+  }
+
+  // POST /plan-specs/transcribe  (13-v1.1-interactive-voice-chat, A2)
+  //
+  // Speech-to-text for the voice companion. The client records a short
+  // push-to-talk clip and uploads it multipart; this route returns
+  // `{ text, unclear }`, which the client then feeds into the EXISTING
+  // `/plan-specs/chat` turn unchanged. It consumes NO billing quota and NEVER
+  // persists the audio — the bytes exist in-flight only and are never written to
+  // any repository, disk, or log.
+  //
+  // Order of operations (fail-closed, mirrors the chat route):
+  //   1. requireAuth               — 401 if no session (authContext is the ONLY
+  //                                  identity; a body-injected tenant/tier is
+  //                                  ignored)
+  //   2. ChatEntitlementPort.check — 403 { error: reason } if not Pro, BEFORE any
+  //                                  multipart parsing or transcription work. A
+  //                                  THROW in the check is an infra failure, NOT
+  //                                  a denial decision — it propagates to a 5xx
+  //                                  (never mislabeled as premium_required), and
+  //                                  the transcriber is still never reached.
+  //   3. content-type ∈ allow-list — 415 unsupported_audio_format (before OpenAI)
+  //   4. size ≤ 15 MB              — 413 (before OpenAI); empty/missing → 400
+  //   5. SpeechTranscriber.transcribe(bytes, signal) — whisper-1 in the adapter;
+  //      empty/whitespace transcript → 200 { text:"", unclear:true } (silence is
+  //      a normal event, never a 5xx); a transport failure → 502
+  //      transcription_failed (generic — no provider detail/stack leaked).
+  //
+  // Multipart is registered in an ENCAPSULATED child scope so its content-type
+  // parser + 15 MB bodyLimit apply ONLY here — the JSON chat/wizard routes above
+  // keep the default parser and 1 MB limit. Registered only when BOTH the gate
+  // and the transcriber are wired (they are, in app.ts). Absent them the wizard
+  // and chat routes are entirely unaffected.
+  if (chatEntitlement && transcriber) {
+    const gate = chatEntitlement;
+    const speechTranscriber = transcriber;
+    await fastify.register(async (scope) => {
+      await scope.register(fastifyMultipart, {
+        // Hard byte cap: a file exceeding this is truncated and toBuffer() throws
+        // FST_REQ_FILE_TOO_LARGE, mapped to 413. A single audio part only.
+        limits: { fileSize: MAX_AUDIO_BYTES, files: 1 },
+      });
+
+      scope.post(
+        "/plan-specs/transcribe",
+        { preHandler: requireAuth() },
+        async (request: FastifyRequest, reply: FastifyReply) => {
+          const { tenantId, userId } = request.authContext!;
+
+          // Pro gate — fail-closed BEFORE any multipart parsing / transcription.
+          // Identity comes ONLY from authContext; a spoofed body cannot influence
+          // it.
+          //
+          // Distinguish a genuine DENY DECISION from a CHECK FAILURE (review
+          // fix): a resolved `{allowed:false}` is a real entitlement denial → 403
+          // with the specific reason, exactly like the chat route. A THROW from
+          // the reader is an infra/outage failure, NOT a payment decision —
+          // reporting it as `premium_required` would mislabel a transient
+          // entitlement-reader/DB outage as "you must upgrade" to a paying Pro
+          // user and would mask the outage from 5xx alerting. Still fail-closed
+          // (the transcriber is NEVER reached), but surfaced as a 5xx like the
+          // chat route's uncaught-throw convention — let it propagate to
+          // Fastify's error handler (500) instead of a synthetic 403.
+          const decision = await gate.check({ tenantId, userId });
+          if (!decision.allowed) {
+            return reply.code(403).send({ error: decision.reason ?? "premium_required" });
+          }
+
+          // Read the single audio part. `request.file()` surfaces the part header
+          // (mimetype) without consuming the whole stream, so the allow-list is
+          // checked BEFORE the bytes are read into memory.
+          let filePart: Awaited<ReturnType<typeof request.file>>;
+          try {
+            filePart = await request.file();
+          } catch {
+            return reply.code(400).send({ error: "invalid_audio_upload" });
+          }
+          if (!filePart) {
+            return reply.code(400).send({ error: "missing_audio" });
+          }
+
+          const contentType = filePart.mimetype;
+          if (!ALLOWED_AUDIO_TYPES.has(contentType)) {
+            // Review fix: `request.file()` only reads the part HEADER — the file
+            // stream itself is still unconsumed. Rejecting here without draining
+            // it leaves a large disallowed-type upload's bytes sitting on the
+            // socket; the client then sees an abrupt ECONNRESET/EPIPE instead of
+            // the clean 415. Resume (drain) the stream before replying so the
+            // connection closes cleanly.
+            filePart.file.resume();
+            return reply.code(415).send({ error: "unsupported_audio_format" });
+          }
+
+          // Read the bytes with the 15 MB hard cap. An over-cap upload is
+          // truncated by @fastify/multipart and toBuffer() throws
+          // FST_REQ_FILE_TOO_LARGE → 413, BEFORE any OpenAI call. Never log the
+          // raw audio.
+          let audio: Buffer;
+          try {
+            audio = await filePart.toBuffer();
+          } catch {
+            return reply.code(413).send({ error: "audio_too_large" });
+          }
+          if (filePart.file.truncated || audio.byteLength > MAX_AUDIO_BYTES) {
+            return reply.code(413).send({ error: "audio_too_large" });
+          }
+          if (audio.byteLength === 0) {
+            return reply.code(400).send({ error: "missing_audio" });
+          }
+
+          // Abort the in-flight transcription if the client disconnects. The
+          // audio is processed in-flight ONLY — never persisted anywhere.
+          const controller = new AbortController();
+          const onClose = () => controller.abort();
+          request.raw.on("close", onClose);
+
+          try {
+            const result = await speechTranscriber.transcribe(
+              { audio: new Uint8Array(audio), contentType },
+              controller.signal,
+            );
+            // Silence/noise → a graceful 200 { text:"", unclear:true }, NOT a 5xx.
+            return reply.code(200).send({ text: result.text, unclear: result.unclear });
+          } catch (error) {
+            // A transport/provider failure maps to a generic 502 — the provider's
+            // message/stack is logged server-side (tenant/user correlation only,
+            // never the audio or transcript) and NEVER returned to the client.
+            request.log.error({ err: error, tenantId, userId }, "transcription failed");
+            return reply.code(502).send({ error: "transcription_failed" });
+          } finally {
+            request.raw.removeListener("close", onClose);
+          }
+        },
+      );
+    });
   }
 };
