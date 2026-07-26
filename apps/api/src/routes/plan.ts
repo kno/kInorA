@@ -810,8 +810,10 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   //                                  ignored)
   //   2. ChatEntitlementPort.check — 403 { error: reason } if not Pro, BEFORE any
   //                                  multipart parsing or transcription work. A
-  //                                  THROW in the check DENIES (fail-closed),
-  //                                  never allows.
+  //                                  THROW in the check is an infra failure, NOT
+  //                                  a denial decision — it propagates to a 5xx
+  //                                  (never mislabeled as premium_required), and
+  //                                  the transcriber is still never reached.
   //   3. content-type ∈ allow-list — 415 unsupported_audio_format (before OpenAI)
   //   4. size ≤ 15 MB              — 413 (before OpenAI); empty/missing → 400
   //   5. SpeechTranscriber.transcribe(bytes, signal) — whisper-1 in the adapter;
@@ -842,15 +844,19 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
 
           // Pro gate — fail-closed BEFORE any multipart parsing / transcription.
           // Identity comes ONLY from authContext; a spoofed body cannot influence
-          // it. A THROW from the reader is treated as a denial (never an allow),
-          // so an entitlement outage cannot open the un-metered OpenAI path.
-          let decision: Awaited<ReturnType<ChatEntitlementPort["check"]>>;
-          try {
-            decision = await gate.check({ tenantId, userId });
-          } catch (error) {
-            request.log.error({ err: error, tenantId, userId }, "transcribe gate check failed");
-            return reply.code(403).send({ error: "premium_required" });
-          }
+          // it.
+          //
+          // Distinguish a genuine DENY DECISION from a CHECK FAILURE (review
+          // fix): a resolved `{allowed:false}` is a real entitlement denial → 403
+          // with the specific reason, exactly like the chat route. A THROW from
+          // the reader is an infra/outage failure, NOT a payment decision —
+          // reporting it as `premium_required` would mislabel a transient
+          // entitlement-reader/DB outage as "you must upgrade" to a paying Pro
+          // user and would mask the outage from 5xx alerting. Still fail-closed
+          // (the transcriber is NEVER reached), but surfaced as a 5xx like the
+          // chat route's uncaught-throw convention — let it propagate to
+          // Fastify's error handler (500) instead of a synthetic 403.
+          const decision = await gate.check({ tenantId, userId });
           if (!decision.allowed) {
             return reply.code(403).send({ error: decision.reason ?? "premium_required" });
           }
@@ -870,6 +876,13 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
 
           const contentType = filePart.mimetype;
           if (!ALLOWED_AUDIO_TYPES.has(contentType)) {
+            // Review fix: `request.file()` only reads the part HEADER — the file
+            // stream itself is still unconsumed. Rejecting here without draining
+            // it leaves a large disallowed-type upload's bytes sitting on the
+            // socket; the client then sees an abrupt ECONNRESET/EPIPE instead of
+            // the clean 415. Resume (drain) the stream before replying so the
+            // connection closes cleanly.
+            filePart.file.resume();
             return reply.code(415).send({ error: "unsupported_audio_format" });
           }
 

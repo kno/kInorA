@@ -4,6 +4,34 @@ import type { OpenAIAudioClient } from "../openai-audio-adapter.js";
 import type { TranscribeInput } from "../speech-transcriber-port.js";
 
 /**
+ * Review fix (resilience): the PRODUCTION client factory must construct the
+ * real `OpenAI` SDK client with a bounded `timeout` + limited `maxRetries` —
+ * not the SDK defaults (10 min timeout / 2 retries), which would let a hung
+ * provider hold the handler + the in-memory audio buffer for up to 10 minutes
+ * and would triple upstream request volume on a degraded provider. Mock the
+ * `openai` module's default export so we can assert on the constructor options
+ * WITHOUT any network call. Vitest hoists `vi.mock` calls above every import in
+ * this file (including the static import of the adapter above), so the adapter
+ * already sees this mocked `OpenAI` constructor.
+ */
+const openAIConstructorCalls: Array<Record<string, unknown>> = [];
+vi.mock("openai", () => {
+  class MockOpenAI {
+    constructor(options: Record<string, unknown>) {
+      openAIConstructorCalls.push(options);
+    }
+  }
+  return {
+    default: MockOpenAI,
+    toFile: vi.fn(async (input: unknown, filename: string, opts: unknown) => ({
+      input,
+      filename,
+      opts,
+    })),
+  };
+});
+
+/**
  * The adapter is constructed with an injectable OpenAI-audio client so tests
  * never touch the network. The fake records the call args and returns a canned
  * transcription.
@@ -119,5 +147,27 @@ describe("OpenAIAudioAdapter — transcribe", () => {
     const adapter = new OpenAIAudioAdapter(() => client);
 
     await expect(adapter.transcribe(input)).rejects.toThrow("network down");
+  });
+
+  // --- Review fix: bounded timeout + limited retries on the PRODUCTION client ---
+
+  it("constructs the default (production) OpenAI client with a bounded timeout and limited retries", async () => {
+    openAIConstructorCalls.length = 0;
+    // No factory injected — exercises the real `defaultClientFactory`, which
+    // must construct the mocked `OpenAI` with resilience-bounded options
+    // instead of the SDK's 10-minute-timeout / 2-retries defaults.
+    const adapter = new OpenAIAudioAdapter();
+
+    // The mocked client has no `audio.transcriptions.create` — the call rejects
+    // after construction; only the constructor args matter for this assertion.
+    await adapter.transcribe(input).catch(() => {});
+
+    expect(openAIConstructorCalls).toHaveLength(1);
+    const options = openAIConstructorCalls[0]!;
+    expect(options["timeout"]).toBeTypeOf("number");
+    expect(options["timeout"] as number).toBeGreaterThan(0);
+    expect(options["timeout"] as number).toBeLessThanOrEqual(60_000);
+    expect(options["maxRetries"]).toBeTypeOf("number");
+    expect(options["maxRetries"] as number).toBeLessThanOrEqual(1);
   });
 });
