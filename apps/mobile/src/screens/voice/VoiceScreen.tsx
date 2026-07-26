@@ -37,7 +37,7 @@
  */
 
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { View, Text, TextInput, Pressable, ScrollView } from "react-native";
+import { View, Text, TextInput, Pressable, ScrollView, Animated } from "react-native";
 import { useIntl } from "react-intl";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
@@ -57,6 +57,7 @@ import {
   type ChatStreamFn,
 } from "../create-plan/chat-store";
 import { styles } from "./VoiceScreen.styles";
+import { createOrbAnimation, type OrbAnimation, BAR_HEIGHTS } from "./orb-animation";
 
 /** Injectable direct-transcribe call (defaults to the real client). */
 type TranscribeFn = (
@@ -93,10 +94,15 @@ export interface VoiceScreenProps {
   synthesize?: SynthesizeFn;
   /** D2: native audio player — defaults to the real `expo-audio` player; injected in tests. */
   player?: AudioPlayer;
+  /** #230: orb/waveform animation — defaults to the real `Animated` driver; injected in tests. */
+  orbAnimation?: OrbAnimation;
 }
 
 type LocalStatus = "idle" | "listening" | "processing";
-type NoticeKey = "denied" | "offline" | "unclear" | "error" | null;
+// `premium` is the Free-tier Pro-gate notice (#231): a transcribe 403 means the
+// tenant is not entitled to voice, so retrying won't help — surface an upgrade
+// hint instead of the generic "try again" error.
+type NoticeKey = "denied" | "offline" | "unclear" | "error" | "premium" | null;
 
 /** Default NetInfo-backed connectivity subscription (lazy import; device only). */
 function defaultSubscribeConnectivity(onChange: (online: boolean) => void): () => void {
@@ -135,6 +141,7 @@ export default function VoiceScreen({
   initialOnline = true,
   synthesize,
   player,
+  orbAnimation,
 }: VoiceScreenProps) {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
@@ -152,6 +159,12 @@ export default function VoiceScreen({
   const playerRef = useRef<AudioPlayer | null>(null);
   if (playerRef.current === null) playerRef.current = player ?? createPlayer();
   const speechAbortRef = useRef<AbortController | null>(null);
+
+  // #230: the orb/waveform animation driver. Presentational only — created once
+  // per screen instance (the real `Animated` driver by default; injectable).
+  const orbAnimationRef = useRef<OrbAnimation | null>(null);
+  if (orbAnimationRef.current === null) orbAnimationRef.current = orbAnimation ?? createOrbAnimation();
+  const orb = orbAnimationRef.current;
 
   const routeToLogin = () => {
     void clearSessionRef.current().finally(() => {
@@ -188,6 +201,20 @@ export default function VoiceScreen({
   // when the recording started — connectivity can drop mid-turn.
   const onlineRef = useRef(online);
   onlineRef.current = online;
+
+  // #230: the orb pulses whenever the assistant is engaged — capturing,
+  // transcribing, streaming a reply, or speaking it — and rests only at idle.
+  const animating =
+    status === "listening" || status === "processing" || state.streaming || speaking;
+
+  // Drive the presentational animation off the status. `start`/`stop` are
+  // idempotent, and the cleanup stops every loop on both a status change and
+  // unmount so no animation loop leaks past a torn-down tree.
+  useEffect(() => {
+    if (animating) orb.start();
+    else orb.stop();
+    return () => orb.stop();
+  }, [animating, orb]);
 
   // Stop any in-flight/playing TTS: abort the pending speech fetch and stop the
   // player. Safe when nothing is playing. Used by a new turn, end-session, and
@@ -340,7 +367,9 @@ export default function VoiceScreen({
         routeToLogin();
         return;
       }
-      setNotice("error");
+      // #231: a 403 is the Free-tier Pro gate — voice isn't entitled, so show an
+      // upgrade hint rather than the retry-oriented generic error.
+      setNotice(outcome.premiumRequired ? "premium" : "error");
       return;
     }
     if (outcome.unclear || outcome.text.trim() === "") {
@@ -416,18 +445,46 @@ export default function VoiceScreen({
 
       {/* Orb + transcript */}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.orbArea}>
-        <View style={[styles.orbCore, statusActive && styles.orbCoreActive]}>
-          <View style={styles.waveform}>
-            {[14, 24, 36, 48, 36, 52, 28, 40, 20].map((h, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.waveBar,
-                  statusActive && styles.waveBarActive,
-                  { height: statusActive ? h : 6 },
-                ]}
-              />
-            ))}
+        <View style={styles.orbContainer}>
+          {/* #230: concentric rings pulse outward while engaged (OD .ring-1/2/3). */}
+          {orb.rings.map((value, i) => (
+            <Animated.View
+              key={i}
+              testID="orb-ring"
+              pointerEvents="none"
+              style={[
+                styles.orbRing,
+                {
+                  opacity: value.interpolate({
+                    inputRange: [0, 0.7, 1],
+                    outputRange: [0.5, 0.08, 0],
+                  }),
+                  transform: [
+                    { scale: value.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.55] }) },
+                  ],
+                },
+              ]}
+            />
+          ))}
+          <View style={[styles.orbCore, statusActive && styles.orbCoreActive]}>
+            <View style={styles.waveform}>
+              {orb.bars.map((value, i) => (
+                <Animated.View
+                  key={i}
+                  testID="wave-bar"
+                  style={[
+                    styles.waveBar,
+                    statusActive && styles.waveBarActive,
+                    { height: BAR_HEIGHTS[i] },
+                    {
+                      transform: [
+                        { scaleY: value.interpolate({ inputRange: [0, 1], outputRange: [0.12, 1] }) },
+                      ],
+                    },
+                  ]}
+                />
+              ))}
+            </View>
           </View>
         </View>
 

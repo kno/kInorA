@@ -29,11 +29,14 @@ export interface TranscribeAudio {
  *               `unclear` is false and `text` is non-empty.
  *   - `error` → `status` carries the HTTP status (`0` for a transport failure /
  *               offline); `sessionExpired` is set ONLY on a `401` or a missing
- *               token, the re-auth/logout signal the screen reacts to.
+ *               token, the re-auth/logout signal the screen reacts to;
+ *               `premiumRequired` is set ONLY on a `403` — voice is Pro-gated,
+ *               so a Free tenant is refused and the screen shows an upgrade hint
+ *               (retrying can't help), never the generic retry error.
  */
 export type TranscribeOutcome =
   | { kind: "ok"; text: string; unclear: boolean }
-  | { kind: "error"; status: number; sessionExpired?: true };
+  | { kind: "error"; status: number; sessionExpired?: true; premiumRequired?: true };
 
 /**
  * Narrow fetch shape (URL string + init), decoupled from the ambient
@@ -100,6 +103,8 @@ export async function transcribeAudio(
   }
 
   if (res.status === 401) return { kind: "error", status: 401, sessionExpired: true };
+  // Voice is Pro-gated server-side; a 403 means the tenant isn't entitled.
+  if (res.status === 403) return { kind: "error", status: 403, premiumRequired: true };
   if (!res.ok) return { kind: "error", status: res.status };
 
   const data = (await res.json().catch(() => ({}))) as {
