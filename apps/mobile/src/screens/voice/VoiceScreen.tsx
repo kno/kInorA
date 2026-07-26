@@ -222,9 +222,18 @@ export default function VoiceScreen({
     if (outcome.kind !== "ok") return;
 
     setSpeaking(true);
-    await playerRef.current!.play(outcome.audio, () => {
+    try {
+      await playerRef.current!.play(outcome.audio, () => {
+        if (!disposedRef.current) setSpeaking(false);
+      });
+    } catch {
+      // Playback failed to start (audio-focus denied, a rejected data: URI).
+      // Fail SILENTLY like every other TTS path and, crucially, clear the
+      // speaking state + release the player so the push-to-talk mic is never
+      // left permanently disabled (`onEnded` never fires on a start failure).
+      void playerRef.current?.stop();
       if (!disposedRef.current) setSpeaking(false);
-    });
+    }
   };
 
   // Request the mic permission once on mount; denial drives the text fallback.
