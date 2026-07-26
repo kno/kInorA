@@ -5,7 +5,17 @@ import { useTranslations } from "next-intl";
 import { PlanSpecDraftSchema, type PlanGoal, type TrainingLocation } from "@kinora/contracts";
 import { parseSSEStream } from "./chat-stream";
 import type { ChatDraftSpec } from "./chat-types";
+import { TranscriptionError, selectMimeType, transcribeAudio } from "./voice-client";
 import styles from "./assistant-pane.module.css";
+
+/** Voice capture sub-mode states (13 Slice B1). */
+type VoiceState = "idle" | "listening" | "processing";
+/**
+ * A transient voice notice key resolved against the `voice` i18n namespace:
+ * `denied` (mic blocked), `unsupported` (no MediaRecorder), `offline`,
+ * `unclear` (silence/noise transcript), or `error` (transport failure).
+ */
+type VoiceNotice = "denied" | "unsupported" | "offline" | "unclear" | "error" | null;
 
 /** Same-origin proxy route that injects the Bearer token and streams SSE back. */
 const CHAT_ENDPOINT = "/create-plan/chat";
@@ -101,10 +111,87 @@ export function AssistantPane({
   const abortRef = useRef<AbortController | null>(null);
   const lastUserMessageRef = useRef<string>("");
 
+  // --- Voice sub-mode (B1: capture + transcribe → existing chat turn) ---
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const [voiceNotice, setVoiceNotice] = useState<VoiceNotice>(null);
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  const [online, setOnline] = useState(true);
+
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const voiceAbortRef = useRef<AbortController | null>(null);
+  // Whether the NEXT `onstop` should transcribe. A user-initiated stop
+  // transcribes; an auto-stop (connectivity dropped mid-recording) only
+  // releases the mic and returns to idle, never sending audio over a dead link.
+  const shouldTranscribeRef = useRef(true);
+  // Latest "cancel the current recording" closure, kept fresh so the stable
+  // offline listener can release a hot mic without re-subscribing.
+  const cancelRecordingRef = useRef<() => void>(() => {});
+
   // Abort any in-flight stream on unmount/navigation so no token write lands in
   // an unmounted tree and the upstream API sees the disconnect.
   useEffect(() => {
     return () => abortRef.current?.abort();
+  }, []);
+
+  // Feature-detect voice at mount (client-only): the browser needs both
+  // getUserMedia and MediaRecorder. Detected in an effect so SSR never touches
+  // `navigator`/`MediaRecorder`.
+  useEffect(() => {
+    setVoiceSupported(
+      typeof navigator !== "undefined" &&
+        !!navigator.mediaDevices &&
+        typeof navigator.mediaDevices.getUserMedia === "function" &&
+        typeof MediaRecorder !== "undefined",
+    );
+  }, []);
+
+  // Track connectivity so voice degrades to disabled offline and recovers
+  // gracefully (no reload) when the connection returns — text input is never
+  // affected either way. Losing the connection MID-RECORDING auto-stops so the
+  // mic is released immediately (the button that could stop it is otherwise
+  // disabled while offline — a hot-mic lockout otherwise).
+  useEffect(() => {
+    if (typeof navigator !== "undefined") setOnline(navigator.onLine);
+    const goOnline = () => {
+      setOnline(true);
+      setVoiceNotice((prev) => (prev === "offline" ? null : prev));
+    };
+    const goOffline = () => {
+      setOnline(false);
+      cancelRecordingRef.current();
+    };
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+
+  // Keep the cancel-recording closure current for the stable offline listener.
+  // Auto-stop halts capture WITHOUT transcribing (network is gone) and releases
+  // the mic; if no recorder is active it still clears any held stream.
+  useEffect(() => {
+    cancelRecordingRef.current = () => {
+      const recorder = recorderRef.current;
+      if (recorder && recorder.state !== "inactive") {
+        shouldTranscribeRef.current = false;
+        recorder.stop();
+      } else {
+        releaseMic();
+      }
+      setVoiceState("idle");
+    };
+  });
+
+  // Release the mic + abort any in-flight transcription on unmount.
+  useEffect(() => {
+    return () => {
+      voiceAbortRef.current?.abort();
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
   }, []);
 
   /**
@@ -176,6 +263,142 @@ export function AssistantPane({
     },
     [streaming, onSpecChange],
   );
+
+  const releaseMic = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    recorderRef.current = null;
+  }, []);
+
+  /**
+   * A finished recording: transcribe the captured blob, then feed a clear
+   * transcript into the EXISTING `runTurn` path (byte-identical to a typed
+   * message). Silence/noise (`unclear` or empty) re-prompts WITHOUT starting a
+   * chat turn; a transport failure shows a gentle "try again". Raw audio never
+   * leaves this function beyond the in-flight upload.
+   */
+  const transcribeAndRun = useCallback(
+    async (blob: Blob) => {
+      if (blob.size === 0) {
+        setVoiceState("idle");
+        setVoiceNotice("unclear");
+        return;
+      }
+      setVoiceState("processing");
+      const controller = new AbortController();
+      voiceAbortRef.current = controller;
+      try {
+        const { text, unclear } = await transcribeAudio(blob, { signal: controller.signal });
+        setVoiceState("idle");
+        if (unclear || text.trim() === "") {
+          setVoiceNotice("unclear");
+          return;
+        }
+        void runTurn(text, true);
+      } catch (err) {
+        setVoiceState("idle");
+        // A user-initiated abort (unmount) is expected — stay silent.
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (err instanceof TranscriptionError || err instanceof Error) {
+          setVoiceNotice("error");
+        }
+      }
+    },
+    [runTurn],
+  );
+
+  const startRecording = useCallback(async () => {
+    // Clear any prior notice (incl. a previous denial) so a retry can recover
+    // in-session once the user grants permission.
+    setVoiceNotice(null);
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      // Permission denied or unavailable → show the message, keep text usable.
+      // The mic stays retry-able (a later grant recovers without a reload).
+      setVoiceNotice("denied");
+      return;
+    }
+    // The stream is acquired: hold it BEFORE building the recorder so any
+    // failure below still releases the mic (no leaked hot mic / second stream).
+    streamRef.current = stream;
+    chunksRef.current = [];
+    try {
+      const mimeType = selectMimeType();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const type = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type });
+        releaseMic();
+        // Auto-stop (offline) only releases the mic; a user stop transcribes.
+        if (shouldTranscribeRef.current) {
+          void transcribeAndRun(blob);
+        } else {
+          setVoiceState("idle");
+        }
+      };
+      recorderRef.current = recorder;
+      shouldTranscribeRef.current = true;
+      recorder.start();
+      setVoiceState("listening");
+    } catch {
+      // Constructor/start() threw (e.g. an unconstructable mimeType) — release
+      // the acquired stream so the mic never stays hot, and recover to idle.
+      releaseMic();
+      setVoiceState("idle");
+      setVoiceNotice("error");
+    }
+  }, [releaseMic, transcribeAndRun]);
+
+  const stopRecording = useCallback(() => {
+    // A user stop transcribes; the recorder's `onstop` handler drives it. Here
+    // we only halt capture and move the UI into the processing state.
+    if (recorderRef.current && recorderRef.current.state !== "inactive") {
+      shouldTranscribeRef.current = true;
+      recorderRef.current.stop();
+    }
+    setVoiceState("processing");
+  }, []);
+
+  const handleMicClick = () => {
+    if (voiceState === "listening") {
+      stopRecording();
+    } else if (voiceState === "idle") {
+      void startRecording();
+    }
+    // While "processing" the mic is disabled; ignore clicks.
+  };
+
+  // Conditions that block STARTING a recording. They deliberately do NOT block
+  // STOPPING one already in flight — otherwise dropping offline mid-recording
+  // would strand a hot mic with no way to release it from the UI.
+  const voiceStartDisabled = streaming || generating || !online || !voiceSupported;
+  const micButtonDisabled =
+    voiceState === "listening"
+      ? false
+      : voiceState === "processing"
+        ? true
+        : voiceStartDisabled;
+
+  const voiceStatusLabel =
+    voiceState === "listening"
+      ? t("voice.state.listening")
+      : voiceState === "processing"
+        ? t("voice.state.processing")
+        : t("voice.state.idle");
+
+  // Prefer the connectivity/support notice when it dominates; otherwise the
+  // last transient notice (denied/unclear/error).
+  const voiceNoticeKey: VoiceNotice = !online
+    ? "offline"
+    : !voiceSupported
+      ? "unsupported"
+      : voiceNotice;
+  const voiceNoticeMessage = voiceNoticeKey ? t(`voice.${voiceNoticeKey}`) : null;
 
   const handleSend = () => {
     const message = input.trim();
@@ -253,7 +476,37 @@ export function AssistantPane({
           </div>
         )}
 
+        {/* Voice affordance (B1): mic status + a gentle notice for denied /
+            unclear / offline / unsupported / error. Uses role="status" (not
+            "alert") so it never collides with the chat error's alert. */}
+        <div
+          className={`${styles.voiceBar} ${styles[`voice_${voiceState}`] ?? ""}`}
+          data-voice-state={voiceState}
+        >
+          <span className={styles.voiceStatus} aria-live="polite">
+            {voiceStatusLabel}
+          </span>
+          {voiceNoticeMessage && (
+            <span className={styles.voiceNotice} role="status">
+              {voiceNoticeMessage}
+            </span>
+          )}
+        </div>
+
         <div className={styles.inputRow}>
+          <button
+            type="button"
+            className={`kin-btn ${styles.micBtn} ${
+              voiceState === "listening" ? styles.micBtnActive : ""
+            }`}
+            aria-label={voiceState === "listening" ? t("voice.stopAria") : t("voice.startAria")}
+            aria-pressed={voiceState === "listening"}
+            title={t("voice.micLabel")}
+            disabled={micButtonDisabled}
+            onClick={handleMicClick}
+          >
+            <span aria-hidden="true">{voiceState === "listening" ? "■" : "🎤"}</span>
+          </button>
           <textarea
             className="kin-input"
             aria-label={t("chat.inputAria")}

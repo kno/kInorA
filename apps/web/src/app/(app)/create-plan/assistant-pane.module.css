@@ -144,3 +144,92 @@
   justify-content: center;
   margin-top: 1rem;
 }
+
+/* --- Voice affordance (13 Slice B1), adapted from the OD "Asistente de voz"
+   orb/listening states (docs/open-design/kinora/screens/mobile-voice.html). --- */
+.voiceBar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 1.25rem;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.voiceStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  opacity: 0.7;
+}
+
+.voiceStatus::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--kin-muted, rgba(255, 255, 255, 0.4));
+  transition: background 0.2s;
+}
+
+.voice_listening .voiceStatus {
+  opacity: 1;
+  color: var(--kin-accent, #4f7cff);
+}
+
+.voice_listening .voiceStatus::before {
+  background: var(--kin-accent, #4f7cff);
+  animation: voice-blink 1.2s ease-in-out infinite;
+}
+
+.voice_processing .voiceStatus {
+  opacity: 0.9;
+}
+
+@keyframes voice-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.voiceNotice {
+  opacity: 0.85;
+  color: var(--kin-muted, rgba(255, 255, 255, 0.7));
+}
+
+.micBtn {
+  flex-shrink: 0;
+  width: 42px;
+  min-height: 42px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.micBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.micBtnActive {
+  background: var(--kin-accent, #4f7cff);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(79, 124, 255, 0.18);
+  animation: mic-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(79, 124, 255, 0.18);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(79, 124, 255, 0.08);
+  }
+}

@@ -1087,6 +1087,21 @@
       "toggleAria": "Modo de creación"
     }
   },
+  "voice": {
+    "micLabel": "Tocá para hablar",
+    "startAria": "Iniciar entrada de voz",
+    "stopAria": "Detener grabación",
+    "state": {
+      "idle": "Listo",
+      "listening": "Escuchando…",
+      "processing": "Procesando…"
+    },
+    "denied": "Necesitamos acceso al micrófono para la voz. Podés seguir escribiendo.",
+    "unsupported": "La entrada de voz no está disponible en este navegador. Podés seguir escribiendo.",
+    "offline": "La voz necesita conexión. Podés seguir escribiendo.",
+    "unclear": "No te entendí. Intentá de nuevo.",
+    "error": "Falló la entrada de voz. Intentá de nuevo."
+  },
   "sidebar": {
     "logout": "Cerrar sesión",
     "logoutLabel": "Cerrar sesión",
