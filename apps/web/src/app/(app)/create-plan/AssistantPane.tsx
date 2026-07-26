@@ -108,6 +108,11 @@ export function AssistantPane({
     { role: "assistant", text: t("chat.greeting") },
   ]);
   const [input, setInput] = useState("");
+  // Inline add-item drafts for the panel's equipment / limitations editors
+  // (the array fields the chat can populate but the panel could previously only
+  // display as counts). Kept local; a committed add flows through `editField`.
+  const [equipmentDraft, setEquipmentDraft] = useState("");
+  const [limitationDraft, setLimitationDraft] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [errorReason, setErrorReason] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState(false);
@@ -529,6 +534,41 @@ export function AssistantPane({
     void persistSpec(next);
   };
 
+  // --- Panel array editors (equipment / limitations) ---
+  // Inline per-item add/remove reusing the wizard's chip pattern. Both share
+  // the SAME `editField` path a scalar edit uses, so a panel array change
+  // updates the shared draft and persists to the server draft identically. An
+  // empty draft is ignored; equipment is de-duplicated case-insensitively.
+
+  /** Add the typed equipment value (trimmed) unless blank or a case-insensitive dup. */
+  const addEquipment = () => {
+    const text = equipmentDraft.trim();
+    setEquipmentDraft("");
+    if (text === "") return;
+    const current = spec.equipment ?? [];
+    if (current.some((v) => v.toLowerCase() === text.toLowerCase())) return;
+    editField({ equipment: [...current, text] });
+  };
+
+  const removeEquipment = (item: string) => {
+    const current = spec.equipment ?? [];
+    editField({ equipment: current.filter((v) => v !== item) });
+  };
+
+  /** Add the typed limitation (trimmed, `isWarning: true`) unless blank. */
+  const addLimitation = () => {
+    const text = limitationDraft.trim();
+    setLimitationDraft("");
+    if (text === "") return;
+    const current = spec.limitations ?? [];
+    editField({ limitations: [...current, { text, isWarning: true }] });
+  };
+
+  const removeLimitation = (index: number) => {
+    const current = spec.limitations ?? [];
+    editField({ limitations: current.filter((_, i) => i !== index) });
+  };
+
   const handleGenerate = async () => {
     setGenerateError(false);
     setGenerating(true);
@@ -747,20 +787,90 @@ export function AssistantPane({
 
             <div className={styles.field}>
               <span className={styles.fieldLabel}>{t("chat.field.equipment")}</span>
-              <span className={styles.fieldValue}>
-                {spec.equipment == null
-                  ? t("chat.panel.notSet")
-                  : t("chat.value.equipmentCount", { n: spec.equipment.length })}
-              </span>
+              <div className={styles.arrayEditor}>
+                <div className={styles.arrayInputRow}>
+                  <input
+                    type="text"
+                    className="kin-input"
+                    aria-label={t("wizard.equipment.addAria")}
+                    placeholder={t("wizard.equipment.addPlaceholder")}
+                    value={equipmentDraft}
+                    onChange={(e) => setEquipmentDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addEquipment();
+                      }
+                    }}
+                  />
+                  <button type="button" className="kin-btn" onClick={addEquipment}>
+                    {t("wizard.equipment.addButton")}
+                  </button>
+                </div>
+                {spec.equipment && spec.equipment.length > 0 ? (
+                  <ul className={styles.chips}>
+                    {spec.equipment.map((item) => (
+                      <li key={item} className={styles.chip}>
+                        {item}
+                        <button
+                          type="button"
+                          className={styles.chipRemove}
+                          aria-label={t("wizard.chip.removeAria", { name: item })}
+                          onClick={() => removeEquipment(item)}
+                        >
+                          ×
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className={styles.fieldValue}>{t("chat.panel.notSet")}</span>
+                )}
+              </div>
             </div>
 
             <div className={styles.field}>
               <span className={styles.fieldLabel}>{t("chat.field.limitations")}</span>
-              <span className={styles.fieldValue}>
-                {spec.limitations == null
-                  ? t("chat.panel.notSet")
-                  : t("chat.value.limitationsCount", { n: spec.limitations.length })}
-              </span>
+              <div className={styles.arrayEditor}>
+                <div className={styles.arrayInputRow}>
+                  <input
+                    type="text"
+                    className="kin-input"
+                    aria-label={t("wizard.limitations.addAria")}
+                    placeholder={t("wizard.limitations.addPlaceholder")}
+                    value={limitationDraft}
+                    onChange={(e) => setLimitationDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addLimitation();
+                      }
+                    }}
+                  />
+                  <button type="button" className="kin-btn" onClick={addLimitation}>
+                    {t("wizard.limitations.addButton")}
+                  </button>
+                </div>
+                {spec.limitations && spec.limitations.length > 0 ? (
+                  <ul className={styles.chips}>
+                    {spec.limitations.map((limitation, index) => (
+                      <li key={`${limitation.text}-${index}`} className={styles.chip}>
+                        {limitation.text}
+                        <button
+                          type="button"
+                          className={styles.chipRemove}
+                          aria-label={t("wizard.chip.removeAria", { name: limitation.text })}
+                          onClick={() => removeLimitation(index)}
+                        >
+                          ×
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className={styles.fieldValue}>{t("chat.panel.notSet")}</span>
+                )}
+              </div>
             </div>
 
             {experienceLevel && (
