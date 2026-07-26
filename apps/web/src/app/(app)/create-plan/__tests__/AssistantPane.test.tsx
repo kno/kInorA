@@ -412,6 +412,58 @@ describe("AssistantPane — Datos extraídos panel array editing (equipment / li
     await waitFor(() => expect(persistSpec).toHaveBeenCalledWith({ equipment: ["bench"] }));
   });
 
+  it("removes ONLY the clicked duplicate equipment entry (index-based, no colliding React keys)", async () => {
+    // A draft can populate duplicate equipment strings (the schema's string[] has
+    // no uniqueness and the panel dedup only guards adds). Removing one must
+    // remove that entry alone, not every value-equal duplicate.
+    const onSpecChange = vi.fn();
+    const persistSpec = vi.fn().mockResolvedValue(undefined);
+    setup({ onSpecChange, persistSpec, spec: { equipment: ["barbell", "barbell", "bench"] } });
+
+    const removeBarbell = screen.getAllByRole("button", { name: /remove barbell/i });
+    expect(removeBarbell.length).toBe(2);
+    fireEvent.click(removeBarbell[0]!);
+
+    // The first duplicate is gone; the second "barbell" and "bench" remain.
+    expect(onSpecChange).toHaveBeenCalledWith({ equipment: ["barbell", "bench"] });
+    await waitFor(() =>
+      expect(persistSpec).toHaveBeenCalledWith({ equipment: ["barbell", "bench"] }),
+    );
+  });
+
+  it("disables the panel array editors while a stream is in flight so a terminal draft cannot clobber a mid-stream edit", async () => {
+    const driver = controllableStream();
+    mockFetchOnce(driver.stream);
+    setup({
+      spec: { equipment: ["barbell"], limitations: [{ text: "knee pain", isWarning: true }] },
+    });
+    await sendTurn();
+    // First token flushed, stream still open → streaming is true.
+    driver.push('event: token\ndata: {"delta":"…"}\n\n');
+
+    await waitFor(() => {
+      expect(
+        (screen.getByRole("textbox", { name: /add equipment/i }) as HTMLInputElement).disabled,
+      ).toBe(true);
+    });
+    const addButtons = screen.getAllByRole("button", { name: /^add$/i }) as HTMLButtonElement[];
+    expect(addButtons[0]!.disabled).toBe(true); // equipment add
+    expect(addButtons[1]!.disabled).toBe(true); // limitations add
+    expect(
+      (screen.getByRole("textbox", { name: /add a limitation/i }) as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: /remove barbell/i }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: /remove knee pain/i }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    // Close the stream so the turn settles cleanly.
+    driver.push('event: draft\ndata: {"draftSpec":{},"missingFields":[],"assistantMessage":"ok"}\n\n');
+    driver.close();
+  });
+
   it("adds a limitation as { text, isWarning: true } and persists it", async () => {
     const onSpecChange = vi.fn();
     const persistSpec = vi.fn().mockResolvedValue(undefined);
