@@ -15,6 +15,7 @@ import type { ConsumeDecision } from "../billing/types.js";
 import type { ChatEntitlementPort } from "../billing/chat-entitlement.js";
 import type { PlanSpecExtractor } from "../ai/extraction-port.js";
 import type { SpeechTranscriber } from "../ai/speech-transcriber-port.js";
+import type { SpeechSynthesizer } from "../ai/speech-synthesizer-port.js";
 
 /**
  * A workout plan record as returned to the route (structural shape, declared
@@ -147,6 +148,32 @@ export interface PlanRoutesOptions {
    * deterministic `MockSpeechTranscriber` (or any fake).
    */
   transcriber?: SpeechTranscriber;
+  /**
+   * Text-to-speech port for `POST /plan-specs/speech`
+   * (13-v1.1-interactive-voice-chat, A3). REQUIRED (alongside `chatEntitlement`
+   * and `voicePreferences`) to register the speech route — when absent the route
+   * is simply not registered and every wizard/chat/transcribe route is
+   * unaffected. The route depends ONLY on this port; the `openai` SDK lives
+   * entirely in the injected adapter (`ai/openai-audio-adapter.ts`), so the route
+   * never imports it. Tests inject a deterministic `MockSpeechSynthesizer`.
+   */
+  synthesizer?: SpeechSynthesizer;
+  /**
+   * Reader for the authenticated user's TTS opt-out preference (A3). Resolves
+   * `tts_enabled` from `user_preferences`: `null`/`true` → enabled (opt-out
+   * default ON); `false` → opted out (the speech route returns 204 and never
+   * calls the synthesizer). Injected by app.ts from the preferences repo; the
+   * route reads it ONLY for the authenticated `userId` from `authContext`.
+   */
+  voicePreferences?: VoicePreferenceReader;
+}
+
+/**
+ * Narrow reader port for the TTS opt-out preference (A3). Returns the stored
+ * `tts_enabled` flag for a user, or `null` when unset (treated as enabled).
+ */
+export interface VoicePreferenceReader {
+  findTtsEnabled(userId: string): Promise<boolean | null>;
 }
 
 /** Default per-turn chat stream deadline (ms). */
@@ -174,6 +201,7 @@ const ALLOWED_AUDIO_TYPES = new Set<string>([
   "audio/mpeg",
   "audio/wav",
 ]);
+
 
 /**
  * Structurally compare two drafts over the allow-listed fields to decide whether
@@ -237,6 +265,26 @@ const chatTurnSchema = {
 };
 
 /**
+ * JSON schema for POST /plan-specs/speech body validation (13, A3).
+ *
+ * Only `text` (a non-empty string) is read. `additionalProperties: true` is
+ * deliberate: a spoofed `tenantId`/`tier` in the body is IGNORED — identity is
+ * resolved exclusively from `authContext`, never the body. An over-cap `text`
+ * is NOT rejected here; the handler truncates it to the OpenAI cap before any
+ * TTS call. The generous `maxLength` only guards against an absurd payload.
+ */
+const speechSchema = {
+  body: {
+    type: "object",
+    required: ["text"],
+    properties: {
+      text: { type: "string", minLength: 1, maxLength: 100_000 },
+    },
+    additionalProperties: true,
+  },
+};
+
+/**
  * Plan route plugin — implements plan wizard and generation API endpoints.
  *
  * All routes require authentication via requireAuth() preHandler which reads
@@ -275,6 +323,8 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   const chatEntitlement = options.chatEntitlement;
   const chatExtractor = options.chatExtractor;
   const transcriber = options.transcriber;
+  const synthesizer = options.synthesizer;
+  const voicePreferences = options.voicePreferences;
 
   /**
    * Read a client-supplied idempotency key (Idempotency-Key header), falling
@@ -928,5 +978,100 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         },
       );
     });
+  }
+
+  // POST /plan-specs/speech  (13-v1.1-interactive-voice-chat, A3)
+  //
+  // Text-to-speech for the voice companion. The client sends the terminal
+  // `assistantMessage` text and this route returns mp3 audio bytes for
+  // after-turn playback. It consumes NO billing quota and NEVER persists the
+  // generated audio — the bytes exist in-flight only and are never written to
+  // any repository, disk, or log.
+  //
+  // Order of operations (fail-closed, mirrors the transcribe route):
+  //   1. requireAuth               — 401 if no session (authContext is the ONLY
+  //                                  identity; a body-injected tenant/tier is
+  //                                  ignored)
+  //   2. ChatEntitlementPort.check — 403 { error: reason } if not Pro, BEFORE any
+  //                                  preference read or TTS work. A THROW in the
+  //                                  check is an infra failure, NOT a denial
+  //                                  decision — it propagates to a 5xx (never
+  //                                  mislabeled as premium_required), and the
+  //                                  synthesizer is still never reached.
+  //   3. resolve tts_enabled       — `false` → 204 No Content (opted out; the
+  //                                  synthesizer is NEVER called). `null`/`true`
+  //                                  → proceed (opt-out default is ON).
+  //   4. SpeechSynthesizer.synthesize(text, signal) — gpt-4o-mini-tts/mp3 in the
+  //      adapter, which truncates at a sentence boundary to the ~4096-char
+  //      OpenAI cap (the adapter is the SINGLE SOURCE OF TRUTH for that cap —
+  //      review fix: a route-level pre-slice made the boundary logic
+  //      unreachable and cut mid-word). A transport failure → 502
+  //      synthesis_failed (generic — no provider detail/stack leaked). On
+  //      success → 200 audio/mpeg body.
+  //
+  // JSON body (default parser); registered only when the gate, synthesizer, and
+  // preference reader are ALL wired (they are, in app.ts). Absent them the
+  // wizard/chat/transcribe routes are entirely unaffected.
+  if (chatEntitlement && synthesizer && voicePreferences) {
+    const gate = chatEntitlement;
+    const speechSynthesizer = synthesizer;
+    const prefs = voicePreferences;
+
+    fastify.post(
+      "/plan-specs/speech",
+      { schema: speechSchema, preHandler: requireAuth() },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        const { tenantId, userId } = request.authContext!;
+
+        // Pro gate — fail-closed BEFORE any preference read / TTS work. Identity
+        // comes ONLY from authContext. A resolved `{allowed:false}` is a genuine
+        // denial → 403 with the reason; a THROW is an infra failure that
+        // propagates to a 5xx (never mislabeled as premium_required), exactly
+        // like the transcribe/chat routes.
+        const decision = await gate.check({ tenantId, userId });
+        if (!decision.allowed) {
+          return reply.code(403).send({ error: decision.reason ?? "premium_required" });
+        }
+
+        // Resolve the caller's opt-out preference. `false` = opted out → 204 and
+        // the synthesizer is NEVER called. `null`/`true` = enabled (default ON).
+        const ttsEnabled = await prefs.findTtsEnabled(userId);
+        if (ttsEnabled === false) {
+          return reply.code(204).send();
+        }
+
+        const body = request.body as { text: string };
+        // Review fix: do NOT hard-slice here. `SpeechSynthesizer.synthesize`
+        // (the OpenAI adapter's `truncateForTts`) is the SINGLE SOURCE OF TRUTH
+        // for the ~4096-char OpenAI TTS cap, cutting at a sentence boundary
+        // rather than mid-word. A route-level slice BEFORE that call would make
+        // the sentence-boundary logic unreachable. The schema's `maxLength`
+        // (100_000) is the only route-level bound — it rejects an absurd
+        // payload before it even reaches here.
+        const text = body.text;
+
+        // Abort the in-flight synthesis if the client disconnects. The audio is
+        // processed in-flight ONLY — never persisted anywhere.
+        const controller = new AbortController();
+        const onClose = () => controller.abort();
+        request.raw.on("close", onClose);
+
+        try {
+          const result = await speechSynthesizer.synthesize(text, controller.signal);
+          return reply
+            .code(200)
+            .header("content-type", result.contentType)
+            .send(Buffer.from(result.audio));
+        } catch (error) {
+          // A transport/provider failure maps to a generic 502 — the provider's
+          // message/stack is logged server-side (tenant/user correlation only,
+          // never the text or key) and NEVER returned to the client.
+          request.log.error({ err: error, tenantId, userId }, "synthesis failed");
+          return reply.code(502).send({ error: "synthesis_failed" });
+        } finally {
+          request.raw.removeListener("close", onClose);
+        }
+      },
+    );
   }
 };
