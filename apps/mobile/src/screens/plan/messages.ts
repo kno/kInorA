@@ -24,4 +24,7 @@ export const messages = defineMessages({
   retry: { id: "planStatus.retry" },
   error: { id: "planStatus.error" },
   quotaExhausted: { id: "adaptation.quotaExhausted" },
+  stalledTitle: { id: "planStatus.stalledTitle" },
+  stalledBody: { id: "planStatus.stalledBody" },
+  refresh: { id: "planStatus.refresh" },
 });
