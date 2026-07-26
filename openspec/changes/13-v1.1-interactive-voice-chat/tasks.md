@@ -103,11 +103,11 @@ count, matching item-12's S2/S2b precedent. C2a (RN SSE transport) is called out
 
 ## Phase 6: Slice C1 — RN Plan-Draft Client + Auth Wiring [Requirements: Mobile Create-Plan Voice Parity]
 
-- [ ] 6.1 RED: Add failing `apps/mobile/src/api/__tests__/plan-draft-client.test.ts` (mocked `fetch`): draft/promote/confirm calls attach a `Bearer` token read from `expo-secure-store`; success responses map to the expected result shape; error responses map to typed errors; no `openai`/LLM import.
-- [ ] 6.2 GREEN: Create `apps/mobile/src/api/plan-draft-client.ts` (mirrors the web `plan-draft-client.ts`), reading the session token via `expo-secure-store` (mirroring `session-storage.ts`/`workout-session.ts` patterns).
-- [ ] 6.3 RED: Extend the test file: a `401`/expired-session response triggers a re-auth/logout signal without crashing; tenant scoping derives only from the resolved auth context, never from a caller-supplied tenant id.
-- [ ] 6.4 GREEN: Wire session-storage read/expiry handling into `plan-draft-client.ts`.
-- [ ] 6.5 TRIANGLE: Run `pnpm --filter mobile test -- src/api/__tests__/plan-draft-client.test.ts` green; `pnpm -w typecheck`; `scripts/deps-guard.mjs` clean (no `openai` in `apps/mobile`).
+- [x] 6.1 RED: Add failing `apps/mobile/src/api/__tests__/plan-draft-client.test.ts` (mocked `fetch`): draft/promote/confirm calls attach a `Bearer` token read from `expo-secure-store`; success responses map to the expected result shape; error responses map to typed errors; no `openai`/LLM import.
+- [x] 6.2 GREEN: Create `apps/mobile/src/api/plan-draft-client.ts` (mirrors the web `plan-draft-client.ts`), reading the session token via `expo-secure-store` (mirroring `session-storage.ts`/`workout-session.ts` patterns).
+- [x] 6.3 RED: Extend the test file: a `401`/expired-session response triggers a re-auth/logout signal without crashing; tenant scoping derives only from the resolved auth context, never from a caller-supplied tenant id.
+- [x] 6.4 GREEN: Wire session-storage read/expiry handling into `plan-draft-client.ts`.
+- [x] 6.5 TRIANGLE: Run `pnpm --filter mobile test -- src/api/__tests__/plan-draft-client.test.ts` green; `pnpm -w typecheck`; `scripts/deps-guard.mjs` clean (no `openai` in `apps/mobile`).
 
 ## Phase 7: Slice C2a — RN XHR-Chunked SSE Reader + Turn Lifecycle [Requirements: Mobile Create-Plan Voice Parity]
 
