@@ -74,11 +74,11 @@ entry point) before Track D (mobile banner) can exist.
 
 ## Phase 5: Slice C1 — Mobile Plan-Status + Adapt Client (port, no UI) [Requirements: Mobile Adherence Suggestion Surface (prerequisite infra)]
 
-- [ ] 5.1 RED: Add failing `apps/mobile/src/api/__tests__/plan-status-client.test.ts`: `fetchPlanStatus` maps `200`/`401`/`403` responses; `401` yields a `sessionExpired` result (mirrors the existing `plan-draft-client.ts` tests); uses injected `fetchImpl`/`getToken` (no real network/SecureStore in tests).
-- [ ] 5.2 GREEN: Create `apps/mobile/src/api/plan-status-client.ts` — `fetchPlanStatus` mirroring `plan-draft-client.ts`'s structure and SecureStore Bearer-auth pattern.
-- [ ] 5.3 RED: Extend the client test: `confirmAdapt(specId)` POSTs to `/plan-specs/:id/adapt`, maps `202`/`403`/`409` into a typed result (`generating` / `quotaExhausted` / `noAdaptation`).
-- [ ] 5.4 GREEN: Add `confirmAdapt` to `plan-status-client.ts`, reusing the same fetch/auth wiring as `fetchPlanStatus`.
-- [ ] 5.5 TRIANGLE: Run `pnpm --filter mobile test -- plan-status-client` green; `pnpm -w typecheck`; confirm the client reuses the existing SecureStore Bearer pattern (no duplicated auth logic) and calls only the existing shared API endpoints (`GET /progress/dashboard`-adjacent plan read + the new `/adapt` from B1) — no new API routes introduced on the mobile side.
+- [x] 5.1 RED: Add failing `apps/mobile/src/api/__tests__/plan-status-client.test.ts`: `fetchPlanStatus` maps `200`/`401`/`403` responses; `401` yields a `sessionExpired` result (mirrors the existing `plan-draft-client.ts` tests); uses injected `fetchImpl`/`getToken` (no real network/SecureStore in tests).
+- [x] 5.2 GREEN: Create `apps/mobile/src/api/plan-status-client.ts` — `fetchPlanStatus` mirroring `plan-draft-client.ts`'s structure and SecureStore Bearer-auth pattern.
+- [x] 5.3 RED: Extend the client test: `confirmAdapt(specId)` POSTs to `/plan-specs/:id/adapt`, maps `202`/`403`/`409` into a typed result (`generating` / `quotaExhausted` / `noAdaptation`). (Implemented as `adaptPlan` — mirrors the web `adaptPlan` client and the orchestrator's requested surface; the 403/409 branch is a `{ kind: "error", status, message }` result carrying the HTTP status so C2/D can map 403→quota, 409→no_adaptation without string-matching.)
+- [x] 5.4 GREEN: Add `adaptPlan` (== `confirmAdapt`) to `plan-status-client.ts`, reusing the same fetch/auth wiring as `fetchPlanStatus`. Also added `regeneratePlan` and `fetchDashboardSummary` (dashboard `adaptation` read) + `fetchLatestPlanForSpec`, all via shared `fetchPlan`/`postGeneration` helpers.
+- [x] 5.5 TRIANGLE: Ran `pnpm --filter mobile test -- plan-status-client` green (390 passed / 47 files, 29 new); `pnpm --filter mobile type-check` clean; `pnpm deps-guard` clean; `pnpm architecture` clean. Client reuses the existing SecureStore Bearer pattern (lazy `defaultGetToken` → `getSessionToken`, no duplicated auth logic) and calls only existing shared API endpoints (`GET /workout-plans/:id`, `GET /plan-specs/:id/workout-plan`, `POST /plan-specs/:id/regenerate`, `POST /plan-specs/:id/adapt`, `GET /progress/dashboard`) — no new API routes on the mobile side.
 
 ## Phase 6: Slice C2 — Mobile Plan-Status Screen (generating/ready/failed) [Requirements: Mobile Adherence Suggestion Surface (prerequisite infra)]
 
