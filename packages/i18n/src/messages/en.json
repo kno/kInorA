@@ -1094,8 +1094,11 @@
     "state": {
       "idle": "Ready",
       "listening": "Listening…",
-      "processing": "Processing…"
+      "processing": "Processing…",
+      "speaking": "Speaking…"
     },
+    "stopSpeaking": "Stop speaking",
+    "stopSpeakingAria": "Stop the assistant's voice",
     "denied": "Microphone access is required for voice. You can keep typing.",
     "unsupported": "Voice input isn't available in this browser. You can keep typing.",
     "offline": "Voice needs a connection. You can keep typing.",

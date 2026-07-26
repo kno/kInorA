@@ -89,13 +89,13 @@ count, matching item-12's S2/S2b precedent. C2a (RN SSE transport) is called out
 
 ## Phase 5: Slice B2 — Web TTS Playback + Voice i18n [Requirements: TTS Opt-Out Preference, Voice Interaction and Microphone Permission (Web and Mobile), Mobile Create-Plan Voice Parity]
 
-- [ ] 5.1 RED: Add failing `apps/web/src/app/(app)/create-plan/speech/__tests__/route.test.ts` — Bearer forwarding, text body forwarded, upstream `204` (opted out) / `403` / `502` passed through verbatim.
-- [ ] 5.2 GREEN: Create `apps/web/src/app/(app)/create-plan/speech/route.ts` (same-origin TTS proxy mirroring `chat/route.ts`).
-- [ ] 5.3 RED: Extend `AssistantPane.test.tsx`: after the terminal `assistantMessage` with TTS enabled → calls `speech/route.ts`, plays via `<audio>` only after the prior user gesture (mic-press anchored `.play()`); a `204` (opted out) response → no playback attempt, no crash.
-- [ ] 5.4 GREEN: Modify `AssistantPane.tsx` — add gesture-anchored `<audio>` playback: `Blob` → `URL.createObjectURL` → `.play()` on the terminal `assistantMessage` when TTS is enabled; skip cleanly on `204`.
-- [ ] 5.5 RED: Add a failing i18n parity test (extend `packages/i18n`'s existing parity check or add one) asserting the new `voice` namespace has identical EN/ES key sets (mic-permission copy, listening/processing/speaking states, mic-denied fallback, offline-degraded copy).
-- [ ] 5.6 GREEN: Add the `voice` namespace to `packages/i18n/src/messages/{en,es}.json` with EN/ES parity; wire the strings into the `AssistantPane` voice UI from B1/B2.
-- [ ] 5.7 TRIANGLE: Run `pnpm --filter web test -- src/app/.../create-plan` + `pnpm --filter i18n test` green; `scripts/deps-guard.mjs` clean; `pnpm --filter web build`; manual smoke (TTS on/off, gesture-anchored playback, EN/ES toggle).
+- [x] 5.1 RED: Add failing `apps/web/src/app/(app)/create-plan/speech/__tests__/route.test.ts` — Bearer forwarding, text body forwarded, upstream `204` (opted out) / `403` / `502` passed through verbatim.
+- [x] 5.2 GREEN: Create `apps/web/src/app/(app)/create-plan/speech/route.ts` (same-origin TTS proxy mirroring `chat/route.ts`).
+- [x] 5.3 RED: Extend `AssistantPane.test.tsx`: after the terminal `assistantMessage` with TTS enabled → calls `speech/route.ts`, plays via `<audio>` only after the prior user gesture (mic-press anchored `.play()`); a `204` (opted out) response → no playback attempt, no crash.
+- [x] 5.4 GREEN: Modify `AssistantPane.tsx` — add gesture-anchored `<audio>` playback: `Blob` → `URL.createObjectURL` → `.play()` on the terminal `assistantMessage` when TTS is enabled; skip cleanly on `204`.
+- [x] 5.5 RED: Add a failing i18n parity test (extend `packages/i18n`'s existing parity check or add one) asserting the new `voice` namespace has identical EN/ES key sets (mic-permission copy, listening/processing/speaking states, mic-denied fallback, offline-degraded copy).
+- [x] 5.6 GREEN: Add the `voice` namespace to `packages/i18n/src/messages/{en,es}.json` with EN/ES parity; wire the strings into the `AssistantPane` voice UI from B1/B2.
+- [x] 5.7 TRIANGLE: Run `pnpm --filter web test -- src/app/.../create-plan` + `pnpm --filter i18n test` green; `scripts/deps-guard.mjs` clean; `pnpm --filter web build`; manual smoke (TTS on/off, gesture-anchored playback, EN/ES toggle).
 
 ---
 

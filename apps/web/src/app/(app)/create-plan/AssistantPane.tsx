@@ -5,7 +5,12 @@ import { useTranslations } from "next-intl";
 import { PlanSpecDraftSchema, type PlanGoal, type TrainingLocation } from "@kinora/contracts";
 import { parseSSEStream } from "./chat-stream";
 import type { ChatDraftSpec } from "./chat-types";
-import { TranscriptionError, selectMimeType, transcribeAudio } from "./voice-client";
+import {
+  TranscriptionError,
+  selectMimeType,
+  synthesizeSpeech,
+  transcribeAudio,
+} from "./voice-client";
 import styles from "./assistant-pane.module.css";
 
 /** Voice capture sub-mode states (13 Slice B1). */
@@ -129,6 +134,14 @@ export function AssistantPane({
   // offline listener can release a hot mic without re-subscribing.
   const cancelRecordingRef = useRef<() => void>(() => {});
 
+  // --- Voice OUTPUT playback (B2: speak the assistant reply after a voice turn) ---
+  const [speaking, setSpeaking] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speechAbortRef = useRef<AbortController | null>(null);
+  // The object URL for the current audio Blob — revoked after playback/stop so a
+  // played reply never leaks a blob: URL.
+  const objectUrlRef = useRef<string | null>(null);
+
   // Abort any in-flight stream on unmount/navigation so no token write lands in
   // an unmounted tree and the upstream API sees the disconnect.
   useEffect(() => {
@@ -194,6 +207,90 @@ export function AssistantPane({
     };
   }, []);
 
+  // Revoke the current audio object URL (idempotent) so a played reply never
+  // leaks a `blob:` URL after playback finishes, is stopped, or is superseded.
+  const revokeObjectUrl = useCallback(() => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+  }, []);
+
+  /**
+   * Stop any in-flight/playing TTS: abort the pending speech fetch, pause the
+   * `<audio>` element, and revoke the object URL. Safe to call when nothing is
+   * playing. Used by the stop-speaking control, a new turn, and unmount.
+   */
+  const stopSpeaking = useCallback(() => {
+    speechAbortRef.current?.abort();
+    const audio = audioRef.current;
+    if (audio) audio.pause();
+    revokeObjectUrl();
+    setSpeaking(false);
+  }, [revokeObjectUrl]);
+
+  /**
+   * Play the terminal assistant reply as TTS audio (B2). Fetches the mp3 from
+   * the same-origin speech proxy and plays it via the `<audio>` element. This is
+   * gesture-anchored: it only runs for a VOICE-initiated turn (the user tapped
+   * the mic), so `.play()` sits within the page's user-gesture chain. TTS is a
+   * best-effort enhancement over the already-shown text reply, so EVERY failure
+   * path (a 204 opt-out, a 403/502, a network error, an aborted turn, a blocked
+   * autoplay) fails silently — the chat is never disrupted. Any prior playback
+   * is stopped first so a new reply supersedes the last.
+   */
+  const playReply = useCallback(
+    async (text: string) => {
+      // Never attempt playback offline (no voice turn can start offline anyway).
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
+      // Supersede any prior playback (abort its fetch, stop its audio, revoke).
+      stopSpeaking();
+
+      const controller = new AbortController();
+      speechAbortRef.current = controller;
+      try {
+        const blob = await synthesizeSpeech(text, { signal: controller.signal });
+        // 204 opt-out / non-2xx / empty → nothing to play; or the turn was
+        // superseded/aborted while the fetch was in flight.
+        if (!blob || controller.signal.aborted) return;
+        const audio = audioRef.current;
+        if (!audio) return;
+
+        const url = URL.createObjectURL(blob);
+        objectUrlRef.current = url;
+        audio.src = url;
+        audio.onended = () => {
+          revokeObjectUrl();
+          setSpeaking(false);
+        };
+        setSpeaking(true);
+        // `play()` may reject (autoplay policy / interrupted) — fail silently.
+        await Promise.resolve(audio.play()).catch(() => {
+          revokeObjectUrl();
+          setSpeaking(false);
+        });
+      } catch {
+        // Network error / abort → no playback; the text reply already stands.
+        revokeObjectUrl();
+        setSpeaking(false);
+      }
+    },
+    [revokeObjectUrl, stopSpeaking],
+  );
+
+  // Abort + revoke any in-flight/playing TTS on unmount so no `blob:` URL leaks
+  // and no audio keeps playing into an unmounted tree.
+  useEffect(() => {
+    return () => {
+      speechAbortRef.current?.abort();
+      audioRef.current?.pause();
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+    };
+  }, []);
+
   /**
    * Run one turn. `appendUserMessage` is false on retry: the ORIGINAL user
    * bubble is reused (not re-sent to the thread) so an error + retry reads
@@ -202,10 +299,13 @@ export function AssistantPane({
    * appended to receive the incoming tokens/terminal text.
    */
   const runTurn = useCallback(
-    async (message: string, appendUserMessage: boolean) => {
+    async (message: string, appendUserMessage: boolean, speakReply = false) => {
       // Turn serialization: never overlap turns (prevents the shared-draft
       // lost-update from two concurrent commits).
       if (streaming) return;
+
+      // A new turn supersedes any TTS still playing/loading from the prior turn.
+      stopSpeaking();
 
       lastUserMessageRef.current = message;
       setErrorReason(null);
@@ -240,6 +340,9 @@ export function AssistantPane({
           } else if (event.type === "draft") {
             if (event.assistantMessage) {
               setMessages((prev) => replaceAssistant(prev, event.assistantMessage));
+              // Voice-initiated turn only: speak the terminal reply (B2).
+              // Gesture-anchored to the mic tap that started this turn.
+              if (speakReply) void playReply(event.assistantMessage);
             }
             onSpecChange(event.draftSpec);
           } else {
@@ -261,7 +364,7 @@ export function AssistantPane({
         setStreaming(false);
       }
     },
-    [streaming, onSpecChange],
+    [streaming, onSpecChange, stopSpeaking, playReply],
   );
 
   const releaseMic = useCallback(() => {
@@ -294,7 +397,8 @@ export function AssistantPane({
           setVoiceNotice("unclear");
           return;
         }
-        void runTurn(text, true);
+        // Voice-initiated turn: request TTS playback of the terminal reply (B2).
+        void runTurn(text, true, true);
       } catch (err) {
         setVoiceState("idle");
         // A user-initiated abort (unmount) is expected — stay silent.
@@ -484,14 +588,31 @@ export function AssistantPane({
           data-voice-state={voiceState}
         >
           <span className={styles.voiceStatus} aria-live="polite">
-            {voiceStatusLabel}
+            {speaking ? t("voice.state.speaking") : voiceStatusLabel}
           </span>
           {voiceNoticeMessage && (
             <span className={styles.voiceNotice} role="status">
               {voiceNoticeMessage}
             </span>
           )}
+          {/* Stop-speaking (mute) affordance — only while TTS is playing (B2). */}
+          {speaking && (
+            <button
+              type="button"
+              className={`kin-btn ${styles.stopSpeakingBtn ?? ""}`}
+              aria-label={t("voice.stopSpeakingAria")}
+              onClick={stopSpeaking}
+            >
+              {t("voice.stopSpeaking")}
+            </button>
+          )}
         </div>
+
+        {/* Hidden audio sink for TTS playback (B2). The reply's mp3 Blob is set
+            as an object URL and played gesture-anchored to the mic tap; the URL
+            is revoked on end/stop/unmount so no `blob:` URL leaks. */}
+        <audio ref={audioRef} hidden aria-hidden="true" />
+
 
         <div className={styles.inputRow}>
           <button
