@@ -204,7 +204,14 @@ export default function VoiceScreen({
     [store],
   );
 
-  const micDisabled = micDenied || !online || state.streaming;
+  // Disable the mic whenever a NEW recording must not begin: mic denied,
+  // offline, a turn already streaming, OR a transcribe already in flight
+  // (`processing`). Without the `processing` guard a second press-and-hold
+  // during transcription would start an overlapping recording + transcribe,
+  // overwrite the first `AbortController` (leaking the first upload on unmount),
+  // and have its transcript silently dropped by the store's serialized runTurn.
+  const micDisabled =
+    micDenied || !online || state.streaming || status === "processing";
 
   const handlePressIn = async () => {
     if (micDisabled || recordingRef.current) return;

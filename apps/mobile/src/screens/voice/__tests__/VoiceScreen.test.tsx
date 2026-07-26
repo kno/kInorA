@@ -300,6 +300,45 @@ describe("VoiceScreen (D1 Expo mic → transcribe → shared chat turn)", () => 
     expect(stream).not.toHaveBeenCalled();
   });
 
+  it("blocks a second recording while a transcribe is in flight (no overlap)", async () => {
+    const recorder = fakeRecorder();
+    const tx = deferred<TranscribeOutcome>();
+    const transcribe = vi.fn(() => tx.promise);
+    const { renderer } = renderScreen({ recorder, transcribe, stream: scriptedStream([]) });
+    await act(async () => {});
+
+    // First press-and-hold → the transcribe is now in flight (processing).
+    await act(async () => {
+      await mic(renderer).props.onPressIn();
+    });
+    act(() => {
+      void mic(renderer).props.onPressOut();
+    });
+    await act(async () => {}); // flush recorder.stop() → status processing, transcribe pending
+    expect(status(renderer)).toBe("Processing…");
+    expect(recorder.start).toHaveBeenCalledTimes(1);
+    // The mic must be disabled during the in-flight transcribe window.
+    expect(mic(renderer).props.disabled).toBe(true);
+
+    // A second press-and-hold during processing must be a complete no-op:
+    // no second recording, no second transcribe (so the first AbortController
+    // is never overwritten and the first turn is never shadowed).
+    await act(async () => {
+      await mic(renderer).props.onPressIn();
+    });
+    act(() => {
+      void mic(renderer).props.onPressOut();
+    });
+    await act(async () => {});
+    expect(recorder.start).toHaveBeenCalledTimes(1);
+    expect(transcribe).toHaveBeenCalledTimes(1);
+
+    // Resolve the first transcribe to settle the turn.
+    await act(async () => {
+      tx.resolve({ kind: "ok", text: "", unclear: true });
+    });
+  });
+
   it("aborts the in-flight transcribe and releases the recorder on unmount", async () => {
     const recorder = fakeRecorder();
     let capturedSignal: AbortSignal | undefined;
