@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  SPEECH_ENDPOINT,
   TRANSCRIBE_ENDPOINT,
   TranscriptionError,
   selectMimeType,
+  synthesizeSpeech,
   transcribeAudio,
 } from "../voice-client";
 
@@ -89,5 +91,56 @@ describe("voice-client — transcribeAudio", () => {
     await expect(
       transcribeAudio(new Blob(["x"], { type: "audio/webm" }), { fetchImpl }),
     ).rejects.toBeInstanceOf(TranscriptionError);
+  });
+});
+
+describe("voice-client — synthesizeSpeech", () => {
+  function audioResponse(bytes: number[], status = 200) {
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      blob: async () => new Blob([new Uint8Array(bytes)], { type: "audio/mpeg" }),
+    } as unknown as Response;
+  }
+
+  it("POSTs the reply text as JSON to the speech proxy and resolves the audio blob", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(audioResponse([1, 2, 3]));
+
+    const blob = await synthesizeSpeech("four days a week it is", { fetchImpl });
+
+    expect(blob).toBeInstanceOf(Blob);
+    expect(blob!.size).toBe(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(SPEECH_ENDPOINT);
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>)["content-type"]).toBe("application/json");
+    expect(init.body).toBe(JSON.stringify({ text: "four days a week it is" }));
+  });
+
+  it("forwards the caller's AbortSignal so aborting the turn cancels the audio fetch", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(audioResponse([1]));
+    const controller = new AbortController();
+    await synthesizeSpeech("hi", { fetchImpl, signal: controller.signal });
+    const init = fetchImpl.mock.calls[0]![1] as RequestInit;
+    expect(init.signal).toBe(controller.signal);
+  });
+
+  it("resolves null on a 204 (TTS opted out) so the caller skips playback silently", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 204 } as Response);
+    const blob = await synthesizeSpeech("hi", { fetchImpl });
+    expect(blob).toBeNull();
+  });
+
+  it("resolves null on a non-2xx (403/502) so a TTS failure never breaks the shown chat reply", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(audioResponse([], 502));
+    const blob = await synthesizeSpeech("hi", { fetchImpl });
+    expect(blob).toBeNull();
+  });
+
+  it("resolves null when the audio body is empty", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(audioResponse([]));
+    const blob = await synthesizeSpeech("hi", { fetchImpl });
+    expect(blob).toBeNull();
   });
 });

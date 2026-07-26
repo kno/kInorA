@@ -17,6 +17,9 @@ export type VoiceTranscript = Pick<PlanSpecDraft, never> & { text: string };
 /** Same-origin proxy that injects the Bearer and forwards the multipart audio. */
 export const TRANSCRIBE_ENDPOINT = "/create-plan/transcribe";
 
+/** Same-origin proxy that injects the Bearer and returns the reply's mp3 audio (B2). */
+export const SPEECH_ENDPOINT = "/create-plan/speech";
+
 /**
  * Preferred MediaRecorder container formats, in order: Chrome/Firefox opus
  * first, then a plain-webm fallback, then `audio/mp4` for Safari (which does
@@ -106,4 +109,36 @@ export async function transcribeAudio(
   const text = typeof data.text === "string" ? data.text : "";
   const unclear = data.unclear === true || text.trim() === "";
   return { text, unclear };
+}
+
+/**
+ * POST the terminal assistant reply text to the same-origin speech proxy and
+ * resolve the mp3 audio `Blob` for after-turn playback (13 Slice B2).
+ *
+ * TTS is a best-effort enhancement over the already-shown text reply, so this
+ * never throws for an expected outcome: a `204` (the user opted out upstream)
+ * and any non-2xx (a Free `403`, a `502` synthesis failure) both resolve to
+ * `null` so the caller simply skips playback with no error surfaced in the
+ * chat. An empty body also resolves `null`. A genuine transport rejection
+ * (network down, an `AbortError` from a canceled turn) still rejects so the
+ * caller can distinguish an abort — it treats every rejection as "no playback"
+ * regardless. Raw audio never leaves this function beyond the in-flight fetch.
+ */
+export async function synthesizeSpeech(
+  text: string,
+  options: { signal?: AbortSignal; endpoint?: string; fetchImpl?: typeof fetch } = {},
+): Promise<Blob | null> {
+  const doFetch = options.fetchImpl ?? fetch;
+  const res = await doFetch(options.endpoint ?? SPEECH_ENDPOINT, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+    signal: options.signal,
+  });
+
+  // 204 (opted out) or any non-2xx (403/502) → no audio to play.
+  if (res.status === 204 || !res.ok) return null;
+
+  const blob = await res.blob();
+  return blob.size > 0 ? blob : null;
 }
