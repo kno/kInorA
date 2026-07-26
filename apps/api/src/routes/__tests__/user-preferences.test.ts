@@ -30,6 +30,7 @@ const EXISTING_PREFS = {
   defaultLocation: "gym",
   defaultDuration: 60,
   defaultEquipment: ["barbell", "dumbbell"],
+  ttsEnabled: true,
 };
 
 function buildMockDb() {
@@ -52,6 +53,9 @@ function buildRepo(overrides: Partial<{
         defaultLocation: input.defaultLocation ?? EXISTING_PREFS.defaultLocation,
         defaultDuration: input.defaultDuration ?? EXISTING_PREFS.defaultDuration,
         defaultEquipment: input.defaultEquipment ?? EXISTING_PREFS.defaultEquipment,
+        // Partial-merge echo: preserve stored value unless the key is sent.
+        ttsEnabled:
+          "ttsEnabled" in input ? input.ttsEnabled : EXISTING_PREFS.ttsEnabled,
       })),
     ...overrides,
   };
@@ -108,6 +112,7 @@ describe("GET /user-preferences", () => {
       defaultLocation: "gym",
       defaultDuration: 60,
       defaultEquipment: ["barbell", "dumbbell"],
+      ttsEnabled: true,
     });
     expect(repo.findPreferencesByUserId).toHaveBeenCalledWith(USER_ID);
   });
@@ -131,7 +136,10 @@ describe("GET /user-preferences", () => {
       defaultLocation: null,
       defaultDuration: null,
       defaultEquipment: null,
+      ttsEnabled: null,
     });
+    // A3: an unset tts_enabled reads as null → the client treats it as enabled.
+    expect(body.ttsEnabled).toBeNull();
   });
 
   it("user isolation: findPreferencesByUserId is called only with the session userId", async () => {
@@ -258,5 +266,60 @@ describe("PUT /user-preferences", () => {
 
     expect(res.statusCode).toBe(200);
     expect(repo.upsertPreferences).toHaveBeenCalledWith(USER_ID, {});
+  });
+
+  // --- ttsEnabled roundtrip (A3) -----------------------------------------
+
+  it("PUT ttsEnabled=false forwards it and the response reflects the opt-out", async () => {
+    const repo = buildRepo();
+    app = await buildTestApp(repo);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/user-preferences",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { ttsEnabled: false },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(repo.upsertPreferences).toHaveBeenCalledWith(USER_ID, { ttsEnabled: false });
+    const body = res.json() as UserPreferences;
+    expect(body.ttsEnabled).toBe(false);
+  });
+
+  it("PUT that omits ttsEnabled does not forward the key (stored value preserved)", async () => {
+    const repo = buildRepo();
+    app = await buildTestApp(repo);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/user-preferences",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { defaultLocation: "home" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const input = repo.upsertPreferences.mock.calls[0][1] as Record<string, unknown>;
+    expect(input).not.toHaveProperty("ttsEnabled");
+    // The echo preserves the previously stored value (true).
+    const body = res.json() as UserPreferences;
+    expect(body.ttsEnabled).toBe(true);
+  });
+
+  it("PUT ttsEnabled=true re-enables TTS", async () => {
+    const repo = buildRepo();
+    app = await buildTestApp(repo);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/user-preferences",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { ttsEnabled: true },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(repo.upsertPreferences).toHaveBeenCalledWith(USER_ID, { ttsEnabled: true });
+    const body = res.json() as UserPreferences;
+    expect(body.ttsEnabled).toBe(true);
   });
 });

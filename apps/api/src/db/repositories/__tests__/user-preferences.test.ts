@@ -188,6 +188,70 @@ describe("UserPreferencesRepository", () => {
       expect(set).toHaveProperty("defaultDuration", null);
     });
 
+    // --- ttsEnabled (A3) ---------------------------------------------------
+
+    it("partial merge: sending only ttsEnabled leaves other fields out of the SET clause (preserves them)", async () => {
+      const { insert, onConflictDoUpdate } = onConflictChain([
+        preferencesRow({ ttsEnabled: false }),
+      ]);
+      const repo = new UserPreferencesRepository({ insert } as never);
+
+      await repo.upsert(USER_A, { ttsEnabled: false });
+
+      const { set } = onConflictDoUpdate.mock.calls[0][0] as {
+        set: Record<string, unknown>;
+      };
+      expect(set.ttsEnabled).toBe(false);
+      expect(set).not.toHaveProperty("defaultLocation");
+      expect(set).not.toHaveProperty("defaultDuration");
+      expect(set).not.toHaveProperty("defaultEquipment");
+      expect(set.updatedAt).toBeInstanceOf(Date);
+    });
+
+    it("omitting ttsEnabled keeps it out of the SET clause (stored value preserved)", async () => {
+      const { insert, onConflictDoUpdate } = onConflictChain([preferencesRow()]);
+      const repo = new UserPreferencesRepository({ insert } as never);
+
+      await repo.upsert(USER_A, { defaultDuration: 45 });
+
+      const { set } = onConflictDoUpdate.mock.calls[0][0] as {
+        set: Record<string, unknown>;
+      };
+      expect(set).not.toHaveProperty("ttsEnabled");
+    });
+
+    it("ttsEnabled=true and null are both written (present in SET) — distinct from omitted", async () => {
+      const { insert: insertTrue, onConflictDoUpdate: setTrue } = onConflictChain([
+        preferencesRow({ ttsEnabled: true }),
+      ]);
+      const repoTrue = new UserPreferencesRepository({ insert: insertTrue } as never);
+      await repoTrue.upsert(USER_A, { ttsEnabled: true });
+      expect((setTrue.mock.calls[0][0] as { set: Record<string, unknown> }).set).toHaveProperty(
+        "ttsEnabled",
+        true,
+      );
+
+      const { insert: insertNull, onConflictDoUpdate: setNull } = onConflictChain([
+        preferencesRow({ ttsEnabled: null }),
+      ]);
+      const repoNull = new UserPreferencesRepository({ insert: insertNull } as never);
+      await repoNull.upsert(USER_A, { ttsEnabled: null });
+      expect((setNull.mock.calls[0][0] as { set: Record<string, unknown> }).set).toHaveProperty(
+        "ttsEnabled",
+        null,
+      );
+    });
+
+    it("ttsEnabled enters the INSERT values on first write", async () => {
+      const { insert, values } = onConflictChain([preferencesRow({ ttsEnabled: false })]);
+      const repo = new UserPreferencesRepository({ insert } as never);
+
+      await repo.upsert(USER_A, { ttsEnabled: false });
+
+      const payload = values.mock.calls[0][0];
+      expect(payload).toMatchObject({ userId: USER_A, ttsEnabled: false });
+    });
+
     it("upsert with empty partial and a different userId is isolated at write", async () => {
       const rowA = preferencesRow({ userId: USER_A });
       const { insert: insertA } = onConflictChain([rowA]);
