@@ -122,7 +122,10 @@ describe("@kinora/i18n package assembly", () => {
         !key.startsWith("adaptation.") &&
         // 14a-v1.1 Slice C2: the `planStatus.*` mobile plan-status-screen
         // namespace has its own scoped count test below.
-        !key.startsWith("planStatus."),
+        !key.startsWith("planStatus.") &&
+        // 14a-v1.1 Slice C3: the `home.*` mobile home-screen namespace has its
+        // own scoped count test below.
+        !key.startsWith("home."),
     );
     expect(nonBillingKeys).toHaveLength(609);
   });
@@ -246,6 +249,25 @@ describe("@kinora/i18n package assembly", () => {
     expect(es["planStatus.stalledTitle"]).toBeTruthy();
     expect(en["planStatus.refresh"]).toBeTruthy();
     expect(es["planStatus.refresh"]).toBeTruthy();
+  });
+
+  it("the home namespace is present with EN+ES parity (14a-v1.1 Slice C3)", () => {
+    expect(catalogs.en.home).toBeDefined();
+    expect(catalogs.es.home).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+
+    const en = flattenMessages(catalogs.en);
+    const es = flattenMessages(catalogs.es);
+    const homeKeys = Object.keys(en).filter((key) => key.startsWith("home."));
+    // C3 mobile home-screen copy: title, subtitle, loading, error, retry,
+    // viewPlan (the plan-status nav entry), noPlanTitle/noPlanBody (empty state).
+    expect(homeKeys).toHaveLength(8);
+    expect(en["home.viewPlan"]).toBeTruthy();
+    expect(es["home.viewPlan"]).toBeTruthy();
+    expect(en["home.noPlanTitle"]).toBeTruthy();
+    expect(es["home.noPlanTitle"]).toBeTruthy();
   });
 
   it("ships the accepted profile + wizard preference keys in both catalogs", () => {
