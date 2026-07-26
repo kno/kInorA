@@ -148,9 +148,13 @@ const planSpecRepoStub = {
 
 const planDraftRepoStub = {
   upsert: () => Promise.reject(new Error("not used")),
+  commitWithVersion: () => Promise.reject(new Error("not used")),
   findCurrent: () => Promise.reject(new Error("not used")),
   delete: () => Promise.reject(new Error("not used")),
-} as unknown as Pick<PlanDraftRepository, "upsert" | "findCurrent" | "delete">;
+} as unknown as Pick<
+  PlanDraftRepository,
+  "upsert" | "commitWithVersion" | "findCurrent" | "delete"
+>;
 
 function buildStack() {
   const store: StoredPlan[] = [];

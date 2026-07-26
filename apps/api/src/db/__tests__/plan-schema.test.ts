@@ -44,6 +44,15 @@ describe("plan_drafts schema shape", () => {
     const cols = getTableColumns(planDrafts);
     expect(cols.updatedAt).toBeDefined();
   });
+
+  it("plan_drafts table has a version integer column for optimistic concurrency (#215)", () => {
+    const cols = getTableColumns(planDrafts);
+    expect(cols.version).toBeDefined();
+    expect(cols.version.columnType).toBe("PgInteger");
+    // NOT NULL with a server default → additive and safe on existing rows.
+    expect(cols.version.notNull).toBe(true);
+    expect(cols.version.hasDefault).toBe(true);
+  });
 });
 
 describe("plan_specs schema shape", () => {

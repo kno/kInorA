@@ -30,6 +30,7 @@ function draftRow(overrides: Record<string, unknown> = {}) {
     userId: USER_A,
     step: 1,
     specJson: specFixture,
+    version: 0,
     updatedAt: new Date("2026-06-27T12:00:00Z"),
     ...overrides,
   };
@@ -57,6 +58,24 @@ function deleteChain() {
   const where = vi.fn().mockResolvedValue(undefined);
   const del = vi.fn().mockReturnValue({ where });
   return { delete: del, where };
+}
+
+/** insert(...).onConflictDoNothing({ target }).returning() chain (#215 INSERT path). */
+function onConflictDoNothingChain(returnRows: unknown[]) {
+  const returning = vi.fn().mockResolvedValue(returnRows);
+  const onConflictDoNothing = vi.fn().mockReturnValue({ returning });
+  const values = vi.fn().mockReturnValue({ onConflictDoNothing });
+  const insert = vi.fn().mockReturnValue({ values });
+  return { insert, values, onConflictDoNothing, returning };
+}
+
+/** update(...).set(set).where(...).returning() chain (#215 version-guarded UPDATE path). */
+function updateChain(returnRows: unknown[]) {
+  const returning = vi.fn().mockResolvedValue(returnRows);
+  const where = vi.fn().mockReturnValue({ returning });
+  const set = vi.fn().mockReturnValue({ where });
+  const update = vi.fn().mockReturnValue({ set });
+  return { update, set, where, returning };
 }
 
 describe("PlanDraftRepository", () => {
@@ -89,6 +108,72 @@ describe("PlanDraftRepository", () => {
       expect(onConflictDoUpdate).toHaveBeenCalledTimes(1);
       expect(result.step).toBe(2);
       expect(returning).toHaveBeenCalledTimes(1);
+    });
+
+    it("bumps version on conflict so a concurrent version-guarded commit re-reads (#215)", async () => {
+      const { insert, onConflictDoUpdate } = onConflictChain([draftRow()]);
+      const repo = new PlanDraftRepository({ insert } as never);
+
+      await repo.upsert(TENANT_A, USER_A, 2, specFixture);
+
+      // The ON CONFLICT set must include a `version` bump (not a fixed value).
+      const setArg = onConflictDoUpdate.mock.calls[0]![0].set as Record<string, unknown>;
+      expect(setArg.version).toBeDefined();
+    });
+  });
+
+  describe("commitWithVersion — optimistic concurrency guard (#215)", () => {
+    it("with expectedVersion null: INSERTs via onConflictDoNothing and returns the new row", async () => {
+      const row = draftRow({ version: 0 });
+      const { insert, values, onConflictDoNothing, returning } =
+        onConflictDoNothingChain([row]);
+      const repo = new PlanDraftRepository({ insert } as never);
+
+      const result = await repo.commitWithVersion(TENANT_A, USER_A, 1, specFixture, null);
+
+      expect(insert).toHaveBeenCalledTimes(1);
+      expect(values).toHaveBeenCalledTimes(1);
+      expect(onConflictDoNothing).toHaveBeenCalledTimes(1);
+      expect(returning).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(row);
+    });
+
+    it("with expectedVersion null but a concurrent insert already won: empty returning → null (conflict)", async () => {
+      const { insert } = onConflictDoNothingChain([]);
+      const repo = new PlanDraftRepository({ insert } as never);
+
+      const result = await repo.commitWithVersion(TENANT_A, USER_A, 1, specFixture, null);
+
+      // No row returned (onConflictDoNothing was a no-op) → caller must re-read.
+      expect(result).toBeNull();
+    });
+
+    it("with a matching expectedVersion: UPDATE applies and returns the bumped row", async () => {
+      const bumped = draftRow({ version: 3, step: 2 });
+      const { update, set, where, returning } = updateChain([bumped]);
+      const repo = new PlanDraftRepository({ update } as never);
+
+      const result = await repo.commitWithVersion(TENANT_A, USER_A, 2, specFixture, 2);
+
+      expect(update).toHaveBeenCalledTimes(1);
+      // The new version is expectedVersion + 1.
+      expect(set).toHaveBeenCalledWith(
+        expect.objectContaining({ step: 2, specJson: specFixture, version: 3 }),
+      );
+      expect(where).toHaveBeenCalledTimes(1);
+      expect(returning).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(bumped);
+    });
+
+    it("with a stale expectedVersion (row moved under us): empty returning → null (conflict)", async () => {
+      // A concurrent turn already bumped the version, so the WHERE version = N
+      // predicate matches no row and returning() is empty.
+      const { update } = updateChain([]);
+      const repo = new PlanDraftRepository({ update } as never);
+
+      const result = await repo.commitWithVersion(TENANT_A, USER_A, 2, specFixture, 2);
+
+      expect(result).toBeNull();
     });
   });
 

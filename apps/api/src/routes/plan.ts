@@ -9,6 +9,7 @@ import {
 } from "../plan/boundary.js";
 import { derivePreferenceScores } from "@kinora/domain";
 import { mergePlanSpecDraft } from "@kinora/domain/plan";
+import type { MergePlanSpecDraftResult } from "@kinora/domain/plan";
 import type { BillingFeature, PlanSpec, PlanSpecDraft } from "@kinora/contracts";
 import type { PlanGenerationService } from "../ai/generation-service.js";
 import type { ConsumeDecision } from "../billing/types.js";
@@ -59,10 +60,25 @@ export interface PlanRouteRepo {
     step: number,
     spec: Partial<PlanSpec>
   ): Promise<{ step: number; specJson: unknown }>;
+  /**
+   * Optimistic-concurrency commit for the shared chat draft (#215). Applies the
+   * merged spec ONLY if `expectedVersion` still matches the persisted row's
+   * version (the value read at the start of the turn). Resolves to the persisted
+   * record on success, or `null` on a version conflict so the caller re-reads,
+   * re-merges, and retries rather than clobbering a concurrent turn's fields.
+   * `expectedVersion === null` means the turn started with no draft (INSERT).
+   */
+  commitDraft(
+    tenantId: string,
+    userId: string,
+    step: number,
+    spec: Partial<PlanSpec>,
+    expectedVersion: number | null
+  ): Promise<{ step: number; specJson: unknown; version: number } | null>;
   findCurrentDraft(
     tenantId: string,
     userId: string
-  ): Promise<{ step: number; specJson: unknown } | null>;
+  ): Promise<{ step: number; specJson: unknown; version: number } | null>;
   /** Atomic: insert confirmed spec + delete draft in ONE db.transaction (owned by app.ts). */
   promoteDraftToSpec(
     tenantId: string,
@@ -222,6 +238,59 @@ function draftChanged(next: PlanSpecDraft, prev: PlanSpecDraft): boolean {
   return fields.some(
     (f) => JSON.stringify(next[f] ?? null) !== JSON.stringify(prev[f] ?? null),
   );
+}
+
+/** The shared draft row as read by the chat turn (spec + optimistic version). */
+type ChatDraftRow = { step: number; specJson: unknown; version: number } | null;
+
+/**
+ * Commit a chat turn's extraction onto the shared draft under optimistic
+ * concurrency (#215 — server-side lost-update guard).
+ *
+ * Merges `extracted` onto the draft read at the start of the turn and commits
+ * with a version guard. On a version conflict (a concurrent chat turn wrote in
+ * between) it re-reads the current draft, re-merges the SAME extraction onto
+ * those fresh fields, and retries the commit exactly ONCE — so an overlapping
+ * turn's fields are preserved instead of clobbered. Pass 1/Pass 2 (the
+ * expensive LLM work) are NOT re-run; only the cheap merge + commit retries.
+ *
+ * Returns the merged view to emit on success (a no-op merge is a successful
+ * commit that writes nothing), or `null` when the retry ALSO conflicts — the
+ * caller then rejects the turn deterministically rather than dropping the
+ * concurrent write.
+ */
+async function commitChatDraft(
+  repo: Pick<PlanRouteRepo, "commitDraft" | "findCurrentDraft">,
+  tenantId: string,
+  userId: string,
+  currentRow: ChatDraftRow,
+  extracted: PlanSpecDraft,
+): Promise<MergePlanSpecDraftResult | null> {
+  let baseRow = currentRow;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const baseDraft = (baseRow?.specJson ?? {}) as PlanSpecDraft;
+    const merged = mergePlanSpecDraft(baseDraft, extracted);
+
+    // A no-op/empty extraction never touches `plan_drafts` — succeed without a
+    // write (and without a version bump), exactly as before.
+    if (!draftChanged(merged.draft, baseDraft)) {
+      return merged;
+    }
+
+    const committed = await repo.commitDraft(
+      tenantId,
+      userId,
+      baseRow?.step ?? 1,
+      merged.draft,
+      baseRow?.version ?? null,
+    );
+    if (committed) return merged;
+
+    // Version conflict → re-read the draft a concurrent turn just wrote and
+    // re-merge onto it before the single retry.
+    baseRow = await repo.findCurrentDraft(tenantId, userId);
+  }
+  return null;
 }
 
 /**
@@ -744,16 +813,13 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
           // Shared draft: read the tenant/user-scoped `plan_drafts` state (never
           // the body). A missing draft is an empty draft.
           //
-          // TODO(S3): two concurrent/overlapping chat turns for the same
-          // tenant+user (e.g. a fast double-submit) can both read the SAME
-          // `currentDraft` here and the second commit's `upsertDraft` can
-          // overwrite the first turn's merged fields (a lost update — WARNING,
-          // not fixed in S2b). Mitigation lands in S3 by serializing chat turns
-          // client-side (disable submit while a turn is in flight); no
-          // server-side locking is added here.
+          // #215: the read here and the commit below are a read-modify-write. Two
+          // overlapping turns for the same tenant+user could both read this SAME
+          // `currentDraft` and lost-update each other. The commit is guarded by
+          // `commitChatDraft` (optimistic version check + one re-read/re-merge
+          // retry), so a concurrent turn's fields are preserved, not clobbered.
           const currentRow = await repo.findCurrentDraft(tenantId, userId);
           const currentDraft = (currentRow?.specJson ?? {}) as PlanSpecDraft;
-          const step = currentRow?.step ?? 1;
 
           // Empty/whitespace message → NO LLM work (spec: draft unchanged, a
           // clarifying prompt only). Emit the current draft + its missingFields
@@ -803,18 +869,29 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
             return;
           }
 
-          // Merge (pure domain, re-validates every field) and compute missing.
-          const { draft: mergedDraft, missingFields } = mergePlanSpecDraft(currentDraft, extracted);
+          // Commit under optimistic concurrency (#215): merge → version-guarded
+          // commit → one re-read/re-merge retry on conflict. A no-op extraction
+          // never touches `plan_drafts`. Returns the merged view to emit, or
+          // `null` when even the retry conflicted.
+          const result = await commitChatDraft(
+            repo,
+            tenantId,
+            userId,
+            currentRow,
+            extracted,
+          );
 
-          // Commit ONLY here, ONLY when the turn actually changed the draft. A
-          // no-op/empty extraction never touches `plan_drafts`.
-          if (draftChanged(mergedDraft, currentDraft)) {
-            await repo.upsertDraft(tenantId, userId, step, mergedDraft);
+          // Still conflicting after one retry → reject THIS turn deterministically
+          // rather than silently dropping the concurrent turn's fields. The
+          // client can re-submit; nothing was lost.
+          if (result === null) {
+            await writeFrame("error", { error: "chat_draft_conflict" });
+            return;
           }
 
           await writeFrame("draft", {
-            draftSpec: mergedDraft,
-            missingFields,
+            draftSpec: result.draft,
+            missingFields: result.missingFields,
             assistantMessage,
           });
         } catch (error) {
