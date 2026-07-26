@@ -696,6 +696,14 @@
     "emptyBody": "Crea un plan o empieza un entrenamiento para ver tu progreso aquí.",
     "emptyCta": "Crear plan"
   },
+  "adaptation": {
+    "title": "¿Te apetece una semana más ligera?",
+    "suggestion": "¿Quieres probar {toDays} días por semana en lugar de {fromDays}?",
+    "accept": "Probar {toDays} días",
+    "dismiss": "Ahora no",
+    "regenerating": "Ajustando tu plan…",
+    "error": "No pudimos ajustar tu plan; sigue igual. Inténtalo de nuevo."
+  },
   "exercises": {
     "title": "Ejercicios",
     "description": "Explora y busca en la biblioteca de ejercicios para tus entrenamientos.",

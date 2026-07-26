@@ -10,7 +10,7 @@ import {
 import { derivePreferenceScores } from "@kinora/domain";
 import { mergePlanSpecDraft } from "@kinora/domain/plan";
 import type { MergePlanSpecDraftResult } from "@kinora/domain/plan";
-import type { BillingFeature, PlanSpec, PlanSpecDraft } from "@kinora/contracts";
+import type { BillingFeature, DashboardSummaryDTO, PlanSpec, PlanSpecDraft } from "@kinora/contracts";
 import type { PlanGenerationService } from "../ai/generation-service.js";
 import type { ConsumeDecision } from "../billing/types.js";
 import type { ChatEntitlementPort } from "../billing/chat-entitlement.js";
@@ -96,6 +96,33 @@ export interface PlanRouteRepo {
     specId: string
   ): Promise<PlanRecord | undefined>;
   findAllPlansByUser(tenantId: string, userId: string): Promise<PlanSummary[]>;
+  /**
+   * 14a-v1.1 Slice B1 — in-place, tenant/user-scoped write of
+   * `spec_json.daysPerWeek` on the caller's confirmed plan_specs row (the
+   * adherence-adaptation confirm write). Resolves to the number of rows updated
+   * (1 when the caller owns the confirmed spec, 0 otherwise). Optional so the
+   * existing wizard/generation route tests that never exercise `/adapt` do not
+   * have to stub it; the `/adapt` route is registered only when it is present.
+   */
+  updateSpecDaysPerWeek?(
+    tenantId: string,
+    userId: string,
+    specId: string,
+    toDays: number
+  ): Promise<number>;
+}
+
+/**
+ * Narrow reader port for the 14a-v1.1 adherence-adaptation confirm route
+ * (`POST /plan-specs/:id/adapt`). The route re-derives the caller's CURRENT
+ * adaptation recommendation the SAME way the dashboard does — from the
+ * authenticated tenant/user's already-fetched history + latest ready plan — so
+ * a stale or forged accept can never regenerate at an arbitrary frequency. In
+ * production this is the same `WorkoutSessionRepository.getDashboardSummary`
+ * that backs `GET /progress/dashboard`; tests inject a fake.
+ */
+export interface AdherenceReader {
+  getDashboardSummary(tenantId: string, userId: string): Promise<DashboardSummaryDTO>;
 }
 
 /**
@@ -131,6 +158,13 @@ export interface PlanRoutesOptions {
    * generation work is started.
    */
   billing?: PlanBillingGate;
+  /**
+   * 14a-v1.1 Slice B1 adherence reader. When provided (alongside a repo that
+   * exposes `updateSpecDaysPerWeek`), the server-authoritative confirm route
+   * `POST /plan-specs/:id/adapt` is registered. Absent it, every other plan
+   * route is unaffected and `/adapt` simply does not exist.
+   */
+  adherenceReader?: AdherenceReader;
   /**
    * Pro-only gate for the conversational chat endpoint (12, S2a). REQUIRED to
    * register `POST /plan-specs/chat` — when absent (alongside `chatExtractor`),
@@ -349,6 +383,22 @@ const speechSchema = {
     properties: {
       text: { type: "string", minLength: 1, maxLength: 100_000 },
     },
+    additionalProperties: true,
+  },
+};
+
+/**
+ * JSON schema for POST /plan-specs/:id/adapt body validation (14a-v1.1, B1).
+ *
+ * The body is intentionally empty (`{}`). `additionalProperties: true` is
+ * deliberate: a spoofed `tenantId`/`daysPerWeek`/`toDays` in the body is
+ * IGNORED, not rejected — identity comes only from `authContext` and the target
+ * frequency is always RE-DERIVED server-side. Mirrors `chatTurnSchema`'s
+ * body-spoof-tolerant stance.
+ */
+const adaptSchema = {
+  body: {
+    type: "object",
     additionalProperties: true,
   },
 };
@@ -586,6 +636,94 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       return reply.code(202).send(result);
     }
   );
+
+  // POST /plan-specs/:id/adapt  (14a-v1.1-adaptation-adherence, Slice B1)
+  //
+  // SERVER-AUTHORITATIVE adherence-adaptation confirm. The client posts `{}` and
+  // NEVER a target frequency — the route re-derives the reduced `daysPerWeek`
+  // itself, so a forged/stale accept can never regenerate at an arbitrary
+  // frequency.
+  //
+  // Order of operations (fail-closed; CONSUME-BEFORE-WRITE so a denied consume
+  // leaves NO half-applied spec):
+  //   1. requireAuth → authContext (the ONLY identity; a body tenantId/daysPerWeek
+  //      is ignored)
+  //   2. assertGeneratable(id) — 404 if the spec is missing/unconfirmed or
+  //      belongs to another tenant/user (before any consume or write)
+  //   3. re-derive the CURRENT recommendation via the dashboard read; if it is
+  //      not `low` with a `reduce_frequency` change FOR THIS spec → 409
+  //      { error: "no_adaptation" } (rejects stale/forged accepts; nothing
+  //      written, nothing consumed)
+  //   4. checkAndConsume `plan_regeneration` — 403 { error: reason } when
+  //      exhausted, with the spec STILL UNCHANGED (no write yet)
+  //   5. updateSpecDaysPerWeek(id, toDays) — persist the server-derived reduced
+  //      frequency in place BEFORE generation reads the spec
+  //   6. startGeneration(id) → 202 { planId, status } (reuses the exact
+  //      regenerate pipeline)
+  //
+  // The deterministic operation key (`plan_regeneration:adapt:${id}`, overridable
+  // via the Idempotency-Key header) makes a double-accept replay a single unit at
+  // the ledger — a quota race consumes exactly one. Registered only when the
+  // adherence reader AND the repo's `updateSpecDaysPerWeek` are wired.
+  const adherenceReader = options.adherenceReader;
+  if (adherenceReader && repo.updateSpecDaysPerWeek) {
+    const updateSpecDaysPerWeek = repo.updateSpecDaysPerWeek.bind(repo);
+    fastify.post(
+      "/plan-specs/:id/adapt",
+      { schema: adaptSchema, preHandler: requireAuth() },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        const { tenantId, userId } = request.authContext!;
+        const { id } = request.params as { id: string };
+
+        // Validate ownership + generatability BEFORE any consume/write. A
+        // cross-tenant/other-user or nonexistent spec throws → 404 via the app
+        // error handler (same as regenerate), spending nothing.
+        await generationService.assertGeneratable(tenantId, userId, id);
+
+        // Re-derive the caller's CURRENT recommendation server-side, exactly as
+        // the dashboard read does (tenant/user scoped from authContext). The
+        // client cannot influence this — the body is ignored entirely.
+        const summary = await adherenceReader.getDashboardSummary(tenantId, userId);
+        const adaptation = summary.adaptation;
+        const suggestedChange = adaptation?.suggestedChange;
+        const isConfirmable =
+          adaptation?.level === "low" &&
+          suggestedChange?.kind === "reduce_frequency" &&
+          adaptation.planSpecId === id;
+        if (!isConfirmable || !suggestedChange) {
+          // Stale (adherence recovered), a forged accept, or a mismatched spec:
+          // no persist, no consume, no generation.
+          return reply.code(409).send({ error: "no_adaptation" });
+        }
+
+        // The reduced frequency is DERIVED here — never read from the body.
+        const toDays = suggestedChange.toDays;
+
+        // Consume BEFORE the write: an exhausted/denied quota returns 403 with
+        // the spec untouched, so a failed consume never leaves a mutated spec
+        // without a regeneration. The deterministic key makes a concurrent
+        // double-accept replay one unit at the ledger.
+        if (billing) {
+          const decision = await billing.checkAndConsume(
+            { tenantId, userId },
+            "plan_regeneration",
+            resolveOperationKey(request, `plan_regeneration:adapt:${id}`),
+          );
+          if (!decision.allowed) {
+            return reply.code(403).send({ error: decision.reason });
+          }
+        }
+
+        // Persist the reduced daysPerWeek in place so generation regenerates at
+        // the adjusted frequency (write AFTER a successful consume, BEFORE
+        // generation reads the spec).
+        await updateSpecDaysPerWeek(tenantId, userId, id, toDays);
+
+        const result = await generationService.startGeneration(tenantId, userId, id);
+        return reply.code(202).send(result);
+      }
+    );
+  }
 
   // GET /workout-plans
   // Returns all workout plan summaries for the authenticated user within their tenant.

@@ -16,6 +16,7 @@ vi.mock("next-intl/server", () => ({
 
 vi.mock("../actions.js", () => ({
   getDashboardAction: vi.fn(),
+  adaptPlanAction: vi.fn(),
 }));
 
 import { getTranslations, getLocale } from "next-intl/server";

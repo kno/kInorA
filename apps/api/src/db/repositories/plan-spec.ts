@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { planSpecs } from "../schema.js";
 import type { Database } from "../client.js";
 import type { PlanSpec } from "@kinora/contracts";
@@ -90,5 +90,45 @@ export class PlanSpecRepository {
       createdAt: Date;
     };
     return { id: row.id, spec: row.specJson as PlanSpec };
+  }
+
+  /**
+   * 14a-v1.1 Slice B1 — in-place, tenant/user-scoped update of
+   * `spec_json.daysPerWeek` on an existing confirmed plan_specs row.
+   *
+   * This is the adherence-adaptation confirm write: the server has already
+   * re-derived the reduced `toDays` (the client never supplies a frequency), so
+   * this only rewrites the ONE field via `jsonb_set`, leaving every other spec
+   * field intact. It is NOT the write-once draft/promote path — no new row, no
+   * migration, no draft involvement.
+   *
+   * Scoped to `(tenantId, userId, id, confirmed = true)`: a cross-tenant or
+   * cross-user id matches nothing and is a no-op. Returns the number of rows
+   * updated (1 when the caller owns the confirmed spec, 0 otherwise) so the
+   * route can treat 0 as a 404 without a separate read.
+   */
+  async updateSpecDaysPerWeek(
+    tenantId: string,
+    userId: string,
+    id: string,
+    toDays: number
+  ): Promise<number> {
+    const rows = await this.db
+      .update(planSpecs)
+      .set({
+        // Rewrite ONLY spec_json.daysPerWeek; `to_jsonb(int)` keeps it a JSON
+        // number and every sibling field is preserved by jsonb_set.
+        specJson: sql`jsonb_set(${planSpecs.specJson}, '{daysPerWeek}', to_jsonb(${toDays}::int), true)`,
+      })
+      .where(
+        and(
+          eq(planSpecs.tenantId, tenantId),
+          eq(planSpecs.userId, userId),
+          eq(planSpecs.id, id),
+          eq(planSpecs.confirmed, true)
+        )
+      )
+      .returning();
+    return rows.length;
   }
 }
