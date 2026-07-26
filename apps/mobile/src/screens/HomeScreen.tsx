@@ -36,6 +36,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const intl = useIntl();
   const logoutLabel = intl.formatMessage({ id: "dashboard.logout" });
   const historyLabel = intl.formatMessage({ id: "history.title" });
+  const createPlanLabel = intl.formatMessage({ id: "chat.teaser.title" });
 
   const [planId, setPlanId] = useState(
     process.env.EXPO_PUBLIC_DEMO_PLAN_ID ?? "",
@@ -94,6 +95,15 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           <Text style={styles.startButtonText}>Start workout</Text>
         </Pressable>
       </View>
+
+      <Pressable
+        style={({ pressed }) => [styles.historyButton, pressed && styles.historyButtonPressed]}
+        onPress={() => navigation.navigate("CreatePlanAssistant")}
+        accessibilityRole="button"
+        accessibilityLabel={createPlanLabel}
+      >
+        <Text style={styles.historyText}>{createPlanLabel}</Text>
+      </Pressable>
 
       <Pressable
         style={({ pressed }) => [styles.historyButton, pressed && styles.historyButtonPressed]}
