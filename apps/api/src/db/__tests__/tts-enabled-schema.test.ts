@@ -31,14 +31,14 @@ describe("tts_enabled migration (13 A3)", () => {
     expect(migrationSql).not.toContain("DEFAULT");
   });
 
-  it("registers the migration as the latest journal entry with a monotonic timestamp", () => {
+  it("registers the migration as a journal entry appended after 0013 with a monotonic timestamp", () => {
     const entry = migrationJournal.entries.find((e) => e.tag === "0014_tts_enabled");
     expect(entry).toBeDefined();
-    // Highest idx — appended after 0013_stripe_event_ts.
-    const maxIdx = Math.max(...migrationJournal.entries.map((e) => e.idx));
-    expect(entry!.idx).toBe(maxIdx);
+    // Appended directly after 0013_stripe_event_ts. (No longer the highest idx —
+    // 0015_plan_draft_version was appended after it; see plan-draft-version-schema.test.ts.)
     const prior = migrationJournal.entries.find((e) => e.idx === entry!.idx - 1);
     expect(prior).toBeDefined();
+    expect(prior!.tag).toBe("0013_stripe_event_ts");
     expect(entry!.when).toBeGreaterThan(prior!.when);
   });
 });

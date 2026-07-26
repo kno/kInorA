@@ -514,6 +514,13 @@ export const planDrafts = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     step: integer("step").notNull(),
     specJson: jsonb("spec_json").notNull(),
+    /**
+     * Optimistic-concurrency guard (#215). Monotonically bumped on every write
+     * to the row. A read-modify-write chat turn commits only if this value is
+     * unchanged since it read, so two overlapping turns cannot lost-update each
+     * other. Additive with a server default of 0 so existing rows are safe.
+     */
+    version: integer("version").notNull().default(0),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({

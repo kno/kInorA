@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { planDrafts } from "../schema.js";
 import type { Database } from "../client.js";
 import type { PlanSpec } from "@kinora/contracts";
@@ -15,6 +15,12 @@ export interface PlanDraftRecord {
   userId: string;
   step: number;
   specJson: unknown;
+  /**
+   * Optimistic-concurrency version (#215). Bumped on every write; a guarded
+   * commit applies only when the stored value still matches the value read at
+   * the start of the read-modify-write cycle.
+   */
+  version: number;
   updatedAt: Date;
 }
 
@@ -44,10 +50,71 @@ export class PlanDraftRepository {
       .values({ tenantId, userId, step, specJson: spec })
       .onConflictDoUpdate({
         target: [planDrafts.tenantId, planDrafts.userId],
-        set: { step, specJson: spec, updatedAt: new Date() },
+        // Bump `version` on every replace so a concurrent version-guarded chat
+        // commit (#215) observes this write and re-reads instead of clobbering.
+        set: {
+          step,
+          specJson: spec,
+          updatedAt: new Date(),
+          version: sql`${planDrafts.version} + 1`,
+        },
       })
       .returning();
     return rows[0] as PlanDraftRecord;
+  }
+
+  /**
+   * Optimistic-concurrency commit for the shared chat draft (#215).
+   *
+   * Applies `step` + `spec` ONLY if the row's `version` still matches
+   * `expectedVersion` (the value read at the start of the turn). Returns the
+   * updated record on success, or `null` on a version conflict — a concurrent
+   * turn wrote in between — so the caller can re-read, re-merge, and retry
+   * rather than silently drop the other turn's fields.
+   *
+   * `expectedVersion === null` means "no draft existed when this turn started":
+   * the commit INSERTs a fresh row. A concurrent insert (unique-index
+   * violation) surfaces as a conflict (`null`) too, via `onConflictDoNothing`,
+   * so the retry re-reads the now-existing row instead of throwing.
+   */
+  async commitWithVersion(
+    tenantId: string,
+    userId: string,
+    step: number,
+    spec: Partial<PlanSpec>,
+    expectedVersion: number | null
+  ): Promise<PlanDraftRecord | null> {
+    if (expectedVersion === null) {
+      const rows = await this.db
+        .insert(planDrafts)
+        .values({ tenantId, userId, step, specJson: spec })
+        // A row already exists (another turn inserted first) → no-op, empty
+        // returning → treat as a conflict so the caller re-reads and retries.
+        .onConflictDoNothing({
+          target: [planDrafts.tenantId, planDrafts.userId],
+        })
+        .returning();
+      return (rows[0] as PlanDraftRecord | undefined) ?? null;
+    }
+
+    const rows = await this.db
+      .update(planDrafts)
+      .set({
+        step,
+        specJson: spec,
+        updatedAt: new Date(),
+        version: expectedVersion + 1,
+      })
+      .where(
+        and(
+          eq(planDrafts.tenantId, tenantId),
+          eq(planDrafts.userId, userId),
+          eq(planDrafts.version, expectedVersion)
+        )
+      )
+      .returning();
+    // Empty returning → the version moved under us (concurrent commit) → conflict.
+    return (rows[0] as PlanDraftRecord | undefined) ?? null;
   }
 
   /**

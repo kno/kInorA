@@ -54,6 +54,7 @@ type PlanRepoMock = { [K in keyof PlanRouteRepo]: ReturnType<typeof vi.fn> };
 function buildPlanRepo(): PlanRepoMock {
   return {
     upsertDraft: vi.fn().mockResolvedValue({ step: 1, specJson: {} }),
+    commitDraft: vi.fn().mockResolvedValue({ step: 1, specJson: {}, version: 1 }),
     findCurrentDraft: vi.fn().mockResolvedValue(null),
     promoteDraftToSpec: vi.fn(),
     findPlanById: vi.fn(),
