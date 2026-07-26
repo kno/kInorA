@@ -550,9 +550,12 @@ export function AssistantPane({
     editField({ equipment: [...current, text] });
   };
 
-  const removeEquipment = (item: string) => {
+  // Remove by INDEX (not value): equipment is a plain `string[]` with no
+  // uniqueness guarantee (a draft can carry duplicates), so a value filter would
+  // drop every value-equal entry at once. Mirrors `removeLimitation`.
+  const removeEquipment = (index: number) => {
     const current = spec.equipment ?? [];
-    editField({ equipment: current.filter((v) => v !== item) });
+    editField({ equipment: current.filter((_, i) => i !== index) });
   };
 
   /** Add the typed limitation (trimmed, `isWarning: true`) unless blank. */
@@ -704,6 +707,7 @@ export function AssistantPane({
                 id="chat-field-goal"
                 className="kin-input"
                 value={spec.goal ?? ""}
+                disabled={streaming}
                 aria-label={t("chat.panel.editAria", { field: t("chat.field.goal") })}
                 onChange={(e) =>
                   editField({ goal: (e.target.value || undefined) as PlanGoal | undefined })
@@ -726,6 +730,7 @@ export function AssistantPane({
                 id="chat-field-location"
                 className="kin-input"
                 value={spec.location ?? ""}
+                disabled={streaming}
                 aria-label={t("chat.panel.editAria", { field: t("chat.field.location") })}
                 onChange={(e) =>
                   editField({
@@ -753,6 +758,7 @@ export function AssistantPane({
                 max={7}
                 className="kin-input"
                 value={spec.daysPerWeek ?? ""}
+                disabled={streaming}
                 aria-label={t("chat.panel.editAria", { field: t("chat.field.daysPerWeek") })}
                 onChange={(e) =>
                   editField({
@@ -773,6 +779,7 @@ export function AssistantPane({
                 max={240}
                 className="kin-input"
                 value={spec.sessionDurationMinutes ?? ""}
+                disabled={streaming}
                 aria-label={t("chat.panel.editAria", {
                   field: t("chat.field.sessionDuration"),
                 })}
@@ -795,6 +802,7 @@ export function AssistantPane({
                     aria-label={t("wizard.equipment.addAria")}
                     placeholder={t("wizard.equipment.addPlaceholder")}
                     value={equipmentDraft}
+                    disabled={streaming}
                     onChange={(e) => setEquipmentDraft(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
@@ -803,20 +811,26 @@ export function AssistantPane({
                       }
                     }}
                   />
-                  <button type="button" className="kin-btn" onClick={addEquipment}>
+                  <button
+                    type="button"
+                    className="kin-btn"
+                    disabled={streaming}
+                    onClick={addEquipment}
+                  >
                     {t("wizard.equipment.addButton")}
                   </button>
                 </div>
                 {spec.equipment && spec.equipment.length > 0 ? (
                   <ul className={styles.chips}>
-                    {spec.equipment.map((item) => (
-                      <li key={item} className={styles.chip}>
+                    {spec.equipment.map((item, index) => (
+                      <li key={`${item}-${index}`} className={styles.chip}>
                         {item}
                         <button
                           type="button"
                           className={styles.chipRemove}
                           aria-label={t("wizard.chip.removeAria", { name: item })}
-                          onClick={() => removeEquipment(item)}
+                          disabled={streaming}
+                          onClick={() => removeEquipment(index)}
                         >
                           ×
                         </button>
@@ -839,6 +853,7 @@ export function AssistantPane({
                     aria-label={t("wizard.limitations.addAria")}
                     placeholder={t("wizard.limitations.addPlaceholder")}
                     value={limitationDraft}
+                    disabled={streaming}
                     onChange={(e) => setLimitationDraft(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
@@ -847,7 +862,12 @@ export function AssistantPane({
                       }
                     }}
                   />
-                  <button type="button" className="kin-btn" onClick={addLimitation}>
+                  <button
+                    type="button"
+                    className="kin-btn"
+                    disabled={streaming}
+                    onClick={addLimitation}
+                  >
                     {t("wizard.limitations.addButton")}
                   </button>
                 </div>
@@ -860,6 +880,7 @@ export function AssistantPane({
                           type="button"
                           className={styles.chipRemove}
                           aria-label={t("wizard.chip.removeAria", { name: limitation.text })}
+                          disabled={streaming}
                           onClick={() => removeLimitation(index)}
                         >
                           ×
