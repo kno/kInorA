@@ -201,6 +201,14 @@
   color: var(--kin-muted, rgba(255, 255, 255, 0.7));
 }
 
+/* Stop-speaking (mute) affordance, shown only while a TTS reply is playing (B2). */
+.stopSpeakingBtn {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+}
+
 .micBtn {
   flex-shrink: 0;
   width: 42px;

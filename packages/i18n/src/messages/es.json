@@ -1094,8 +1094,11 @@
     "state": {
       "idle": "Listo",
       "listening": "Escuchando…",
-      "processing": "Procesando…"
+      "processing": "Procesando…",
+      "speaking": "Hablando…"
     },
+    "stopSpeaking": "Detener voz",
+    "stopSpeakingAria": "Detener la voz del asistente",
     "denied": "Necesitamos acceso al micrófono para la voz. Podés seguir escribiendo.",
     "unsupported": "La entrada de voz no está disponible en este navegador. Podés seguir escribiendo.",
     "offline": "La voz necesita conexión. Podés seguir escribiendo.",

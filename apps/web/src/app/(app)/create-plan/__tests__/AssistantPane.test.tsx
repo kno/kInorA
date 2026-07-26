@@ -436,13 +436,17 @@ function streamWithStopSpy(): { stream: MediaStream; stop: ReturnType<typeof vi.
   return { stream: { getTracks: () => [{ stop }] } as unknown as MediaStream, stop };
 }
 
-/** Route fetch by URL: `/create-plan/transcribe` vs `/create-plan/chat`. */
+/** Route fetch by URL: `/create-plan/transcribe`, `/create-plan/speech`, or `/create-plan/chat`. */
 function routeFetch(handlers: {
   transcribe: () => Promise<unknown>;
   chat?: () => Promise<unknown>;
+  speech?: () => Promise<unknown>;
 }) {
   const fetchMock = vi.fn((url: string) => {
     if (String(url).includes("transcribe")) return handlers.transcribe();
+    if (String(url).includes("speech")) {
+      return (handlers.speech ?? (() => Promise.resolve({ ok: true, status: 204 })))();
+    }
     return (handlers.chat ?? (() => Promise.reject(new Error("no chat handler"))))();
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -707,5 +711,201 @@ describe("AssistantPane — voice capture (B1)", () => {
     expect((screen.getByRole("textbox", { name: /chat message/i }) as HTMLTextAreaElement).disabled).toBe(
       false,
     );
+  });
+});
+
+// --- Voice TTS playback sub-mode (13 Slice B2) ---
+
+/** A speech-proxy response carrying mp3 audio bytes (200). */
+function audioResponse(bytes: number[] = [1, 2, 3]) {
+  return Promise.resolve({
+    ok: true,
+    status: 200,
+    blob: async () => new Blob([new Uint8Array(bytes)], { type: "audio/mpeg" }),
+  });
+}
+
+/**
+ * Mock the browser audio surface jsdom does not implement: `HTMLMediaElement`
+ * play/pause and `URL.createObjectURL`/`revokeObjectURL`. Returns the spies so
+ * each test can assert playback happened (or did not) and that the object URL
+ * is revoked (no leak).
+ */
+function installAudioMocks() {
+  const play = vi.fn().mockResolvedValue(undefined);
+  const pause = vi.fn();
+  Object.defineProperty(window.HTMLMediaElement.prototype, "play", {
+    configurable: true,
+    value: play,
+  });
+  Object.defineProperty(window.HTMLMediaElement.prototype, "pause", {
+    configurable: true,
+    value: pause,
+  });
+  const createObjectURL = vi.fn(() => "blob:kinora-mock");
+  const revokeObjectURL = vi.fn();
+  vi.stubGlobal("URL", {
+    ...URL,
+    createObjectURL,
+    revokeObjectURL,
+  });
+  return { play, pause, createObjectURL, revokeObjectURL };
+}
+
+/** Drive a full voice turn: mic start → stop → (transcribe → chat → playback). */
+async function driveVoiceTurn() {
+  const getUserMedia = vi.fn().mockResolvedValue(fakeStream());
+  installVoice(getUserMedia);
+  renderVoicePane();
+  await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(micStart());
+  await waitFor(() => expect(micStop()).toBeTruthy());
+  fireEvent.click(micStop());
+}
+
+const CHAT_REPLY_FRAME =
+  'event: draft\ndata: {"draftSpec":{"goal":"hypertrophy"},"missingFields":[],"assistantMessage":"Four days a week it is."}\n\n';
+
+describe("AssistantPane — voice TTS playback (B2)", () => {
+  it("speaks the terminal reply after a voice turn: calls the speech proxy with the reply text and plays the audio", async () => {
+    const audio = installAudioMocks();
+    const speech = vi.fn(() => audioResponse());
+    const fetchMock = routeFetch({
+      transcribe: () =>
+        Promise.resolve({ ok: true, status: 200, json: async () => ({ text: "four days", unclear: false }) }),
+      chat: () => Promise.resolve({ ok: true, status: 200, body: eagerStream([CHAT_REPLY_FRAME]) }),
+      speech,
+    });
+
+    await driveVoiceTurn();
+
+    await waitFor(() => expect(screen.getByText("Four days a week it is.")).toBeTruthy());
+    await waitFor(() => expect(speech).toHaveBeenCalled());
+    // The speech proxy was POSTed the terminal assistant text as JSON.
+    const speechCall = fetchMock.mock.calls.find((c) => String(c[0]).includes("speech")) as unknown as
+      | [string, RequestInit]
+      | undefined;
+    expect(speechCall).toBeTruthy();
+    const init = speechCall![1];
+    expect(JSON.parse(init.body as string)).toEqual({ text: "Four days a week it is." });
+    // The blob was turned into an object URL and played.
+    await waitFor(() => expect(audio.createObjectURL).toHaveBeenCalled());
+    await waitFor(() => expect(audio.play).toHaveBeenCalled());
+  });
+
+  it("does NOT speak a purely typed turn (playback is anchored to the voice interaction)", async () => {
+    const audio = installAudioMocks();
+    const speech = vi.fn(() => audioResponse());
+    installVoice(vi.fn().mockResolvedValue(fakeStream()));
+    routeFetch({
+      transcribe: () => Promise.reject(new Error("unused")),
+      chat: () => Promise.resolve({ ok: true, status: 200, body: eagerStream([CHAT_REPLY_FRAME]) }),
+      speech,
+    });
+    setup();
+    await sendTurn("build muscle");
+    await waitFor(() => expect(screen.getByText("Four days a week it is.")).toBeTruthy());
+    // A typed turn must never trigger TTS.
+    expect(speech).not.toHaveBeenCalled();
+    expect(audio.play).not.toHaveBeenCalled();
+  });
+
+  it("skips playback silently on a 204 (TTS opted out) — the reply is still shown, no crash", async () => {
+    const audio = installAudioMocks();
+    const speech = vi.fn(() => Promise.resolve({ ok: true, status: 204 }));
+    routeFetch({
+      transcribe: () =>
+        Promise.resolve({ ok: true, status: 200, json: async () => ({ text: "four days", unclear: false }) }),
+      chat: () => Promise.resolve({ ok: true, status: 200, body: eagerStream([CHAT_REPLY_FRAME]) }),
+      speech,
+    });
+
+    await driveVoiceTurn();
+
+    await waitFor(() => expect(screen.getByText("Four days a week it is.")).toBeTruthy());
+    await waitFor(() => expect(speech).toHaveBeenCalled());
+    expect(audio.play).not.toHaveBeenCalled();
+    expect(audio.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("a speech failure (502) never breaks the chat: the reply stays shown and nothing throws", async () => {
+    const audio = installAudioMocks();
+    const speech = vi.fn(() => Promise.resolve({ ok: false, status: 502, text: async () => "" }));
+    routeFetch({
+      transcribe: () =>
+        Promise.resolve({ ok: true, status: 200, json: async () => ({ text: "four days", unclear: false }) }),
+      chat: () => Promise.resolve({ ok: true, status: 200, body: eagerStream([CHAT_REPLY_FRAME]) }),
+      speech,
+    });
+
+    await driveVoiceTurn();
+
+    await waitFor(() => expect(screen.getByText("Four days a week it is.")).toBeTruthy());
+    await waitFor(() => expect(speech).toHaveBeenCalled());
+    expect(audio.play).not.toHaveBeenCalled();
+  });
+
+  it("a network failure on the speech fetch never breaks the chat reply", async () => {
+    const audio = installAudioMocks();
+    const speech = vi.fn(() => Promise.reject(new Error("network down")));
+    routeFetch({
+      transcribe: () =>
+        Promise.resolve({ ok: true, status: 200, json: async () => ({ text: "four days", unclear: false }) }),
+      chat: () => Promise.resolve({ ok: true, status: 200, body: eagerStream([CHAT_REPLY_FRAME]) }),
+      speech,
+    });
+
+    await driveVoiceTurn();
+
+    await waitFor(() => expect(screen.getByText("Four days a week it is.")).toBeTruthy());
+    await waitFor(() => expect(speech).toHaveBeenCalled());
+    expect(audio.play).not.toHaveBeenCalled();
+  });
+
+  it("offers a stop-speaking control while playing, and stopping pauses audio + revokes the object URL", async () => {
+    const audio = installAudioMocks();
+    routeFetch({
+      transcribe: () =>
+        Promise.resolve({ ok: true, status: 200, json: async () => ({ text: "four days", unclear: false }) }),
+      chat: () => Promise.resolve({ ok: true, status: 200, body: eagerStream([CHAT_REPLY_FRAME]) }),
+      speech: () => audioResponse(),
+    });
+
+    await driveVoiceTurn();
+
+    await waitFor(() => expect(audio.play).toHaveBeenCalled());
+    const stopBtn = await screen.findByRole("button", { name: /stop the assistant's voice/i });
+    fireEvent.click(stopBtn);
+    expect(audio.pause).toHaveBeenCalled();
+    expect(audio.revokeObjectURL).toHaveBeenCalled();
+  });
+
+  it("revokes the object URL and stops audio when the component unmounts mid-playback", async () => {
+    const audio = installAudioMocks();
+    const getUserMedia = vi.fn().mockResolvedValue(fakeStream());
+    installVoice(getUserMedia);
+    routeFetch({
+      transcribe: () =>
+        Promise.resolve({ ok: true, status: 200, json: async () => ({ text: "four days", unclear: false }) }),
+      chat: () => Promise.resolve({ ok: true, status: 200, body: eagerStream([CHAT_REPLY_FRAME]) }),
+      speech: () => audioResponse(),
+    });
+
+    const { unmount } = renderWithIntl(
+      <AssistantPane
+        spec={{}}
+        onSpecChange={vi.fn()}
+        persistSpec={() => Promise.resolve()}
+        onGenerate={() => Promise.resolve()}
+      />,
+    );
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(micStart());
+    await waitFor(() => expect(micStop()).toBeTruthy());
+    fireEvent.click(micStop());
+    await waitFor(() => expect(audio.play).toHaveBeenCalled());
+
+    unmount();
+    expect(audio.revokeObjectURL).toHaveBeenCalled();
   });
 });
