@@ -42,6 +42,14 @@ function selectChain(rows: unknown[]) {
   return { select, from, where };
 }
 
+function updateChain(rows: unknown[]) {
+  const returning = vi.fn().mockResolvedValue(rows);
+  const where = vi.fn().mockReturnValue({ returning });
+  const set = vi.fn().mockReturnValue({ where });
+  const update = vi.fn().mockReturnValue({ set });
+  return { update, set, where, returning };
+}
+
 describe("PlanSpecRepository", () => {
   describe("findConfirmedById", () => {
     it("returns the spec when it is confirmed and belongs to the tenant", async () => {
@@ -134,6 +142,36 @@ describe("PlanSpecRepository", () => {
       expect(insertedValues.tenantId).toBe(TENANT_B);
       expect(insertedValues.userId).toBe(USER_B);
       expect(result.id).toBe("spec-uuid-2");
+    });
+  });
+
+  // 14a-v1.1 Slice B1 — in-place, tenant/user-scoped `spec_json.daysPerWeek`
+  // write for the adherence-adaptation confirm route. This is NOT the write-once
+  // draft/promote path: it updates an existing confirmed plan_specs row directly.
+  describe("updateSpecDaysPerWeek", () => {
+    it("updates spec_json.daysPerWeek in place and returns 1 for the owning tenant/user", async () => {
+      const { update, set, where, returning } = updateChain([planSpecRow()]);
+      const repo = new PlanSpecRepository({ update } as never);
+
+      const affected = await repo.updateSpecDaysPerWeek(TENANT_A, USER_A, "spec-uuid-1", 3);
+
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(set).toHaveBeenCalledTimes(1);
+      expect(where).toHaveBeenCalledTimes(1);
+      expect(returning).toHaveBeenCalledTimes(1);
+      // Exactly one owned row was updated.
+      expect(affected).toBe(1);
+    });
+
+    it("is a no-op (0 rows) for a cross-tenant / cross-user id", async () => {
+      // The WHERE clause is scoped to (tenantId, userId, id, confirmed) so a
+      // spec owned by another tenant/user matches nothing → empty returning.
+      const { update } = updateChain([]);
+      const repo = new PlanSpecRepository({ update } as never);
+
+      const affected = await repo.updateSpecDaysPerWeek(TENANT_B, USER_B, "spec-uuid-1", 3);
+
+      expect(affected).toBe(0);
     });
   });
 });
