@@ -405,9 +405,9 @@
       "generic": "Algo salió mal. Inténtalo de nuevo."
     },
     "sync": {
-      "reload_required": "Tus cambios guardados están a salvo, pero necesitás recargar la página para terminar de sincronizar.",
-      "auth_required": "Tu sesión expiró mientras sincronizábamos. Tus cambios siguen guardados localmente — recargá la página o volvé a iniciar sesión para terminar de sincronizar.",
-      "dropped": "Algunos de tus cambios no se pudieron guardar y se descartaron porque el servidor los rechazó. Por favor, volvé a hacer esos cambios."
+      "reload_required": "Tus cambios guardados están a salvo, pero necesitas recargar la página para terminar de sincronizar.",
+      "auth_required": "Tu sesión expiró mientras sincronizábamos. Tus cambios siguen guardados localmente — recarga la página o vuelve a iniciar sesión para terminar de sincronizar.",
+      "dropped": "Algunos de tus cambios no se pudieron guardar y se descartaron porque el servidor los rechazó. Por favor, vuelve a hacer esos cambios."
     },
     "currentExercise": "Ejercicio actual",
     "rpe": "RPE",
@@ -1057,26 +1057,26 @@
     },
     "backHome": "Volver al inicio",
     "error": {
-      "load": "No pudimos cargar la sesión. Intentá de nuevo.",
-      "start": "No pudimos iniciar la sesión. Intentá de nuevo.",
-      "record": "No pudimos guardar la serie. Intentá de nuevo.",
-      "complete": "No pudimos finalizar la sesión. Intentá de nuevo."
+      "load": "No pudimos cargar la sesión. Inténtalo de nuevo.",
+      "start": "No pudimos iniciar la sesión. Inténtalo de nuevo.",
+      "record": "No pudimos guardar la serie. Inténtalo de nuevo.",
+      "complete": "No pudimos finalizar la sesión. Inténtalo de nuevo."
     },
     "reps": {
       "decrease": "Reducir repetición",
       "increase": "Aumentar repetición"
     },
     "conflict": {
-      "withScope": "Ya tenés una sesión activa en «{planName}» (Día {day}). Terminala antes de empezar otra.",
-      "withPlan": "Ya tenés una sesión activa en «{planName}». Terminala antes de empezar otra.",
-      "generic": "Ya tenés una sesión activa. Terminala antes de empezar otra."
+      "withScope": "Ya tienes una sesión activa en «{planName}» (Día {day}). Termínala antes de empezar otra.",
+      "withPlan": "Ya tienes una sesión activa en «{planName}». Termínala antes de empezar otra.",
+      "generic": "Ya tienes una sesión activa. Termínala antes de empezar otra."
     },
     "retry": "Reintentar"
   },
   "chat": {
     "coachName": "Entrenador kInorA",
     "coachStatus": "IA · Disponible ahora",
-    "greeting": "¡Hola! Soy tu entrenador personal de kInorA. Contame qué plan querés — tu objetivo, cuántos días por semana, la duración de cada sesión, dónde entrenás y qué equipo tenés — y lo diseño para vos.",
+    "greeting": "¡Hola! Soy tu entrenador personal de kInorA. Cuéntame qué plan quieres — tu objetivo, cuántos días por semana, la duración de cada sesión, dónde entrenas y qué equipo tienes — y lo diseño para ti.",
     "inputPlaceholder": "Escribe tu mensaje…",
     "inputAria": "Mensaje del chat",
     "send": "Enviar",
@@ -1085,9 +1085,9 @@
     "retry": "Reintentar",
     "threadAria": "Conversación con el entrenador kInorA",
     "error": {
-      "chat_stream_failed": "Algo salió mal. Intentá de nuevo.",
-      "chat_stream_timeout": "Tardó demasiado. Intentá de nuevo.",
-      "generic": "Algo salió mal. Intentá de nuevo."
+      "chat_stream_failed": "Algo salió mal. Inténtalo de nuevo.",
+      "chat_stream_timeout": "Tardó demasiado. Inténtalo de nuevo.",
+      "generic": "Algo salió mal. Inténtalo de nuevo."
     },
     "panel": {
       "title": "Datos extraídos",
@@ -1095,7 +1095,7 @@
       "editAria": "Editar {field}",
       "notSet": "—",
       "generate": "Generar plan",
-      "generateError": "No pudimos generar tu plan. Intentá de nuevo."
+      "generateError": "No pudimos generar tu plan. Inténtalo de nuevo."
     },
     "field": {
       "goal": "Objetivo",
@@ -1115,7 +1115,7 @@
     "teaser": {
       "eyebrow": "Pro",
       "title": "Crea tu plan conversando",
-      "description": "Describí tu objetivo con tus palabras y dejá que el entrenador kInorA diseñe tu plan — una función Pro.",
+      "description": "Describe tu objetivo con tus palabras y deja que el entrenador kInorA diseñe tu plan — una función Pro.",
       "cta": "Mejora a Pro"
     },
     "mode": {
@@ -1125,7 +1125,7 @@
     }
   },
   "voice": {
-    "micLabel": "Tocá para hablar",
+    "micLabel": "Toca para hablar",
     "startAria": "Iniciar entrada de voz",
     "stopAria": "Detener grabación",
     "state": {
@@ -1137,14 +1137,14 @@
     },
     "stopSpeaking": "Detener voz",
     "stopSpeakingAria": "Detener la voz del asistente",
-    "denied": "Necesitamos acceso al micrófono para la voz. Podés seguir escribiendo.",
-    "unsupported": "La entrada de voz no está disponible en este navegador. Podés seguir escribiendo.",
-    "offline": "La voz necesita conexión. Podés seguir escribiendo.",
-    "unclear": "No te entendí. Intentá de nuevo.",
-    "error": "Falló la entrada de voz. Intentá de nuevo.",
-    "premium": "La voz es una función Pro. Mejorá tu plan para usarla. Podés seguir escribiendo.",
+    "denied": "Necesitamos acceso al micrófono para la voz. Puedes seguir escribiendo.",
+    "unsupported": "La entrada de voz no está disponible en este navegador. Puedes seguir escribiendo.",
+    "offline": "La voz necesita conexión. Puedes seguir escribiendo.",
+    "unclear": "No te entendí. Inténtalo de nuevo.",
+    "error": "Falló la entrada de voz. Inténtalo de nuevo.",
+    "premium": "La voz es una función Pro. Mejora tu plan para usarla. Puedes seguir escribiendo.",
     "screenTitle": "Asistente kInorA",
-    "hold": "Mantené para hablar",
+    "hold": "Mantén para hablar",
     "backAria": "Volver",
     "keyboardAria": "Cambiar a escritura",
     "endSession": "Finalizar sesión",
