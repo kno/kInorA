@@ -125,6 +125,12 @@ export function AssistantPane({
   // answer the assistant's next question by just typing — no mouse reach.
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // Auto-scroll: keep the thread pinned to the latest message as replies stream
+  // in, but ONLY while the user is already near the bottom — if they scrolled up
+  // to read earlier messages we must NOT yank them back down on every token.
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
+
   // --- Voice sub-mode (B1: capture + transcribe → existing chat turn) ---
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceNotice, setVoiceNotice] = useState<VoiceNotice>(null);
@@ -167,6 +173,24 @@ export function AssistantPane({
     const id = requestAnimationFrame(() => inputRef.current?.focus());
     return () => cancelAnimationFrame(id);
   }, [streaming]);
+
+  // Keep the thread scrolled to the latest message whenever it changes (new
+  // turn, streaming tokens, terminal draft) — but only when the user is already
+  // pinned to the bottom (see stickToBottomRef, updated by onScroll below).
+  useEffect(() => {
+    if (!stickToBottomRef.current) return;
+    const el = messagesRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  // Track whether the user is near the bottom so streaming replies keep
+  // auto-following, but scrolling up to read history pauses the auto-scroll.
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickToBottomRef.current = distanceFromBottom < 80;
+  }, []);
 
   // Feature-detect voice at mount (client-only): the browser needs both
   // getUserMedia and MediaRecorder. Detected in an effect so SSR never touches
@@ -328,6 +352,9 @@ export function AssistantPane({
       stopSpeaking();
 
       lastUserMessageRef.current = message;
+      // The user just sent a turn — follow it and its reply to the bottom even
+      // if they had scrolled up earlier.
+      stickToBottomRef.current = true;
       setErrorReason(null);
       setMessages((prev) => {
         const withUser = appendUserMessage
@@ -612,7 +639,11 @@ export function AssistantPane({
           <div className={styles.coachStatus}>{t("chat.coachStatus")}</div>
         </header>
 
-        <div className={`${styles.messages} kin-scroll`}>
+        <div
+          className={`${styles.messages} kin-scroll`}
+          ref={messagesRef}
+          onScroll={handleMessagesScroll}
+        >
           {messages.map((m, i) => (
             <div
               key={i}
