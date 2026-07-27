@@ -68,6 +68,8 @@ import type { PlanSpecExtractor } from "./ai/extraction-port.js";
 import type { SpeechTranscriber } from "./ai/speech-transcriber-port.js";
 import type { SpeechSynthesizer } from "./ai/speech-synthesizer-port.js";
 import { OpenAIAudioAdapter } from "./ai/openai-audio-adapter.js";
+import { MockSpeechTranscriber } from "./ai/mock-speech-transcriber.js";
+import { MockSpeechSynthesizer } from "./ai/mock-speech-synthesizer.js";
 import { CheckAndConsumeQuota } from "./billing/quota-consumption.js";
 import { SetMemberAllocation, GetTenantUsage } from "./billing/quota-admin.js";
 import { GetBillingVisibility } from "./billing/billing-visibility.js";
@@ -391,8 +393,16 @@ export async function buildApp(
   // (mapped to a generic 502). Tests inject deterministic Mocks via the
   // `transcriber`/`synthesizer` BuildAppOptions overrides.
   const audioAdapter = new OpenAIAudioAdapter();
-  const transcriber: SpeechTranscriber = transcriberOverride ?? audioAdapter;
-  const synthesizer: SpeechSynthesizer = synthesizerOverride ?? audioAdapter;
+  // Local-dev escape hatch: with no OPENAI_API_KEY available, `VOICE_USE_MOCK=1`
+  // swaps in the deterministic Mock adapters so the voice UI flow (mic capture →
+  // transcribe → extraction → draft) can be exercised without OpenAI. The mock
+  // synthesizer returns non-mp3 marker bytes, so no real audio plays back. Test
+  // overrides still win; production leaves the flag unset and uses the real adapter.
+  const useVoiceMock = process.env["VOICE_USE_MOCK"] === "1";
+  const transcriber: SpeechTranscriber =
+    transcriberOverride ?? (useVoiceMock ? new MockSpeechTranscriber() : audioAdapter);
+  const synthesizer: SpeechSynthesizer =
+    synthesizerOverride ?? (useVoiceMock ? new MockSpeechSynthesizer() : audioAdapter);
   // A3: resolve the caller's TTS opt-out from user_preferences. Built here (the
   // repo is reused below for the /user-preferences routes) and read ONLY for the
   // authenticated userId inside the route. `null` = enabled (opt-out default ON).
