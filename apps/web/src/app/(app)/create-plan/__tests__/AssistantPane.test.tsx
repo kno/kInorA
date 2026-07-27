@@ -110,6 +110,31 @@ describe("AssistantPane — SSE consumer", () => {
     });
   });
 
+  it("focuses the text input on mount so the page lands ready to type", async () => {
+    setup();
+    const input = screen.getByRole("textbox", { name: /chat message/i });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(input);
+    });
+  });
+
+  it("returns focus to the text input after a turn completes", async () => {
+    mockFetchOnce(
+      eagerStream([
+        'event: draft\ndata: {"draftSpec":{},"missingFields":[],"assistantMessage":"¿Cuántos días?"}\n\n',
+      ]),
+    );
+    setup();
+    const input = screen.getByRole("textbox", { name: /chat message/i });
+    await sendTurn("hola");
+    // Once the turn ends the input is re-enabled AND receives focus, so the
+    // user can keep typing their answer without reaching for the mouse.
+    await waitFor(() => {
+      expect((input as HTMLTextAreaElement).disabled).toBe(false);
+      expect(document.activeElement).toBe(input);
+    });
+  });
+
   it("populates the Datos extraídos panel from the terminal draft event", async () => {
     const onSpecChange = vi.fn();
     mockFetchOnce(

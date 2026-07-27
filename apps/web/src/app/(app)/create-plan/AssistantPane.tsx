@@ -120,6 +120,10 @@ export function AssistantPane({
 
   const abortRef = useRef<AbortController | null>(null);
   const lastUserMessageRef = useRef<string>("");
+  // Text input + focus management: the input is focused on mount (so the page
+  // lands ready to type) and again each time a turn finishes, so the user can
+  // answer the assistant's next question by just typing — no mouse reach.
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   // --- Voice sub-mode (B1: capture + transcribe → existing chat turn) ---
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
@@ -152,6 +156,17 @@ export function AssistantPane({
   useEffect(() => {
     return () => abortRef.current?.abort();
   }, []);
+
+  // Focus the text input on mount (page lands ready to type) and again whenever
+  // a turn finishes (streaming → false), so the user can answer without reaching
+  // for the mouse. The textarea is `disabled` while streaming; deferring the
+  // focus to the next animation frame guarantees it runs after the re-enable has
+  // painted and wins any competing focus (e.g. the Send button after a click).
+  useEffect(() => {
+    if (streaming) return;
+    const id = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(id);
+  }, [streaming]);
 
   // Feature-detect voice at mount (client-only): the browser needs both
   // getUserMedia and MediaRecorder. Detected in an effect so SSR never touches
@@ -672,6 +687,7 @@ export function AssistantPane({
             <span aria-hidden="true">{voiceState === "listening" ? "■" : "🎤"}</span>
           </button>
           <textarea
+            ref={inputRef}
             className="kin-input"
             aria-label={t("chat.inputAria")}
             placeholder={t("chat.inputPlaceholder")}
