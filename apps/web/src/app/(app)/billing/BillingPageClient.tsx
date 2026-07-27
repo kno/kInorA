@@ -14,7 +14,6 @@ import type { GetBillingInvoicesResult } from "./billing-types";
 import {
   getBillingInvoicesAction,
   getBillingVisibilityAction,
-  openPortalAction,
   startCheckoutAction,
 } from "./actions";
 import styles from "./BillingPageClient.module.css";
@@ -252,7 +251,6 @@ function BillingScreen({
 
         <aside aria-label={t("billing.regions.aside")} className={styles.asideCol}>
           <ProCard billing={billing} pricing={pricing} />
-          {isOwner ? <PaymentCard /> : null}
           <SupportCard />
         </aside>
       </div>
@@ -354,10 +352,6 @@ function PlanHero({
         <MetaTile label={t("billing.plan.metaPrice")} value={priceValue} />
         <MetaTile label={t("billing.plan.metaRenewal")} value={renewal} />
         <MetaTile label={t("billing.plan.metaPeriod")} value={currentPeriodValue} />
-        <MetaTile
-          label={t("billing.plan.metaPayment")}
-          value={isPro ? t("billing.pro.title") : t("billing.plan.valueNotSet")}
-        />
       </dl>
     </section>
   );
@@ -655,47 +649,6 @@ function CycleOption({
     >
       {label}
     </button>
-  );
-}
-
-function PaymentCard() {
-  const t = useTranslations();
-  const [busy, setBusy] = useState(false);
-  const [portalError, setPortalError] = useState<string | null>(null);
-
-  async function onManage() {
-    setBusy(true);
-    setPortalError(null);
-    try {
-      const result = await openPortalAction();
-      if (result.kind === "ok") {
-        redirectTo(result.url);
-        return;
-      }
-      setPortalError(t("billing.actions.portalError"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className={styles.card}>
-      <h3 className={styles.cardTitle}>{t("billing.payment.title")}</h3>
-      <p className="kin-text kin-muted">{t("billing.payment.description")}</p>
-      <button
-        type="button"
-        className="kin-btn kin-btn--secondary"
-        onClick={() => void onManage()}
-        disabled={busy}
-      >
-        {busy ? t("billing.actions.redirecting") : t("billing.payment.manageCta")}
-      </button>
-      {portalError ? (
-        <p role="alert" className={styles.ctaError}>
-          {portalError}
-        </p>
-      ) : null}
-    </section>
   );
 }
 

@@ -9,13 +9,11 @@ import type { GetBillingInvoicesResult } from "../billing-client";
 const getBillingVisibilityAction = vi.fn();
 const getBillingInvoicesAction = vi.fn();
 const startCheckoutAction = vi.fn();
-const openPortalAction = vi.fn();
 
 vi.mock("../actions.js", () => ({
   getBillingVisibilityAction: (...a: unknown[]) => getBillingVisibilityAction(...a),
   getBillingInvoicesAction: (...a: unknown[]) => getBillingInvoicesAction(...a),
   startCheckoutAction: (...a: unknown[]) => startCheckoutAction(...a),
-  openPortalAction: (...a: unknown[]) => openPortalAction(...a),
 }));
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -313,7 +311,6 @@ describe("BillingPageClient — ownership on transient invoice error (#197)", ()
   it("does NOT grant owner-only controls when the invoice read is a transient error (no owner flip)", () => {
     renderClient({ initialData: PRO_ACTIVE, initialInvoices: INVOICE_ERROR });
     // A transient error must never promote a caller into the owner UI.
-    expect(screen.queryByRole("button", { name: /manage \/ add card/i })).toBeNull();
     expect(screen.queryByText(/Invoices & charges/i)).toBeNull();
   });
 
@@ -322,8 +319,8 @@ describe("BillingPageClient — ownership on transient invoice error (#197)", ()
     getBillingInvoicesAction.mockResolvedValue(INVOICE_ERROR);
     renderClient({ initialData: PRO_ACTIVE, initialInvoices: OWNER_INVOICES });
 
-    // Ownership is established (definitive ok) — owner controls render.
-    expect(screen.getByRole("button", { name: /manage \/ add card/i })).toBeDefined();
+    // Ownership is established (definitive ok) — owner-only invoice history renders.
+    expect(screen.getByText(/Invoices & charges/i)).toBeDefined();
 
     await act(async () => {
       window.dispatchEvent(new Event("focus"));
@@ -331,10 +328,10 @@ describe("BillingPageClient — ownership on transient invoice error (#197)", ()
     });
 
     // After the transient error: the owner is NOT flipped to non-owner. The
-    // invoice section degrades to its error card, and the owner-only payment
-    // control is preserved.
+    // invoice section degrades to its error card while the owner-only section
+    // itself is preserved.
     await waitFor(() => expect(screen.getByText(/couldn't load your invoices/i)).toBeDefined());
-    expect(screen.getByRole("button", { name: /manage \/ add card/i })).toBeDefined();
+    expect(screen.getByText(/Invoices & charges/i)).toBeDefined();
   });
 });
 
@@ -361,7 +358,7 @@ describe("BillingPageClient — Pro card cycle toggle + save badge", () => {
   });
 });
 
-describe("BillingPageClient — payment + support cards", () => {
+describe("BillingPageClient — support card", () => {
   it("renders the support card for everyone", () => {
     renderClient({ initialData: FREE_ACTIVE, initialInvoices: NON_OWNER });
     expect(screen.getByText(/Need help\?/i)).toBeDefined();
@@ -375,19 +372,9 @@ describe("BillingPageClient — payment + support cards", () => {
     expect(link.getAttribute("href")).toBe("/help/billing");
     expect(link.getAttribute("aria-disabled")).toBeNull();
   });
-
-  it("shows the payment-method manage CTA only for an owner", () => {
-    renderClient({ initialData: PRO_ACTIVE, initialInvoices: OWNER_INVOICES });
-    expect(screen.getByRole("button", { name: /manage \/ add card/i })).toBeDefined();
-  });
-
-  it("hides the payment-method manage CTA for a non-owner", () => {
-    renderClient({ initialData: PRO_ACTIVE, initialInvoices: NON_OWNER });
-    expect(screen.queryByRole("button", { name: /manage \/ add card/i })).toBeNull();
-  });
 });
 
-describe("BillingPageClient — checkout + portal CTAs", () => {
+describe("BillingPageClient — checkout CTA", () => {
   it("starts checkout for the selected cycle and redirects to the Stripe url", async () => {
     startCheckoutAction.mockResolvedValue({ kind: "ok", url: "https://checkout.stripe.test/go" });
     renderClient({ initialData: FREE_ACTIVE });
@@ -431,34 +418,6 @@ describe("BillingPageClient — checkout + portal CTAs", () => {
     });
 
     await waitFor(() => expect(screen.getByText(/promotion code isn't valid/i)).toBeDefined());
-  });
-
-  it("opens the portal and redirects for an owner", async () => {
-    openPortalAction.mockResolvedValue({ kind: "ok", url: "https://billing.stripe.test/portal" });
-    renderClient({ initialData: PRO_ACTIVE, initialInvoices: OWNER_INVOICES });
-
-    const manage = screen.getByRole("button", { name: /manage \/ add card/i });
-    await act(async () => {
-      manage.click();
-      await Promise.resolve();
-    });
-
-    await waitFor(() => expect(openPortalAction).toHaveBeenCalled());
-    await waitFor(() => expect(assignSpy).toHaveBeenCalledWith("https://billing.stripe.test/portal"));
-  });
-
-  it("surfaces a portal error without redirecting", async () => {
-    openPortalAction.mockResolvedValue({ kind: "error", message: "server_error" });
-    renderClient({ initialData: PRO_ACTIVE, initialInvoices: OWNER_INVOICES });
-
-    const manage = screen.getByRole("button", { name: /manage \/ add card/i });
-    await act(async () => {
-      manage.click();
-      await Promise.resolve();
-    });
-
-    await waitFor(() => expect(screen.getByText(/couldn't open the billing portal/i)).toBeDefined());
-    expect(assignSpy).not.toHaveBeenCalled();
   });
 });
 
