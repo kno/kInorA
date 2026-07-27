@@ -84,4 +84,33 @@ describe("buildExtractionPrompt", () => {
       /do not diagnose|do not provide medical advice|not a medical|no medical/,
     );
   });
+
+  it("instructs the assistant to reply in the user's own language", () => {
+    const prompt = buildExtractionPrompt(baseInput);
+    expect(prompt.toLowerCase()).toMatch(
+      /same language|user'?s language|language the user|language they use/,
+    );
+  });
+
+  it("instructs the assistant to ask only one question at a time", () => {
+    const prompt = buildExtractionPrompt(baseInput);
+    expect(prompt.toLowerCase()).toMatch(/one question at a time|a single question|only one question/);
+  });
+
+  it("instructs the assistant to avoid regional idioms/voseo unless the user uses them", () => {
+    const prompt = buildExtractionPrompt(baseInput);
+    expect(prompt.toLowerCase()).toMatch(/voseo|regional|idiom|neutral/);
+  });
+
+  it("instructs a warm, human, non-mechanical tone", () => {
+    const prompt = buildExtractionPrompt(baseInput);
+    expect(prompt.toLowerCase()).toMatch(/warm|natural|real person|caring|not robotic|conversational/);
+  });
+
+  it("instructs the model to NEVER echo the internal context scaffolding in its reply", () => {
+    const prompt = buildExtractionPrompt(baseInput);
+    expect(prompt.toLowerCase()).toMatch(
+      /never repeat|do not repeat|never echo|do not echo|internal context|not.*quote/,
+    );
+  });
 });
