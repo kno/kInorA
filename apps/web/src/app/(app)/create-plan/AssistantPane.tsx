@@ -612,7 +612,7 @@ export function AssistantPane({
           <div className={styles.coachStatus}>{t("chat.coachStatus")}</div>
         </header>
 
-        <div className={styles.messages}>
+        <div className={`${styles.messages} kin-scroll`}>
           {messages.map((m, i) => (
             <div
               key={i}
