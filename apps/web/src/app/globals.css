@@ -102,6 +102,40 @@ a {
 }
 
 /* -------------------------------------------------------------------------
+ * Scrollbar — design-system treatment for overflow containers.
+ * Add the `kin-scroll` class to any scrollable element (e.g. chat threads,
+ * lists) for a slim, token-based scrollbar instead of the default OS one.
+ * ------------------------------------------------------------------------- */
+
+.kin-scroll {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.kin-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.kin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.kin-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--r-pill);
+  /* Inset the thumb so it reads as a slim pill, not a full-width bar. */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.kin-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+  background-clip: padding-box;
+}
+
+/* -------------------------------------------------------------------------
  * Layout primitives
  * ------------------------------------------------------------------------- */
 
