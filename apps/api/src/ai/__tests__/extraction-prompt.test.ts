@@ -113,4 +113,18 @@ describe("buildExtractionPrompt", () => {
       /never repeat|do not repeat|never echo|do not echo|internal context|not.*quote/,
     );
   });
+
+  it("instructs the model to PROPOSE a concrete default when the user asks for a recommendation or is unsure", () => {
+    const prompt = buildExtractionPrompt(baseInput);
+    expect(prompt.toLowerCase()).toMatch(
+      /propose a (concrete|sensible|specific)|suggest a (concrete|sensible|specific)|asks you to decide|is unsure/,
+    );
+  });
+
+  it("instructs the model NOT to re-ask the same question it just asked", () => {
+    const prompt = buildExtractionPrompt(baseInput);
+    expect(prompt.toLowerCase()).toMatch(
+      /do not (just )?repeat the same question|never ask the same|don't bounce|do not bounce/,
+    );
+  });
 });
