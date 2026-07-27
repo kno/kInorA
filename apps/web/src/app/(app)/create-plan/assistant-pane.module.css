@@ -15,6 +15,10 @@
   display: flex;
   flex-direction: column;
   min-height: 420px;
+  /* Cap the panel to the viewport so a long conversation scrolls INSIDE the
+     messages area instead of growing the column and pushing the input row +
+     voice bar off-screen. min-height (floor) still wins on very short viewports. */
+  max-height: calc(100vh - 11rem);
   border: 1px solid var(--kin-border, rgba(255, 255, 255, 0.1));
   border-radius: 12px;
   padding: 1rem;
@@ -43,6 +47,10 @@
   flex-direction: column;
   gap: 0.6rem;
   flex: 1;
+  /* Essential with flex + overflow: a flex item defaults to min-height:auto and
+     will NOT shrink below its content, so without this the list grows the column
+     instead of scrolling. This makes the messages list the sole scroll region. */
+  min-height: 0;
   overflow-y: auto;
   padding-right: 0.25rem;
 }
