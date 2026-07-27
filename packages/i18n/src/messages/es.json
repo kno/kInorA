@@ -892,7 +892,7 @@
     "navLabel": "Facturación",
     "title": "Facturación",
     "description": "Revisa tu plan, el estado de prueba y el uso de esta cuenta.",
-    "subtitle": "Gestiona tu plan, tu uso y tu método de pago.",
+    "subtitle": "Gestiona tu plan y tu uso.",
     "loading": {
       "title": "Cargando tu facturación…",
       "description": "Estamos obteniendo los detalles de tu plan, prueba y uso.",
@@ -933,7 +933,6 @@
       "metaPrice": "Precio",
       "metaRenewal": "Renovación",
       "metaPeriod": "Periodo actual",
-      "metaPayment": "Método de pago",
       "valueNotSet": "—",
       "renewalNone": "Sin renovación",
       "comparePlans": "Comparar planes",
@@ -982,11 +981,6 @@
       "currentBadge": "Tu plan actual",
       "noCommitment": "Sin permanencia · Cancela en un clic"
     },
-    "payment": {
-      "title": "Método de pago",
-      "description": "Gestiona tu tarjeta de forma segura en el portal de Stripe.",
-      "manageCta": "Gestionar / Añadir tarjeta"
-    },
     "support": {
       "title": "¿Necesitas ayuda?",
       "description": "Encuentra respuestas a las preguntas frecuentes de facturación.",
@@ -1009,7 +1003,6 @@
     },
     "actions": {
       "checkoutError": "No pudimos iniciar el pago. Inténtalo de nuevo.",
-      "portalError": "No pudimos abrir el portal de facturación. Inténtalo de nuevo.",
       "invalidPromotion": "Ese código promocional no es válido.",
       "redirecting": "Redirigiendo…"
     },
