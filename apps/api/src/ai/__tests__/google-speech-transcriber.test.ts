@@ -4,6 +4,7 @@ import {
   type GoogleGenAiFetch,
 } from "../google-speech-transcriber.js";
 import type { TranscribeInput } from "../speech-transcriber-port.js";
+import { ProviderRateLimitError } from "../provider-errors.js";
 
 /**
  * The adapter is constructed with an injectable `fetch`-shaped client so tests
@@ -314,5 +315,41 @@ describe("GoogleSpeechTranscriber — transcribe", () => {
     const serialized = `${(caught as Error).message}\n${(caught as Error).stack ?? ""}`;
     expect(serialized).not.toContain("google-test-key");
     expect(calls).toHaveLength(1);
+  });
+
+  it("a TERMINAL 429 (retries exhausted) throws ProviderRateLimitError('gemini','stt'), not the generic error", async () => {
+    const { fetchImpl } = makeFakeFetch({ error: { message: "quota" } }, { status: 429 });
+    const adapter = new GoogleSpeechTranscriber(fetchImpl, [0, 0]);
+
+    let caught: unknown;
+    try {
+      await adapter.transcribe(input);
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(ProviderRateLimitError);
+    expect((caught as ProviderRateLimitError).provider).toBe("gemini");
+    expect((caught as ProviderRateLimitError).feature).toBe("stt");
+    const serialized = `${(caught as Error).message}\n${(caught as Error).stack ?? ""}`;
+    expect(serialized).not.toContain("google-test-key");
+  });
+
+  it("a terminal 400 still throws the GENERIC error, not ProviderRateLimitError", async () => {
+    const { fetchImpl } = makeFakeFetch(
+      { error: { message: "bad request" } },
+      { status: 400 },
+    );
+    const adapter = new GoogleSpeechTranscriber(fetchImpl, [0, 0]);
+
+    let caught: unknown;
+    try {
+      await adapter.transcribe(input);
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught).not.toBeInstanceOf(ProviderRateLimitError);
   });
 });

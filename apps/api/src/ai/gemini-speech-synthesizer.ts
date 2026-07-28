@@ -6,6 +6,7 @@ import {
   DEFAULT_BACKOFF_MS,
   fetchWithTransientRetry,
 } from "./retry-transient.js";
+import { ProviderRateLimitError } from "./provider-errors.js";
 
 /**
  * Google (Gemini) adapter for text-to-speech
@@ -258,8 +259,14 @@ export class GeminiSpeechSynthesizer implements SpeechSynthesizer {
     }
 
     if (response.status !== 200) {
-      // Generic error — the route maps synthesize failures to 502. NEVER
-      // include the key, the URL (which carries the key), or the text.
+      // A TERMINAL 429 (retries in fetchWithTransientRetry are exhausted) is a
+      // rate-limit/quota-exhausted failure, not a generic transport error —
+      // classify it distinctly so the route can log/respond accordingly.
+      // Any OTHER non-2xx keeps throwing the generic error. NEVER include the
+      // key, the URL (which carries the key), or the text.
+      if (response.status === 429) {
+        throw new ProviderRateLimitError("gemini", "tts");
+      }
       throw new Error(`Google TTS request failed with status ${response.status}`);
     }
 

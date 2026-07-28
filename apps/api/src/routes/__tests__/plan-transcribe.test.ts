@@ -9,6 +9,7 @@ import type {
   TranscribeResult,
 } from "../../ai/speech-transcriber-port.js";
 import type { Database } from "../../db/client.js";
+import { ProviderRateLimitError } from "../../ai/provider-errors.js";
 import {
   createAuthMockDb,
   buildActiveMembershipRow,
@@ -105,6 +106,13 @@ function throwingTranscriber(): SpeechTranscriber & { transcribe: ReturnType<typ
     transcribe: vi.fn().mockRejectedValue(
       new Error("OpenAI upstream 500 — secret-internal-stack-detail"),
     ),
+  };
+}
+
+/** Transcriber that rejects with a rate-limit/quota-exhausted failure. */
+function rateLimitedTranscriber(): SpeechTranscriber & { transcribe: ReturnType<typeof vi.fn> } {
+  return {
+    transcribe: vi.fn().mockRejectedValue(new ProviderRateLimitError("gemini", "stt")),
   };
 }
 
@@ -613,6 +621,31 @@ describe("POST /plan-specs/transcribe (Pro-gated, capped, no-persistence STT)", 
     // The provider's internal message/stack must not reach the client.
     expect(res.payload).not.toContain("secret-internal-stack-detail");
     expect(res.payload).not.toContain("OpenAI upstream 500");
+  });
+
+  it("a ProviderRateLimitError → 429 rate_limited with a DISTINCT warn log (not the generic 502 error log)", async () => {
+    const transcriber = rateLimitedTranscriber();
+    const logger = recordingLogger();
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      chatEntitlement: allowGate(),
+      transcriber,
+      logger,
+    });
+
+    const mp = multipartPayload([audioPart()]);
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/transcribe",
+      headers: { authorization: `Bearer ${VALID_TOKEN}`, ...mp.headers },
+      payload: mp.body,
+    });
+
+    expect(res.statusCode).toBe(429);
+    expect(res.json()).toEqual({ error: "rate_limited" });
+    const dump = JSON.stringify(logger.records);
+    expect(dump).toContain("provider rate limit / quota exceeded (HTTP 429) — request throttled");
+    expect(dump).not.toContain("transcription failed");
   });
 
   // --- No persistence + no raw-audio/transcript logging --------------------
