@@ -247,7 +247,17 @@ export async function buildApp(
     socialAuthService = socialAuthServiceLegacy;
   }
 
-  const app = Fastify();
+  // Enable the request/error logger so route-level `request.log.warn/error`
+  // (rate-limit throttling, transcription/synthesis failures, etc.) are actually
+  // emitted — a bare `Fastify()` defaults to `logger: false`, silently dropping
+  // every log and leaving prod failures invisible. Off under tests to keep the
+  // vitest output clean; level overridable via API_LOG_LEVEL.
+  const app = Fastify({
+    logger:
+      process.env.NODE_ENV === "test"
+        ? false
+        : { level: process.env.API_LOG_LEVEL ?? "info" },
+  });
 
   // Validation errors → 422, Auth errors → 401, social auth errors → 400,
   // everything else → 500. Must be set before registering route plugins so
