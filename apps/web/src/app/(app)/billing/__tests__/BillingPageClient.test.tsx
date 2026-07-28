@@ -85,10 +85,12 @@ const TRIALING: BillingVisibilityDTO = {
     tier: "pro",
     status: "trialing",
     source: "system",
-    trialStartedAt: "2026-06-28T00:00:00.000Z",
-    trialEndsAt: "2026-07-28T00:00:00.000Z",
+    // Relative to now so an active trial never rots into an expired one as the
+    // calendar advances (was a fixed 2026-07-28 that lapsed on that date).
+    trialStartedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+    trialEndsAt: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString(),
     activeOverrideEndsAt: null,
-    updatedAt: "2026-06-28T00:00:00.000Z",
+    updatedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
   },
   tenantUsage: [],
   memberUsage: [],
