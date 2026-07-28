@@ -101,4 +101,48 @@ describe("fetchWithTransientRetry", () => {
     const { DEFAULT_BACKOFF_MS } = await import("../retry-transient.js");
     expect(DEFAULT_BACKOFF_MS).toEqual([400, 800]);
   });
+
+  it("actually waits a POSITIVE backoff delay between attempts, then retries (fake timers)", async () => {
+    vi.useFakeTimers();
+    try {
+      const responses: FakeResponse[] = [{ status: 503 }, { status: 200 }];
+      const doFetch = vi.fn(async () => responses.shift()!);
+
+      const pending = fetchWithTransientRetry(doFetch, { backoffMs: [400] });
+
+      // After the first (503) attempt the helper schedules a real 400ms timer
+      // before retrying — the second attempt has not run yet.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(doFetch).toHaveBeenCalledTimes(1);
+
+      // Advancing past the backoff fires the timer → the retry runs and wins.
+      await vi.advanceTimersByTimeAsync(400);
+      const result = await pending;
+
+      expect(result.status).toBe(200);
+      expect(doFetch).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborting DURING a positive backoff wait clears the pending timer and stops retrying", async () => {
+    // A large backoff would sleep 10s, but aborting mid-wait must resolve the
+    // sleep immediately via its abort listener (never sleeps past the abort).
+    const controller = new AbortController();
+    const doFetch = vi.fn(async (): Promise<FakeResponse> => ({ status: 503 }));
+
+    const pending = fetchWithTransientRetry(doFetch, {
+      backoffMs: [10_000, 10_000],
+      signal: controller.signal,
+    });
+    // Abort shortly after the wait begins (well before the 10s timer).
+    setTimeout(() => controller.abort(), 5);
+
+    const result = await pending;
+
+    expect(result.status).toBe(503);
+    // The abort during the wait stopped retries after the first attempt.
+    expect(doFetch).toHaveBeenCalledTimes(1);
+  });
 });

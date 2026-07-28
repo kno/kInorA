@@ -156,7 +156,7 @@ describe("POST /create-plan/transcribe — same-origin multipart proxy (13 B1)",
     );
   });
 
-  it("forwards the client's AbortSignal to the upstream fetch so a browser abort cancels it", async () => {
+  it("does NOT forward the client's AbortSignal to the upstream fetch (buffered upload consumes the request → its signal fires immediately under Next/undici, which would spuriously abort the upstream call)", async () => {
     cookieGet.mockReturnValue({ value: "tok-1" });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -170,7 +170,9 @@ describe("POST /create-plan/transcribe — same-origin multipart proxy (13 B1)",
     const req = makeRequest(controller.signal);
     await POST(req);
 
+    // The proxy runs the short, stateless transcription to completion even if
+    // the browser later disconnects; no signal is threaded to the upstream call.
     const init = fetchMock.mock.calls[0]![1] as RequestInit;
-    expect(init.signal).toBe(req.signal);
+    expect(init.signal).toBeUndefined();
   });
 });
