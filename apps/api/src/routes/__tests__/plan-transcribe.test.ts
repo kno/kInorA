@@ -404,12 +404,16 @@ describe("POST /plan-specs/transcribe (Pro-gated, capped, no-persistence STT)", 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ text: CANNED_TEXT, unclear: false });
     expect(transcriber.transcribe).toHaveBeenCalledTimes(1);
-    // The transcriber received the audio bytes + validated content type + a signal.
+    // The transcriber received the audio bytes + validated content type. No
+    // client-disconnect signal is threaded anymore: Node fires the request
+    // `'close'` right after a buffered upload is consumed (not only on a real
+    // disconnect), which was aborting the transcription immediately — the
+    // adapter's own bounded timeout keeps the in-flight call bounded instead.
     const [inputArg, signalArg] = transcriber.transcribe.mock.calls[0]!;
     expect(inputArg.contentType).toBe("audio/webm");
     expect(inputArg.audio).toBeInstanceOf(Uint8Array);
     expect(inputArg.audio.byteLength).toBeGreaterThan(0);
-    expect(signalArg).toBeInstanceOf(AbortSignal);
+    expect(signalArg).toBeUndefined();
   });
 
   // --- Caps + allow-list (server-side, BEFORE OpenAI) ----------------------

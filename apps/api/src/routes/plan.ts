@@ -1232,17 +1232,19 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
             return reply.code(400).send({ error: "missing_audio" });
           }
 
-          // Abort the in-flight transcription if the client disconnects. The
-          // audio is processed in-flight ONLY — never persisted anywhere.
-          const controller = new AbortController();
-          const onClose = () => controller.abort();
-          request.raw.on("close", onClose);
-
+          // NOTE: intentionally NO client-disconnect AbortController here. When
+          // the upload is buffered by the web proxy, Node emits `'close'` on the
+          // request right AFTER the body is consumed — not only on a real
+          // disconnect — which fired immediately and aborted the transcription
+          // (observed: AbortError ~40ms → 502 on the first voice turn). The
+          // transcriber adapter has its own bounded timeout, so the in-flight,
+          // never-persisted transcription stays bounded without the flaky
+          // request-close signal.
           try {
-            const result = await speechTranscriber.transcribe(
-              { audio: new Uint8Array(audio), contentType },
-              controller.signal,
-            );
+            const result = await speechTranscriber.transcribe({
+              audio: new Uint8Array(audio),
+              contentType,
+            });
             // Silence/noise → a graceful 200 { text:"", unclear:true }, NOT a 5xx.
             return reply.code(200).send({ text: result.text, unclear: result.unclear });
           } catch (error) {
@@ -1262,8 +1264,6 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
             // never the audio or transcript) and NEVER returned to the client.
             request.log.error({ err: error, tenantId, userId }, "transcription failed");
             return reply.code(502).send({ error: "transcription_failed" });
-          } finally {
-            request.raw.removeListener("close", onClose);
           }
         },
       );
