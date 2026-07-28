@@ -171,11 +171,19 @@ export function AssistantPane({
 
   // --- Voice OUTPUT playback (B2: speak the assistant reply after a voice turn) ---
   const [speaking, setSpeaking] = useState(false);
+  // True while the TTS reply is being SYNTHESIZED (the fetch to the speech
+  // endpoint), before playback starts — drives the animated "generating voice"
+  // indicator so the gap between the text reply and the spoken reply is visible.
+  const [synthesizing, setSynthesizing] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speechAbortRef = useRef<AbortController | null>(null);
   // The object URL for the current audio Blob — revoked after playback/stop so a
   // played reply never leaks a blob: URL.
   const objectUrlRef = useRef<string | null>(null);
+  // Latest-callback ref so playReply's `onended` (created earlier in the render)
+  // can re-enter listening (hands-free loop) without a dependency cycle on
+  // startRecording, which is declared further down.
+  const autoStartListeningRef = useRef<() => void>(() => {});
 
   // Abort any in-flight stream on unmount/navigation so no token write lands in
   // an unmounted tree and the upstream API sees the disconnect.
@@ -291,6 +299,7 @@ export function AssistantPane({
     if (audio) audio.pause();
     revokeObjectUrl();
     setSpeaking(false);
+    setSynthesizing(false);
   }, [revokeObjectUrl]);
 
   /**
@@ -340,13 +349,22 @@ export function AssistantPane({
 
       const controller = new AbortController();
       speechAbortRef.current = controller;
+      // Show the animated "generating voice" indicator while the TTS is being
+      // synthesized (this fetch can take a few seconds on the provider).
+      setSynthesizing(true);
       try {
         const blob = await synthesizeSpeech(text, { signal: controller.signal });
         // 204 opt-out / non-2xx / empty → nothing to play; or the turn was
         // superseded/aborted while the fetch was in flight.
-        if (!blob || controller.signal.aborted) return;
+        if (!blob || controller.signal.aborted) {
+          setSynthesizing(false);
+          return;
+        }
         const audio = audioRef.current;
-        if (!audio) return;
+        if (!audio) {
+          setSynthesizing(false);
+          return;
+        }
 
         const url = URL.createObjectURL(blob);
         objectUrlRef.current = url;
@@ -354,7 +372,12 @@ export function AssistantPane({
         audio.onended = () => {
           revokeObjectUrl();
           setSpeaking(false);
+          // Hands-free loop: once the spoken reply finishes, re-enter listening
+          // automatically so the user can answer without tapping the mic again.
+          autoStartListeningRef.current();
         };
+        // Synthesis done → transition from "generating" to "speaking".
+        setSynthesizing(false);
         setSpeaking(true);
         // `play()` may reject (autoplay policy / interrupted) — fail silently.
         await Promise.resolve(audio.play()).catch(() => {
@@ -368,6 +391,7 @@ export function AssistantPane({
         console.warn("[voice] tts failed", err);
         revokeObjectUrl();
         setSpeaking(false);
+        setSynthesizing(false);
       }
     },
     [revokeObjectUrl, stopSpeaking],
@@ -573,6 +597,18 @@ export function AssistantPane({
     setVoiceState("processing");
   }, []);
 
+  // Keep the hands-free auto-listen callback fresh (latest render's values).
+  // After a spoken reply finishes, re-enter listening ONLY when it's safe:
+  // online, mic supported, not mid-turn, and idle — so it never loops on itself
+  // or fights an in-flight turn. Runs on every render to avoid a stale closure.
+  useEffect(() => {
+    autoStartListeningRef.current = () => {
+      if (online && voiceSupported && !streaming && !generating && voiceState === "idle") {
+        void startRecording();
+      }
+    };
+  });
+
   const handleMicClick = () => {
     if (voiceState === "listening") {
       stopRecording();
@@ -740,7 +776,21 @@ export function AssistantPane({
           data-voice-state={voiceState}
         >
           <span className={styles.voiceStatus} aria-live="polite">
-            {speaking ? t("voice.state.speaking") : voiceStatusLabel}
+            {synthesizing ? (
+              <span
+                className={styles.synthWave}
+                role="status"
+                aria-label={t("voice.state.synthesizing")}
+              >
+                <span />
+                <span />
+                <span />
+              </span>
+            ) : speaking ? (
+              t("voice.state.speaking")
+            ) : (
+              voiceStatusLabel
+            )}
           </span>
           {voiceNoticeMessage && (
             <span className={styles.voiceNotice} role="status">

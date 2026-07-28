@@ -1125,6 +1125,7 @@
       "listening": "Listening…",
       "processing": "Processing…",
       "speaking": "Speaking…",
+      "synthesizing": "Generating voice…",
       "responding": "kInorA is responding…"
     },
     "stopSpeaking": "Stop speaking",
