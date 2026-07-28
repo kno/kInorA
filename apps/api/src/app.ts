@@ -67,7 +67,7 @@ import {
 import type { PlanSpecExtractor } from "./ai/extraction-port.js";
 import type { SpeechTranscriber } from "./ai/speech-transcriber-port.js";
 import type { SpeechSynthesizer } from "./ai/speech-synthesizer-port.js";
-import { OpenAIAudioAdapter } from "./ai/openai-audio-adapter.js";
+import { buildTranscriber, buildSynthesizer } from "./ai/voice-provider-factory.js";
 import { MockSpeechTranscriber } from "./ai/mock-speech-transcriber.js";
 import { MockSpeechSynthesizer } from "./ai/mock-speech-synthesizer.js";
 import { CheckAndConsumeQuota } from "./billing/quota-consumption.js";
@@ -386,23 +386,26 @@ export async function buildApp(
   // to a generic 502). Tests inject a deterministic `MockSpeechTranscriber` via
   // the `transcriber` BuildAppOptions override. The transcribe route is
   // registered only when this port is present (it always is here).
-  // 13-v1.1-interactive-voice-chat (A2 STT + A3 TTS): one OpenAI-audio adapter
-  // implements BOTH ports (whisper-1 transcribe + gpt-4o-mini-tts synthesize).
-  // Like every other adapter it reads the dedicated OPENAI_API_KEY at CALL time,
-  // so the app boots cleanly with the key unset and only a live call fails
-  // (mapped to a generic 502). Tests inject deterministic Mocks via the
+  // 13-v1.1-interactive-voice-chat (A2 STT + A3 TTS), now provider-abstracted
+  // (feat/voice-provider-adapters): STT and TTS providers are selected
+  // INDEPENDENTLY via env (`VOICE_STT_PROVIDER` = openai|google, default openai;
+  // `VOICE_TTS_PROVIDER` = openai, default openai) through the voice provider
+  // factory. Every adapter reads its dedicated API key at CALL time, so the app
+  // boots cleanly with keys unset and only a live call fails (mapped to a
+  // generic 502). Tests inject deterministic Mocks via the
   // `transcriber`/`synthesizer` BuildAppOptions overrides.
-  const audioAdapter = new OpenAIAudioAdapter();
-  // Local-dev escape hatch: with no OPENAI_API_KEY available, `VOICE_USE_MOCK=1`
+  //
+  // Local-dev escape hatch: with no provider key available, `VOICE_USE_MOCK=1`
   // swaps in the deterministic Mock adapters so the voice UI flow (mic capture →
-  // transcribe → extraction → draft) can be exercised without OpenAI. The mock
-  // synthesizer returns non-mp3 marker bytes, so no real audio plays back. Test
-  // overrides still win; production leaves the flag unset and uses the real adapter.
+  // transcribe → extraction → draft) can be exercised without any provider. The
+  // mock synthesizer returns non-mp3 marker bytes, so no real audio plays back.
+  // Test overrides still win; production leaves the flag unset and uses the
+  // factory-selected real adapters.
   const useVoiceMock = process.env["VOICE_USE_MOCK"] === "1";
   const transcriber: SpeechTranscriber =
-    transcriberOverride ?? (useVoiceMock ? new MockSpeechTranscriber() : audioAdapter);
+    transcriberOverride ?? (useVoiceMock ? new MockSpeechTranscriber() : buildTranscriber());
   const synthesizer: SpeechSynthesizer =
-    synthesizerOverride ?? (useVoiceMock ? new MockSpeechSynthesizer() : audioAdapter);
+    synthesizerOverride ?? (useVoiceMock ? new MockSpeechSynthesizer() : buildSynthesizer());
   // A3: resolve the caller's TTS opt-out from user_preferences. Built here (the
   // repo is reused below for the /user-preferences routes) and read ONLY for the
   // authenticated userId inside the route. `null` = enabled (opt-out default ON).
