@@ -577,6 +577,17 @@ export async function buildApp(
   const stripeEventStore = new StripeEventStoreRepository(database);
   const processStripeWebhook = new ProcessStripeWebhook(resolvedStripeGateway, stripeEventStore);
   await app.register(stripeWebhookRoutes, { processWebhook: processStripeWebhook });
+  // Public reachability (prod): the web reverse-proxy only forwards `/api/:path*`
+  // to the api (apps/web/next.config.ts rewrite), while the api mounts every
+  // route unprefixed — so Stripe could NOT reach `/billing/webhook` from outside
+  // the internal network. Register the webhook ALSO under `/api` so
+  // `https://<host>/api/billing/webhook` reaches it (mirrors the `/api/health`
+  // dual-registration in health.ts). Each registration is its own encapsulated
+  // scope with its own raw-body content-type parser.
+  await app.register(stripeWebhookRoutes, {
+    prefix: "/api",
+    processWebhook: processStripeWebhook,
+  });
 
   // WebSocket plugin + authenticated plan-status route.
   // WsRegistry is shared between this route and PlanGenerationService so
