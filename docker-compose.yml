@@ -56,6 +56,17 @@ services:
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
       LANGFUSE_HOST: ${LANGFUSE_HOST}
+      # 11b billing (Stripe). MUST be forwarded into the container — the api reads
+      # them at call time; without these the Stripe gateway is unconfigured and
+      # the whole billing flow (checkout/portal/webhook) fails closed in prod
+      # (local `pnpm dev` loads the root .env directly, so it only bites in Docker).
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      STRIPE_PRICE_MONTHLY: ${STRIPE_PRICE_MONTHLY}
+      STRIPE_PRICE_ANNUAL: ${STRIPE_PRICE_ANNUAL}
+      STRIPE_PRICE_MONTHLY_AMOUNT: ${STRIPE_PRICE_MONTHLY_AMOUNT}
+      STRIPE_PRICE_ANNUAL_AMOUNT: ${STRIPE_PRICE_ANNUAL_AMOUNT}
+      STRIPE_PRICE_CURRENCY: ${STRIPE_PRICE_CURRENCY}
     # No ports — web proxies /api/* through internal network
     command: ["pnpm", "--filter", "api", "start"]
     healthcheck:
