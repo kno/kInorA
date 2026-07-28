@@ -8,6 +8,7 @@ const envPath = resolve(__dirname, "../../../.env");
 config({ path: envPath });
 
 import { buildApp } from "./app.js";
+import { registerProcessSafetyNet } from "./process-safety.js";
 import { createDbClient } from "./db/client.js";
 import { createProvidersFromEnv } from "./auth/providers.js";
 import { createSocialAuthService } from "./auth/social-wiring.js";
@@ -25,6 +26,12 @@ async function main() {
   const socialAuthService = createSocialAuthService(db, registry);
 
   const app = await buildApp(db, socialAuthService);
+
+  // Resilience: a background provider-stream rejection (e.g. a malformed Gemini
+  // SSE chunk → "Failed to parse stream") must not terminate the whole API. Log
+  // it and keep serving — the per-request SSE route already fails that turn
+  // closed. See process-safety.ts.
+  registerProcessSafetyNet(app.log);
 
   const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
   for (const signal of signals) {
