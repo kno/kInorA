@@ -2,6 +2,7 @@ import type { SpeechTranscriber } from "./speech-transcriber-port.js";
 import type { SpeechSynthesizer } from "./speech-synthesizer-port.js";
 import { OpenAIAudioAdapter } from "./openai-audio-adapter.js";
 import { GoogleSpeechTranscriber } from "./google-speech-transcriber.js";
+import { GeminiSpeechSynthesizer } from "./gemini-speech-synthesizer.js";
 
 /**
  * Env-driven voice provider selection (feat/voice-provider-adapters).
@@ -36,14 +37,17 @@ export function buildTranscriber(): SpeechTranscriber {
 }
 
 /**
- * Build the TTS synthesizer from `VOICE_TTS_PROVIDER` (`openai`, default
- * `openai`). Only OpenAI TTS exists today; a future provider (e.g. Google TTS)
- * is ONE more `case` here behind the unchanged `SpeechSynthesizer` port.
- * Unknown → `openai` (fail-safe).
+ * Build the TTS synthesizer from `VOICE_TTS_PROVIDER`
+ * (`openai` | `google`, default `openai`). `google` → `GeminiSpeechSynthesizer`
+ * (Gemini TTS, returns `audio/wav`), enabling a fully OpenAI-free voice stack
+ * alongside `VOICE_STT_PROVIDER=google`. Unknown/unset → `openai` (fail-safe
+ * back-compat — a misconfigured env can never leave voice with no adapter).
  */
 export function buildSynthesizer(): SpeechSynthesizer {
   const provider = process.env["VOICE_TTS_PROVIDER"];
   switch (provider) {
+    case "google":
+      return new GeminiSpeechSynthesizer();
     case "openai":
     default:
       return new OpenAIAudioAdapter();

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { buildTranscriber, buildSynthesizer } from "../voice-provider-factory.js";
 import { OpenAIAudioAdapter } from "../openai-audio-adapter.js";
 import { GoogleSpeechTranscriber } from "../google-speech-transcriber.js";
+import { GeminiSpeechSynthesizer } from "../gemini-speech-synthesizer.js";
 
 describe("voice-provider-factory — buildTranscriber", () => {
   const OLD = process.env["VOICE_STT_PROVIDER"];
@@ -51,6 +52,11 @@ describe("voice-provider-factory — buildSynthesizer", () => {
   it("returns an OpenAIAudioAdapter for VOICE_TTS_PROVIDER=openai", () => {
     process.env["VOICE_TTS_PROVIDER"] = "openai";
     expect(buildSynthesizer()).toBeInstanceOf(OpenAIAudioAdapter);
+  });
+
+  it("returns a GeminiSpeechSynthesizer for VOICE_TTS_PROVIDER=google", () => {
+    process.env["VOICE_TTS_PROVIDER"] = "google";
+    expect(buildSynthesizer()).toBeInstanceOf(GeminiSpeechSynthesizer);
   });
 
   it("falls back to OpenAIAudioAdapter for an unknown provider value (fail-safe)", () => {
