@@ -3,6 +3,7 @@ import {
   GeminiSpeechSynthesizer,
   wrapPcmInWavHeader,
   parseSampleRate,
+  DEFAULT_TTS_STYLE_DIRECTIVE,
   type GoogleGenAiFetch,
 } from "../gemini-speech-synthesizer.js";
 import { ProviderRateLimitError } from "../provider-errors.js";
@@ -145,11 +146,13 @@ describe("GeminiSpeechSynthesizer — synthesize", () => {
   const OLD_KEY = process.env["GOOGLE_GENERATIVE_AI_API_KEY"];
   const OLD_MODEL = process.env["GOOGLE_TTS_MODEL"];
   const OLD_VOICE = process.env["GOOGLE_TTS_VOICE"];
+  const OLD_STYLE = process.env["GOOGLE_TTS_STYLE_DIRECTIVE"];
 
   beforeEach(() => {
     process.env["GOOGLE_GENERATIVE_AI_API_KEY"] = "google-test-key";
     delete process.env["GOOGLE_TTS_MODEL"];
     delete process.env["GOOGLE_TTS_VOICE"];
+    delete process.env["GOOGLE_TTS_STYLE_DIRECTIVE"];
   });
 
   afterEach(() => {
@@ -159,6 +162,8 @@ describe("GeminiSpeechSynthesizer — synthesize", () => {
     else process.env["GOOGLE_TTS_MODEL"] = OLD_MODEL;
     if (OLD_VOICE === undefined) delete process.env["GOOGLE_TTS_VOICE"];
     else process.env["GOOGLE_TTS_VOICE"] = OLD_VOICE;
+    if (OLD_STYLE === undefined) delete process.env["GOOGLE_TTS_STYLE_DIRECTIVE"];
+    else process.env["GOOGLE_TTS_STYLE_DIRECTIVE"] = OLD_STYLE;
     vi.restoreAllMocks();
   });
 
@@ -188,13 +193,70 @@ describe("GeminiSpeechSynthesizer — synthesize", () => {
       };
     };
 
-    // AUDIO modality + default prebuilt voice + the text passed through.
+    // AUDIO modality + default prebuilt voice + the text passed through
+    // (prefixed by the neutral-peninsular-Spanish style directive).
     expect(body.generationConfig?.responseModalities).toEqual(["AUDIO"]);
     expect(
       body.generationConfig?.speechConfig?.voiceConfig?.prebuiltVoiceConfig
         ?.voiceName,
     ).toBe("Kore");
-    expect(body.contents[0]!.parts[0]!.text).toBe("Great plan! Let's begin.");
+    expect(body.contents[0]!.parts[0]!.text).toBe(
+      `${DEFAULT_TTS_STYLE_DIRECTIVE}\n\nGreat plan! Let's begin.`,
+    );
+  });
+
+  it("prepends the DEFAULT neutral-peninsular-Spanish style directive to the request text", async () => {
+    const { fetchImpl, calls } = makeFakeFetch(geminiAudioResponse(PCM_BASE64));
+    const adapter = new GeminiSpeechSynthesizer(fetchImpl);
+
+    await adapter.synthesize("Hola, empecemos.");
+
+    const body = JSON.parse(calls[0]!.init.body as string) as {
+      contents: Array<{ parts: Array<{ text: string }> }>;
+    };
+    const sent = body.contents[0]!.parts[0]!.text;
+    // The spoken words follow the directive verbatim; the directive leads.
+    expect(sent.startsWith(DEFAULT_TTS_STYLE_DIRECTIVE)).toBe(true);
+    expect(sent).toBe(`${DEFAULT_TTS_STYLE_DIRECTIVE}\n\nHola, empecemos.`);
+    // Sanity: the default directive targets España/castellano, not LatAm.
+    expect(DEFAULT_TTS_STYLE_DIRECTIVE).toContain("España");
+  });
+
+  it("GOOGLE_TTS_STYLE_DIRECTIVE overrides the default directive at call time", async () => {
+    process.env["GOOGLE_TTS_STYLE_DIRECTIVE"] =
+      "Habla despacio y con acento andaluz:";
+    const { fetchImpl, calls } = makeFakeFetch(geminiAudioResponse(PCM_BASE64));
+    const adapter = new GeminiSpeechSynthesizer(fetchImpl);
+
+    await adapter.synthesize("Vamos allá.");
+
+    const body = JSON.parse(calls[0]!.init.body as string) as {
+      contents: Array<{ parts: Array<{ text: string }> }>;
+    };
+    const sent = body.contents[0]!.parts[0]!.text;
+    expect(sent).toBe("Habla despacio y con acento andaluz:\n\nVamos allá.");
+    expect(sent).not.toContain(DEFAULT_TTS_STYLE_DIRECTIVE);
+  });
+
+  it("truncates the USER text but preserves the leading directive (directive is never truncated away)", async () => {
+    // A body far beyond the 4096-char cap: the directive must still lead and the
+    // user text must be bounded to (roughly) the cap, never dropped for the
+    // directive.
+    const longText = `${"a".repeat(5000)}.`;
+    const { fetchImpl, calls } = makeFakeFetch(geminiAudioResponse(PCM_BASE64));
+    const adapter = new GeminiSpeechSynthesizer(fetchImpl);
+
+    await adapter.synthesize(longText);
+
+    const body = JSON.parse(calls[0]!.init.body as string) as {
+      contents: Array<{ parts: Array<{ text: string }> }>;
+    };
+    const sent = body.contents[0]!.parts[0]!.text;
+    expect(sent.startsWith(`${DEFAULT_TTS_STYLE_DIRECTIVE}\n\n`)).toBe(true);
+    // The user portion is bounded to the 4096 cap (hard cut of the "aaa…").
+    const userPortion = sent.slice(`${DEFAULT_TTS_STYLE_DIRECTIVE}\n\n`.length);
+    expect(userPortion.length).toBeLessThanOrEqual(4096);
+    expect(userPortion.length).toBeGreaterThan(0);
   });
 
   it("uses GOOGLE_TTS_MODEL + GOOGLE_TTS_VOICE when set", async () => {

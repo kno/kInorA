@@ -47,6 +47,23 @@ const DEFAULT_TTS_MODEL = "gemini-2.5-flash-preview-tts";
 /** Prebuilt voice pinned in one place; overridable via env. */
 const DEFAULT_TTS_VOICE = "Kore";
 
+/**
+ * Natural-language STYLE directive prepended to the content to steer the SPOKEN
+ * accent toward neutral peninsular (European / Castilian) Spanish — NOT a
+ * Latin-American accent and with no marked regional coloring. This uses Gemini
+ * TTS's documented single-speaker style-prompt pattern (a leading
+ * `Di lo siguiente con ...: <texto>` directive controls delivery/accent, not the
+ * spoken words). Pinned in one place and overridable via `GOOGLE_TTS_STYLE_DIRECTIVE`
+ * so the exact wording can be tuned in prod WITHOUT a redeploy.
+ *
+ * NOTE: the resulting accent quality is BROWSER/EAR-verified, not unit-verifiable
+ * — unit tests only assert that the directive is prepended and env-overridable;
+ * whether the model actually renders a convincing Castilian accent must be
+ * confirmed by listening to real synthesized output.
+ */
+export const DEFAULT_TTS_STYLE_DIRECTIVE =
+  "Pronuncia el siguiente texto con acento neutro de español de España (castellano), sin acento latinoamericano ni marcas regionales:";
+
 /** Default PCM sample rate when the mime type omits/garbles `rate=NNNN`. */
 const DEFAULT_SAMPLE_RATE = 24_000;
 
@@ -218,11 +235,15 @@ export class GeminiSpeechSynthesizer implements SpeechSynthesizer {
     const apiKey = process.env["GOOGLE_GENERATIVE_AI_API_KEY"] ?? "placeholder-key";
     const model = process.env["GOOGLE_TTS_MODEL"] ?? DEFAULT_TTS_MODEL;
     const voice = process.env["GOOGLE_TTS_VOICE"] ?? DEFAULT_TTS_VOICE;
+    const styleDirective =
+      process.env["GOOGLE_TTS_STYLE_DIRECTIVE"] ?? DEFAULT_TTS_STYLE_DIRECTIVE;
     const url = `${GENERATIVE_LANGUAGE_BASE}/${model}:generateContent?key=${apiKey}`;
 
-    // Bound the input at a sentence boundary BEFORE the call. The text is NEVER
-    // logged.
-    const input = truncateForTts(text);
+    // Bound the USER text at a sentence boundary BEFORE prepending the style
+    // directive — truncation must never eat the directive (it is short relative
+    // to the 4096-char cap and must reach the model to steer the accent). The
+    // text is NEVER logged.
+    const input = `${styleDirective}\n\n${truncateForTts(text)}`;
 
     const requestBody = {
       contents: [{ parts: [{ text: input }] }],
