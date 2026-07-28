@@ -1078,6 +1078,7 @@
     "error": {
       "chat_stream_failed": "Something went wrong. Please try again.",
       "chat_stream_timeout": "That took too long. Please try again.",
+      "chat_rate_limited": "AI rate limit reached — try again shortly.",
       "generic": "Something went wrong. Please try again."
     },
     "panel": {
@@ -1124,6 +1125,7 @@
       "listening": "Listening…",
       "processing": "Processing…",
       "speaking": "Speaking…",
+      "synthesizing": "Generating voice…",
       "responding": "kInorA is responding…"
     },
     "stopSpeaking": "Stop speaking",
@@ -1132,6 +1134,7 @@
     "unsupported": "Voice input isn't available in this browser. You can keep typing.",
     "offline": "Voice needs a connection. You can keep typing.",
     "unclear": "I didn't catch that. Please try again.",
+    "rate_limited": "AI rate limit reached. Please wait a moment and try again.",
     "error": "Voice input failed. Please try again.",
     "premium": "Voice is a Pro feature. Upgrade to Pro to use it. You can keep typing.",
     "screenTitle": "kInorA Assistant",

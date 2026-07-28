@@ -3,7 +3,7 @@ import http from "node:http";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { ServerResponse } from "node:http";
 import { authPlugin } from "../../auth/plugin.js";
-import { planRoutes, type PlanRouteRepo } from "../plan.js";
+import { planRoutes, isLikelyRateLimitMessage, type PlanRouteRepo } from "../plan.js";
 import type { ChatEntitlementPort } from "../../billing/chat-entitlement.js";
 import type {
   ChatExtractInput,
@@ -137,6 +137,49 @@ function richExtractor(
   };
 }
 
+/** A recording logger so tests can assert warn vs. error log routing. */
+function recordingLogger(): {
+  info: (...a: unknown[]) => void;
+  error: (...a: unknown[]) => void;
+  warn: (...a: unknown[]) => void;
+  debug: (...a: unknown[]) => void;
+  fatal: (...a: unknown[]) => void;
+  trace: (...a: unknown[]) => void;
+  child: () => unknown;
+  level: string;
+  records: unknown[];
+} {
+  const records: unknown[] = [];
+  const safe = (value: unknown): string => {
+    const seen = new WeakSet<object>();
+    return JSON.stringify(value, (_k, v) => {
+      if (typeof v === "object" && v !== null) {
+        if (seen.has(v)) return "[circular]";
+        seen.add(v);
+      }
+      if (typeof v === "bigint") return v.toString();
+      return v;
+    });
+  };
+  const log = (...args: unknown[]) => {
+    records.push(args.map((a) => safe(a)));
+  };
+  const logger = {
+    records,
+    level: "info",
+    info: log,
+    error: log,
+    warn: log,
+    debug: log,
+    fatal: log,
+    trace: log,
+    child() {
+      return logger;
+    },
+  };
+  return logger;
+}
+
 /** Parse an SSE payload into ordered { event, data } frames. */
 function parseSse(payload: string): Array<{ event: string; data: string }> {
   return payload
@@ -162,8 +205,13 @@ async function buildTestApp(opts: {
    * wires it, so a test can assert a chat turn NEVER consumes quota.
    */
   billing?: { checkAndConsume: ReturnType<typeof vi.fn> };
+  logger?: ReturnType<typeof recordingLogger>;
 }): Promise<FastifyInstance> {
-  const app = Fastify();
+  const app = Fastify(
+    opts.logger
+      ? { loggerInstance: opts.logger as never, disableRequestLogging: true }
+      : {},
+  );
   app.setErrorHandler((error, _request, reply) => {
     if (error.validation) {
       return reply.code(400).send({ error: "Bad Request" });
@@ -618,6 +666,88 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     expect(frames.some((f) => f.event === "draft")).toBe(false);
     // Draft untouched.
     expect(repo.commitDraft).not.toHaveBeenCalled();
+  });
+
+  it("a Gemini quota-exhausted error (extract throws a quota-message error) → terminal SSE error chat_rate_limited, with a DISTINCT warn log", async () => {
+    const extractor: PlanSpecExtractor = {
+      async *streamReply(_input, signal) {
+        for (const t of ["thinking", "..."]) {
+          if (signal.aborted) return;
+          yield t;
+        }
+      },
+      async extract() {
+        throw new Error(
+          "GoogleGenerativeAIError: [429 Too Many Requests] Resource has been exhausted (RESOURCE_EXHAUSTED)",
+        );
+      },
+    };
+    const repo = buildPlanRepo();
+    const logger = recordingLogger();
+
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      chatEntitlement: allowGate(),
+      chatExtractor: extractor,
+      logger,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/chat",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { message: "build muscle" },
+    });
+
+    const frames = parseSse(res.payload);
+    expect(frames.at(-1)?.event).toBe("error");
+    expect(JSON.parse(frames.at(-1)!.data)).toEqual({ error: "chat_rate_limited" });
+    expect(repo.commitDraft).not.toHaveBeenCalled();
+
+    const dump = JSON.stringify(logger.records);
+    expect(dump).toContain("provider rate limit / quota exceeded (HTTP 429) — chat throttled");
+    expect(dump).not.toContain("chat stream failed");
+  });
+
+  it("a non-rate-limit failure keeps the generic chat_stream_failed terminal + error log (not conflated with quota detection)", async () => {
+    const extractor: PlanSpecExtractor = {
+      async *streamReply(_input, signal) {
+        for (const t of ["thinking", "..."]) {
+          if (signal.aborted) return;
+          yield t;
+        }
+        throw new Error("provider 500 — unrelated failure");
+      },
+      async extract() {
+        return {};
+      },
+    };
+    const repo = buildPlanRepo();
+    const logger = recordingLogger();
+
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      chatEntitlement: allowGate(),
+      chatExtractor: extractor,
+      logger,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/chat",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { message: "make it harder" },
+    });
+
+    const frames = parseSse(res.payload);
+    expect(frames.at(-1)?.event).toBe("error");
+    expect(JSON.parse(frames.at(-1)!.data)).toEqual({ error: "chat_stream_failed" });
+
+    const dump = JSON.stringify(logger.records);
+    expect(dump).toContain("chat stream failed");
+    expect(dump).not.toContain("chat throttled");
   });
 
   it("empty/whitespace message → NO LLM work, a clarifying draft, draft unchanged", async () => {
@@ -1086,5 +1216,30 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     expect(repo.commitDraft).toHaveBeenCalledTimes(1);
     // ... yet the plan_generation meter was NEVER consumed by a chat turn.
     expect(billing.checkAndConsume).not.toHaveBeenCalled();
+  });
+});
+
+describe("isLikelyRateLimitMessage", () => {
+  it("true for messages containing 429 / quota / RESOURCE_EXHAUSTED / Too Many Requests (case-insensitive)", () => {
+    expect(isLikelyRateLimitMessage(new Error("[429] request failed"))).toBe(true);
+    expect(isLikelyRateLimitMessage(new Error("Quota exceeded for this model"))).toBe(true);
+    expect(isLikelyRateLimitMessage(new Error("RESOURCE_EXHAUSTED"))).toBe(true);
+    expect(isLikelyRateLimitMessage(new Error("resource_exhausted"))).toBe(true);
+    expect(isLikelyRateLimitMessage(new Error("Too Many Requests"))).toBe(true);
+    expect(isLikelyRateLimitMessage(new Error("too many requests, slow down"))).toBe(true);
+  });
+
+  it("true when the recognizable substring is in the error's name rather than its message", () => {
+    const err = new Error("generic failure");
+    err.name = "GoogleGenerativeAIError: 429";
+    expect(isLikelyRateLimitMessage(err)).toBe(true);
+  });
+
+  it("false for unrelated errors and non-Error values", () => {
+    expect(isLikelyRateLimitMessage(new Error("network timeout"))).toBe(false);
+    expect(isLikelyRateLimitMessage(new Error("provider 500 — unrelated failure"))).toBe(false);
+    expect(isLikelyRateLimitMessage("plain string")).toBe(false);
+    expect(isLikelyRateLimitMessage(undefined)).toBe(false);
+    expect(isLikelyRateLimitMessage(null)).toBe(false);
   });
 });

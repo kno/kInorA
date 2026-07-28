@@ -17,6 +17,7 @@ import type { ChatEntitlementPort } from "../billing/chat-entitlement.js";
 import type { PlanSpecExtractor } from "../ai/extraction-port.js";
 import type { SpeechTranscriber } from "../ai/speech-transcriber-port.js";
 import type { SpeechSynthesizer } from "../ai/speech-synthesizer-port.js";
+import { ProviderRateLimitError } from "../ai/provider-errors.js";
 
 /**
  * A workout plan record as returned to the route (structural shape, declared
@@ -403,6 +404,26 @@ const adaptSchema = {
     additionalProperties: true,
   },
 };
+
+/**
+ * Best-effort detection of a Gemini rate-limit/quota-exhausted failure
+ * surfaced through LangChain's `ChatGoogleGenerativeAI` (`/plan-specs/chat`).
+ * That path throws a `GoogleGenerativeAIError` whose message/name contains a
+ * recognizable substring rather than a typed error the route can catch — this
+ * is a case-insensitive substring check on the error's message/name, kept as
+ * a tiny standalone, unit-testable helper rather than inlined in the catch
+ * block.
+ */
+export function isLikelyRateLimitMessage(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const haystack = `${error.name} ${error.message}`.toLowerCase();
+  return (
+    haystack.includes("429") ||
+    haystack.includes("too many requests") ||
+    haystack.includes("quota") ||
+    haystack.includes("resource_exhausted")
+  );
+}
 
 /**
  * Plan route plugin — implements plan wizard and generation API endpoints.
@@ -1069,10 +1090,27 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
           // lands HERE rather than at the post-await `controller.signal.aborted`
           // check below Pass 2 — surface it as the same `chat_stream_timeout`
           // terminal, not the generic `chat_stream_failed`.
-          request.log.error({ err: error, tenantId, userId }, "chat stream failed");
-          if (!clientGone) {
-            const reason = timedOut ? "chat_stream_timeout" : "chat_stream_failed";
-            await writeFrame("error", { error: reason });
+          //
+          // A HARD Gemini rate-limit (429/quota exhausted) surfaces through
+          // LangChain's `ChatGoogleGenerativeAI` as a `GoogleGenerativeAIError`
+          // whose message/name contains a recognizable substring rather than a
+          // typed error — best-effort detect it so operators can tell "quota
+          // exhausted" apart from a real fault via a DISTINCT warn + terminal
+          // reason. Not conflated with a timeout, which always wins first.
+          if (!timedOut && isLikelyRateLimitMessage(error)) {
+            request.log.warn(
+              { provider: "gemini", tenantId, userId },
+              "provider rate limit / quota exceeded (HTTP 429) — chat throttled",
+            );
+            if (!clientGone) {
+              await writeFrame("error", { error: "chat_rate_limited" });
+            }
+          } else {
+            request.log.error({ err: error, tenantId, userId }, "chat stream failed");
+            if (!clientGone) {
+              const reason = timedOut ? "chat_stream_timeout" : "chat_stream_failed";
+              await writeFrame("error", { error: reason });
+            }
           }
         } finally {
           clearTimeout(timer);
@@ -1194,27 +1232,38 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
             return reply.code(400).send({ error: "missing_audio" });
           }
 
-          // Abort the in-flight transcription if the client disconnects. The
-          // audio is processed in-flight ONLY — never persisted anywhere.
-          const controller = new AbortController();
-          const onClose = () => controller.abort();
-          request.raw.on("close", onClose);
-
+          // NOTE: intentionally NO client-disconnect AbortController here. When
+          // the upload is buffered by the web proxy, Node emits `'close'` on the
+          // request right AFTER the body is consumed — not only on a real
+          // disconnect — which fired immediately and aborted the transcription
+          // (observed: AbortError ~40ms → 502 on the first voice turn). The
+          // transcriber adapter has its own bounded timeout, so the in-flight,
+          // never-persisted transcription stays bounded without the flaky
+          // request-close signal.
           try {
-            const result = await speechTranscriber.transcribe(
-              { audio: new Uint8Array(audio), contentType },
-              controller.signal,
-            );
+            const result = await speechTranscriber.transcribe({
+              audio: new Uint8Array(audio),
+              contentType,
+            });
             // Silence/noise → a graceful 200 { text:"", unclear:true }, NOT a 5xx.
             return reply.code(200).send({ text: result.text, unclear: result.unclear });
           } catch (error) {
+            // A HARD rate-limit (429, quota exhausted after retries) is
+            // distinguished from a generic transport/provider failure so
+            // operators can tell "quota exhausted" apart from a real fault —
+            // a DISTINCT warn, and 429 rather than 502, to the client.
+            if (error instanceof ProviderRateLimitError) {
+              request.log.warn(
+                { feature: error.feature, provider: error.provider, tenantId, userId },
+                "provider rate limit / quota exceeded (HTTP 429) — request throttled",
+              );
+              return reply.code(429).send({ error: "rate_limited" });
+            }
             // A transport/provider failure maps to a generic 502 — the provider's
             // message/stack is logged server-side (tenant/user correlation only,
             // never the audio or transcript) and NEVER returned to the client.
             request.log.error({ err: error, tenantId, userId }, "transcription failed");
             return reply.code(502).send({ error: "transcription_failed" });
-          } finally {
-            request.raw.removeListener("close", onClose);
           }
         },
       );
@@ -1304,6 +1353,17 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
             .header("content-type", result.contentType)
             .send(Buffer.from(result.audio));
         } catch (error) {
+          // A HARD rate-limit (429, quota exhausted after retries) is
+          // distinguished from a generic transport/provider failure so
+          // operators can tell "quota exhausted" apart from a real fault — a
+          // DISTINCT warn, and 429 rather than 502, to the client.
+          if (error instanceof ProviderRateLimitError) {
+            request.log.warn(
+              { feature: error.feature, provider: error.provider, tenantId, userId },
+              "provider rate limit / quota exceeded (HTTP 429) — request throttled",
+            );
+            return reply.code(429).send({ error: "rate_limited" });
+          }
           // A transport/provider failure maps to a generic 502 — the provider's
           // message/stack is logged server-side (tenant/user correlation only,
           // never the text or key) and NEVER returned to the client.
