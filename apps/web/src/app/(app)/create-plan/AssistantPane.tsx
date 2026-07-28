@@ -18,9 +18,17 @@ type VoiceState = "idle" | "listening" | "processing";
 /**
  * A transient voice notice key resolved against the `voice` i18n namespace:
  * `denied` (mic blocked), `unsupported` (no MediaRecorder), `offline`,
- * `unclear` (silence/noise transcript), or `error` (transport failure).
+ * `unclear` (silence/noise transcript), `rate_limited` (429 from the
+ * transcribe proxy), or `error` (any other transport failure).
  */
-type VoiceNotice = "denied" | "unsupported" | "offline" | "unclear" | "error" | null;
+type VoiceNotice =
+  | "denied"
+  | "unsupported"
+  | "offline"
+  | "unclear"
+  | "rate_limited"
+  | "error"
+  | null;
 
 /** Same-origin proxy route that injects the Bearer token and streams SSE back. */
 const CHAT_ENDPOINT = "/create-plan/chat";
@@ -353,8 +361,11 @@ export function AssistantPane({
           revokeObjectUrl();
           setSpeaking(false);
         });
-      } catch {
+      } catch (err) {
         // Network error / abort → no playback; the text reply already stands.
+        // Fail-silent to the user is intentional (TTS is best-effort) — only
+        // log for visibility.
+        console.warn("[voice] tts failed", err);
         revokeObjectUrl();
         setSpeaking(false);
       }
@@ -436,6 +447,7 @@ export function AssistantPane({
             // Terminal error: never leave a blank coach bubble in the thread —
             // remove the placeholder if no prose arrived before the failure;
             // keep it (as partial prose) when some tokens already streamed.
+            console.warn("[chat] stream terminated with error", { reason: event.reason });
             setMessages((prev) => removeTrailingEmptyAssistant(prev));
             setErrorReason(event.reason);
           }
@@ -490,7 +502,13 @@ export function AssistantPane({
         setVoiceState("idle");
         // A user-initiated abort (unmount) is expected — stay silent.
         if (err instanceof DOMException && err.name === "AbortError") return;
-        if (err instanceof TranscriptionError || err instanceof Error) {
+        if (err instanceof TranscriptionError) {
+          console.warn("[voice] transcribe failed", { reason: err.reason, status: err.status });
+          setVoiceNotice(err.reason === "rate_limited" ? "rate_limited" : "error");
+          return;
+        }
+        if (err instanceof Error) {
+          console.warn("[voice] transcribe failed", { reason: "unknown", error: err });
           setVoiceNotice("error");
         }
       }
@@ -1052,6 +1070,7 @@ function replaceAssistant(messages: ChatMessage[], text: string): ChatMessage[] 
 
 function resolveErrorMessage(t: ReturnType<typeof useTranslations>, reason: string): string {
   if (reason === "chat_stream_timeout") return t("chat.error.chat_stream_timeout");
+  if (reason === "chat_rate_limited") return t("chat.error.chat_rate_limited");
   if (reason === "chat_stream_failed") return t("chat.error.chat_stream_failed");
   return t("chat.error.generic");
 }

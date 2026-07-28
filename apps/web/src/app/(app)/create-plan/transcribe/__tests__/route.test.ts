@@ -38,7 +38,7 @@ describe("POST /create-plan/transcribe — same-origin multipart proxy (13 B1)",
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("forwards the session as a Bearer + the multipart body with duplex:half to the API transcribe route", async () => {
+  it("forwards the session as a Bearer + the BUFFERED multipart body (no streaming/duplex) to the API transcribe route", async () => {
     cookieGet.mockReturnValue({ value: "tok-1" });
     process.env.API_BASE_URL = "http://api.test";
     const fetchMock = vi.fn().mockResolvedValue({
@@ -63,9 +63,10 @@ describe("POST /create-plan/transcribe — same-origin multipart proxy (13 B1)",
     expect((init.headers as Record<string, string>)["content-type"]).toBe(
       `multipart/form-data; boundary=${BOUNDARY}`,
     );
-    // The body is forwarded as a stream (duplex required by undici).
-    expect(init.body).toBeTruthy();
-    expect(init.duplex).toBe("half");
+    // The body is forwarded fully buffered (an ArrayBuffer), never a stream —
+    // no `duplex` option should be present.
+    expect(init.body).toBeInstanceOf(ArrayBuffer);
+    expect(init.duplex).toBeUndefined();
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ text: "hello", unclear: false });
@@ -135,11 +136,13 @@ describe("POST /create-plan/transcribe — same-origin multipart proxy (13 B1)",
     expect(await res.json()).toEqual({ error: "transcription_failed" });
   });
 
-  it("maps an unreachable upstream to a generic api_unreachable error without leaking the internal API URL", async () => {
+  it("maps an unreachable upstream to a generic api_unreachable error without leaking the internal API URL, and logs the failure server-side", async () => {
     cookieGet.mockReturnValue({ value: "tok-1" });
     process.env.API_BASE_URL = "http://api:4000";
-    const fetchMock = vi.fn().mockRejectedValue(new Error("ECONNREFUSED http://api:4000"));
+    const upstreamError = new Error("ECONNREFUSED http://api:4000");
+    const fetchMock = vi.fn().mockRejectedValue(upstreamError);
     vi.stubGlobal("fetch", fetchMock);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const res = await POST(makeRequest());
 
@@ -147,6 +150,10 @@ describe("POST /create-plan/transcribe — same-origin multipart proxy (13 B1)",
     const body = await res.json();
     expect(body).toEqual({ error: "api_unreachable" });
     expect(JSON.stringify(body)).not.toContain("api:4000");
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[transcribe-proxy] upstream fetch failed",
+      upstreamError,
+    );
   });
 
   it("forwards the client's AbortSignal to the upstream fetch so a browser abort cancels it", async () => {

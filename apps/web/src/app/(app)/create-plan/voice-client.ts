@@ -41,15 +41,30 @@ export interface TranscriptionResult {
 
 /**
  * A transcribe request that failed at the transport level (a non-2xx proxy
- * response — e.g. a Free 403, an oversize 413, an unsupported-format 415, or
- * an upstream 502). Carries the status so the UI can react; B1 treats every
- * non-2xx as "voice input failed, try again" since the mic only appears in the
- * Pro flow (the 403 is the real server enforcement, not an expected path).
+ * response — e.g. a Free 403, an oversize 413, an unsupported-format 415, a
+ * 429 rate-limit, or an upstream 502). Carries the status AND the proxy's
+ * `{ error }` reason string (`premium_required`, `rate_limited`,
+ * `transcription_failed`, `api_unreachable`, ...) so the UI can distinguish a
+ * rate-limit from a transport failure instead of surfacing every non-2xx as
+ * the same generic "voice input failed, try again".
  */
 export class TranscriptionError extends Error {
-  constructor(readonly status: number) {
+  constructor(
+    readonly status: number,
+    readonly reason: string = "transcription_failed",
+  ) {
     super(`transcription_failed_${status}`);
     this.name = "TranscriptionError";
+  }
+}
+
+/** Best-effort parse of the proxy's `{ error }` JSON body into a reason string. */
+async function readErrorReason(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = (await res.json()) as Partial<{ error: string }>;
+    return typeof data.error === "string" && data.error !== "" ? data.error : fallback;
+  } catch {
+    return fallback;
   }
 }
 
@@ -103,7 +118,10 @@ export async function transcribeAudio(
     signal: options.signal,
   });
 
-  if (!res.ok) throw new TranscriptionError(res.status);
+  if (!res.ok) {
+    const reason = await readErrorReason(res, "transcription_failed");
+    throw new TranscriptionError(res.status, reason);
+  }
 
   const data = (await res.json().catch(() => ({}))) as Partial<TranscriptionResult>;
   const text = typeof data.text === "string" ? data.text : "";
@@ -136,8 +154,15 @@ export async function synthesizeSpeech(
     signal: options.signal,
   });
 
-  // 204 (opted out) or any non-2xx (403/502) → no audio to play.
-  if (res.status === 204 || !res.ok) return null;
+  // 204 (opted out) or any non-2xx (403/502/429) → no audio to play. Capture
+  // the reason for console visibility only — TTS stays fail-silent to the
+  // caller either way (no reason is thrown/returned here).
+  if (res.status === 204) return null;
+  if (!res.ok) {
+    const reason = await readErrorReason(res, "speech_failed");
+    console.warn("[voice] tts request failed", { reason, status: res.status });
+    return null;
+  }
 
   const blob = await res.blob();
   return blob.size > 0 ? blob : null;

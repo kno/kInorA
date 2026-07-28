@@ -8,11 +8,17 @@ import { SESSION_COOKIE } from "@/auth/session-cookie";
  * `kinora_session` httpOnly cookie as a Bearer to the cross-origin API, so the
  * MediaRecorder blob is POSTed to THIS route (same-origin), which reads the
  * session cookie server-side and forwards the multipart body to
- * `POST {API_BASE_URL}/plan-specs/transcribe` as a Bearer, streaming with
- * `duplex: "half"`. The upstream `{ text, unclear }` JSON and its status are
- * passed through verbatim — a Free user's 403, an oversize 413, an
- * unsupported-format 415, and a transport 502 all surface unchanged so the
- * client can react. No token ever reaches the browser; no LLM import here.
+ * `POST {API_BASE_URL}/plan-specs/transcribe` as a Bearer. The upload is
+ * buffered (`request.arrayBuffer()`) before the upstream fetch rather than
+ * streamed — create-plan clips are small (<=15MB), and streaming
+ * `request.body` straight through with `duplex: "half"` proved flaky under
+ * Next dev/undici when the body originates from a browser upload (it works
+ * fine via curl with a complete body, but intermittently 502s with no
+ * api-side log against a real browser MediaRecorder upload). The upstream
+ * `{ text, unclear }` JSON and its status are passed through verbatim — a
+ * Free user's 403, an oversize 413, an unsupported-format 415, and a
+ * transport 502 all surface unchanged so the client can react. No token
+ * ever reaches the browser; no LLM import here.
  */
 export const dynamic = "force-dynamic";
 
@@ -35,6 +41,10 @@ export async function POST(request: Request): Promise<Response> {
   // Preserve the multipart boundary from the incoming request's content-type.
   const contentType = request.headers.get("content-type") ?? "application/octet-stream";
 
+  // Buffer the upload fully before forwarding — see the module doc for why
+  // streaming `request.body` with `duplex: "half"` is flaky here.
+  const body = await request.arrayBuffer();
+
   let upstream: Response;
   try {
     upstream = await fetch(`${apiBaseUrl()}/plan-specs/transcribe`, {
@@ -43,14 +53,14 @@ export async function POST(request: Request): Promise<Response> {
         "content-type": contentType,
         authorization: `Bearer ${token}`,
       },
-      body: request.body,
+      body,
       signal: request.signal,
       cache: "no-store",
-      // undici requires `duplex` when a body is streamed.
-      duplex: "half",
-    } as RequestInit & { duplex: "half" });
-  } catch {
-    // Never leak the internal API URL — a generic unreachable error only.
+    });
+  } catch (err) {
+    // Never leak the internal API URL — a generic unreachable error only —
+    // but DO log server-side so a flaky/failed upstream fetch is visible.
+    console.error("[transcribe-proxy] upstream fetch failed", err);
     return jsonError("api_unreachable", 502);
   }
 

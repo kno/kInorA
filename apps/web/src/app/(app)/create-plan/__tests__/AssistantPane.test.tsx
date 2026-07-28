@@ -596,6 +596,21 @@ describe("AssistantPane — error message resolution", () => {
       expect(screen.getByRole("button", { name: /retry/i })).toBeTruthy();
     });
   });
+
+  it("shows the distinct chat_rate_limited copy (not the generic chat_stream_failed copy) and logs the reason", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockFetchOnce(eagerStream(['event: error\ndata: {"error":"chat_rate_limited"}\n\n']));
+    setup();
+    await sendTurn();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /retry/i })).toBeTruthy();
+    });
+    expect(screen.getByText(/AI rate limit reached/i)).toBeTruthy();
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[chat] stream terminated with error",
+      expect.objectContaining({ reason: "chat_rate_limited" }),
+    );
+  });
 });
 
 describe("AssistantPane — generation gate", () => {
@@ -937,6 +952,33 @@ describe("AssistantPane — voice capture (B1)", () => {
     expect(
       (screen.getByRole("textbox", { name: /chat message/i }) as HTMLTextAreaElement).disabled,
     ).toBe(false);
+  });
+
+  it("shows the rate_limited voice notice (not the generic error) when the transcribe proxy 429s", async () => {
+    const getUserMedia = vi.fn().mockResolvedValue(fakeStream());
+    installVoice(getUserMedia);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    routeFetch({
+      transcribe: () =>
+        Promise.resolve({
+          ok: false,
+          status: 429,
+          json: async () => ({ error: "rate_limited" }),
+        }),
+    });
+
+    renderVoicePane();
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(micStart());
+    await waitFor(() => expect(micStop()).toBeTruthy());
+    fireEvent.click(micStop());
+
+    await waitFor(() => expect(screen.getByText(/rate limit reached/i)).toBeTruthy());
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[voice] transcribe failed",
+      expect.objectContaining({ reason: "rate_limited", status: 429 }),
+    );
   });
 
   it("offline disables voice with a text fallback, and reconnecting re-enables it without a reload", async () => {
