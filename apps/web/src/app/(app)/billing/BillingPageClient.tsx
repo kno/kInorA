@@ -240,11 +240,7 @@ function BillingScreen({
       <div className={styles.grid}>
         <div role="region" aria-label={t("billing.regions.main")} className={styles.mainCol}>
           {accessEndedReason ? <AccessEndedBanner reason={accessEndedReason} /> : null}
-          <PlanHero
-            billing={billing}
-            pricing={pricing}
-            period={tenantUsage[0]?.period ?? memberUsage[0]?.period ?? null}
-          />
+          <PlanHero billing={billing} pricing={pricing} />
           <UsageMeters tenantUsage={tenantUsage} memberUsage={memberUsage} />
           {isOwner ? <InvoiceHistory invoices={invoices} /> : null}
         </div>
@@ -296,15 +292,9 @@ function AccessEndedBanner({ reason }: { reason: "trial_expired" | "subscription
 function PlanHero({
   billing,
   pricing,
-  period,
 }: {
   billing: BillingVisibilityDTO["billing"];
   pricing: BillingPricingDTO | null;
-  /** The current billing period key (e.g. "2026-07"), sourced from a usage
-   * row — the SAME period the Usage Meters section reports on below. Kept as
-   * a distinct signal from `currentPeriodEnd` (a renewal DATE) so the
-   * "Current period" tile never collapses into the "Renewal" tile. */
-  period: string | null;
 }) {
   const t = useTranslations();
   const format = useFormatter();
@@ -330,17 +320,6 @@ function PlanHero({
         })
       : t("billing.plan.valueNotSet");
 
-  // FIX 1 (4R review): "Current period" must reflect the REAL current billing
-  // period (the same period key the Usage Meters section reports on) — NOT
-  // the cycle label, and NOT a restatement of the Renewal date tile above.
-  const currentPeriodValue =
-    period ??
-    (billing.status === "trialing" && billing.trialEndsAt != null
-      ? t("billing.plan.periodTrialEndsOn", {
-          date: new Date(billing.trialEndsAt).toISOString().slice(0, 10),
-        })
-      : t("billing.plan.valueNotSet"));
-
   return (
     <section className={styles.card} data-testid="billing-plan-hero">
       <span className={styles.eyebrow}>{t("billing.plan.currentLabel")}</span>
@@ -351,7 +330,6 @@ function PlanHero({
       <dl className={styles.metaGrid}>
         <MetaTile label={t("billing.plan.metaPrice")} value={priceValue} />
         <MetaTile label={t("billing.plan.metaRenewal")} value={renewal} />
-        <MetaTile label={t("billing.plan.metaPeriod")} value={currentPeriodValue} />
       </dl>
     </section>
   );
