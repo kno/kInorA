@@ -173,16 +173,17 @@ export interface PlanRoutesOptions {
    */
   chatEntitlement?: ChatEntitlementPort;
   /**
-   * Extractor for the chat endpoint (12, S2b). Both passes are used now:
-   * `streamReply` for the assistant prose and `extract` for the terminal
-   * structured `Partial<PlanSpec>`. The route depends ONLY on this port — the
-   * LangChain dependency lives entirely inside the injected adapter
-   * (`ai/extraction-adapter.ts`), so the route never imports LangChain.
+   * Extractor for the chat endpoint (12, S2b). A single `streamTurn` yields the
+   * assistant prose token-by-token then one terminal `final` carrying the
+   * structured `Partial<PlanSpec>` and the full assistant message from one LLM
+   * pass. The route depends ONLY on this port — the LangChain dependency lives
+   * entirely inside the injected adapter (`ai/extraction-adapter.ts`), so the
+   * route never imports LangChain.
    */
   chatExtractor?: PlanSpecExtractor;
   /**
-   * Wall-clock deadline (ms) for a single chat turn (12, S2b). If Pass 1/Pass 2
-   * do not complete within this budget the turn is aborted (LLM stream cancelled
+   * Wall-clock deadline (ms) for a single chat turn (12, S2b). If the turn does
+   * not complete within this budget it is aborted (LLM stream cancelled
    * via the shared AbortSignal), a terminal `error` event is emitted, and the
    * socket is closed cleanly with NO draft write. Defaults to 60s. Injected
    * small in tests for deterministic timeout coverage.
@@ -824,11 +825,13 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
 
   // POST /plan-specs/chat  (12-interactive-text-chat, Slice 2b)
   //
-  // Streaming SSE endpoint for the Asistente. S2b completes the turn: it streams
-  // the assistant prose (Pass 1), runs the terminal structured extraction
-  // (Pass 2), merges the result onto the SHARED `plan_drafts` draft via the pure
-  // `mergePlanSpecDraft`, commits the draft ONLY on the terminal event, and emits
-  // a terminal `draft { draftSpec, missingFields, assistantMessage }`. Any
+  // Streaming SSE endpoint for the Asistente. Two LLM passes per turn: Pass 1
+  // `streamReply` streams the assistant prose token-by-token (real progressive
+  // streaming), and Pass 2 `extract` — SEEDED with Pass 1's reply — returns the
+  // structured draft CONSISTENT with what the assistant just said. The route
+  // merges the draft onto the SHARED `plan_drafts` draft via the pure
+  // `mergePlanSpecDraft`, commits the draft ONLY after Pass 2, and emits a
+  // terminal `draft { draftSpec, missingFields, assistantMessage }`. Any
   // mid-stream failure emits a terminal `error` and leaves the draft untouched.
   // The route depends ONLY on the `PlanSpecExtractor` port — LangChain lives in
   // the injected adapter, never here (deps-guard/architecture confinement).
@@ -841,8 +844,8 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   //   4. read the current shared draft (tenant/user scoped, from authContext)
   //   5. empty/whitespace message → NO LLM work; a clarifying terminal `draft`
   //      carrying the UNCHANGED draft (no write)
-  //   6. otherwise Pass 1 stream `token` deltas → Pass 2 `extract` → merge →
-  //      commit-if-changed → terminal `draft`
+  //   6. otherwise Pass 1 `streamReply` (`token` deltas) → Pass 2 `extract`
+  //      (seeded with the reply) → merge → commit-if-changed → terminal `draft`
   //
   // Resilience: a shared AbortController is fired by (a) client disconnect
   // (`close` on request/response), (b) a socket-level error (ECONNRESET), and
@@ -994,8 +997,12 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
           const { missingFields: currentMissingFields } = mergePlanSpecDraft(currentDraft, {});
           const input = { message, currentDraft, missingFields: currentMissingFields };
 
-          // Pass 1 — stream the assistant prose token-by-token, accumulating it
-          // for the terminal event.
+          // Pass 1 — REAL prose streaming. A plain `.stream()` call yields the
+          // assistant's conversational reply token-by-token (restoring the
+          // progressive typing effect that structured-output streaming lost);
+          // accumulate the full reply for the terminal event AND to seed Pass 2.
+          // The shared AbortSignal is threaded in, so a timeout/disconnect firing
+          // mid-turn cancels the in-flight LLM round-trip.
           let assistantMessage = "";
           for await (const token of chatExtractorPort.streamReply(input, controller.signal)) {
             if (controller.signal.aborted) break;
@@ -1009,11 +1016,17 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
             return;
           }
 
-          // Pass 2 — terminal structured extraction (non-streamed). Threads the
-          // SAME AbortSignal so a timeout/disconnect firing during this call
-          // cancels the in-flight structured-output request (HIGH fix — Pass 2
-          // was previously uncancellable).
-          const extracted = await chatExtractorPort.extract(input, controller.signal);
+          // Pass 2 — terminal structured extraction (non-streamed), SEEDED with
+          // Pass 1's reply so the extracted fields are CONSISTENT with what the
+          // assistant just said (if the reply recommends "3 days", Pass 2
+          // extracts daysPerWeek=3). Threads the SAME AbortSignal so a
+          // timeout/disconnect firing during this call cancels the in-flight
+          // structured-output request.
+          const extracted = await chatExtractorPort.extract(
+            input,
+            assistantMessage,
+            controller.signal,
+          );
 
           if (controller.signal.aborted) {
             if (timedOut) await writeFrame("error", { error: "chat_stream_timeout" });

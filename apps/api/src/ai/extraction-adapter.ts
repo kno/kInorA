@@ -4,7 +4,7 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { PlanSpecDraftSchema } from "@kinora/contracts";
 import type { PlanSpecDraft } from "@kinora/contracts";
 import type { ChatExtractInput, PlanSpecExtractor } from "./extraction-port.js";
-import { buildExtractionPrompt } from "./extraction-prompt.js";
+import { buildReplyPrompt, buildExtractionPrompt } from "./extraction-prompt.js";
 import type { DynamicConfigRepo } from "./dynamic-generator.js";
 
 /**
@@ -16,41 +16,49 @@ import type { DynamicConfigRepo } from "./dynamic-generator.js";
  * so the deps-guard/architecture confinement (LLM code lives only under
  * `apps/api/src/ai/`) holds.
  *
- * Two passes per turn (design.md):
- *   - Pass 1 `streamReply()` — streams the assistant PROSE token-by-token via the
- *     model's `.stream()`, honoring the `AbortSignal` (client disconnect / server
- *     timeout aborts the underlying LLM stream).
+ * TWO passes per turn (real streaming + consistency):
+ *   - Pass 1 `streamReply()` — a PLAIN (non-structured) `.stream()` call that
+ *     streams the assistant PROSE token-by-token via `buildReplyPrompt()`,
+ *     honoring the `AbortSignal` (client disconnect / server timeout aborts the
+ *     underlying LLM stream). This restores the real progressive typing effect
+ *     that structured-output streaming lost (some providers, e.g. Gemini, emit
+ *     structured output as a single non-progressive chunk).
  *   - Pass 2 `extract()` — a terminal, non-streamed structured extraction via
  *     `withStructuredOutput(PlanSpecDraftSchema, { method: "jsonSchema" })`,
- *     mirroring the proven generation adapter (`adapter-factory.ts`). The result
- *     is re-parsed with `PlanSpecDraftSchema` at this boundary so a forbidden or
- *     malformed key can never leak past the adapter.
+ *     mirroring the proven generation adapter (`adapter-factory.ts`). Its prompt
+ *     (`buildExtractionPrompt(input, assistantReply)`) INCLUDES the Pass-1 reply,
+ *     so the extracted fields are CONSISTENT with what the assistant just said.
+ *     The result is re-parsed with `PlanSpecDraftSchema` at this boundary so a
+ *     forbidden or malformed key can never leak past the adapter.
+ *
+ * Because Pass 2 reads Pass 1's output, the prose and the committed draft agree
+ * by construction (Pass 2 is seeded with, and grounded in, the reply).
  *
  * Provider selection mirrors `DynamicPlanGenerator`: the active provider/model is
  * read from the DB config on EVERY call and a fresh model is built via the
  * injected factory. Tests inject a deterministic fake factory — no network.
  *
- * OBSERVABILITY / MASKING (S1 TODO(S2b) closed here): the prompt handed to the
- * model is `buildExtractionPrompt()` output, which masks ALL already-known
- * limitation/health terms via `mask()` (a first-mention phrase is unavoidably
- * present — it is the minimal exposure the extraction needs, see
+ * OBSERVABILITY / MASKING: the prompts handed to the model are
+ * `buildReplyPrompt()` / `buildExtractionPrompt()` output, which mask ALL
+ * already-known limitation/health terms via `mask()` (a first-mention phrase is
+ * unavoidably present — it is the minimal exposure the feature needs, see
  * `extraction-prompt.ts`). Crucially, NO input-capturing callback handler is
  * attached and the trace `metadata` carries ONLY safe fields
  * (feature/provider/model) — never the raw message or limitation text — exactly
  * as `invokeChain` does for generation. Health text therefore never reaches the
  * observability backend.
- *
- * KNOWN TRADEOFF: Pass 1 (prose) and Pass 2 (structured extraction) are
- * INDEPENDENT LLM calls over the same prompt and MAY disagree (e.g. the prose
- * mentions a value the structured pass does not extract, or vice versa). This
- * is accepted: the terminal `draft` committed to `plan_drafts` is always Pass
- * 2's output — Pass 2 is the source of truth, Pass 1 is purely the user-facing
- * narration of the turn.
  */
 
-/** Minimal LangChain chat-model surface the adapter needs (real models + test fakes satisfy it). */
+/**
+ * Minimal LangChain chat-model surface the adapter needs (real models + test
+ * fakes satisfy it): a plain `stream()` for Pass 1 and a
+ * `withStructuredOutput(...).invoke()` for Pass 2.
+ */
 export interface ExtractionChatModel {
-  stream(input: string, options?: ExtractionCallOptions): Promise<AsyncIterable<{ content: unknown }>>;
+  stream(
+    input: string,
+    options?: ExtractionCallOptions,
+  ): Promise<AsyncIterable<{ content: unknown }>>;
   withStructuredOutput(
     schema: unknown,
     opts: { method: string },
@@ -160,9 +168,12 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
   async *streamReply(input: ChatExtractInput, signal: AbortSignal): AsyncIterable<string> {
     if (signal.aborted) return;
     const { model, metadata } = await this.resolve();
-    // buildExtractionPrompt masks all KNOWN limitation terms before the model
+    // buildReplyPrompt masks all KNOWN limitation terms before the model
     // (and hence any observability) sees them.
-    const prompt = buildExtractionPrompt(input);
+    const prompt = buildReplyPrompt(input);
+    // `signal` is threaded into the LangChain call options so an external abort
+    // — a wall-clock timeout OR client disconnect firing mid-turn — cancels this
+    // in-flight streaming round-trip instead of blocking on the provider.
     const stream = await model.stream(prompt, { signal, runName: RUN_NAME, metadata });
     for await (const chunk of stream) {
       if (signal.aborted) return;
@@ -171,16 +182,22 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
     }
   }
 
-  async extract(input: ChatExtractInput, signal?: AbortSignal): Promise<PlanSpecDraft> {
+  async extract(
+    input: ChatExtractInput,
+    assistantReply: string,
+    signal?: AbortSignal,
+  ): Promise<PlanSpecDraft> {
     const { model, metadata } = await this.resolve();
-    const prompt = buildExtractionPrompt(input);
+    // The Pass-2 prompt is SEEDED with Pass 1's reply so the extraction is
+    // consistent with what the assistant just told the user. Masking still
+    // scrubs known limitation terms everywhere, including inside the reply.
+    const prompt = buildExtractionPrompt(input, assistantReply);
     const chain = model.withStructuredOutput(PlanSpecDraftSchema, { method: "jsonSchema" });
     // Forward `signal` into the LangChain call options (the same `{ signal }`
     // shape `.stream()` accepts) so an external abort — a wall-clock timeout OR
     // client disconnect firing DURING Pass 2 — actually cancels this in-flight
     // structured-output round-trip instead of the caller blocking until the
-    // provider responds. (HIGH fix: Pass 2 was previously uncancellable because
-    // no signal reached the LangChain call.)
+    // provider responds.
     const raw = await chain.invoke(prompt, { signal, runName: RUN_NAME, metadata });
     // Re-parse at the boundary: never trust the model to honor the allow-list.
     // A forbidden key (preferenceScores/confirmed) or bad value is stripped/rejected here.

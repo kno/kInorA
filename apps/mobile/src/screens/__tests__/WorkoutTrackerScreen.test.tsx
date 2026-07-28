@@ -244,7 +244,7 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
       await Promise.resolve();
     });
     expect(renderedText(es)).toContain(
-      "Ya tenés una sesión activa en «Fuerza» (Día 3). Terminala antes de empezar otra.",
+      "Ya tienes una sesión activa en «Fuerza» (Día 3). Termínala antes de empezar otra.",
     );
   });
 
@@ -269,7 +269,7 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
       await Promise.resolve();
     });
     expect(renderedText(es)).toContain(
-      "Ya tenés una sesión activa en «Fuerza». Terminala antes de empezar otra.",
+      "Ya tienes una sesión activa en «Fuerza». Termínala antes de empezar otra.",
     );
   });
 
@@ -294,7 +294,7 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
       await Promise.resolve();
     });
     expect(renderedText(es)).toContain(
-      "Ya tenés una sesión activa. Terminala antes de empezar otra.",
+      "Ya tienes una sesión activa. Termínala antes de empezar otra.",
     );
   });
 
@@ -314,6 +314,6 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
     await act(async () => {
       await Promise.resolve();
     });
-    expect(renderedText(es)).toContain("No pudimos cargar la sesión. Intentá de nuevo.");
+    expect(renderedText(es)).toContain("No pudimos cargar la sesión. Inténtalo de nuevo.");
   });
 });

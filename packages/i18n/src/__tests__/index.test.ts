@@ -190,8 +190,11 @@ describe("@kinora/i18n package assembly", () => {
     // cycle toggle + save badge, payment-method + support cards, CTA actions)
     // + 1 (11b Slice 5 4R FIX 1: distinct Price/Current-period plan-hero copy)
     // + 2 (#198 subscription-ended access banner: endedTitle/endedDescription)
-    // + 11 (#199 billing help FAQ page: title/intro/backToBilling + 4 Q/A pairs).
-    expect(billingKeys).toHaveLength(97);
+    // + 11 (#199 billing help FAQ page: title/intro/backToBilling + 4 Q/A pairs)
+    // − 5 (payment-method surface removed: plan.metaPayment, payment.{title,
+    //   description,manageCta}, actions.portalError).
+    // − 2 (current-period tile removed: plan.metaPeriod, plan.periodTrialEndsOn).
+    expect(billingKeys).toHaveLength(90);
     expect(en["billing.tier.free"]).toBe("Free");
     expect(es["billing.tier.free"]).toBe("Gratis");
   });

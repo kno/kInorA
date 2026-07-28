@@ -892,7 +892,7 @@
     "navLabel": "Billing",
     "title": "Billing",
     "description": "Review your plan, trial status, and usage for this account.",
-    "subtitle": "Manage your plan, usage, and payment details.",
+    "subtitle": "Manage your plan and usage.",
     "loading": {
       "title": "Loading your billing…",
       "description": "We are fetching your plan, trial, and usage details.",
@@ -932,13 +932,10 @@
       "descriptionPro": "You are on Pro with high monthly limits across every feature.",
       "metaPrice": "Price",
       "metaRenewal": "Renewal",
-      "metaPeriod": "Current period",
-      "metaPayment": "Payment method",
       "valueNotSet": "—",
       "renewalNone": "No renewal",
       "comparePlans": "Compare plans",
-      "priceFree": "Free",
-      "periodTrialEndsOn": "Trial ends {date}"
+      "priceFree": "Free"
     },
     "usage": {
       "tenantTitle": "Tenant usage this period",
@@ -982,11 +979,6 @@
       "currentBadge": "Your current plan",
       "noCommitment": "No commitment · Cancel in one click"
     },
-    "payment": {
-      "title": "Payment method",
-      "description": "Manage your card securely in the Stripe portal.",
-      "manageCta": "Manage / Add card"
-    },
     "support": {
       "title": "Need help?",
       "description": "Find answers to common billing questions.",
@@ -1009,7 +1001,6 @@
     },
     "actions": {
       "checkoutError": "We couldn't start checkout. Please try again.",
-      "portalError": "We couldn't open the billing portal. Please try again.",
       "invalidPromotion": "That promotion code isn't valid.",
       "redirecting": "Redirecting…"
     },

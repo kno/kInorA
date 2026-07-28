@@ -103,13 +103,15 @@ function input(overrides: Partial<ChatExtractInput> = {}): ChatExtractInput {
 }
 
 describe("PlanSpecExtractionAdapter (real two-pass adapter, fake model)", () => {
-  it("streamReply yields prose tokens from the LangChain .stream() pass", async () => {
+  it("streamReply yields prose tokens from the LangChain .stream() pass (real progressive streaming)", async () => {
     const { adapter } = buildAdapter({ tokens: ["Got ", "it — ", "done."], extracted: {} });
     const controller = new AbortController();
 
     const out: string[] = [];
     for await (const tok of adapter.streamReply(input(), controller.signal)) out.push(tok);
 
+    // More than one delta arrived (the typing effect is preserved).
+    expect(out.length).toBeGreaterThan(1);
     expect(out).toEqual(["Got ", "it — ", "done."]);
   });
 
@@ -151,7 +153,7 @@ describe("PlanSpecExtractionAdapter (real two-pass adapter, fake model)", () => 
       },
     });
 
-    const draft = await adapter.extract(input());
+    const draft = await adapter.extract(input(), "Got it.");
 
     expect(draft.goal).toBe("hypertrophy");
     expect(draft.daysPerWeek).toBe(4);
@@ -163,6 +165,22 @@ describe("PlanSpecExtractionAdapter (real two-pass adapter, fake model)", () => 
     expect(invokeCalls).toHaveLength(1);
   });
 
+  it("extract SEEDS Pass 2 with the assistant reply so the extraction is consistent with the prose", async () => {
+    // The whole point of the redesign: Pass 2 reads Pass 1's reply so the
+    // extracted fields agree with what the assistant just said. The reply text
+    // MUST appear verbatim in the prompt handed to the structured-output call.
+    const { adapter, invokeCalls } = buildAdapter({
+      tokens: [],
+      extracted: { daysPerWeek: 3 },
+    });
+
+    const reply = "For fat loss, 3 days a week of 40 minutes is a solid starting point.";
+    await adapter.extract(input(), reply);
+
+    expect(invokeCalls).toHaveLength(1);
+    expect(invokeCalls[0]?.input).toContain(reply);
+  });
+
   it("extract propagates a Pass-2 model failure (so the route can fail closed)", async () => {
     const { adapter } = buildAdapter({
       tokens: [],
@@ -170,7 +188,7 @@ describe("PlanSpecExtractionAdapter (real two-pass adapter, fake model)", () => 
       extractError: new Error("provider 500"),
     });
 
-    await expect(adapter.extract(input())).rejects.toThrow("provider 500");
+    await expect(adapter.extract(input(), "reply")).rejects.toThrow("provider 500");
   });
 
   it("extract forwards its AbortSignal into the Pass-2 call so an external abort cancels a stalled request", async () => {
@@ -184,7 +202,7 @@ describe("PlanSpecExtractionAdapter (real two-pass adapter, fake model)", () => 
     });
     const controller = new AbortController();
 
-    const promise = adapter.extract(input(), controller.signal);
+    const promise = adapter.extract(input(), "reply", controller.signal);
     // Give the fake a turn to register its call before aborting.
     await Promise.resolve();
     controller.abort();
@@ -197,8 +215,8 @@ describe("PlanSpecExtractionAdapter (real two-pass adapter, fake model)", () => 
   it("MASKING: the observability payload masks known limitation text while the model still receives the prompt", async () => {
     // Threat Matrix: health/limitation leak to LLM/observability. A limitation
     // term already known in the draft MUST be redacted from BOTH the prompt the
-    // model sees (S1 buildExtractionPrompt) and the trace metadata, while the
-    // structured extraction still succeeds.
+    // model sees (buildReplyPrompt / buildExtractionPrompt) and the trace
+    // metadata, while the structured extraction still succeeds.
     const HEALTH = "torn left ACL";
     const { adapter, streamCalls, invokeCalls } = buildAdapter({
       tokens: ["ok"],
@@ -212,10 +230,9 @@ describe("PlanSpecExtractionAdapter (real two-pass adapter, fake model)", () => 
     });
 
     // Drive both passes.
-    // eslint-disable-next-line no-empty
-    for await (const _ of adapter.streamReply(draftInput, controller.signal)) {
-    }
-    const result = await adapter.extract(draftInput);
+    let assistantReply = "";
+    for await (const tok of adapter.streamReply(draftInput, controller.signal)) assistantReply += tok;
+    const result = await adapter.extract(draftInput, assistantReply);
 
     // Extraction still works.
     expect(result.goal).toBe("strength");

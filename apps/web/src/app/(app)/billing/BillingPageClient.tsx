@@ -14,7 +14,6 @@ import type { GetBillingInvoicesResult } from "./billing-types";
 import {
   getBillingInvoicesAction,
   getBillingVisibilityAction,
-  openPortalAction,
   startCheckoutAction,
 } from "./actions";
 import styles from "./BillingPageClient.module.css";
@@ -241,18 +240,13 @@ function BillingScreen({
       <div className={styles.grid}>
         <div role="region" aria-label={t("billing.regions.main")} className={styles.mainCol}>
           {accessEndedReason ? <AccessEndedBanner reason={accessEndedReason} /> : null}
-          <PlanHero
-            billing={billing}
-            pricing={pricing}
-            period={tenantUsage[0]?.period ?? memberUsage[0]?.period ?? null}
-          />
+          <PlanHero billing={billing} pricing={pricing} />
           <UsageMeters tenantUsage={tenantUsage} memberUsage={memberUsage} />
           {isOwner ? <InvoiceHistory invoices={invoices} /> : null}
         </div>
 
         <aside aria-label={t("billing.regions.aside")} className={styles.asideCol}>
           <ProCard billing={billing} pricing={pricing} />
-          {isOwner ? <PaymentCard /> : null}
           <SupportCard />
         </aside>
       </div>
@@ -298,15 +292,9 @@ function AccessEndedBanner({ reason }: { reason: "trial_expired" | "subscription
 function PlanHero({
   billing,
   pricing,
-  period,
 }: {
   billing: BillingVisibilityDTO["billing"];
   pricing: BillingPricingDTO | null;
-  /** The current billing period key (e.g. "2026-07"), sourced from a usage
-   * row — the SAME period the Usage Meters section reports on below. Kept as
-   * a distinct signal from `currentPeriodEnd` (a renewal DATE) so the
-   * "Current period" tile never collapses into the "Renewal" tile. */
-  period: string | null;
 }) {
   const t = useTranslations();
   const format = useFormatter();
@@ -332,17 +320,6 @@ function PlanHero({
         })
       : t("billing.plan.valueNotSet");
 
-  // FIX 1 (4R review): "Current period" must reflect the REAL current billing
-  // period (the same period key the Usage Meters section reports on) — NOT
-  // the cycle label, and NOT a restatement of the Renewal date tile above.
-  const currentPeriodValue =
-    period ??
-    (billing.status === "trialing" && billing.trialEndsAt != null
-      ? t("billing.plan.periodTrialEndsOn", {
-          date: new Date(billing.trialEndsAt).toISOString().slice(0, 10),
-        })
-      : t("billing.plan.valueNotSet"));
-
   return (
     <section className={styles.card} data-testid="billing-plan-hero">
       <span className={styles.eyebrow}>{t("billing.plan.currentLabel")}</span>
@@ -353,11 +330,6 @@ function PlanHero({
       <dl className={styles.metaGrid}>
         <MetaTile label={t("billing.plan.metaPrice")} value={priceValue} />
         <MetaTile label={t("billing.plan.metaRenewal")} value={renewal} />
-        <MetaTile label={t("billing.plan.metaPeriod")} value={currentPeriodValue} />
-        <MetaTile
-          label={t("billing.plan.metaPayment")}
-          value={isPro ? t("billing.pro.title") : t("billing.plan.valueNotSet")}
-        />
       </dl>
     </section>
   );
@@ -655,47 +627,6 @@ function CycleOption({
     >
       {label}
     </button>
-  );
-}
-
-function PaymentCard() {
-  const t = useTranslations();
-  const [busy, setBusy] = useState(false);
-  const [portalError, setPortalError] = useState<string | null>(null);
-
-  async function onManage() {
-    setBusy(true);
-    setPortalError(null);
-    try {
-      const result = await openPortalAction();
-      if (result.kind === "ok") {
-        redirectTo(result.url);
-        return;
-      }
-      setPortalError(t("billing.actions.portalError"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className={styles.card}>
-      <h3 className={styles.cardTitle}>{t("billing.payment.title")}</h3>
-      <p className="kin-text kin-muted">{t("billing.payment.description")}</p>
-      <button
-        type="button"
-        className="kin-btn kin-btn--secondary"
-        onClick={() => void onManage()}
-        disabled={busy}
-      >
-        {busy ? t("billing.actions.redirecting") : t("billing.payment.manageCta")}
-      </button>
-      {portalError ? (
-        <p role="alert" className={styles.ctaError}>
-          {portalError}
-        </p>
-      ) : null}
-    </section>
   );
 }
 

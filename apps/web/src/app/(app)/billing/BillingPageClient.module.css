@@ -3,7 +3,7 @@
  * layout + tokens (dark oklch theme, lime accent, Space Grotesk display + DM
  * Sans body, 22px card radius). The app-level sidebar is provided by AppShell;
  * this module lays out the main column (plan hero, usage meters, invoice
- * history) + the aside (Pro card, payment method, support). Prices/save % come
+ * history) + the aside (Pro card, support). Prices/save % come
  * from config (never hardcoded) and usage is shown as metered "up to N/mo".
  */
 
