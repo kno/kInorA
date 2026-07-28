@@ -9,13 +9,11 @@ import type { GetBillingInvoicesResult } from "../billing-client";
 const getBillingVisibilityAction = vi.fn();
 const getBillingInvoicesAction = vi.fn();
 const startCheckoutAction = vi.fn();
-const openPortalAction = vi.fn();
 
 vi.mock("../actions.js", () => ({
   getBillingVisibilityAction: (...a: unknown[]) => getBillingVisibilityAction(...a),
   getBillingInvoicesAction: (...a: unknown[]) => getBillingInvoicesAction(...a),
   startCheckoutAction: (...a: unknown[]) => startCheckoutAction(...a),
-  openPortalAction: (...a: unknown[]) => openPortalAction(...a),
 }));
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -87,10 +85,12 @@ const TRIALING: BillingVisibilityDTO = {
     tier: "pro",
     status: "trialing",
     source: "system",
-    trialStartedAt: "2026-06-28T00:00:00.000Z",
-    trialEndsAt: "2026-07-28T00:00:00.000Z",
+    // Relative to now so an active trial never rots into an expired one as the
+    // calendar advances (was a fixed 2026-07-28 that lapsed on that date).
+    trialStartedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+    trialEndsAt: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString(),
     activeOverrideEndsAt: null,
-    updatedAt: "2026-06-28T00:00:00.000Z",
+    updatedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
   },
   tenantUsage: [],
   memberUsage: [],
@@ -201,30 +201,22 @@ describe("BillingPageClient — OD layout", () => {
     expect(screen.getByTestId("billing-trial-badge").textContent).toMatch(/Pro trial/);
   });
 
-  // FIX 1 (4R review): the Price tile and the Current-period tile must show
-  // DISTINCT, meaningful values — never both rendering the cycle word.
-  it("shows the formatted price in the Price tile and a real period (not the cycle word) in Current period", () => {
+  // The Price tile shows the actual formatted price for the tenant's cycle —
+  // NOT the cycle label (the cycle toggle in the Pro card already shows that).
+  it("shows the formatted price in the Price tile (not the cycle word)", () => {
     renderClient({ initialData: PRO_ACTIVE });
 
     const priceLabel = screen.getByText("Price");
     const priceValue = priceLabel.nextElementSibling as HTMLElement;
     expect(priceValue.textContent).toMatch(/9[.,]99/);
     expect(priceValue.textContent).not.toMatch(/^Monthly$|^Annual$/);
-
-    const periodLabel = screen.getByText("Current period");
-    const periodValue = periodLabel.nextElementSibling as HTMLElement;
-    expect(periodValue.textContent).toBe("2026-07");
-    expect(periodValue.textContent).not.toMatch(/^Monthly$|^Annual$/);
-
-    // The two tiles must never render identical content.
-    expect(priceValue.textContent).not.toBe(periodValue.textContent);
   });
 
-  it("shows a trial-end placeholder in Current period when no usage rows or period end exist", () => {
-    renderClient({ initialData: TRIALING });
-    const periodLabel = screen.getByText("Current period");
-    const periodValue = periodLabel.nextElementSibling as HTMLElement;
-    expect(periodValue.textContent).toBe("Trial ends 2026-07-28");
+  // The Current-period tile was removed — it duplicated the Renewal tile and
+  // added low-value copy. The plan hero now shows only Price + Renewal.
+  it("does not render a Current period tile", () => {
+    renderClient({ initialData: PRO_ACTIVE });
+    expect(screen.queryByText("Current period")).toBeNull();
   });
 });
 
@@ -313,7 +305,6 @@ describe("BillingPageClient — ownership on transient invoice error (#197)", ()
   it("does NOT grant owner-only controls when the invoice read is a transient error (no owner flip)", () => {
     renderClient({ initialData: PRO_ACTIVE, initialInvoices: INVOICE_ERROR });
     // A transient error must never promote a caller into the owner UI.
-    expect(screen.queryByRole("button", { name: /manage \/ add card/i })).toBeNull();
     expect(screen.queryByText(/Invoices & charges/i)).toBeNull();
   });
 
@@ -322,8 +313,8 @@ describe("BillingPageClient — ownership on transient invoice error (#197)", ()
     getBillingInvoicesAction.mockResolvedValue(INVOICE_ERROR);
     renderClient({ initialData: PRO_ACTIVE, initialInvoices: OWNER_INVOICES });
 
-    // Ownership is established (definitive ok) — owner controls render.
-    expect(screen.getByRole("button", { name: /manage \/ add card/i })).toBeDefined();
+    // Ownership is established (definitive ok) — owner-only invoice history renders.
+    expect(screen.getByText(/Invoices & charges/i)).toBeDefined();
 
     await act(async () => {
       window.dispatchEvent(new Event("focus"));
@@ -331,10 +322,10 @@ describe("BillingPageClient — ownership on transient invoice error (#197)", ()
     });
 
     // After the transient error: the owner is NOT flipped to non-owner. The
-    // invoice section degrades to its error card, and the owner-only payment
-    // control is preserved.
+    // invoice section degrades to its error card while the owner-only section
+    // itself is preserved.
     await waitFor(() => expect(screen.getByText(/couldn't load your invoices/i)).toBeDefined());
-    expect(screen.getByRole("button", { name: /manage \/ add card/i })).toBeDefined();
+    expect(screen.getByText(/Invoices & charges/i)).toBeDefined();
   });
 });
 
@@ -361,7 +352,7 @@ describe("BillingPageClient — Pro card cycle toggle + save badge", () => {
   });
 });
 
-describe("BillingPageClient — payment + support cards", () => {
+describe("BillingPageClient — support card", () => {
   it("renders the support card for everyone", () => {
     renderClient({ initialData: FREE_ACTIVE, initialInvoices: NON_OWNER });
     expect(screen.getByText(/Need help\?/i)).toBeDefined();
@@ -375,19 +366,9 @@ describe("BillingPageClient — payment + support cards", () => {
     expect(link.getAttribute("href")).toBe("/help/billing");
     expect(link.getAttribute("aria-disabled")).toBeNull();
   });
-
-  it("shows the payment-method manage CTA only for an owner", () => {
-    renderClient({ initialData: PRO_ACTIVE, initialInvoices: OWNER_INVOICES });
-    expect(screen.getByRole("button", { name: /manage \/ add card/i })).toBeDefined();
-  });
-
-  it("hides the payment-method manage CTA for a non-owner", () => {
-    renderClient({ initialData: PRO_ACTIVE, initialInvoices: NON_OWNER });
-    expect(screen.queryByRole("button", { name: /manage \/ add card/i })).toBeNull();
-  });
 });
 
-describe("BillingPageClient — checkout + portal CTAs", () => {
+describe("BillingPageClient — checkout CTA", () => {
   it("starts checkout for the selected cycle and redirects to the Stripe url", async () => {
     startCheckoutAction.mockResolvedValue({ kind: "ok", url: "https://checkout.stripe.test/go" });
     renderClient({ initialData: FREE_ACTIVE });
@@ -431,34 +412,6 @@ describe("BillingPageClient — checkout + portal CTAs", () => {
     });
 
     await waitFor(() => expect(screen.getByText(/promotion code isn't valid/i)).toBeDefined());
-  });
-
-  it("opens the portal and redirects for an owner", async () => {
-    openPortalAction.mockResolvedValue({ kind: "ok", url: "https://billing.stripe.test/portal" });
-    renderClient({ initialData: PRO_ACTIVE, initialInvoices: OWNER_INVOICES });
-
-    const manage = screen.getByRole("button", { name: /manage \/ add card/i });
-    await act(async () => {
-      manage.click();
-      await Promise.resolve();
-    });
-
-    await waitFor(() => expect(openPortalAction).toHaveBeenCalled());
-    await waitFor(() => expect(assignSpy).toHaveBeenCalledWith("https://billing.stripe.test/portal"));
-  });
-
-  it("surfaces a portal error without redirecting", async () => {
-    openPortalAction.mockResolvedValue({ kind: "error", message: "server_error" });
-    renderClient({ initialData: PRO_ACTIVE, initialInvoices: OWNER_INVOICES });
-
-    const manage = screen.getByRole("button", { name: /manage \/ add card/i });
-    await act(async () => {
-      manage.click();
-      await Promise.resolve();
-    });
-
-    await waitFor(() => expect(screen.getByText(/couldn't open the billing portal/i)).toBeDefined());
-    expect(assignSpy).not.toHaveBeenCalled();
   });
 });
 

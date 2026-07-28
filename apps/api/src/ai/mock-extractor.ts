@@ -5,10 +5,12 @@ import type { ChatExtractInput, PlanSpecExtractor } from "./extraction-port.js";
  * Deterministic mock implementation of `PlanSpecExtractor` (mirrors
  * `MockPlanGenerator`).
  *
- * Returns a structurally valid `Partial<PlanSpec>` and a token stream WITHOUT
- * any network call, API key, or LLM dependency. Used by route/service tests
- * (S2+) that need an extractor without real LLM infrastructure. It intentionally
- * does NOT import LangChain — the real adapter (S2b) owns that dependency.
+ * `streamReply` yields a deterministic token stream (the assistant prose);
+ * `extract` returns a structurally valid `PlanSpecDraft` from a keyword scan of
+ * the user message — all WITHOUT any network call, API key, or LLM dependency.
+ * Used by route/service tests (S2+) that need an extractor without real LLM
+ * infrastructure. It intentionally does NOT import LangChain — the real adapter
+ * (S2b) owns that dependency.
  *
  * Determinism guarantee: same input → same output on every call, from any
  * instance. No random values, no timestamps, no external state. Extraction is a
@@ -25,8 +27,8 @@ const NUMBER_WORDS: Record<string, number> = {
   seven: 7,
 };
 
-/** Deterministic assistant prose, emitted token-by-token by `streamReply`. */
-const REPLY_TOKENS: readonly string[] = [
+/** Deterministic assistant prose, emitted token-by-token by `streamTurn`. */
+export const REPLY_TOKENS: readonly string[] = [
   "Got ",
   "it — ",
   "I've ",
@@ -103,8 +105,18 @@ export class MockPlanSpecExtractor implements PlanSpecExtractor {
     }
   }
 
-  async extract(input: ChatExtractInput): Promise<PlanSpecDraft> {
-    const text = input.message;
+  /**
+   * Deterministic keyword scan of the USER message → the six-field draft (NOT a
+   * real NLU). `assistantReply` is accepted to satisfy the port signature (the
+   * real adapter seeds Pass 2 with it) but the mock ignores it — the keyword
+   * scan is over `input.message` only, keeping the mock fully deterministic.
+   */
+  async extract(input: ChatExtractInput, _assistantReply: string): Promise<PlanSpecDraft> {
+    return this.extractDraft(input.message);
+  }
+
+  /** Deterministic keyword scan → the six-field draft (NOT a real NLU). */
+  private extractDraft(text: string): PlanSpecDraft {
     const draft: PlanSpecDraft = {};
 
     const goal = extractGoal(text);

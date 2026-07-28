@@ -5,7 +5,10 @@ import type { ServerResponse } from "node:http";
 import { authPlugin } from "../../auth/plugin.js";
 import { planRoutes, type PlanRouteRepo } from "../plan.js";
 import type { ChatEntitlementPort } from "../../billing/chat-entitlement.js";
-import type { ChatExtractInput, PlanSpecExtractor } from "../../ai/extraction-port.js";
+import type {
+  ChatExtractInput,
+  PlanSpecExtractor,
+} from "../../ai/extraction-port.js";
 import type { Database } from "../../db/client.js";
 import type { PlanSpecDraft } from "@kinora/contracts";
 import {
@@ -81,10 +84,16 @@ function denyGate(reason = "premium_required"): ChatEntitlementPort & {
   return { check: vi.fn().mockResolvedValue({ allowed: false, reason }) };
 }
 
-/** Deterministic stub extractor: streams three canned tokens, no network/LLM. */
+/**
+ * Deterministic stub extractor: Pass 1 `streamReply` streams three canned token
+ * deltas; Pass 2 `extract` returns an empty draft — no network/LLM.
+ */
 const CANNED_TOKENS = ["Got ", "it — ", "done."];
 
-function stubExtractor(): PlanSpecExtractor & { streamReply: ReturnType<typeof vi.fn> } {
+function stubExtractor(): PlanSpecExtractor & {
+  streamReply: ReturnType<typeof vi.fn>;
+  extract: ReturnType<typeof vi.fn>;
+} {
   const streamReply = vi.fn(async function* (
     _input: ChatExtractInput,
     signal: AbortSignal,
@@ -94,10 +103,52 @@ function stubExtractor(): PlanSpecExtractor & { streamReply: ReturnType<typeof v
       yield token;
     }
   });
+  const extract = vi.fn(
+    async (_input: ChatExtractInput, _assistantReply: string): Promise<PlanSpecDraft> => ({}),
+  );
+  return { streamReply, extract } as PlanSpecExtractor & {
+    streamReply: ReturnType<typeof vi.fn>;
+    extract: ReturnType<typeof vi.fn>;
+  };
+}
+
+/**
+ * Extractor that streams prose (Pass 1) then returns a fixed extraction (Pass 2).
+ * `extract` RECORDS the `assistantReply` it was seeded with (see `.seededReply`)
+ * so tests can prove Pass 2 receives Pass 1's accumulated prose.
+ */
+function richExtractor(
+  extracted: PlanSpecDraft,
+  tokens: string[] = ["Got ", "it."],
+): PlanSpecExtractor & { seededReply: () => string | undefined } {
+  let seededReply: string | undefined;
   return {
-    streamReply,
-    extract: vi.fn().mockResolvedValue({} as PlanSpecDraft),
-  } as PlanSpecExtractor & { streamReply: ReturnType<typeof vi.fn> };
+    async *streamReply(_input, signal) {
+      for (const t of tokens) {
+        if (signal.aborted) return;
+        yield t;
+      }
+    },
+    async extract(_input, assistantReply) {
+      seededReply = assistantReply;
+      return extracted;
+    },
+    seededReply: () => seededReply,
+  };
+}
+
+/** Parse an SSE payload into ordered { event, data } frames. */
+function parseSse(payload: string): Array<{ event: string; data: string }> {
+  return payload
+    .split("\n\n")
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0)
+    .map((block) => {
+      const lines = block.split("\n");
+      const event = lines.find((l) => l.startsWith("event:"))?.slice(6).trim() ?? "";
+      const data = lines.find((l) => l.startsWith("data:"))?.slice(5).trim() ?? "";
+      return { event, data };
+    });
 }
 
 async function buildTestApp(opts: {
@@ -129,20 +180,6 @@ async function buildTestApp(opts: {
     chatStreamTimeoutMs: opts.chatStreamTimeoutMs,
   });
   return app;
-}
-
-/** Parse an SSE payload into ordered { event, data } frames. */
-function parseSse(payload: string): Array<{ event: string; data: string }> {
-  return payload
-    .split("\n\n")
-    .map((block) => block.trim())
-    .filter((block) => block.length > 0)
-    .map((block) => {
-      const lines = block.split("\n");
-      const event = lines.find((l) => l.startsWith("event:"))?.slice(6).trim() ?? "";
-      const data = lines.find((l) => l.startsWith("data:"))?.slice(5).trim() ?? "";
-      return { event, data };
-    });
 }
 
 // --- Tests -----------------------------------------------------------------
@@ -195,6 +232,7 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     // Gate ran; no stream was ever produced (fail-closed before any work).
     expect(gate.check).toHaveBeenCalledTimes(1);
     expect(extractor.streamReply).not.toHaveBeenCalled();
+    expect(extractor.extract).not.toHaveBeenCalled();
     // Not an SSE response — a plain JSON denial.
     expect(res.headers["content-type"]).toContain("application/json");
   });
@@ -240,9 +278,9 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
   });
 
   it("streams token deltas then a terminal draft event (empty extraction → no write)", async () => {
-    // The stub extractor returns an empty `{}` extraction. Merged onto the empty
-    // current draft it changes nothing, so NO draft is committed — but the
-    // terminal event is now `draft` (S2b), carrying the empty spec + all six
+    // The stub extractor's terminal `final` carries an empty `{}` draft. Merged
+    // onto the empty current draft it changes nothing, so NO draft is committed —
+    // but the terminal event is a `draft`, carrying the empty spec + all six
     // missingFields.
     const extractor = stubExtractor();
     const repo = buildPlanRepo();
@@ -300,7 +338,9 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
           await new Promise((r) => setTimeout(r, 10));
         }
       },
-      extract: vi.fn().mockResolvedValue({} as PlanSpecDraft),
+      async extract() {
+        return {};
+      },
     };
 
     const repo = buildPlanRepo();
@@ -376,7 +416,9 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
           await new Promise((r) => setTimeout(r, 20));
         }
       },
-      extract: vi.fn().mockResolvedValue({} as PlanSpecDraft),
+      async extract() {
+        return {};
+      },
     };
 
     const repo = buildPlanRepo();
@@ -457,25 +499,10 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
 
     expect(res.statusCode).toBe(400);
     expect(extractor.streamReply).not.toHaveBeenCalled();
+    expect(extractor.extract).not.toHaveBeenCalled();
   });
 
   // --- S2b: terminal structured extraction + draft commit ------------------
-
-  /** Extractor that streams prose then returns a fixed structured extraction. */
-  function richExtractor(
-    extracted: PlanSpecDraft,
-    tokens: string[] = ["Got ", "it."],
-  ): PlanSpecExtractor & { extract: ReturnType<typeof vi.fn> } {
-    return {
-      async *streamReply(_input, signal) {
-        for (const t of tokens) {
-          if (signal.aborted) return;
-          yield t;
-        }
-      },
-      extract: vi.fn().mockResolvedValue(extracted),
-    };
-  }
 
   it("valid message → prose deltas then a terminal draft with the MERGED spec, committed once", async () => {
     const extractor = richExtractor({ goal: "hypertrophy", daysPerWeek: 4, equipment: ["dumbbells"] });
@@ -521,15 +548,50 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     expect(repo.upsertDraft).not.toHaveBeenCalled();
   });
 
-  it("mid-stream extraction (Pass 2) failure → terminal error and the draft is NOT written", async () => {
+  it("SEEDS Pass 2 extract() with the full prose accumulated from Pass 1 (consistency)", async () => {
+    // The redesign's whole point: Pass 2 reads Pass 1's reply so the draft and
+    // the prose agree. The route must pass the CONCATENATION of every Pass-1
+    // token into extract() as the `assistantReply` argument.
+    const extractor = richExtractor({ goal: "hypertrophy" }, ["For ", "hypertrophy, ", "4 days."]);
+    const repo = buildPlanRepo();
+    repo.findCurrentDraft.mockResolvedValue({ step: 1, specJson: {}, version: 0 });
+
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      chatEntitlement: allowGate(),
+      chatExtractor: extractor,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/chat",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { message: "build muscle" },
+    });
+
+    const frames = parseSse(res.payload);
+    // The terminal assistantMessage is the full reconstructed prose ...
+    const terminal = JSON.parse(frames.at(-1)!.data);
+    expect(terminal.assistantMessage).toBe("For hypertrophy, 4 days.");
+    // ... and extract() was seeded with exactly that same accumulated prose.
+    expect(extractor.seededReply()).toBe("For hypertrophy, 4 days.");
+  });
+
+  it("mid-stream failure → terminal error and the draft is NOT written", async () => {
+    // Pass 1 streams some prose then throws (e.g. a provider error mid-stream).
+    // The turn fails closed: a terminal `error`, draft untouched, never a
+    // `draft` event, and Pass 2 is never reached.
+    const extract = vi.fn(async (): Promise<PlanSpecDraft> => ({}));
     const extractor: PlanSpecExtractor = {
       async *streamReply(_input, signal) {
         for (const t of ["thinking", "..."]) {
           if (signal.aborted) return;
           yield t;
         }
+        throw new Error("provider 500");
       },
-      extract: vi.fn().mockRejectedValue(new Error("provider 500")),
+      extract,
     };
     const repo = buildPlanRepo();
     repo.findCurrentDraft.mockResolvedValue({ step: 1, specJson: { goal: "strength" }, version: 0 });
@@ -560,7 +622,8 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
 
   it("empty/whitespace message → NO LLM work, a clarifying draft, draft unchanged", async () => {
     const extractor = richExtractor({ goal: "strength" });
-    const streamSpy = vi.spyOn(extractor, "streamReply");
+    const replySpy = vi.spyOn(extractor, "streamReply");
+    const extractSpy = vi.spyOn(extractor, "extract");
     const repo = buildPlanRepo();
     repo.findCurrentDraft.mockResolvedValue({ step: 1, specJson: { daysPerWeek: 3 }, version: 0 });
 
@@ -585,8 +648,8 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     expect(terminal.draftSpec).toEqual({ daysPerWeek: 3 });
     expect(terminal.missingFields).toContain("goal");
     // No extractor call, no write.
-    expect(streamSpy).not.toHaveBeenCalled();
-    expect(extractor.extract).not.toHaveBeenCalled();
+    expect(replySpy).not.toHaveBeenCalled();
+    expect(extractSpy).not.toHaveBeenCalled();
     expect(repo.commitDraft).not.toHaveBeenCalled();
   });
 
@@ -604,7 +667,9 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
           await new Promise((r) => setTimeout(r, 30));
         }
       },
-      extract: vi.fn().mockResolvedValue({ goal: "strength" } as PlanSpecDraft),
+      async extract() {
+        return { goal: "strength" };
+      },
     };
     const repo = buildPlanRepo();
 
@@ -627,8 +692,7 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     expect(frames.at(-1)?.event).toBe("error");
     expect(JSON.parse(frames.at(-1)!.data)).toEqual({ error: "chat_stream_timeout" });
     expect(sawAbort).toBe(true);
-    // Timed out before Pass 2 / commit.
-    expect(extractor.extract).not.toHaveBeenCalled();
+    // Timed out before any terminal `final` / commit.
     expect(repo.commitDraft).not.toHaveBeenCalled();
   });
 
@@ -710,25 +774,22 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     expect(repo.promoteDraftToSpec).not.toHaveBeenCalled();
   });
 
-  // --- Review fixes: missingFields steering, Pass-2 abort, drain-no-hang ---
+  // --- Review fixes: missingFields steering, mid-turn abort, drain-no-hang ---
 
   it("threads the CURRENT draft's missingFields into the extractor input so the prompt is steered", async () => {
     // WARNING fix: missingFields was never populated on ChatExtractInput, so
     // buildExtractionPrompt always rendered "STILL MISSING: (none)". An empty
-    // currentDraft must yield all six missing fields on BOTH streamReply and
-    // extract's input.
-    let capturedStreamInput: ChatExtractInput | undefined;
-    let capturedExtractInput: ChatExtractInput | undefined;
+    // currentDraft must yield all six missing fields on the streamReply input.
+    let capturedInput: ChatExtractInput | undefined;
     const extractor: PlanSpecExtractor = {
       async *streamReply(input, signal) {
-        capturedStreamInput = input;
+        capturedInput = input;
         if (signal.aborted) return;
         yield "ok";
       },
-      extract: vi.fn(async (input: ChatExtractInput) => {
-        capturedExtractInput = input;
+      async extract() {
         return { goal: "hypertrophy" };
-      }),
+      },
     };
     const repo = buildPlanRepo();
     repo.findCurrentDraft.mockResolvedValue(null);
@@ -755,33 +816,34 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
       "equipment",
       "limitations",
     ];
-    expect(capturedStreamInput?.missingFields).toEqual(expectedMissing);
-    expect(capturedExtractInput?.missingFields).toEqual(expectedMissing);
+    expect(capturedInput?.missingFields).toEqual(expectedMissing);
   });
 
-  it("aborts an in-flight Pass 2 (extract) on timeout instead of blocking on it, and emits the terminal error promptly", async () => {
-    // HIGH fix: previously extract() had no signal parameter at all, so a
-    // timeout firing DURING Pass 2 could not cancel it — the handler would
-    // block until the (possibly never-resolving) call settled on its own.
-    let extractSignal: AbortSignal | undefined;
-    let extractSawAbort = false;
+  it("aborts an in-flight turn on timeout instead of blocking on it, and emits the terminal error promptly", async () => {
+    // HIGH fix: a timeout firing DURING the (single) streaming call must cancel
+    // it — the handler must never block until the (possibly never-resolving)
+    // call settles on its own.
+    let turnSignal: AbortSignal | undefined;
+    let sawAbort = false;
     const extractor: PlanSpecExtractor = {
-      async *streamReply() {
+      async *streamReply(_input, signal) {
+        turnSignal = signal;
         yield "ok";
-      },
-      extract: (_input, signal) =>
-        new Promise((_resolve, reject) => {
-          extractSignal = signal;
-          signal?.addEventListener(
+        // Stall until the signal aborts — never completes on its own.
+        await new Promise<void>((_resolve, reject) => {
+          signal.addEventListener(
             "abort",
             () => {
-              extractSawAbort = true;
+              sawAbort = true;
               reject(new Error("aborted"));
             },
             { once: true },
           );
-          // Deliberately never resolves on its own — only an abort settles it.
-        }),
+        });
+      },
+      async extract() {
+        return {};
+      },
     };
     const repo = buildPlanRepo();
 
@@ -805,11 +867,11 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
     const frames = parseSse(res.payload);
     expect(frames.at(-1)?.event).toBe("error");
     expect(JSON.parse(frames.at(-1)!.data)).toEqual({ error: "chat_stream_timeout" });
-    // The route passed a real signal into extract() and that signal aborted.
-    expect(extractSignal).toBeInstanceOf(AbortSignal);
-    expect(extractSawAbort).toBe(true);
+    // The route passed a real signal into streamReply() and that signal aborted.
+    expect(turnSignal).toBeInstanceOf(AbortSignal);
+    expect(sawAbort).toBe(true);
     // Resolved promptly (well within a generous bound), not after some much
-    // longer/never-resolving wait — proves Pass 2 was actually cancelled.
+    // longer/never-resolving wait — proves the turn was actually cancelled.
     expect(elapsedMs).toBeLessThan(2000);
     expect(repo.commitDraft).not.toHaveBeenCalled();
   });
@@ -839,7 +901,9 @@ describe("POST /plan-specs/chat (SSE transport + Pro gate)", () => {
             await new Promise((r) => setTimeout(r, 5));
           }
         },
-        extract: vi.fn().mockResolvedValue({} as PlanSpecDraft),
+        async extract() {
+          return {};
+        },
       };
       const repo = buildPlanRepo();
 

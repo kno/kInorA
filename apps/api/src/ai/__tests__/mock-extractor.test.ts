@@ -16,14 +16,14 @@ async function collect(stream: AsyncIterable<string>): Promise<string[]> {
 describe("MockPlanSpecExtractor", () => {
   const extractor = new MockPlanSpecExtractor();
 
-  it("extract returns a deterministic Partial<PlanSpec> for a fixed message", async () => {
-    const a = await extractor.extract(input);
-    const b = await extractor.extract(input);
+  it("extract returns a deterministic PlanSpecDraft for a fixed message", async () => {
+    const a = await extractor.extract(input, "some reply");
+    const b = await extractor.extract(input, "another reply");
     expect(a).toEqual(b);
   });
 
   it("extract pulls the goal, days, duration, location and equipment from the message", async () => {
-    const draft = await extractor.extract(input);
+    const draft = await extractor.extract(input, "");
     expect(draft.goal).toBe("hypertrophy");
     expect(draft.daysPerWeek).toBe(4);
     expect(draft.sessionDurationMinutes).toBe(45);
@@ -31,14 +31,22 @@ describe("MockPlanSpecExtractor", () => {
     expect(draft.equipment).toEqual(["dumbbells"]);
   });
 
+  it("extract scans the user message and ignores the assistantReply argument", async () => {
+    // The mock's keyword scan is over `input.message` only — a wildly different
+    // assistantReply must not change the deterministic extraction.
+    const draft = await extractor.extract(input, "You should train 1 day a week at home");
+    expect(draft.daysPerWeek).toBe(4);
+    expect(draft.location).toBe("gym");
+  });
+
   it("extract never sets preferenceScores or confirmed", async () => {
-    const draft = await extractor.extract(input);
+    const draft = await extractor.extract(input, "");
     expect(draft).not.toHaveProperty("preferenceScores");
     expect(draft).not.toHaveProperty("confirmed");
   });
 
   it("extract returns an empty draft when nothing is recognizable", async () => {
-    const draft = await extractor.extract({ message: "hello there", currentDraft: {} });
+    const draft = await extractor.extract({ message: "hello there", currentDraft: {} }, "");
     expect(draft).toEqual({});
   });
 
