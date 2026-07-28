@@ -62,19 +62,19 @@ describe("tracker copy → ICU catalog parity", () => {
     );
     expect(render("es", "mobileTracker.backHome")).toBe("Volver al inicio");
     expect(render("es", "mobileTracker.conflict.generic")).toBe(
-      "Ya tenés una sesión activa. Terminala antes de empezar otra.",
+      "Ya tienes una sesión activa. Termínala antes de empezar otra.",
     );
     expect(render("es", "mobileTracker.error.start")).toBe(
-      "No pudimos iniciar la sesión. Intentá de nuevo.",
+      "No pudimos iniciar la sesión. Inténtalo de nuevo.",
     );
     expect(render("es", "mobileTracker.error.load")).toBe(
-      "No pudimos cargar la sesión. Intentá de nuevo.",
+      "No pudimos cargar la sesión. Inténtalo de nuevo.",
     );
     expect(render("es", "mobileTracker.error.record")).toBe(
-      "No pudimos guardar la serie. Intentá de nuevo.",
+      "No pudimos guardar la serie. Inténtalo de nuevo.",
     );
     expect(render("es", "mobileTracker.error.complete")).toBe(
-      "No pudimos finalizar la sesión. Intentá de nuevo.",
+      "No pudimos finalizar la sesión. Inténtalo de nuevo.",
     );
     expect(render("es", "mobileTracker.retry")).toBe("Reintentar");
   });
@@ -108,10 +108,10 @@ describe("tracker copy → ICU catalog parity", () => {
       "3 series · 12 reps",
     );
     expect(render("es", "mobileTracker.conflict.withScope", { planName: "Fuerza", day: 3 })).toBe(
-      "Ya tenés una sesión activa en «Fuerza» (Día 3). Terminala antes de empezar otra.",
+      "Ya tienes una sesión activa en «Fuerza» (Día 3). Termínala antes de empezar otra.",
     );
     expect(render("es", "mobileTracker.conflict.withPlan", { planName: "Fuerza" })).toBe(
-      "Ya tenés una sesión activa en «Fuerza». Terminala antes de empezar otra.",
+      "Ya tienes una sesión activa en «Fuerza». Termínala antes de empezar otra.",
     );
   });
 
