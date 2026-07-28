@@ -243,3 +243,56 @@ describe("POST /billing/webhook — unconfigured gateway fails closed retryably 
     await app.close();
   });
 });
+
+// The web reverse-proxy only forwards `/api/:path*` to the api (next.config.ts),
+// while the api mounts routes unprefixed — so the webhook is ALSO registered
+// under `/api` (app.ts) to be reachable by Stripe in prod. Prove the prefixed
+// registration keeps the raw-body parser + signature verification intact.
+describe("POST /api/billing/webhook — prefixed registration stays reachable (hermetic)", () => {
+  async function buildPrefixedApp(store: StripeEventStorePort): Promise<FastifyInstance> {
+    const app = Fastify();
+    const processWebhook = new ProcessStripeWebhook(
+      new StripeApiGateway("sk_test_hermetic", WEBHOOK_SECRET, stripe),
+      store,
+    );
+    await app.register(stripeWebhookRoutes, { prefix: "/api", processWebhook });
+    await app.ready();
+    return app;
+  }
+
+  it("accepts a validly signed event at /api/billing/webhook and writes state", async () => {
+    const store = fakeStore();
+    const app = await buildPrefixedApp(store.port);
+
+    const payload = subscriptionEventPayload({ status: "active", interval: "month" });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/billing/webhook",
+      headers: { "content-type": "application/json", "stripe-signature": sign(payload) },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(store.applied).toHaveLength(1);
+    expect(store.applied[0]).toMatchObject({ tenantId: TENANT, tier: "pro", source: "stripe" });
+
+    await app.close();
+  });
+
+  it("rejects a forged signature at /api/billing/webhook with 400 and no write", async () => {
+    const store = fakeStore();
+    const app = await buildPrefixedApp(store.port);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/billing/webhook",
+      headers: { "content-type": "application/json", "stripe-signature": "t=1,v1=deadbeef" },
+      payload: subscriptionEventPayload(),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(store.applied).toHaveLength(0);
+
+    await app.close();
+  });
+});
