@@ -184,6 +184,12 @@ export function AssistantPane({
   // can re-enter listening (hands-free loop) without a dependency cycle on
   // startRecording, which is declared further down.
   const autoStartListeningRef = useRef<() => void>(() => {});
+  // The reply words targeted by the in-progress progressive reveal (voice
+  // turns only). Read from `audio.ontimeupdate`, which fires on the audio
+  // element's own timeline — keeping the target text in a ref (rather than a
+  // closed-over local) means a superseded/re-armed handler never reads stale
+  // words from a previous reply.
+  const revealWordsRef = useRef<string[]>([]);
 
   // Abort any in-flight stream on unmount/navigation so no token write lands in
   // an unmounted tree and the upstream API sees the disconnect.
@@ -331,14 +337,32 @@ export function AssistantPane({
   }, []);
 
   /**
-   * Play the terminal assistant reply as TTS audio (B2). Fetches the mp3 from
-   * the same-origin speech proxy and plays it via the `<audio>` element. This is
-   * gesture-anchored: it only runs for a VOICE-initiated turn (the user tapped
-   * the mic), so `.play()` sits within the page's user-gesture chain. TTS is a
-   * best-effort enhancement over the already-shown text reply, so EVERY failure
-   * path (a 204 opt-out, a 403/502, a network error, an aborted turn, a blocked
-   * autoplay) fails silently — the chat is never disrupted. Any prior playback
-   * is stopped first so a new reply supersedes the last.
+   * Play the terminal assistant reply as TTS audio (B2/B3). Fetches the mp3
+   * from the same-origin speech proxy and plays it via the `<audio>` element.
+   * This is gesture-anchored: it only runs for a VOICE-initiated turn (the
+   * user tapped the mic), so `.play()` sits within the page's user-gesture
+   * chain.
+   *
+   * The reply TEXT is deliberately withheld from the bubble until playback
+   * actually starts (the caller — `runTurn` — never reveals it for a voice
+   * turn): the animated "generating voice" indicator alone carries the
+   * feedback while this fetch/synthesis runs. Once `audio.play()` resolves,
+   * the text is revealed PROGRESSIVELY in sync with `timeupdate`
+   * (proportional to `currentTime / duration`, word-by-word — Gemini TTS
+   * returns raw PCM with no word-level timestamps, so this proportional
+   * reveal is the achievable target, not exact karaoke alignment), and
+   * `onended` snaps it to the complete original text as a safety net against
+   * any rounding.
+   *
+   * EVERY failure/opt-out/edge path below reveals the FULL text immediately
+   * instead of leaving the bubble stuck empty: a 204 opt-out, a missing
+   * `<audio>` element, a 403/502/network error, a blocked autoplay
+   * (`play()` rejects), and an unusable `audio.duration` (NaN/Infinity/0/
+   * negative — jsdom's `<audio>` always reports this) all fall back to
+   * showing the complete text at once. Only a turn superseded mid-flight
+   * (the fetch's own `AbortController` already aborted by a newer turn) skips
+   * the reveal, since the bubble at that point belongs to the NEW turn.
+   * Any prior playback is stopped first so a new reply supersedes the last.
    */
   const playReply = useCallback(
     async (text: string) => {
@@ -349,6 +373,12 @@ export function AssistantPane({
 
       const controller = new AbortController();
       speechAbortRef.current = controller;
+      // Reveal the complete text immediately — used by every fallback path.
+      // Guarded by `!controller.signal.aborted` at each call site so a
+      // superseded/old turn never overwrites the NEW turn's bubble.
+      const revealFullText = () => {
+        setMessages((prev) => replaceAssistant(prev, text));
+      };
       // Show the animated "generating voice" indicator while the TTS is being
       // synthesized (this fetch can take a few seconds on the provider).
       setSynthesizing(true);
@@ -358,11 +388,13 @@ export function AssistantPane({
         // superseded/aborted while the fetch was in flight.
         if (!blob || controller.signal.aborted) {
           setSynthesizing(false);
+          if (!controller.signal.aborted) revealFullText();
           return;
         }
         const audio = audioRef.current;
         if (!audio) {
           setSynthesizing(false);
+          revealFullText();
           return;
         }
 
@@ -370,6 +402,9 @@ export function AssistantPane({
         objectUrlRef.current = url;
         audio.src = url;
         audio.onended = () => {
+          // Safety net: guarantee the complete text is shown even if the
+          // proportional `timeupdate` reveal under-rounded.
+          revealFullText();
           revokeObjectUrl();
           setSpeaking(false);
           // Hands-free loop: once the spoken reply finishes, re-enter listening
@@ -379,19 +414,51 @@ export function AssistantPane({
         // Synthesis done → transition from "generating" to "speaking".
         setSynthesizing(false);
         setSpeaking(true);
-        // `play()` may reject (autoplay policy / interrupted) — fail silently.
-        await Promise.resolve(audio.play()).catch(() => {
+        // `play()` may reject (autoplay policy / interrupted) — fail silently,
+        // but never leave the reply text stuck hidden.
+        const played = await Promise.resolve(audio.play()).then(
+          () => true,
+          () => false,
+        );
+        if (!played) {
           revokeObjectUrl();
           setSpeaking(false);
-        });
+          revealFullText();
+          return;
+        }
+
+        const duration = audio.duration;
+        if (!Number.isFinite(duration) || duration <= 0) {
+          // No usable duration (jsdom always hits this path; a real browser
+          // hits it if metadata failed to load) → proportional reveal is
+          // impossible, so show the complete text right away.
+          revealFullText();
+        } else {
+          revealWordsRef.current = text.trim().split(/\s+/).filter(Boolean);
+          audio.ontimeupdate = () => {
+            const words = revealWordsRef.current;
+            if (words.length === 0) return;
+            const d = audio.duration;
+            if (!Number.isFinite(d) || d <= 0) return;
+            const ratio = audio.currentTime / d;
+            const shownWords = Math.min(
+              words.length,
+              Math.max(0, Math.ceil(ratio * words.length)),
+            );
+            setMessages((prev) => replaceAssistant(prev, words.slice(0, shownWords).join(" ")));
+          };
+        }
       } catch (err) {
-        // Network error / abort → no playback; the text reply already stands.
+        // Network error / abort → no playback; reveal the full reply text
+        // instead of leaving it hidden (unless this turn was itself
+        // superseded, in which case the bubble now belongs to a newer turn).
         // Fail-silent to the user is intentional (TTS is best-effort) — only
         // log for visibility.
         console.warn("[voice] tts failed", err);
         revokeObjectUrl();
         setSpeaking(false);
         setSynthesizing(false);
+        if (!controller.signal.aborted) revealFullText();
       }
     },
     [revokeObjectUrl, stopSpeaking],
@@ -458,13 +525,25 @@ export function AssistantPane({
 
         for await (const event of parseSSEStream(res.body)) {
           if (event.type === "token") {
-            setMessages((prev) => appendToAssistant(prev, event.delta));
+            // Voice turn: suppress the progressive text reveal entirely — the
+            // bubble stays empty/placeholder while the animated "generating
+            // voice" indicator carries the feedback; the reply text is
+            // revealed later, in sync with TTS playback (see `playReply`).
+            if (!speakReply) {
+              setMessages((prev) => appendToAssistant(prev, event.delta));
+            }
           } else if (event.type === "draft") {
             if (event.assistantMessage) {
-              setMessages((prev) => replaceAssistant(prev, event.assistantMessage));
-              // Voice-initiated turn only: speak the terminal reply (B2).
-              // Gesture-anchored to the mic tap that started this turn.
-              if (speakReply) void playReply(event.assistantMessage);
+              if (speakReply) {
+                // Voice-initiated turn: defer the reveal entirely to
+                // playback (B2/B3) — do NOT show the full text yet, only
+                // hand it off so it can be spoken (and progressively
+                // revealed once playback starts). Gesture-anchored to the
+                // mic tap that started this turn.
+                void playReply(event.assistantMessage);
+              } else {
+                setMessages((prev) => replaceAssistant(prev, event.assistantMessage));
+              }
             }
             onSpecChange(event.draftSpec);
           } else {

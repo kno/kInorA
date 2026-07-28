@@ -1271,3 +1271,128 @@ describe("AssistantPane — voice TTS playback (B2)", () => {
     expect(screen.queryByRole("button", { name: /stop recording/i })).toBeNull();
   });
 });
+
+// --- Voice reply text reveal timing (13 Slice B3: withhold-then-reveal) ---
+
+describe("AssistantPane — voice reply text reveal timing (B3)", () => {
+  it("does NOT reveal the reply text on token/draft SSE events for a voice turn — the bubble stays empty while streaming and while TTS is synthesizing", async () => {
+    installAudioMocks();
+    let resolveSpeech!: (v: unknown) => void;
+    const pendingSpeech = new Promise((resolve) => {
+      resolveSpeech = resolve;
+    });
+    const getUserMedia = vi.fn().mockResolvedValue(fakeStream());
+    installVoice(getUserMedia);
+    routeFetch({
+      transcribe: () =>
+        Promise.resolve({ ok: true, status: 200, json: async () => ({ text: "four days", unclear: false }) }),
+      // A token frame BEFORE the terminal draft — proves the per-token append
+      // is suppressed too, not just the terminal replace.
+      chat: () =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          body: eagerStream([
+            'event: token\ndata: {"delta":"Four "}\n\n',
+            CHAT_REPLY_FRAME,
+          ]),
+        }),
+      speech: () => pendingSpeech as Promise<unknown>,
+    });
+
+    renderVoicePane();
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(micStart());
+    await waitFor(() => expect(micStop()).toBeTruthy());
+    fireEvent.click(micStop());
+
+    // The terminal draft landed and TTS synthesis started (the "generating
+    // voice" indicator is up) while the speech fetch is still pending...
+    await waitFor(() => {
+      expect(document.querySelector('[aria-label*="enerando" i], [aria-label*="enerating" i]')).toBeTruthy();
+    });
+    // ...yet neither the streamed token nor the full terminal reply is shown.
+    expect(screen.queryByText(/Four/)).toBeNull();
+    expect(screen.queryByText("Four days a week it is.")).toBeNull();
+
+    // Resolve synthesis: since jsdom's <audio> always reports a non-finite
+    // duration, playback falls back to revealing the complete text at once.
+    resolveSpeech({
+      ok: true,
+      status: 200,
+      blob: async () => new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+    });
+    await waitFor(() => expect(screen.getByText("Four days a week it is.")).toBeTruthy());
+  });
+
+  it("reveals the full text immediately when autoplay is blocked (audio.play() rejects) — never stuck hidden", async () => {
+    const play = vi.fn().mockRejectedValue(new DOMException("blocked", "NotAllowedError"));
+    const pause = vi.fn();
+    Object.defineProperty(window.HTMLMediaElement.prototype, "play", {
+      configurable: true,
+      value: play,
+    });
+    Object.defineProperty(window.HTMLMediaElement.prototype, "pause", {
+      configurable: true,
+      value: pause,
+    });
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: vi.fn(() => "blob:kinora-mock"),
+      revokeObjectURL: vi.fn(),
+    });
+    routeFetch({
+      transcribe: () =>
+        Promise.resolve({ ok: true, status: 200, json: async () => ({ text: "four days", unclear: false }) }),
+      chat: () => Promise.resolve({ ok: true, status: 200, body: eagerStream([CHAT_REPLY_FRAME]) }),
+      speech: () => audioResponse(),
+    });
+
+    await driveVoiceTurn();
+
+    await waitFor(() => expect(screen.getByText("Four days a week it is.")).toBeTruthy());
+  });
+
+  it("reveals the reply text progressively in sync with `timeupdate`, and completes on `ended` (proportional word reveal; true audio timing is browser-verified — jsdom cannot drive real playback/duration)", async () => {
+    const audio = installAudioMocks();
+    const getUserMedia = vi.fn().mockResolvedValue(fakeStream());
+    installVoice(getUserMedia);
+    routeFetch({
+      transcribe: () =>
+        Promise.resolve({ ok: true, status: 200, json: async () => ({ text: "four days", unclear: false }) }),
+      chat: () => Promise.resolve({ ok: true, status: 200, body: eagerStream([CHAT_REPLY_FRAME]) }),
+      speech: () => audioResponse(),
+    });
+
+    renderVoicePane();
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+
+    // Give the (always-mounted, hidden) `<audio>` element a finite, positive
+    // duration BEFORE the turn starts, so playReply's post-play() check takes
+    // the proportional-reveal path instead of the bad-duration fallback
+    // (jsdom's default NaN duration is exercised by the other B3 tests above).
+    const audioEl = document.querySelector("audio") as HTMLAudioElement;
+    Object.defineProperty(audioEl, "duration", { value: 10, configurable: true });
+
+    fireEvent.click(micStart());
+    await waitFor(() => expect(micStop()).toBeTruthy());
+    fireEvent.click(micStop());
+    await waitFor(() => expect(audio.play).toHaveBeenCalled());
+
+    // "Four days a week it is." → 6 words. currentTime=2.5/10 → ratio .25 →
+    // ceil(1.5) = 2 words shown.
+    Object.defineProperty(audioEl, "currentTime", { value: 2.5, configurable: true });
+    fireEvent(audioEl, new Event("timeupdate"));
+    await waitFor(() => expect(screen.getByText("Four days")).toBeTruthy());
+
+    // currentTime=7.5/10 → ratio .75 → ceil(4.5) = 5 words shown.
+    Object.defineProperty(audioEl, "currentTime", { value: 7.5, configurable: true });
+    fireEvent(audioEl, new Event("timeupdate"));
+    await waitFor(() => expect(screen.getByText("Four days a week it")).toBeTruthy());
+
+    // `ended` is the safety net: the COMPLETE original text is shown even if
+    // the proportional math under-rounded.
+    fireEvent(audioEl, new Event("ended"));
+    await waitFor(() => expect(screen.getByText("Four days a week it is.")).toBeTruthy());
+  });
+});
