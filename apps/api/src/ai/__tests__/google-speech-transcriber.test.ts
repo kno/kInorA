@@ -28,6 +28,32 @@ function makeFakeFetch(
   return { fetchImpl, calls };
 }
 
+/**
+ * A fake fetch that returns a scripted sequence of statuses (one per call),
+ * repeating the last entry once the sequence is exhausted. Used to prove the
+ * shared transient-error retry (`retry-transient.ts`) is wired in.
+ */
+function makeSequencedFetch(
+  statuses: number[],
+  responseBody: unknown,
+): {
+  fetchImpl: GoogleGenAiFetch;
+  calls: Array<{ url: string; init: Parameters<GoogleGenAiFetch>[1] }>;
+} {
+  const calls: Array<{ url: string; init: Parameters<GoogleGenAiFetch>[1] }> = [];
+  let callIndex = 0;
+  const fetchImpl: GoogleGenAiFetch = vi.fn(async (url, init) => {
+    calls.push({ url, init });
+    const status = statuses[Math.min(callIndex, statuses.length - 1)]!;
+    callIndex += 1;
+    return {
+      status,
+      json: async () => responseBody,
+    };
+  });
+  return { fetchImpl, calls };
+}
+
 /** Build a normal Gemini generateContent success body with the given text. */
 function geminiTextResponse(text: string): unknown {
   return {
@@ -217,7 +243,9 @@ describe("GoogleSpeechTranscriber — transcribe", () => {
       { error: { message: "boom" } },
       { status: 500 },
     );
-    const adapter = new GoogleSpeechTranscriber(fetchImpl);
+    // 500 is a transient status (retried) — zero the backoff so this test
+    // doesn't actually sleep through real retries.
+    const adapter = new GoogleSpeechTranscriber(fetchImpl, [0, 0]);
 
     let caught: unknown;
     try {
@@ -250,5 +278,41 @@ describe("GoogleSpeechTranscriber — transcribe", () => {
     await adapter.transcribe(input, controller.signal);
 
     expect(calls[0]!.init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("retries a transient 503 and succeeds on the following 200 (zeroed backoff)", async () => {
+    const { fetchImpl, calls } = makeSequencedFetch(
+      [503, 200],
+      geminiTextResponse("build muscle four days a week"),
+    );
+    const adapter = new GoogleSpeechTranscriber(fetchImpl, [0, 0]);
+
+    const result = await adapter.transcribe(input);
+
+    expect(result).toEqual({
+      text: "build muscle four days a week",
+      unclear: false,
+    });
+    expect(calls).toHaveLength(2);
+  });
+
+  it("does not retry a non-transient 400 and throws immediately without leaking the key", async () => {
+    const { fetchImpl, calls } = makeFakeFetch(
+      { error: { message: "bad request" } },
+      { status: 400 },
+    );
+    const adapter = new GoogleSpeechTranscriber(fetchImpl, [0, 0]);
+
+    let caught: unknown;
+    try {
+      await adapter.transcribe(input);
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    const serialized = `${(caught as Error).message}\n${(caught as Error).stack ?? ""}`;
+    expect(serialized).not.toContain("google-test-key");
+    expect(calls).toHaveLength(1);
   });
 });

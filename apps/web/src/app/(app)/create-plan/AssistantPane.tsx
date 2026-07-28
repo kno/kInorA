@@ -25,6 +25,18 @@ type VoiceNotice = "denied" | "unsupported" | "offline" | "unclear" | "error" | 
 /** Same-origin proxy route that injects the Bearer token and streams SSE back. */
 const CHAT_ENDPOINT = "/create-plan/chat";
 
+/**
+ * A 44-byte valid, silent WAV (RIFF/WAVE header, zero audio samples) used to
+ * "prime" the hidden `<audio>` element inside the real mic-tap gesture. Playing
+ * (then immediately pausing) this in-gesture engages the media element under
+ * the browser's autoplay policy, so the later programmatic `.play()` in
+ * `playReply` — which fires seconds after the click, well outside the transient
+ * user-activation window — is allowed instead of silently blocked. It is a
+ * literal `data:` URI (NOT `URL.createObjectURL`), so it needs no revocation.
+ */
+const SILENT_WAV_DATA_URI =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+
 interface ChatMessage {
   role: "assistant" | "user";
   text: string;
@@ -274,6 +286,34 @@ export function AssistantPane({
   }, [revokeObjectUrl]);
 
   /**
+   * Engage the hidden `<audio>` element inside the real user gesture (the mic
+   * tap) so a later programmatic `playReply()` is permitted by the browser's
+   * autoplay policy. Playing a silent WAV then immediately pausing marks the
+   * element as user-activated for the page session; subsequent `.play()` calls
+   * that fire seconds later (after transcribe + SSE) no longer get blocked.
+   *
+   * Best-effort and fully fail-silent: if the browser still refuses (or the
+   * element is not mounted / not yet playable) the error is swallowed and the
+   * TTS layer simply stays a no-op — text chat is never affected. It never
+   * touches `voiceState`/`streaming`, so it can never wedge the capture flow,
+   * and it is safe (idempotent) to call on every mic tap. `playReply` always
+   * overwrites `audio.src` with the reply's object URL, so priming's silent
+   * `src` is harmlessly replaced by real audio when a reply arrives.
+   */
+  const primeAudio = useCallback(async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    try {
+      audio.src = SILENT_WAV_DATA_URI;
+      await audio.play();
+      audio.pause();
+      audio.currentTime = 0;
+    } catch {
+      // Autoplay still blocked / element not ready → swallow; TTS is optional.
+    }
+  }, []);
+
+  /**
    * Play the terminal assistant reply as TTS audio (B2). Fetches the mp3 from
    * the same-origin speech proxy and plays it via the `<audio>` element. This is
    * gesture-anchored: it only runs for a VOICE-initiated turn (the user tapped
@@ -519,6 +559,11 @@ export function AssistantPane({
     if (voiceState === "listening") {
       stopRecording();
     } else if (voiceState === "idle") {
+      // Prime the audio element WITHIN this real gesture (fire-and-forget, no
+      // await before it) so the reply's later programmatic playback is allowed
+      // by the browser's autoplay policy. It never blocks the recording start
+      // and never touches voiceState, so it cannot wedge the capture flow.
+      void primeAudio();
       void startRecording();
     }
     // While "processing" the mic is disabled; ignore clicks.

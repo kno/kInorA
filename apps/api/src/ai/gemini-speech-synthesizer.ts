@@ -2,6 +2,10 @@ import type {
   SpeechSynthesizer,
   SynthesizeResult,
 } from "./speech-synthesizer-port.js";
+import {
+  DEFAULT_BACKOFF_MS,
+  fetchWithTransientRetry,
+} from "./retry-transient.js";
 
 /**
  * Google (Gemini) adapter for text-to-speech
@@ -187,9 +191,19 @@ interface GenerateContentResponse {
 
 export class GeminiSpeechSynthesizer implements SpeechSynthesizer {
   private readonly fetchImpl: GoogleGenAiFetch;
+  private readonly backoffMs: readonly number[];
 
-  constructor(fetchImpl: GoogleGenAiFetch = defaultFetch) {
+  /**
+   * `backoffMs` overrides the retry delays between transient-error attempts
+   * (429/503/500/502/504) — defaults to the production `DEFAULT_BACKOFF_MS`
+   * (400ms, 800ms). Tests pass `[0, 0]` so they never actually sleep.
+   */
+  constructor(
+    fetchImpl: GoogleGenAiFetch = defaultFetch,
+    backoffMs: readonly number[] = DEFAULT_BACKOFF_MS,
+  ) {
     this.fetchImpl = fetchImpl;
+    this.backoffMs = backoffMs;
   }
 
   async synthesize(text: string, signal?: AbortSignal): Promise<SynthesizeResult> {
@@ -228,12 +242,16 @@ export class GeminiSpeechSynthesizer implements SpeechSynthesizer {
 
     let response: { status: number; json(): Promise<unknown> };
     try {
-      response = await this.fetchImpl(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
+      response = await fetchWithTransientRetry(
+        () =>
+          this.fetchImpl(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          }),
+        { backoffMs: this.backoffMs, signal: controller.signal },
+      );
     } finally {
       clearTimeout(timeout);
       if (signal) signal.removeEventListener("abort", onAbort);

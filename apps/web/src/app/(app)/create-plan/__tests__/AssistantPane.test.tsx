@@ -1087,7 +1087,9 @@ describe("AssistantPane — voice TTS playback (B2)", () => {
 
     await waitFor(() => expect(screen.getByText("Four days a week it is.")).toBeTruthy());
     await waitFor(() => expect(speech).toHaveBeenCalled());
-    expect(audio.play).not.toHaveBeenCalled();
+    // The reply itself was never turned into an object URL (createObjectURL is
+    // the reply-playback path; the in-gesture prime uses a bare data: URI), so
+    // no reply audio was played. `audio.play` may have fired once for the prime.
     expect(audio.createObjectURL).not.toHaveBeenCalled();
   });
 
@@ -1105,7 +1107,10 @@ describe("AssistantPane — voice TTS playback (B2)", () => {
 
     await waitFor(() => expect(screen.getByText("Four days a week it is.")).toBeTruthy());
     await waitFor(() => expect(speech).toHaveBeenCalled());
-    expect(audio.play).not.toHaveBeenCalled();
+    // The reply was never turned into an object URL (createObjectURL is the
+    // reply-playback path; the in-gesture prime uses a bare data: URI), so no
+    // reply audio was played. `audio.play` may have fired once for the prime.
+    expect(audio.createObjectURL).not.toHaveBeenCalled();
   });
 
   it("a network failure on the speech fetch never breaks the chat reply", async () => {
@@ -1122,7 +1127,10 @@ describe("AssistantPane — voice TTS playback (B2)", () => {
 
     await waitFor(() => expect(screen.getByText("Four days a week it is.")).toBeTruthy());
     await waitFor(() => expect(speech).toHaveBeenCalled());
-    expect(audio.play).not.toHaveBeenCalled();
+    // The reply was never turned into an object URL (createObjectURL is the
+    // reply-playback path; the in-gesture prime uses a bare data: URI), so no
+    // reply audio was played. `audio.play` may have fired once for the prime.
+    expect(audio.createObjectURL).not.toHaveBeenCalled();
   });
 
   it("offers a stop-speaking control while playing, and stopping pauses audio + revokes the object URL", async () => {
@@ -1170,5 +1178,54 @@ describe("AssistantPane — voice TTS playback (B2)", () => {
 
     unmount();
     expect(audio.revokeObjectURL).toHaveBeenCalled();
+  });
+
+  // NOTE: jsdom implements neither the browser's autoplay policy nor real
+  // microphone capture, so the two behaviours the gesture-priming fix exists to
+  // exercise — (a) a real transient-user-activation window that would block a
+  // late programmatic `.play()`, and (b) actual mic audio — cannot be asserted
+  // here. Those are verified manually in-browser by the user. The two tests
+  // below only prove that the priming call fires within the mic gesture and
+  // that voice state fully resets after a completed turn (a second recording
+  // could start), which is all jsdom can deterministically observe.
+
+  it("primes the audio element within the mic-tap gesture (plays then pauses the silent WAV)", async () => {
+    const audio = installAudioMocks();
+    const getUserMedia = vi.fn().mockResolvedValue(fakeStream());
+    installVoice(getUserMedia);
+    // No turn is completed here — only the start gesture is exercised — so the
+    // transcribe handler is never reached.
+    routeFetch({ transcribe: () => Promise.reject(new Error("unused")) });
+
+    renderVoicePane();
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(micStart());
+
+    // The gesture-priming step engages the hidden <audio> element so the later
+    // reply playback is permitted by the browser's autoplay policy in-browser.
+    await waitFor(() => expect(audio.play).toHaveBeenCalled());
+    await waitFor(() => expect(audio.pause).toHaveBeenCalled());
+  });
+
+  it("fully resets voice state after a completed voice turn so a second recording can start", async () => {
+    installAudioMocks();
+    routeFetch({
+      transcribe: () =>
+        Promise.resolve({ ok: true, status: 200, json: async () => ({ text: "four days", unclear: false }) }),
+      chat: () => Promise.resolve({ ok: true, status: 200, body: eagerStream([CHAT_REPLY_FRAME]) }),
+      speech: () => audioResponse(),
+    });
+
+    await driveVoiceTurn();
+
+    // The reply rendered → transcribe + chat stream + TTS have all settled.
+    await waitFor(() => expect(screen.getByText("Four days a week it is.")).toBeTruthy());
+    // voiceState is back to idle and `streaming` cleared, so the mic re-enables
+    // (a stuck listening/processing state or a never-cleared `streaming` flag
+    // would leave it disabled and strand voice input).
+    await waitFor(() => expect((micStart() as HTMLButtonElement).disabled).toBe(false));
+    // …and the recording control offers "start" again (not stuck on "stop").
+    expect(screen.queryByRole("button", { name: /stop recording/i })).toBeNull();
   });
 });

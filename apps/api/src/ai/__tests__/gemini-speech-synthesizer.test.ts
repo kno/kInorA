@@ -29,6 +29,32 @@ function makeFakeFetch(
   return { fetchImpl, calls };
 }
 
+/**
+ * A fake fetch that returns a scripted sequence of statuses (one per call),
+ * repeating the last entry once the sequence is exhausted. Used to prove the
+ * shared transient-error retry (`retry-transient.ts`) is wired in.
+ */
+function makeSequencedFetch(
+  statuses: number[],
+  responseBody: unknown,
+): {
+  fetchImpl: GoogleGenAiFetch;
+  calls: Array<{ url: string; init: Parameters<GoogleGenAiFetch>[1] }>;
+} {
+  const calls: Array<{ url: string; init: Parameters<GoogleGenAiFetch>[1] }> = [];
+  let callIndex = 0;
+  const fetchImpl: GoogleGenAiFetch = vi.fn(async (url, init) => {
+    calls.push({ url, init });
+    const status = statuses[Math.min(callIndex, statuses.length - 1)]!;
+    callIndex += 1;
+    return {
+      status,
+      json: async () => responseBody,
+    };
+  });
+  return { fetchImpl, calls };
+}
+
 /** Build a Gemini TTS success body carrying inline base64 PCM + a mime type. */
 function geminiAudioResponse(base64: string, mimeType?: string): unknown {
   return {
@@ -286,5 +312,38 @@ describe("GeminiSpeechSynthesizer — synthesize", () => {
     const adapter = new GeminiSpeechSynthesizer(fetchImpl);
 
     await expect(adapter.synthesize("hi")).rejects.toThrow();
+  });
+
+  it("retries a transient 503 and succeeds on the following 200 (zeroed backoff)", async () => {
+    const { fetchImpl, calls } = makeSequencedFetch(
+      [503, 200],
+      geminiAudioResponse(PCM_BASE64),
+    );
+    const adapter = new GeminiSpeechSynthesizer(fetchImpl, [0, 0]);
+
+    const result = await adapter.synthesize("hello");
+
+    expect(result.contentType).toBe("audio/wav");
+    expect(calls).toHaveLength(2);
+  });
+
+  it("does not retry a non-transient 400 and throws immediately without leaking the key", async () => {
+    const { fetchImpl, calls } = makeFakeFetch(
+      { error: { message: "bad request" } },
+      { status: 400 },
+    );
+    const adapter = new GeminiSpeechSynthesizer(fetchImpl, [0, 0]);
+
+    let caught: unknown;
+    try {
+      await adapter.synthesize("hi");
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    const serialized = `${(caught as Error).message}\n${(caught as Error).stack ?? ""}`;
+    expect(serialized).not.toContain("google-test-key");
+    expect(calls).toHaveLength(1);
   });
 });

@@ -3,6 +3,10 @@ import type {
   TranscribeInput,
   TranscribeResult,
 } from "./speech-transcriber-port.js";
+import {
+  DEFAULT_BACKOFF_MS,
+  fetchWithTransientRetry,
+} from "./retry-transient.js";
 
 /**
  * Google (Gemini multimodal) adapter for speech-to-text
@@ -101,9 +105,19 @@ function languageHint(language: string | undefined): string {
 
 export class GoogleSpeechTranscriber implements SpeechTranscriber {
   private readonly fetchImpl: GoogleGenAiFetch;
+  private readonly backoffMs: readonly number[];
 
-  constructor(fetchImpl: GoogleGenAiFetch = defaultFetch) {
+  /**
+   * `backoffMs` overrides the retry delays between transient-error attempts
+   * (429/503/500/502/504) — defaults to the production `DEFAULT_BACKOFF_MS`
+   * (400ms, 800ms). Tests pass `[0, 0]` so they never actually sleep.
+   */
+  constructor(
+    fetchImpl: GoogleGenAiFetch = defaultFetch,
+    backoffMs: readonly number[] = DEFAULT_BACKOFF_MS,
+  ) {
     this.fetchImpl = fetchImpl;
+    this.backoffMs = backoffMs;
   }
 
   async transcribe(input: TranscribeInput, signal?: AbortSignal): Promise<TranscribeResult> {
@@ -148,12 +162,16 @@ export class GoogleSpeechTranscriber implements SpeechTranscriber {
 
     let response: { status: number; json(): Promise<unknown> };
     try {
-      response = await this.fetchImpl(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
+      response = await fetchWithTransientRetry(
+        () =>
+          this.fetchImpl(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          }),
+        { backoffMs: this.backoffMs, signal: controller.signal },
+      );
     } finally {
       clearTimeout(timeout);
       if (signal) signal.removeEventListener("abort", onAbort);
