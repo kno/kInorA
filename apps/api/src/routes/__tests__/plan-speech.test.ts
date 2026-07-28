@@ -8,6 +8,7 @@ import type {
   SynthesizeResult,
 } from "../../ai/speech-synthesizer-port.js";
 import { OpenAIAudioAdapter, type OpenAIAudioClient } from "../../ai/openai-audio-adapter.js";
+import { ProviderRateLimitError } from "../../ai/provider-errors.js";
 import type { Database } from "../../db/client.js";
 import {
   createAuthMockDb,
@@ -102,6 +103,13 @@ function throwingSynthesizer(): SpeechSynthesizer & { synthesize: ReturnType<typ
     synthesize: vi.fn().mockRejectedValue(
       new Error("OpenAI TTS upstream 500 — secret-internal-stack-detail"),
     ),
+  };
+}
+
+/** Synthesizer that rejects with a rate-limit/quota-exhausted failure. */
+function rateLimitedSynthesizer(): SpeechSynthesizer & { synthesize: ReturnType<typeof vi.fn> } {
+  return {
+    synthesize: vi.fn().mockRejectedValue(new ProviderRateLimitError("gemini", "tts")),
   };
 }
 
@@ -490,6 +498,30 @@ describe("POST /plan-specs/speech (Pro-gated, opt-out-aware, no-persistence TTS)
     expect(res.json()).toEqual({ error: "synthesis_failed" });
     expect(res.payload).not.toContain("secret-internal-stack-detail");
     expect(res.payload).not.toContain("OpenAI TTS upstream 500");
+  });
+
+  it("a ProviderRateLimitError → 429 rate_limited with a DISTINCT warn log (not the generic 502 error log)", async () => {
+    const synthesizer = rateLimitedSynthesizer();
+    const logger = recordingLogger();
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      chatEntitlement: allowGate(),
+      synthesizer,
+      logger,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/plan-specs/speech",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { text: CANNED_TEXT },
+    });
+
+    expect(res.statusCode).toBe(429);
+    expect(res.json()).toEqual({ error: "rate_limited" });
+    const dump = JSON.stringify(logger.records);
+    expect(dump).toContain("provider rate limit / quota exceeded (HTTP 429) — request throttled");
+    expect(dump).not.toContain("synthesis failed");
   });
 
   // --- No persistence + no text/key logging --------------------------------

@@ -38,6 +38,24 @@ describe("voice-client — transcribeAudio", () => {
     } as unknown as Response;
   }
 
+  it("throws a TranscriptionError carrying the parsed reason on a 429 rate-limit response", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({ error: "rate_limited" }, false, 429),
+    );
+    await expect(
+      transcribeAudio(new Blob(["x"], { type: "audio/webm" }), { fetchImpl }),
+    ).rejects.toMatchObject({ name: "TranscriptionError", status: 429, reason: "rate_limited" });
+  });
+
+  it("falls back to the transcription_failed reason when the error body has no parseable error field", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({}, false, 502),
+    );
+    await expect(
+      transcribeAudio(new Blob(["x"], { type: "audio/webm" }), { fetchImpl }),
+    ).rejects.toMatchObject({ name: "TranscriptionError", status: 502, reason: "transcription_failed" });
+  });
+
   it("POSTs the blob as multipart form-data to the transcribe proxy and returns the transcript", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       jsonResponse({ text: "build muscle four days a week", unclear: false }),

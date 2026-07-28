@@ -1078,6 +1078,7 @@
     "error": {
       "chat_stream_failed": "Algo salió mal. Inténtalo de nuevo.",
       "chat_stream_timeout": "Tardó demasiado. Inténtalo de nuevo.",
+      "chat_rate_limited": "Se alcanzó el límite de la IA. Espera un momento e inténtalo de nuevo.",
       "generic": "Algo salió mal. Inténtalo de nuevo."
     },
     "panel": {
@@ -1124,6 +1125,7 @@
       "listening": "Escuchando…",
       "processing": "Procesando…",
       "speaking": "Hablando…",
+      "synthesizing": "Generando voz…",
       "responding": "kInorA responde…"
     },
     "stopSpeaking": "Detener voz",
@@ -1132,6 +1134,7 @@
     "unsupported": "La entrada de voz no está disponible en este navegador. Puedes seguir escribiendo.",
     "offline": "La voz necesita conexión. Puedes seguir escribiendo.",
     "unclear": "No te entendí. Inténtalo de nuevo.",
+    "rate_limited": "Se alcanzó el límite de la IA. Espera un momento e inténtalo de nuevo.",
     "error": "Falló la entrada de voz. Inténtalo de nuevo.",
     "premium": "La voz es una función Pro. Mejora tu plan para usarla. Puedes seguir escribiendo.",
     "screenTitle": "Asistente kInorA",

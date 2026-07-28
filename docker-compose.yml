@@ -52,6 +52,13 @@ services:
       # CREATE EXTENSION vector.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY}
+      # 13 voice provider selection. MUST be forwarded — the voice factory reads
+      # these at boot; without them the container ignores the VPS .env and falls
+      # back to `openai`, so the OpenAI-free Google (Gemini) STT+TTS stack is dead
+      # in prod (same class of bug as the STRIPE_* omission below). Default keeps
+      # `openai` so behavior is unchanged unless the VPS .env sets `google`.
+      VOICE_STT_PROVIDER: ${VOICE_STT_PROVIDER:-openai}
+      VOICE_TTS_PROVIDER: ${VOICE_TTS_PROVIDER:-openai}
       OPENCODE_GO_API_KEY: ${OPENCODE_GO_API_KEY}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
