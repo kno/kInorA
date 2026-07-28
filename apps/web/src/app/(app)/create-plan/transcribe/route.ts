@@ -54,7 +54,13 @@ export async function POST(request: Request): Promise<Response> {
         authorization: `Bearer ${token}`,
       },
       body,
-      signal: request.signal,
+      // NOTE: do NOT forward `request.signal` here. Once the upload is fully
+      // buffered above (`request.arrayBuffer()`), the incoming request is
+      // "consumed" and Next dev/undici fires `request.signal` immediately —
+      // which would abort this upstream call (observed: api AbortError ~40ms →
+      // 502 transcription_failed on the FIRST transcribe). The transcription is
+      // short and stateless, so running it to completion even if the client
+      // later disconnects is harmless.
       cache: "no-store",
     });
   } catch (err) {
