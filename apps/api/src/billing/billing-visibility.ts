@@ -111,6 +111,12 @@ export class GetBillingVisibility {
       this.port.readOwnMemberUsage(scope.tenantId, scope.userId, period),
     ]);
 
+    // A paid Stripe subscription is the ONLY state with a real renewal/cycle:
+    // effective Pro whose source is Stripe (never trial/override/backfill). The
+    // stored Stripe columns persist after cancellation, so they must be gated on
+    // this rather than read unconditionally.
+    const hasPaidStripeSubscription = effective.tier === "pro" && effective.source === "stripe";
+
     const billing: TenantBillingStateDTO = {
       tenantId: scope.tenantId as TenantId,
       tier: effective.tier,
@@ -121,11 +127,16 @@ export class GetBillingVisibility {
       activeOverrideEndsAt: ctx.activeOverrideEndsAt?.toISOString() ?? null,
       updatedAt: (ctx.billing?.updatedAt ?? now).toISOString(),
       // Stripe display metadata (11b): projected so the web PlanHero Price /
-      // Renewal tiles populate. Null when there is no paid Stripe subscription;
+      // Renewal tiles populate. Null unless there is an ACTIVE PAID Stripe
+      // subscription — a stored `current_period_end` lingers after a
+      // cancellation/reset, so gating on the effective (tier=pro + source=stripe)
+      // prevents a Free/expired tenant from showing a bogus renewal date.
       // NOT read by tier resolution (see resolveEffectiveTier).
-      billingCycle: ctx.billing?.billingCycle ?? null,
-      currentPeriodEnd: ctx.billing?.currentPeriodEnd?.toISOString() ?? null,
-      cancelAtPeriodEnd: ctx.billing?.cancelAtPeriodEnd ?? false,
+      billingCycle: hasPaidStripeSubscription ? (ctx.billing?.billingCycle ?? null) : null,
+      currentPeriodEnd: hasPaidStripeSubscription
+        ? (ctx.billing?.currentPeriodEnd?.toISOString() ?? null)
+        : null,
+      cancelAtPeriodEnd: hasPaidStripeSubscription ? (ctx.billing?.cancelAtPeriodEnd ?? false) : false,
     };
 
     return {
