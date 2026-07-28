@@ -311,7 +311,7 @@ test.describe("Billing real-stack QA (#200)", () => {
     await expect(page.getByText("Save 20%")).toBeVisible();
   });
 
-  test("owner sees invoice history + Manage CTA; a non-owner member does not", async ({
+  test("owner sees invoice history; a non-owner member does not", async ({
     page,
   }) => {
     // Owner: a fresh registration is the tenant owner.
@@ -319,7 +319,6 @@ test.describe("Billing real-stack QA (#200)", () => {
     await useSession(page, owner.token);
     await page.goto("/billing");
     await expect(page.getByRole("heading", { name: "Invoices & charges" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Manage / Add card" })).toBeVisible();
 
     // Non-owner: demote the membership to `member`; the owner-only invoice/portal
     // endpoints then return 403 (→ web `forbidden`) and the sections are hidden.
@@ -332,9 +331,8 @@ test.describe("Billing real-stack QA (#200)", () => {
     // The billing screen still renders (any active member can read visibility)…
     await expect(page.getByRole("heading", { name: "Billing", level: 1 })).toBeVisible();
     await expect(page.getByTestId("billing-tier-chip")).toBeVisible();
-    // …but the owner-only surfaces are absent.
+    // …but the owner-only invoice surface is absent.
     await expect(page.getByRole("heading", { name: "Invoices & charges" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Manage / Add card" })).toHaveCount(0);
   });
 
   test("switching the active tenant replaces the billing view (Free → Pro, no stale state)", async ({
@@ -441,7 +439,7 @@ test.describe("Billing real-stack QA (#200)", () => {
     await expect(page.getByRole("radiogroup", { name: "Billing cycle" })).toBeVisible();
   });
 
-  test("Stripe checkout + portal are wired to the boundary (no external redirect)", async ({
+  test("Stripe checkout is wired to the boundary (no external redirect)", async ({
     page,
   }) => {
     // We CANNOT complete a live Stripe test checkout / Customer Portal in e2e
@@ -465,17 +463,6 @@ test.describe("Billing real-stack QA (#200)", () => {
     ).toBeVisible();
     // Still on /billing — no external redirect was followed.
     expect(new URL(page.url()).pathname).toBe("/billing");
-
-    // Manage CTA (owner-only) → portal action.
-    const manage = page.getByRole("button", { name: "Manage / Add card" });
-    await expect(manage).toBeEnabled();
-    await manage.click();
-    // Scope to the specific copy: the checkout alert above is still on screen, so
-    // a bare getByRole("alert") would match two nodes (strict-mode violation).
-    await expect(
-      page.getByText("We couldn't open the billing portal. Please try again."),
-    ).toBeVisible();
-    expect(new URL(page.url()).pathname).toBe("/billing");
   });
 });
 
@@ -487,11 +474,8 @@ test.describe("Billing real-stack QA (#200)", () => {
  *
  *   [ ] Complete a live Stripe TEST checkout from the Upgrade CTA (card
  *       4242 4242 4242 4242) and confirm the webhook flips the tenant to
- *       Pro/active, the "Your current plan" badge appears, and the Renewal /
- *       Current-period tiles populate from the subscription.
- *   [ ] Open the Stripe Customer Portal from "Manage / Add card" as an owner of a
- *       SUBSCRIBED tenant (has a stripe_customer_id), update the card, and cancel
- *       — confirm the portal returns to /billing and the state reflects the change.
+ *       Pro/active, the "Your current plan" badge appears, and the Renewal tile
+ *       populates from the subscription.
  *   [ ] With a subscribed tenant, confirm the owner Invoice History lists real
  *       invoices with working Receipt links (hostedInvoiceUrl / receiptUrl).
  *   [ ] Loading + offline cards: throttle / go offline in DevTools and trigger a
