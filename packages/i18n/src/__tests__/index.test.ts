@@ -193,7 +193,8 @@ describe("@kinora/i18n package assembly", () => {
     // + 11 (#199 billing help FAQ page: title/intro/backToBilling + 4 Q/A pairs)
     // − 5 (payment-method surface removed: plan.metaPayment, payment.{title,
     //   description,manageCta}, actions.portalError).
-    expect(billingKeys).toHaveLength(92);
+    // − 2 (current-period tile removed: plan.metaPeriod, plan.periodTrialEndsOn).
+    expect(billingKeys).toHaveLength(90);
     expect(en["billing.tier.free"]).toBe("Free");
     expect(es["billing.tier.free"]).toBe("Gratis");
   });

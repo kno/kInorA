@@ -932,12 +932,10 @@
       "descriptionPro": "You are on Pro with high monthly limits across every feature.",
       "metaPrice": "Price",
       "metaRenewal": "Renewal",
-      "metaPeriod": "Current period",
       "valueNotSet": "—",
       "renewalNone": "No renewal",
       "comparePlans": "Compare plans",
-      "priceFree": "Free",
-      "periodTrialEndsOn": "Trial ends {date}"
+      "priceFree": "Free"
     },
     "usage": {
       "tenantTitle": "Tenant usage this period",

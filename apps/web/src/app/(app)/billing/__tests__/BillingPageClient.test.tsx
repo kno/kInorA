@@ -199,30 +199,22 @@ describe("BillingPageClient — OD layout", () => {
     expect(screen.getByTestId("billing-trial-badge").textContent).toMatch(/Pro trial/);
   });
 
-  // FIX 1 (4R review): the Price tile and the Current-period tile must show
-  // DISTINCT, meaningful values — never both rendering the cycle word.
-  it("shows the formatted price in the Price tile and a real period (not the cycle word) in Current period", () => {
+  // The Price tile shows the actual formatted price for the tenant's cycle —
+  // NOT the cycle label (the cycle toggle in the Pro card already shows that).
+  it("shows the formatted price in the Price tile (not the cycle word)", () => {
     renderClient({ initialData: PRO_ACTIVE });
 
     const priceLabel = screen.getByText("Price");
     const priceValue = priceLabel.nextElementSibling as HTMLElement;
     expect(priceValue.textContent).toMatch(/9[.,]99/);
     expect(priceValue.textContent).not.toMatch(/^Monthly$|^Annual$/);
-
-    const periodLabel = screen.getByText("Current period");
-    const periodValue = periodLabel.nextElementSibling as HTMLElement;
-    expect(periodValue.textContent).toBe("2026-07");
-    expect(periodValue.textContent).not.toMatch(/^Monthly$|^Annual$/);
-
-    // The two tiles must never render identical content.
-    expect(priceValue.textContent).not.toBe(periodValue.textContent);
   });
 
-  it("shows a trial-end placeholder in Current period when no usage rows or period end exist", () => {
-    renderClient({ initialData: TRIALING });
-    const periodLabel = screen.getByText("Current period");
-    const periodValue = periodLabel.nextElementSibling as HTMLElement;
-    expect(periodValue.textContent).toBe("Trial ends 2026-07-28");
+  // The Current-period tile was removed — it duplicated the Renewal tile and
+  // added low-value copy. The plan hero now shows only Price + Renewal.
+  it("does not render a Current period tile", () => {
+    renderClient({ initialData: PRO_ACTIVE });
+    expect(screen.queryByText("Current period")).toBeNull();
   });
 });
 

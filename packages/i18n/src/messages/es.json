@@ -932,12 +932,10 @@
       "descriptionPro": "Estás en Pro con límites mensuales amplios en todas las funciones.",
       "metaPrice": "Precio",
       "metaRenewal": "Renovación",
-      "metaPeriod": "Periodo actual",
       "valueNotSet": "—",
       "renewalNone": "Sin renovación",
       "comparePlans": "Comparar planes",
-      "priceFree": "Gratis",
-      "periodTrialEndsOn": "La prueba termina el {date}"
+      "priceFree": "Gratis"
     },
     "usage": {
       "tenantTitle": "Uso de la cuenta este periodo",
