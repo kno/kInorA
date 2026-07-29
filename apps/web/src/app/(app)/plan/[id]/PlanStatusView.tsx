@@ -138,11 +138,14 @@ export function PlanStatusView({
         </section>
       ))}
       {program?.limitationWarnings && program.limitationWarnings.length > 0 && (
-        <section className="kin-card kin-card--warning">
+        // Dedupe (issue #250): the generator can emit the same advisory string
+        // once per user-declared limitation, so render each DISTINCT note once
+        // instead of repeating identical copies.
+        <section className="kin-card kin-card--warning" role="note">
           <h3 className="kin-subtitle">{t("plan.limitation.warningLabel")}</h3>
           <ul>
-            {program.limitationWarnings.map((warning, idx) => (
-              <li key={idx}>{warning}</li>
+            {Array.from(new Set(program.limitationWarnings)).map((warning) => (
+              <li key={warning}>{warning}</li>
             ))}
           </ul>
         </section>

@@ -210,7 +210,10 @@ export function MemoryPageClient({ initialData, initialError = null }: MemoryPag
   }
 
   return (
-    <section className="kin-card kin-card--center" style={{ maxWidth: 760 }}>
+    // Left-aligned content card (issue #252): the form + memory list read as a
+    // left-to-right document, so `kin-card--center` (text-align:center) mangled
+    // their alignment. Short status/loading/empty cards below keep `--center`.
+    <section className="kin-card" style={{ maxWidth: 760, marginInline: "auto" }}>
       <h2 className="kin-title">{t("memory.title")}</h2>
       <p className="kin-text kin-muted" style={{ marginBottom: "1rem" }}>
         {t("memory.description")}
