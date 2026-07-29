@@ -129,7 +129,10 @@ describe("@kinora/i18n package assembly", () => {
     );
     // +1 `tracker.restartLabel` authored for #251 (restart-timer control on
     // the live tracker topbar; pause/restart now persist across navigation).
-    expect(nonBillingKeys).toHaveLength(610);
+    // +3 `tracker.load.{stepLabel,stepGroupLabel,stepOptionA11y}` authored for
+    // #253 (granular load-step selector: 0.5/1/2.5/5 kg increments on the web
+    // tracker; stepOptionA11y interpolates {step}).
+    expect(nonBillingKeys).toHaveLength(613);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
