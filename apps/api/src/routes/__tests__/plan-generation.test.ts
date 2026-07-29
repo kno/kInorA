@@ -315,7 +315,46 @@ describe("Plan generation routes", () => {
       expect(generationService.startGeneration).toHaveBeenCalledWith(
         TENANT_A,
         USER_A,
-        SPEC_ID
+        SPEC_ID,
+        "en"
+      );
+    });
+
+    it("threads x-kinora-locale: es into startGeneration (#260)", async () => {
+      const db = buildSessionOnlyDb(buildSessionRow());
+      const generationService = buildMockGenerationService({ planId: PLAN_ID, status: "generating" });
+      app = await buildTestApp({ db, generationService });
+
+      await app.inject({
+        method: "POST",
+        url: `/plan-specs/${SPEC_ID}/confirm`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}`, "x-kinora-locale": "es-ES" },
+      });
+
+      expect(generationService.startGeneration).toHaveBeenCalledWith(
+        TENANT_A,
+        USER_A,
+        SPEC_ID,
+        "es"
+      );
+    });
+
+    it("defaults to en when x-kinora-locale is absent (#260)", async () => {
+      const db = buildSessionOnlyDb(buildSessionRow());
+      const generationService = buildMockGenerationService({ planId: PLAN_ID, status: "generating" });
+      app = await buildTestApp({ db, generationService });
+
+      await app.inject({
+        method: "POST",
+        url: `/plan-specs/${SPEC_ID}/confirm`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}`, "x-kinora-locale": "fr-FR" },
+      });
+
+      expect(generationService.startGeneration).toHaveBeenCalledWith(
+        TENANT_A,
+        USER_A,
+        SPEC_ID,
+        "en"
       );
     });
   });
@@ -396,7 +435,8 @@ describe("Plan generation routes", () => {
       expect(generationService.startGeneration).toHaveBeenCalledWith(
         TENANT_A,
         USER_A,
-        SPEC_ID
+        SPEC_ID,
+        "en"
       );
     });
   });

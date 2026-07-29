@@ -12,6 +12,7 @@ import {
   assertNoDiagnosticLanguage,
   normalizeProgramReps,
 } from "@kinora/domain";
+import type { WarningLocale } from "@kinora/domain";
 
 /**
  * 404-class error: spec not found or belongs to a different tenant.
@@ -93,6 +94,8 @@ export class PlanGenerationService {
    * @param tenantId  Tenant from authContext (never from request body)
    * @param userId    User from authContext (never from request body)
    * @param planSpecId ID of the confirmed plan spec to generate from
+   * @param locale    App locale for the DETERMINISTIC limitation warnings (#260).
+   *                  Defaults to `"en"` so existing callers/tests are unaffected.
    *
    * @throws PlanSpecNotFoundError (404) when the spec is missing or unconfirmed
    * @throws PlanSpecShapeError (422) when the spec fails assertPlanSpecShape
@@ -100,7 +103,8 @@ export class PlanGenerationService {
   async startGeneration(
     tenantId: string,
     userId: string,
-    planSpecId: string
+    planSpecId: string,
+    locale: WarningLocale = "en"
   ): Promise<{ planId: string; status: "generating" }> {
     const spec = await this.loadValidatedSpec(tenantId, userId, planSpecId);
 
@@ -118,7 +122,7 @@ export class PlanGenerationService {
 
     // Step 4: Fire-and-forget background task.
     // Promise rejection is caught inside the task — no unhandledRejection.
-    void this.runGenerationTask(tenantId, userId, planId, spec);
+    void this.runGenerationTask(tenantId, userId, planId, spec, locale);
 
     return { planId, status: "generating" };
   }
@@ -175,7 +179,8 @@ export class PlanGenerationService {
     tenantId: string,
     userId: string,
     planId: string,
-    spec: import("@kinora/contracts").PlanSpec
+    spec: import("@kinora/contracts").PlanSpec,
+    locale: WarningLocale
   ): Promise<void> {
     // Signal: task is starting (greppable prefix for log aggregators)
     console.info("[generation-service] generation started", { planId, tenantId });
@@ -186,7 +191,17 @@ export class PlanGenerationService {
       const rawProgram = await this.generator.generate(generationInput);
       const normalized = normalizeProgramReps(rawProgram);
       const substituted = applyEquipmentSubstitutions(normalized, spec.equipment);
-      const withWarnings = injectLimitationWarnings(substituted, spec.limitations);
+      // #260: limitation warnings are DETERMINISTIC and LOCALIZED — they are the
+      // SINGLE source of truth. Drop any warnings the LLM may have authored
+      // (its English prompt can leak English prose even when the app is in
+      // Spanish) before injecting the locale-correct deterministic ones, so no
+      // mixed-language text ever reaches the persisted program.
+      const withoutLlmWarnings = { ...substituted, limitationWarnings: [] };
+      const withWarnings = injectLimitationWarnings(
+        withoutLlmWarnings,
+        spec.limitations,
+        locale
+      );
       assertNoDiagnosticLanguage(withWarnings);
 
       const result = await this.planRepo.markReady(tenantId, planId, withWarnings);

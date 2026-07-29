@@ -6,6 +6,8 @@ import {
   isSpecComplete,
   fetchUserPlans,
   adaptPlan,
+  confirmPlanGen,
+  regeneratePlan,
 } from "../plan-draft-client";
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -195,6 +197,53 @@ describe("adaptPlan", () => {
     const result = await adaptPlan("spec-7", undefined, { fetchImpl });
     expect(result.kind).toBe("error");
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("x-kinora-locale header (#260)", () => {
+  it("confirmPlanGen sends x-kinora-locale when a locale is provided", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(200, { planId: "plan-1", status: "generating" }));
+
+    await confirmPlanGen("spec-1", "tok", { fetchImpl, apiBaseUrl: "http://api.test", locale: "es" });
+
+    const headers = (fetchImpl.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+    expect(headers["x-kinora-locale"]).toBe("es");
+    expect(headers.authorization).toBe("Bearer tok");
+  });
+
+  it("regeneratePlan sends x-kinora-locale when a locale is provided", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(202, { planId: "plan-1", status: "generating" }));
+
+    await regeneratePlan("spec-1", "tok", { fetchImpl, apiBaseUrl: "http://api.test", locale: "es" });
+
+    const headers = (fetchImpl.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+    expect(headers["x-kinora-locale"]).toBe("es");
+  });
+
+  it("adaptPlan sends x-kinora-locale when a locale is provided", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(202, { planId: "plan-1", status: "generating" }));
+
+    await adaptPlan("spec-1", "tok", { fetchImpl, apiBaseUrl: "http://api.test", locale: "es" });
+
+    const headers = (fetchImpl.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+    expect(headers["x-kinora-locale"]).toBe("es");
+  });
+
+  it("omits x-kinora-locale when no locale is provided", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(200, { planId: "plan-1", status: "generating" }));
+
+    await confirmPlanGen("spec-1", "tok", { fetchImpl, apiBaseUrl: "http://api.test" });
+
+    const headers = (fetchImpl.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+    expect(headers).not.toHaveProperty("x-kinora-locale");
   });
 });
 
