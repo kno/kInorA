@@ -70,7 +70,9 @@ describe("MemoryPageClient", () => {
   it("renders existing memories, metadata, and create controls", () => {
     renderWithIntl(<MemoryPageClient initialData={LIST_RESPONSE} />);
 
-    expect(screen.getByRole("heading", { name: "Your memory" })).toBeDefined();
+    // Issue #252: the "Your memory" title must render exactly once (previously
+    // both the page shell and this client rendered it, duplicating the heading).
+    expect(screen.getAllByRole("heading", { name: "Your memory" })).toHaveLength(1);
     expect(screen.getByText("Prefers morning workouts")).toBeDefined();
     expect(screen.getByRole("textbox", { name: "Fact to remember" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Save memory" })).toBeDefined();
