@@ -82,5 +82,5 @@ Generate a structured ${spec.daysPerWeek}-day-per-week workout program that:
 5. Returns exactly ${spec.daysPerWeek} weekly sessions (one per training day).
 
 OUTPUT FORMAT:
-Return a structured workout program with weeklySessions (array of sessions, one per day) and limitationWarnings (array of advisory strings, empty if no limitations). Each session must include a day number, title, and exercises with name, sets, reps (as a string like "8-12"), restSeconds, and optional notes.`.trim();
+Return a structured workout program with weeklySessions (array of sessions, one per day). Each session must include a day number, title, and exercises with name, sets, reps (as a string like "8-12"), restSeconds, and optional notes. Do NOT author any limitation warnings or safety-disclaimer prose — return limitationWarnings as an empty array. The app appends localized limitation warnings deterministically after generation, so any prose you write here is discarded.`.trim();
 }

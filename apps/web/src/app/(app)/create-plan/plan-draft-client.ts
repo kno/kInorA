@@ -55,6 +55,33 @@ export type ConfirmResult =
 interface ClientOptions {
   fetchImpl?: typeof fetch;
   apiBaseUrl?: string;
+  /**
+   * App locale (#260) forwarded to the API as the `x-kinora-locale` header so
+   * the DETERMINISTIC limitation warnings are generated in the user's language.
+   * Resolved via next-intl `getLocale()` in the Server Action call site and
+   * passed here; omitted in unit tests that don't exercise the header. The API
+   * whitelists it to `en`/`es`, so any value is safe to forward verbatim.
+   */
+  locale?: string;
+}
+
+/** Locale request header (#260) — mirrors the API's `LOCALE_HEADER`. */
+export const LOCALE_HEADER = "x-kinora-locale";
+
+/**
+ * Build the request headers for a generation-triggering call: the Bearer auth,
+ * the JSON content-type, and — when a locale was resolved at the call site —
+ * the `x-kinora-locale` header (#260).
+ */
+function generationHeaders(token: string, locale: string | undefined): Record<string, string> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    authorization: `Bearer ${token}`,
+  };
+  if (locale) {
+    headers[LOCALE_HEADER] = locale;
+  }
+  return headers;
 }
 
 /**
@@ -153,10 +180,7 @@ export async function confirmPlanGen(
   try {
     res = await fetchImpl(`${base}/plan-specs/${specId}/confirm`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${token}`,
-      },
+      headers: generationHeaders(token, options.locale),
       body: JSON.stringify({}),
     });
   } catch {
@@ -203,10 +227,7 @@ export async function regeneratePlan(
   try {
     res = await fetchImpl(`${base}/plan-specs/${specId}/regenerate`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${token}`,
-      },
+      headers: generationHeaders(token, options.locale),
       body: JSON.stringify({}),
     });
   } catch {
@@ -257,10 +278,7 @@ export async function adaptPlan(
   try {
     res = await fetchImpl(`${base}/plan-specs/${specId}/adapt`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${token}`,
-      },
+      headers: generationHeaders(token, options.locale),
       body: JSON.stringify({}),
     });
   } catch {

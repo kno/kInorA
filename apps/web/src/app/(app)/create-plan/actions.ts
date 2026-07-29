@@ -1,6 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { getLocale } from "next-intl/server";
 import type { PlanSpec } from "@kinora/contracts";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { promotePlanSpec, confirmPlanGen, submitDraft, regeneratePlan } from "./plan-draft-client";
@@ -51,7 +52,10 @@ export async function confirmPlanSpecAction(): Promise<{ planId: string; status:
   if (promoteResult.kind === "error") {
     throw new Error(promoteResult.message);
   }
-  const confirmResult = await confirmPlanGen(promoteResult.id, token);
+  // #260: forward the app locale so the DETERMINISTIC limitation warnings are
+  // generated in the user's language.
+  const locale = await getLocale();
+  const confirmResult = await confirmPlanGen(promoteResult.id, token, { locale });
   if (confirmResult.kind === "error") {
     throw new Error(confirmResult.message);
   }
@@ -81,7 +85,9 @@ export async function saveUserPreferencesAction(input: {
  */
 export async function regeneratePlanAction(specId: string): Promise<{ planId: string; status: string }> {
   const token = await sessionToken();
-  const result = await regeneratePlan(specId, token);
+  // #260: forward the app locale for localized limitation warnings.
+  const locale = await getLocale();
+  const result = await regeneratePlan(specId, token, { locale });
   if (result.kind === "error") {
     throw new Error(result.message);
   }

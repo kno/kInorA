@@ -210,7 +210,7 @@ describe("POST /plan-specs/:id/adapt", () => {
     // Exactly one plan_regeneration unit consumed.
     expect(billing.checkAndConsume).toHaveBeenCalledTimes(1);
     expect(billing.checkAndConsume.mock.calls[0][1]).toBe("plan_regeneration");
-    expect(generationService.startGeneration).toHaveBeenCalledWith(TENANT_A, USER_A, SPEC_ID);
+    expect(generationService.startGeneration).toHaveBeenCalledWith(TENANT_A, USER_A, SPEC_ID, "en");
   });
 
   it("409 no_adaptation when the current recommendation is not low (recovered adherence) — no write, no consume, no generation", async () => {

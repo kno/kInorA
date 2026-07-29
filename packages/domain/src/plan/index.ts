@@ -24,6 +24,7 @@ export type { RpeValidation } from "./rpe.js";
 
 export { applyEquipmentSubstitutions } from "./equipment-substitution.js";
 export { injectLimitationWarnings } from "./limitation-warnings.js";
+export type { WarningLocale } from "./limitation-warnings.js";
 export { assertNoDiagnosticLanguage } from "./diagnostic-guard.js";
 
 export {

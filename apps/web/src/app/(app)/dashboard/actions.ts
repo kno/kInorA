@@ -1,6 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { getLocale } from "next-intl/server";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { fetchDashboardSummary, type FetchDashboardSummaryResult } from "./dashboard-client";
@@ -62,6 +63,8 @@ export async function getDashboardAction(): Promise<FetchDashboardSummaryResult>
 export async function adaptPlanAction(planSpecId: string): Promise<AdaptPlanActionResult> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
-  const result = await adaptPlan(planSpecId, token);
+  // #260: forward the app locale for localized limitation warnings.
+  const locale = await getLocale();
+  const result = await adaptPlan(planSpecId, token, { locale });
   return result.kind === "ok" ? { kind: "ok" } : { kind: "error", message: result.message };
 }
