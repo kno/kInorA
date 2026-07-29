@@ -17,6 +17,13 @@ import { WEIGHT_STEP, clamp, displayNum, parseLeadingInt } from "./tracker-model
 import { Stepper } from "./Stepper";
 import styles from "../TrackerPanel.module.css";
 
+/**
+ * Selectable load-step sizes (kg) for the +/- load stepper. `WEIGHT_STEP`
+ * (2.5) is the default and stays the current behavior; the others let the
+ * user dial the increment finer (0.5/1) or coarser (5). #253.
+ */
+const WEIGHT_STEPS = [0.5, 1, WEIGHT_STEP, 5] as const;
+
 interface ExerciseCardProps {
   activeExercise?: SessionExerciseRecord;
   activeSet?: SetRecordDTO;
@@ -53,6 +60,9 @@ export function ExerciseCard({
   const [rpeInput, setRpeInput] = useState(() => seedFromSet(activeSet).rpe);
   const [note, setNote] = useState(() => seedFromSet(activeSet).note);
   const [showNote, setShowNote] = useState(false);
+  // The +/- load increment. Persists across active-set changes within the
+  // session — deliberately NOT re-seeded in the effect below. #253.
+  const [weightStep, setWeightStep] = useState<number>(WEIGHT_STEP);
   const activeSetId = activeSet?.id;
 
   useEffect(() => {
@@ -124,8 +134,8 @@ export function ExerciseCard({
           unit={t("unit.kg")}
           decrementLabel={t("weight.downLabel")}
           incrementLabel={t("weight.upLabel")}
-          onDecrement={() => setWeight((w) => clamp(+(w - WEIGHT_STEP).toFixed(1), 0, 300))}
-          onIncrement={() => setWeight((w) => clamp(+(w + WEIGHT_STEP).toFixed(1), 0, 300))}
+          onDecrement={() => setWeight((w) => clamp(+(w - weightStep).toFixed(1), 0, 300))}
+          onIncrement={() => setWeight((w) => clamp(+(w + weightStep).toFixed(1), 0, 300))}
           disabled={!canRecord}
         />
         <Stepper
@@ -139,6 +149,34 @@ export function ExerciseCard({
           onIncrement={() => setReps((r) => clamp(r + 1, 0, 99))}
           disabled={!canRecord}
         />
+      </div>
+
+      <div
+        className={styles.stepSizeRow}
+        role="group"
+        aria-label={t("load.stepGroupLabel")}
+      >
+        <span className={styles.stepSizeLabel}>{t("load.stepLabel")}</span>
+        <div className={styles.stepSizeOptions}>
+          {WEIGHT_STEPS.map((step) => {
+            const selected = weightStep === step;
+            return (
+              <button
+                key={step}
+                type="button"
+                className={`${styles.stepSizeOption} ${
+                  selected ? styles.stepSizeOptionActive : ""
+                }`}
+                aria-pressed={selected}
+                aria-label={t("load.stepOptionA11y", { step })}
+                onClick={() => setWeightStep(step)}
+                disabled={!canRecord}
+              >
+                {displayNum(step)}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className={styles.secondaryRow}>

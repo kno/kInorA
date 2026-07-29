@@ -365,6 +365,74 @@
   font-size: 13px;
 }
 
+/* ---- Load step-size selector (#253) ---- */
+
+.stepSizeRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.stepSizeLabel {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.stepSizeOptions {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.stepSizeOption {
+  min-width: 44px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.05s;
+}
+
+.stepSizeOption:hover:not(:disabled) {
+  background: var(--border);
+  color: var(--fg);
+}
+
+.stepSizeOption:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.stepSizeOption:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.stepSizeOptionActive,
+.stepSizeOptionActive:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+
+.stepSizeOption:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* ---- Optional RPE + note controls ---- */
 
 .secondaryRow {
