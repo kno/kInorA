@@ -445,7 +445,10 @@
       "aria": "Adjust load and reps"
     },
     "load": {
-      "label": "Load"
+      "label": "Load",
+      "stepLabel": "Step",
+      "stepGroupLabel": "Load increment",
+      "stepOptionA11y": "Set increment to {step} kg"
     },
     "reps": {
       "label": "Reps",

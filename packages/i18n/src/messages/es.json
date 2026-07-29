@@ -445,7 +445,10 @@
       "aria": "Ajustar carga y repeticiones"
     },
     "load": {
-      "label": "Carga"
+      "label": "Carga",
+      "stepLabel": "Paso",
+      "stepGroupLabel": "Incremento de carga",
+      "stepOptionA11y": "Fijar incremento en {step} kg"
     },
     "reps": {
       "label": "Reps",
