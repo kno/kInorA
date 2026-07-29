@@ -4,6 +4,7 @@ import { OpenAIAudioAdapter } from "./openai-audio-adapter.js";
 import { GoogleSpeechTranscriber } from "./google-speech-transcriber.js";
 import { DeepgramSpeechTranscriber } from "./deepgram-speech-transcriber.js";
 import { GeminiSpeechSynthesizer } from "./gemini-speech-synthesizer.js";
+import { DeepgramSpeechSynthesizer } from "./deepgram-speech-synthesizer.js";
 
 /**
  * Env-driven voice provider selection (feat/voice-provider-adapters).
@@ -42,9 +43,11 @@ export function buildTranscriber(): SpeechTranscriber {
 
 /**
  * Build the TTS synthesizer from `VOICE_TTS_PROVIDER`
- * (`openai` | `google`, default `openai`). `google` → `GeminiSpeechSynthesizer`
- * (Gemini TTS, returns `audio/wav`), enabling a fully OpenAI-free voice stack
- * alongside `VOICE_STT_PROVIDER=google`. Unknown/unset → `openai` (fail-safe
+ * (`openai` | `google` | `deepgram`, default `openai`). `google` →
+ * `GeminiSpeechSynthesizer` (Gemini TTS, returns `audio/wav`); `deepgram` →
+ * `DeepgramSpeechSynthesizer` (Aura-2 TTS, returns a container-wrapped
+ * `audio/wav`), enabling a fully OpenAI-free voice stack alongside
+ * `VOICE_STT_PROVIDER=google`/`deepgram`. Unknown/unset → `openai` (fail-safe
  * back-compat — a misconfigured env can never leave voice with no adapter).
  */
 export function buildSynthesizer(): SpeechSynthesizer {
@@ -52,6 +55,8 @@ export function buildSynthesizer(): SpeechSynthesizer {
   switch (provider) {
     case "google":
       return new GeminiSpeechSynthesizer();
+    case "deepgram":
+      return new DeepgramSpeechSynthesizer();
     case "openai":
     default:
       return new OpenAIAudioAdapter();

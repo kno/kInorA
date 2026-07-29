@@ -4,6 +4,7 @@ import { OpenAIAudioAdapter } from "../openai-audio-adapter.js";
 import { GoogleSpeechTranscriber } from "../google-speech-transcriber.js";
 import { DeepgramSpeechTranscriber } from "../deepgram-speech-transcriber.js";
 import { GeminiSpeechSynthesizer } from "../gemini-speech-synthesizer.js";
+import { DeepgramSpeechSynthesizer } from "../deepgram-speech-synthesizer.js";
 
 describe("voice-provider-factory — buildTranscriber", () => {
   const OLD = process.env["VOICE_STT_PROVIDER"];
@@ -63,6 +64,11 @@ describe("voice-provider-factory — buildSynthesizer", () => {
   it("returns a GeminiSpeechSynthesizer for VOICE_TTS_PROVIDER=google", () => {
     process.env["VOICE_TTS_PROVIDER"] = "google";
     expect(buildSynthesizer()).toBeInstanceOf(GeminiSpeechSynthesizer);
+  });
+
+  it("returns a DeepgramSpeechSynthesizer for VOICE_TTS_PROVIDER=deepgram", () => {
+    process.env["VOICE_TTS_PROVIDER"] = "deepgram";
+    expect(buildSynthesizer()).toBeInstanceOf(DeepgramSpeechSynthesizer);
   });
 
   it("falls back to OpenAIAudioAdapter for an unknown provider value (fail-safe)", () => {
