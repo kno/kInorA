@@ -23,9 +23,12 @@ describe("MemoryPage", () => {
     listUserMemories.mockResolvedValue({ kind: "ok", data: { settings: { enabled: true }, memories: [] } });
 
     const page = await MemoryPage();
-    const memoryClient = page.props.children[2];
+    // Issue #252: the shell renders the MemoryPageClient as its ONLY child — the
+    // title/description live in the client, not duplicated here in the shell.
+    const memoryClient = page.props.children;
 
     expect(page.props.className).toContain("kin-page");
+    expect(Array.isArray(page.props.children)).toBe(false);
     expect(memoryClient.props.initialError).toBeNull();
     expect(memoryClient.props.initialData).toEqual({ settings: { enabled: true }, memories: [] });
   });
@@ -35,7 +38,7 @@ describe("MemoryPage", () => {
     listUserMemories.mockResolvedValue({ kind: "error", message: "api_unreachable" });
 
     const page = await MemoryPage();
-    const memoryClient = page.props.children[2];
+    const memoryClient = page.props.children;
 
     expect(memoryClient.props.initialData).toBeNull();
     expect(memoryClient.props.initialError).toBe("api_unreachable");

@@ -77,6 +77,27 @@ describe("PlanStatusView — ready state", () => {
   });
 });
 
+describe("PlanStatusView — limitation warnings (issue #250)", () => {
+  const dupWarningProgram: WorkoutProgram = {
+    weeklySessions: sampleProgram.weeklySessions,
+    limitationWarnings: [
+      "Avoid deep knee flexion.",
+      "Avoid deep knee flexion.",
+      "Keep the spine neutral.",
+    ],
+  };
+
+  it("renders each distinct limitation warning only once (dedupes repeated notes)", () => {
+    renderWithIntl(
+      <PlanStatusView status="ready" planId="plan-1" program={dupWarningProgram} />,
+    );
+    // The backend can emit the same advisory string per limitation; the UI must
+    // collapse identical notes so they are not repeated verbatim.
+    expect(screen.getAllByText("Avoid deep knee flexion.")).toHaveLength(1);
+    expect(screen.getAllByText("Keep the spine neutral.")).toHaveLength(1);
+  });
+});
+
 describe("PlanStatusView — failed state", () => {
   it("renders an error message when status is 'failed'", () => {
     renderWithIntl(<PlanStatusView status="failed" planId="plan-1" />);

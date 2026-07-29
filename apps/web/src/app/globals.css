@@ -163,6 +163,26 @@ a {
 
 .kin-card--center {
   text-align: center;
+  /* Center fixed-size flex children (e.g. the OrbitProgress loader ring, which
+   * has an explicit width and so would otherwise sit flush-left in the column).
+   * Issue #249. */
+  align-items: center;
+}
+
+/* Limitation / advisory notes card (issue #250). Uses the design-system warning
+ * accent (see plan-week-view `.limitationBanner`) for a bit more prominence, and
+ * a top margin so it isn't flush against the session content / CTA above it. */
+.kin-card--warning {
+  margin-top: var(--sp-4);
+  border-left: 3px solid var(--warning);
+  background: color-mix(in oklab, var(--warning) 8%, var(--surface));
+}
+
+.kin-card--warning .kin-subtitle {
+  color: var(--warning);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--fs-sm);
 }
 
 /* -------------------------------------------------------------------------
@@ -1458,6 +1478,9 @@ a {
   margin: 0 auto;
   display: grid;
   gap: var(--sp-4);
+  /* Vertical breathing room so the page title isn't flush to the top of the
+   * content area (the AppShell `.main` provides no top padding). Issue #248. */
+  padding-top: var(--sp-5);
 }
 
 /* Topbar (page heading + date pill + search + notifications) */
@@ -2071,6 +2094,13 @@ a {
 
 .dash-empty {
   text-align: center;
+  /* Center the copy + CTA and give vertical rhythm so the button isn't flush
+   * against the body text. Issue #248. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-block: var(--sp-6);
 }
 
 /* Responsive */
