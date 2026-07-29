@@ -383,14 +383,17 @@ describe("POST /plan-specs/:id/adapt", () => {
     expect(key2).toBe("client-retry-key-1");
   });
 
-  // --- Review fix (B1 4R, atomicity WARNING — minimal) --------------------
+  // --- #244: atomic write + startGeneration via compensating rollback ------
   //
-  // consume → write(daysPerWeek) → startGeneration is non-atomic. At minimum a
-  // synchronous startGeneration failure (after a successful consume + write)
-  // MUST surface as an error to the caller — never a silent 202 — so the
-  // caller knows to retry. No transaction is required (matches the accepted
-  // `/regenerate` shape).
-  it("a synchronous startGeneration failure surfaces an error (not a silent 202) after quota was consumed and the spec was written", async () => {
+  // consume → write(daysPerWeek) → startGeneration is non-atomic. If
+  // startGeneration throws SYNCHRONOUSLY after the daysPerWeek write already
+  // committed, the spec would be left at the REDUCED frequency with a consumed
+  // quota unit but NO fresh generation. The handler must perform a compensating
+  // write restoring the ORIGINAL frequency (`suggestedChange.fromDays`) and then
+  // rethrow so the caller still gets the error. The consumed unit is NOT
+  // refunded (pre-existing behavior; the billing port exposes no reversal) — the
+  // spec self-heals on the next retry.
+  it("rolls back the daysPerWeek write when startGeneration fails synchronously, then surfaces the error", async () => {
     const update = vi.fn().mockResolvedValue(1);
     const billing = buildAllowBilling();
     const generationService = buildGenerationService({ result: new Error("generation boom") });
@@ -403,11 +406,34 @@ describe("POST /plan-specs/:id/adapt", () => {
 
     const res = await post(app);
 
+    // The generation error still propagates to the client (never a silent 202).
     expect(res.statusCode).not.toBe(202);
     expect(res.statusCode).toBeGreaterThanOrEqual(500);
-    // The consume and the write already happened (non-atomic, matches
-    // /regenerate) — only the generation start itself failed.
-    expect(update).toHaveBeenCalledTimes(1);
+    // Compensating rollback: first the reduced write (toDays=3), then the
+    // restore to the original frequency (fromDays=4).
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenNthCalledWith(1, TENANT_A, USER_A, SPEC_ID, 3);
+    expect(update).toHaveBeenNthCalledWith(2, TENANT_A, USER_A, SPEC_ID, 4);
+    // The unit was consumed exactly once and is not refunded (self-healing on retry).
     expect(billing.checkAndConsume).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT roll back on the happy path — updateSpecDaysPerWeek called once with toDays, 202", async () => {
+    const update = vi.fn().mockResolvedValue(1);
+    const billing = buildAllowBilling();
+    const generationService = buildGenerationService();
+    app = await buildTestApp({
+      db: buildSessionOnlyDb(buildSessionRow()),
+      generationService,
+      billing,
+      repo: buildRepo(update),
+    });
+
+    const res = await post(app);
+
+    expect(res.statusCode).toBe(202);
+    expect(res.json()).toEqual({ planId: PLAN_ID, status: "generating" });
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(TENANT_A, USER_A, SPEC_ID, 3);
   });
 });

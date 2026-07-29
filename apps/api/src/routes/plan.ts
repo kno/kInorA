@@ -784,12 +784,35 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         // generation reads the spec).
         await updateSpecDaysPerWeek(tenantId, userId, id, toDays);
 
-        const result = await generationService.startGeneration(
-          tenantId,
-          userId,
-          id,
-          resolveWarningLocale(request)
-        );
+        // #244: make the write + startGeneration atomic via a compensating
+        // rollback. If startGeneration throws SYNCHRONOUSLY after the
+        // daysPerWeek write already committed (e.g. its internal
+        // `createGenerating` insert fails, or a race makes `loadValidatedSpec`
+        // throw), restore the ORIGINAL frequency so the spec is not left
+        // reduced with a consumed unit and NO fresh generation. Then rethrow so
+        // the client still gets the error (the app error handler maps it).
+        let result;
+        try {
+          result = await generationService.startGeneration(
+            tenantId,
+            userId,
+            id,
+            resolveWarningLocale(request)
+          );
+        } catch (err) {
+          // Best-effort restore to the original frequency (suggestedChange.fromDays).
+          // If the restore itself throws, swallow it and let the ORIGINAL
+          // startGeneration error propagate (the spec remains self-healing on the
+          // next regenerate/adapt). The consumed plan_regeneration unit is NOT
+          // refunded here: the billing port exposes no reversal API (same as
+          // /regenerate) and the unit is intentionally spent — a retry re-consumes.
+          try {
+            await updateSpecDaysPerWeek(tenantId, userId, id, suggestedChange.fromDays);
+          } catch {
+            /* swallow — the original startGeneration error is the meaningful one */
+          }
+          throw err;
+        }
         return reply.code(202).send(result);
       }
     );
