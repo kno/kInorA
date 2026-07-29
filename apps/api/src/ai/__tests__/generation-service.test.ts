@@ -261,6 +261,81 @@ describe("PlanGenerationService", () => {
     });
   });
 
+  describe("localized limitation warnings (#260)", () => {
+    const specWithLimitations = {
+      ...confirmedSpec,
+      limitations: [{ text: "dolor lumbar", isWarning: true }],
+    };
+
+    it("defaults to English deterministic warnings when no locale is passed", async () => {
+      vi.useFakeTimers();
+      const specRepo = buildMockSpecRepo({ specJson: specWithLimitations });
+      const planRepo = buildMockPlanRepo();
+      vi.spyOn(generator, "generate").mockResolvedValue({
+        weeklySessions: mockProgram.weeklySessions,
+        limitationWarnings: [],
+      });
+
+      const service = new PlanGenerationService(generator, specRepo as never, planRepo as never);
+      await service.startGeneration(TENANT_A, USER_A, SPEC_ID);
+      await vi.runAllTimersAsync();
+
+      const [, , program] = planRepo.markReady.mock.calls[0] as [string, string, WorkoutProgram];
+      expect(program.limitationWarnings).toEqual([
+        "Limitation: dolor lumbar — Consult a professional before attempting exercises that stress this area.",
+      ]);
+      vi.useRealTimers();
+    });
+
+    it("threads the 'es' locale into the deterministic warnings", async () => {
+      vi.useFakeTimers();
+      const specRepo = buildMockSpecRepo({ specJson: specWithLimitations });
+      const planRepo = buildMockPlanRepo();
+      vi.spyOn(generator, "generate").mockResolvedValue({
+        weeklySessions: mockProgram.weeklySessions,
+        limitationWarnings: [],
+      });
+
+      const service = new PlanGenerationService(generator, specRepo as never, planRepo as never);
+      await service.startGeneration(TENANT_A, USER_A, SPEC_ID, "es");
+      await vi.runAllTimersAsync();
+
+      const [, , program] = planRepo.markReady.mock.calls[0] as [string, string, WorkoutProgram];
+      expect(program.limitationWarnings).toEqual([
+        "Limitación: dolor lumbar — Consulta con un profesional antes de realizar ejercicios que exijan esta zona.",
+      ]);
+      vi.useRealTimers();
+    });
+
+    it("DROPS an LLM-emitted English warning and replaces it with the localized one", async () => {
+      vi.useFakeTimers();
+      const specRepo = buildMockSpecRepo({ specJson: specWithLimitations });
+      const planRepo = buildMockPlanRepo();
+      // The raw LLM program carries an English warning authored by the model.
+      vi.spyOn(generator, "generate").mockResolvedValue({
+        weeklySessions: mockProgram.weeklySessions,
+        limitationWarnings: [
+          "Limitation: dolor lumbar — Consult a professional before attempting exercises that stress this area.",
+          "Please stretch before every workout.",
+        ],
+      });
+
+      const service = new PlanGenerationService(generator, specRepo as never, planRepo as never);
+      await service.startGeneration(TENANT_A, USER_A, SPEC_ID, "es");
+      await vi.runAllTimersAsync();
+
+      const [, , program] = planRepo.markReady.mock.calls[0] as [string, string, WorkoutProgram];
+      // ONLY the localized deterministic warning survives — no English leak.
+      expect(program.limitationWarnings).toEqual([
+        "Limitación: dolor lumbar — Consulta con un profesional antes de realizar ejercicios que exijan esta zona.",
+      ]);
+      expect(program.limitationWarnings).not.toContain(
+        "Please stretch before every workout.",
+      );
+      vi.useRealTimers();
+    });
+  });
+
   describe("background task — failure path", () => {
     it("calls markFailed with tenantId + planId + error message when generator throws", async () => {
       vi.useFakeTimers();

@@ -11,6 +11,7 @@ import { derivePreferenceScores } from "@kinora/domain";
 import { mergePlanSpecDraft } from "@kinora/domain/plan";
 import type { MergePlanSpecDraftResult } from "@kinora/domain/plan";
 import type { BillingFeature, DashboardSummaryDTO, PlanSpec, PlanSpecDraft } from "@kinora/contracts";
+import type { WarningLocale } from "@kinora/domain";
 import type { PlanGenerationService } from "../ai/generation-service.js";
 import type { ConsumeDecision } from "../billing/types.js";
 import type { ChatEntitlementPort } from "../billing/chat-entitlement.js";
@@ -274,6 +275,25 @@ function draftChanged(next: PlanSpecDraft, prev: PlanSpecDraft): boolean {
   return fields.some(
     (f) => JSON.stringify(next[f] ?? null) !== JSON.stringify(prev[f] ?? null),
   );
+}
+
+/** HTTP header carrying the caller's app locale for localized plan copy (#260). */
+export const LOCALE_HEADER = "x-kinora-locale";
+
+/**
+ * Resolve the DETERMINISTIC limitation-warning locale (#260) from the
+ * `x-kinora-locale` request header. The web/mobile client sends its resolved
+ * next-intl locale; we NEVER trust it beyond a strict whitelist of the app's
+ * two catalogs. Anything starting with `es` (e.g. `es`, `es-ES`, `es-419`)
+ * maps to `"es"`; everything else — including a missing/blank/array header —
+ * falls back to `"en"`.
+ */
+export function resolveWarningLocale(request: FastifyRequest): WarningLocale {
+  const header = request.headers[LOCALE_HEADER];
+  const raw = Array.isArray(header) ? header[0] : header;
+  return typeof raw === "string" && raw.trim().toLowerCase().startsWith("es")
+    ? "es"
+    : "en";
 }
 
 /** The shared draft row as read by the chat turn (spec + optimistic version). */
@@ -617,7 +637,12 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         }
       }
 
-      const result = await generationService.startGeneration(tenantId, userId, id);
+      const result = await generationService.startGeneration(
+        tenantId,
+        userId,
+        id,
+        resolveWarningLocale(request)
+      );
       return reply.code(200).send(result);
     }
   );
@@ -654,7 +679,12 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         }
       }
 
-      const result = await generationService.startGeneration(tenantId, userId, id);
+      const result = await generationService.startGeneration(
+        tenantId,
+        userId,
+        id,
+        resolveWarningLocale(request)
+      );
       return reply.code(202).send(result);
     }
   );
@@ -754,7 +784,12 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         // generation reads the spec).
         await updateSpecDaysPerWeek(tenantId, userId, id, toDays);
 
-        const result = await generationService.startGeneration(tenantId, userId, id);
+        const result = await generationService.startGeneration(
+          tenantId,
+          userId,
+          id,
+          resolveWarningLocale(request)
+        );
         return reply.code(202).send(result);
       }
     );

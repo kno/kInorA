@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { injectLimitationWarnings } from "../limitation-warnings.js";
+import type { WarningLocale } from "../limitation-warnings.js";
 import type { WorkoutProgram, PlanLimitation } from "@kinora/contracts";
 
 function makeProgram(overrides?: Partial<WorkoutProgram>): WorkoutProgram {
@@ -142,6 +143,64 @@ describe("injectLimitationWarnings — pure function", () => {
     injectLimitationWarnings(program, limitations);
 
     expect(program.limitationWarnings).toBe(originalWarnings);
+    expect(program.limitationWarnings).toHaveLength(0);
+  });
+});
+
+describe("injectLimitationWarnings — locale-aware templates (#260)", () => {
+  it("defaults to English when no locale is passed", () => {
+    const program = makeProgram();
+    const result = injectLimitationWarnings(program, [makeLimitation("lower back pain")]);
+
+    const [w] = result.limitationWarnings;
+    expect(w).toBe(
+      "Limitation: lower back pain — Consult a professional before attempting exercises that stress this area.",
+    );
+  });
+
+  it("renders the English template for the 'en' locale", () => {
+    const program = makeProgram();
+    const result = injectLimitationWarnings(program, [makeLimitation("knee injury")], "en");
+
+    const [w] = result.limitationWarnings;
+    expect(w).toBe(
+      "Limitation: knee injury — Consult a professional before attempting exercises that stress this area.",
+    );
+  });
+
+  it("renders the neutral Spanish template for the 'es' locale (no voseo)", () => {
+    const program = makeProgram();
+    const result = injectLimitationWarnings(program, [makeLimitation("dolor lumbar")], "es");
+
+    const [w] = result.limitationWarnings;
+    expect(w).toBe(
+      "Limitación: dolor lumbar — Consulta con un profesional antes de realizar ejercicios que exijan esta zona.",
+    );
+    // Neutral register — must NOT use voseo ("consultá"/"realizá").
+    expect(w).not.toMatch(/consultá|realizá/);
+  });
+
+  it("still deduplicates within the same locale", () => {
+    const existing =
+      "Limitación: dolor lumbar — Consulta con un profesional antes de realizar ejercicios que exijan esta zona.";
+    const program = makeProgram({ limitationWarnings: [existing] });
+    const result = injectLimitationWarnings(program, [makeLimitation("dolor lumbar")], "es");
+
+    expect(result.limitationWarnings).toHaveLength(1);
+    expect(result.limitationWarnings[0]).toBe(existing);
+  });
+
+  it("returns the program unchanged for empty limitations regardless of locale", () => {
+    const program = makeProgram({ limitationWarnings: ["existing"] });
+    const result = injectLimitationWarnings(program, [], "es");
+    expect(result).toEqual(program);
+  });
+
+  it("does not mutate the input program for the 'es' locale", () => {
+    const program = makeProgram({ limitationWarnings: [] });
+    const original = program.limitationWarnings;
+    injectLimitationWarnings(program, [makeLimitation("dolor de rodilla")], "es");
+    expect(program.limitationWarnings).toBe(original);
     expect(program.limitationWarnings).toHaveLength(0);
   });
 });
