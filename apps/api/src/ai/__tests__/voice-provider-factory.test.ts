@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { buildTranscriber, buildSynthesizer } from "../voice-provider-factory.js";
 import { OpenAIAudioAdapter } from "../openai-audio-adapter.js";
 import { GoogleSpeechTranscriber } from "../google-speech-transcriber.js";
+import { DeepgramSpeechTranscriber } from "../deepgram-speech-transcriber.js";
 import { GeminiSpeechSynthesizer } from "../gemini-speech-synthesizer.js";
 
 describe("voice-provider-factory — buildTranscriber", () => {
@@ -25,6 +26,11 @@ describe("voice-provider-factory — buildTranscriber", () => {
   it("returns a GoogleSpeechTranscriber for VOICE_STT_PROVIDER=google", () => {
     process.env["VOICE_STT_PROVIDER"] = "google";
     expect(buildTranscriber()).toBeInstanceOf(GoogleSpeechTranscriber);
+  });
+
+  it("returns a DeepgramSpeechTranscriber for VOICE_STT_PROVIDER=deepgram", () => {
+    process.env["VOICE_STT_PROVIDER"] = "deepgram";
+    expect(buildTranscriber()).toBeInstanceOf(DeepgramSpeechTranscriber);
   });
 
   it("falls back to OpenAIAudioAdapter for an unknown provider value (fail-safe)", () => {

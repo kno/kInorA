@@ -2,6 +2,7 @@ import type { SpeechTranscriber } from "./speech-transcriber-port.js";
 import type { SpeechSynthesizer } from "./speech-synthesizer-port.js";
 import { OpenAIAudioAdapter } from "./openai-audio-adapter.js";
 import { GoogleSpeechTranscriber } from "./google-speech-transcriber.js";
+import { DeepgramSpeechTranscriber } from "./deepgram-speech-transcriber.js";
 import { GeminiSpeechSynthesizer } from "./gemini-speech-synthesizer.js";
 
 /**
@@ -23,13 +24,16 @@ import { GeminiSpeechSynthesizer } from "./gemini-speech-synthesizer.js";
 
 /**
  * Build the STT transcriber from `VOICE_STT_PROVIDER`
- * (`openai` | `google`, default `openai`). Unknown → `openai` (fail-safe).
+ * (`openai` | `google` | `deepgram`, default `openai`). Unknown → `openai`
+ * (fail-safe).
  */
 export function buildTranscriber(): SpeechTranscriber {
   const provider = process.env["VOICE_STT_PROVIDER"];
   switch (provider) {
     case "google":
       return new GoogleSpeechTranscriber();
+    case "deepgram":
+      return new DeepgramSpeechTranscriber();
     case "openai":
     default:
       return new OpenAIAudioAdapter();
