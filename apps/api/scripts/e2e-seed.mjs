@@ -199,3 +199,120 @@ export async function demoteToMember(tenantId, userId) {
     );
   }
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A minimal-but-VALID confirmed plan spec. Shape mirrors the real
+ * `PlanSpec` and must pass `assertPlanSpecShape` (apps/api/src/plan/boundary.ts)
+ * so the `/plan-specs/:id/adapt` route's `assertGeneratable` +
+ * `loadValidatedSpec` accept it and the flow can reach the 202. `daysPerWeek`
+ * is stored top-level (the adapt route rewrites it via `jsonb_set`).
+ * @param {number} daysPerWeek
+ */
+function sampleSpecJson(daysPerWeek) {
+  return {
+    goal: "strength",
+    location: "gym",
+    daysPerWeek,
+    sessionDurationMinutes: 60,
+    equipment: ["barbell"],
+    limitations: [],
+    preferenceScores: {
+      strength: 0.9,
+      hypertrophy: 0.6,
+      endurance: 0.2,
+      mobility: 0.3,
+    },
+    confirmed: true,
+  };
+}
+
+/**
+ * A minimal ready-plan program body. The adherence derivation only reads
+ * `programJson.weeklySessions.length` (→ `plannedSessionsPerWeek`), so the
+ * array length is what matters; `program_json` is read as loose JSONB (no
+ * schema validation on the read path).
+ * @param {number} daysPerWeek
+ */
+function sampleProgramJson(daysPerWeek) {
+  return {
+    weeklySessions: Array.from({ length: daysPerWeek }, (_, i) => ({
+      day: i + 1,
+      title: `Session ${i + 1}`,
+      exercises: [{ name: "Squat", sets: 4, reps: "8-12", restSeconds: 90 }],
+    })),
+    limitationWarnings: [],
+  };
+}
+
+/**
+ * Seed a confirmed plan_spec + a READY workout_plan + N completed
+ * workout_sessions so the dashboard adherence→adaptation derivation
+ * (`computeAdherenceAdaptation`) resolves to a concrete level for the tenant.
+ *
+ * The derivation is: `adherence = completedInWindow / (plannedSessionsPerWeek * periodWeeks)`
+ * over a rolling 4-week window, where `plannedSessionsPerWeek =
+ * program_json.weeklySessions.length` and `completedInWindow` = completed
+ * sessions whose `completed_at` falls in `[now-28d, now]`. `< 0.70` → level
+ * `"low"` + a `reduce_frequency` suggestion (`fromDays = daysPerWeek`,
+ * `toDays = daysPerWeek - 1`). The plan's `created_at` is set 35 days in the
+ * past so the domain does NOT suppress the signal as `insufficient_data`
+ * (which it does when the plan is younger than the window).
+ *
+ * Example: `daysPerWeek: 4` ⇒ plannedInWindow = 4 × 4 = 16; seed 3 completed
+ * → 3/16 = 18.75% < 70% → `"low"`; seed 15 completed → 15/16 = 93.75% → `"ok"`.
+ *
+ * @param {{ tenantId: string, userId: string, daysPerWeek: number, completedSessions: number }} input
+ * @returns {Promise<{ planSpecId: string, workoutPlanId: string }>}
+ */
+export async function seedAdherencePlan(input) {
+  const { tenantId, userId, daysPerWeek, completedSessions } = input;
+  const now = Date.now();
+  // Older than the 4-week window so the adaptation is not `insufficient_data`.
+  const planCreatedAt = new Date(now - 35 * DAY_MS);
+
+  const specRes = await db().query(
+    `INSERT INTO plan_specs (tenant_id, user_id, spec_json, confirmed, created_at)
+     VALUES ($1, $2, $3::jsonb, true, $4)
+     RETURNING id`,
+    [tenantId, userId, JSON.stringify(sampleSpecJson(daysPerWeek)), planCreatedAt],
+  );
+  const planSpecId = specRes.rows[0].id;
+
+  const planRes = await db().query(
+    `INSERT INTO workout_plans
+       (tenant_id, user_id, plan_spec_id, status, name, program_json, created_at, updated_at)
+     VALUES ($1, $2, $3, 'ready', $4, $5::jsonb, $6, $6)
+     RETURNING id`,
+    [
+      tenantId,
+      userId,
+      planSpecId,
+      "E2E Adherence Plan",
+      JSON.stringify(sampleProgramJson(daysPerWeek)),
+      planCreatedAt,
+    ],
+  );
+  const workoutPlanId = planRes.rows[0].id;
+
+  // Completed sessions spread evenly across the last 4 weeks — every
+  // `completed_at` lands inside `[now-27d, now-1d]` (⊂ the [now-28d, now]
+  // window). All are `status='completed'`, so the single-active-per-user
+  // partial unique index (status='active') never trips.
+  for (let i = 0; i < completedSessions; i += 1) {
+    const spread =
+      completedSessions <= 1
+        ? 1
+        : Math.round(1 + (i * 26) / (completedSessions - 1));
+    const completedAt = new Date(now - spread * DAY_MS);
+    await db().query(
+      `INSERT INTO workout_sessions
+         (tenant_id, user_id, workout_plan_id, status, day, started_at, completed_at)
+       VALUES ($1, $2, $3, 'completed', $4, $5, $5)`,
+      [tenantId, userId, workoutPlanId, (i % daysPerWeek) + 1, completedAt],
+    );
+  }
+
+  return { planSpecId, workoutPlanId };
+}
