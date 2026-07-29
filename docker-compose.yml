@@ -52,6 +52,17 @@ services:
       # CREATE EXTENSION vector.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY}
+      # Deepgram STT (VOICE_STT_PROVIDER=deepgram). MUST be forwarded — compose
+      # only injects vars listed under environment: (same forwarding gotcha as
+      # STRIPE_*/VOICE_*); without it the Deepgram transcriber falls back to the
+      # placeholder key and every live STT call fails in prod.
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY}
+      # Deepgram TTS voice (VOICE_TTS_PROVIDER=deepgram). Has a sane default
+      # (aura-2-carina-es, peninsular es-es), so this is only needed to swap the
+      # voice without a redeploy. Same forwarding gotcha: compose only injects
+      # vars listed under environment:, so without this line a VPS .env override
+      # would be silently ignored and the adapter would use its built-in default.
+      DEEPGRAM_TTS_MODEL: ${DEEPGRAM_TTS_MODEL:-aura-2-carina-es}
       # 13 voice provider selection. MUST be forwarded — the voice factory reads
       # these at boot; without them the container ignores the VPS .env and falls
       # back to `openai`, so the OpenAI-free Google (Gemini) STT+TTS stack is dead
