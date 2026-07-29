@@ -51,7 +51,7 @@ export function TrackerPanel({
   const model = deriveTrackerModel(session);
   const restDuration = model.activeExercise?.restSeconds ?? 60;
 
-  const timer = useSessionTimer(session.startedAt, model.isCompleted);
+  const timer = useSessionTimer(session.startedAt, model.isCompleted, session.id);
   const rest = useRestTimer(restDuration);
 
   const handleComplete = useCallback(
@@ -68,6 +68,7 @@ export function TrackerPanel({
           paused={timer.paused}
           isCompleted={model.isCompleted}
           onTogglePause={timer.togglePause}
+          onRestart={timer.restart}
           onComplete={handleComplete}
         />
 

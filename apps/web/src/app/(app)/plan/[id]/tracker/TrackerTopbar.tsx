@@ -8,6 +8,7 @@ interface TrackerTopbarProps {
   paused: boolean;
   isCompleted: boolean;
   onTogglePause: () => void;
+  onRestart: () => void;
   onComplete: () => void;
 }
 
@@ -18,6 +19,7 @@ export function TrackerTopbar({
   paused,
   isCompleted,
   onTogglePause,
+  onRestart,
   onComplete,
 }: TrackerTopbarProps) {
   const t = useTranslations("tracker");
@@ -50,6 +52,24 @@ export function TrackerTopbar({
               <rect x="9" y="2" width="4" height="12" rx="1.5" fill="currentColor" />
             </svg>
           )}
+        </button>
+        <button
+          type="button"
+          className={styles.iconBtn}
+          onClick={onRestart}
+          aria-label={t("restartLabel")}
+          disabled={isCompleted}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path
+              d="M8 2.5a5.5 5.5 0 1 0 5.2 3.7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+            <polygon points="8,0 8,5 11,2.5" fill="currentColor" />
+          </svg>
         </button>
         <button
           type="button"

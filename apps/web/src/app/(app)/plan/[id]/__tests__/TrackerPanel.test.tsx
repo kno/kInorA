@@ -252,6 +252,18 @@ describe("TrackerPanel — redesigned live tracker", () => {
     expect(screen.getAllByText(/coming soon/i).length).toBeGreaterThanOrEqual(2);
   });
 
+  it("renders a restart control and resets the displayed timer on click (#251)", () => {
+    // Session started long ago → the live timer shows a large elapsed value.
+    renderPanel({ startedAt: new Date(Date.now() - 3_600_000).toISOString() });
+
+    const restart = screen.getByRole("button", { name: /restart timer/i });
+    expect(restart).toBeTruthy();
+
+    fireEvent.click(restart);
+    // Restart zeroes the display without needing a server round-trip.
+    expect(screen.getByText("00:00")).toBeTruthy();
+  });
+
   it("wires Complete workout to onCompleteSession", () => {
     const { onCompleteSession } = renderPanel();
 
