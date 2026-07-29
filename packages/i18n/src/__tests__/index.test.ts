@@ -127,7 +127,9 @@ describe("@kinora/i18n package assembly", () => {
         // own scoped count test below.
         !key.startsWith("home."),
     );
-    expect(nonBillingKeys).toHaveLength(609);
+    // +1 `tracker.restartLabel` authored for #251 (restart-timer control on
+    // the live tracker topbar; pause/restart now persist across navigation).
+    expect(nonBillingKeys).toHaveLength(610);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
