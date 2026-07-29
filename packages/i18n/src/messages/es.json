@@ -422,6 +422,7 @@
     "timerLabel": "Tiempo",
     "pauseLabel": "Pausar sesión",
     "resumeLabel": "Reanudar sesión",
+    "restartLabel": "Reiniciar cronómetro",
     "progress": {
       "label": "Ejercicio {n} de {m}",
       "valuetext": "Ejercicio {n} de {m}, {percent}%",

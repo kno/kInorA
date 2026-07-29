@@ -14,14 +14,54 @@ import { useSessionTimer } from "../use-session-timer";
 const T0 = 1_700_000_000_000; // fixed epoch ms for deterministic runs
 const iso = (ms: number) => new Date(ms).toISOString();
 
+/**
+ * jsdom in this project's vitest setup does not provide `window.localStorage`,
+ * so we install a minimal Map-backed stub to exercise the hook's persistence.
+ * Persistence is what fixes #251 (pause/restart surviving navigation), and it
+ * must degrade gracefully when storage is unavailable/throws.
+ */
+function installLocalStorage(
+  impl: Pick<Storage, "getItem" | "setItem"> & Partial<Storage>,
+): void {
+  Object.defineProperty(window, "localStorage", {
+    value: impl,
+    configurable: true,
+    writable: true,
+  });
+}
+
+function makeMapStorage(): Storage {
+  const store = new Map<string, string>();
+  return {
+    getItem: (key) => (store.has(key) ? store.get(key)! : null),
+    setItem: (key, value) => {
+      store.set(key, String(value));
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+    clear: () => {
+      store.clear();
+    },
+    key: (index) => [...store.keys()][index] ?? null,
+    get length() {
+      return store.size;
+    },
+  } as Storage;
+}
+
 describe("useSessionTimer", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(T0);
+    installLocalStorage(makeMapStorage());
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
+    // Tear the stub down between tests.
+    delete (window as unknown as { localStorage?: Storage }).localStorage;
   });
 
   it("seeds elapsed from startedAt", () => {
@@ -112,5 +152,159 @@ describe("useSessionTimer", () => {
     });
     // No interval / listener attached while frozen → value stays put.
     expect(result.current.elapsed).toBe(42);
+  });
+
+  // ─── #251: pause / restart must PERSIST across navigation (unmount) ───────
+
+  it("keeps the timer paused and frozen across an unmount/remount with the same sessionId (the reported bug)", () => {
+    const sessionId = "sess-persist-pause";
+    const first = renderHook(() => useSessionTimer(iso(T0), false, sessionId));
+
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(first.result.current.elapsed).toBe(10);
+
+    // Pause, then leave the tracker (navigate away → the panel unmounts and the
+    // component-local pause refs are destroyed).
+    act(() => {
+      first.result.current.togglePause();
+    });
+    expect(first.result.current.paused).toBe(true);
+    expect(first.result.current.elapsed).toBe(10);
+    first.unmount();
+
+    // 5 minutes pass while the user is on another page.
+    act(() => {
+      vi.setSystemTime(T0 + 10_000 + 300_000);
+    });
+
+    // Return to the tracker (remount, same session): the timer is STILL paused
+    // and STILL shows the frozen 10s — NOT the full wall-clock time since start.
+    const second = renderHook(() => useSessionTimer(iso(T0), false, sessionId));
+    expect(second.result.current.paused).toBe(true);
+    expect(second.result.current.elapsed).toBe(10);
+
+    // Resuming continues correctly, excluding the away time.
+    act(() => {
+      second.result.current.togglePause();
+    });
+    expect(second.result.current.paused).toBe(false);
+    act(() => {
+      vi.advanceTimersByTime(4_000);
+    });
+    expect(second.result.current.elapsed).toBe(14);
+  });
+
+  it("persists a running timer's completed pause windows across a remount", () => {
+    const sessionId = "sess-persist-accum";
+    const first = renderHook(() => useSessionTimer(iso(T0), false, sessionId));
+
+    act(() => {
+      vi.advanceTimersByTime(10_000); // 10s running
+      first.result.current.togglePause(); // pause
+    });
+    act(() => {
+      vi.advanceTimersByTime(30_000); // 30s paused
+      first.result.current.togglePause(); // resume → 30s folded into accum
+    });
+    expect(first.result.current.elapsed).toBe(10);
+    first.unmount();
+
+    // Remount after more wall-clock: the 30s paused window stays excluded.
+    act(() => {
+      vi.setSystemTime(T0 + 40_000 + 5_000);
+    });
+    const second = renderHook(() => useSessionTimer(iso(T0), false, sessionId));
+    expect(second.result.current.paused).toBe(false);
+    // now(45s) − start − pausedAccum(30s) = 15s
+    expect(second.result.current.elapsed).toBe(15);
+  });
+
+  it("restart zeroes the elapsed, clears pause, and the reset persists across a remount", () => {
+    const sessionId = "sess-restart";
+    const first = renderHook(() => useSessionTimer(iso(T0 - 50_000), false, sessionId));
+    expect(first.result.current.elapsed).toBe(50);
+
+    act(() => {
+      first.result.current.restart();
+    });
+    expect(first.result.current.elapsed).toBe(0);
+    expect(first.result.current.paused).toBe(false);
+
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(first.result.current.elapsed).toBe(5);
+    first.unmount();
+
+    // The restart (startOverride) survives navigation: remount continues from
+    // the reset origin, not the original DB startedAt.
+    const second = renderHook(() => useSessionTimer(iso(T0 - 50_000), false, sessionId));
+    expect(second.result.current.elapsed).toBe(5);
+  });
+
+  it("restart while paused clears the pause and both persist", () => {
+    const sessionId = "sess-restart-paused";
+    const first = renderHook(() => useSessionTimer(iso(T0 - 20_000), false, sessionId));
+
+    act(() => {
+      first.result.current.togglePause();
+    });
+    expect(first.result.current.paused).toBe(true);
+
+    act(() => {
+      first.result.current.restart();
+    });
+    expect(first.result.current.paused).toBe(false);
+    expect(first.result.current.elapsed).toBe(0);
+    first.unmount();
+
+    const second = renderHook(() => useSessionTimer(iso(T0 - 20_000), false, sessionId));
+    expect(second.result.current.paused).toBe(false);
+    expect(second.result.current.elapsed).toBe(0);
+  });
+
+  it("does not crash and degrades to in-memory when localStorage throws", () => {
+    installLocalStorage({
+      getItem: () => {
+        throw new Error("storage blocked (private mode)");
+      },
+      setItem: () => {
+        throw new Error("storage blocked (private mode)");
+      },
+    });
+
+    const { result } = renderHook(() => useSessionTimer(iso(T0), false, "sess-throws"));
+    expect(result.current.elapsed).toBe(0);
+
+    // Pausing writes to storage — the throw must be swallowed, in-memory pause
+    // still works.
+    act(() => {
+      result.current.togglePause();
+    });
+    expect(result.current.paused).toBe(true);
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(result.current.elapsed).toBe(0);
+
+    // Restart also must not crash when storage is unavailable.
+    act(() => {
+      result.current.restart();
+    });
+    expect(result.current.paused).toBe(false);
+  });
+
+  it("isolates persisted state per sessionId", () => {
+    const a = renderHook(() => useSessionTimer(iso(T0), false, "sess-A"));
+    act(() => {
+      a.result.current.togglePause();
+    });
+    a.unmount();
+
+    // A different session must NOT inherit session A's paused state.
+    const b = renderHook(() => useSessionTimer(iso(T0), false, "sess-B"));
+    expect(b.result.current.paused).toBe(false);
   });
 });

@@ -422,6 +422,7 @@
     "timerLabel": "Time",
     "pauseLabel": "Pause session",
     "resumeLabel": "Resume session",
+    "restartLabel": "Restart timer",
     "progress": {
       "label": "Exercise {n} of {m}",
       "valuetext": "Exercise {n} of {m}, {percent}%",
