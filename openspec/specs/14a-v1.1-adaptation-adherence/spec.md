@@ -60,49 +60,71 @@ When adherence is `low` (below `70%`), the system SHOULD suggest a **frequency r
 - WHEN the recommendation is generated
 - THEN adherence is reported `low` with no `suggestedChange` (cannot reduce below the floor)
 
+### Requirement: Adherence-Wins Precedence
+
+When both an adherence signal and an RPE signal could produce a recommendation, `getDashboardSummary` MUST compute adherence first. If adherence is `low` with a `suggestedChange`, that recommendation MUST occupy the single `DashboardSummaryDTO.adaptation` slot and the RPE signal MUST NOT surface. Only when adherence is NOT a `low` suggestion MAY an RPE `adjust_load` recommendation occupy the slot. The contract MUST remain a single slot, never an array of competing recommendations.
+
+#### Scenario: Adherence-low suppresses a concurrent RPE signal
+
+- GIVEN adherence is `low` with a `suggestedChange` AND the RPE trend independently qualifies for `adjust_load`
+- WHEN the dashboard summary is assembled
+- THEN the `adaptation` slot carries the adherence recommendation and no RPE recommendation is surfaced
+
+#### Scenario: RPE surfaces when adherence is not low
+
+- GIVEN adherence is `ok` or `insufficient_data`
+- WHEN the RPE trend qualifies for `adjust_load`
+- THEN the `adaptation` slot carries the RPE recommendation
+
 ### Requirement: User Confirmation
 
-Adherence-based changes MUST be presented as **suggestions requiring explicit user confirmation**; auto-apply and silent regeneration are forbidden and no code path may regenerate a plan without a user action. On **accept**, the plan MUST be regenerated through the EXISTING regenerate path (`POST /plan-specs/:id/regenerate`) with `PlanSpec.daysPerWeek` adjusted to `toDays`, consuming exactly one `plan_regeneration` unit at the existing billing gate. On **reject**, the current plan MUST remain unchanged and NOTHING MUST be consumed. If the `plan_regeneration` quota is exhausted at confirm time, the request MUST fail with a clear error and the plan MUST remain unchanged (no partial regeneration, no quota deduction beyond the existing gate's behavior).
+Adherence- and RPE-based changes MUST be presented as suggestions requiring explicit user confirmation; auto-apply and silent regeneration are forbidden. On **accept**, `POST /plan-specs/:id/adapt` MUST re-derive the recommendation from `getDashboardSummary` (never trust the body); a mismatch MUST return `409 no_adaptation`. For `reduce_frequency`, the plan regenerates via `PlanSpec.daysPerWeek` adjusted to `toDays`. For `adjust_load`, the plan regenerates via `PlanSpec.intensityBias` written through `updateSpecIntensityBias(id, change.to)`. Both kinds MUST consume exactly one `plan_regeneration` unit at the existing billing gate using **consume-before-write** via a FRESH `randomUUID()` idempotency key per request; the mutation MUST be written only AFTER a successful consume. If `startGeneration` throws synchronously after a successful write, the write MUST be rolled back (`updateSpecDaysPerWeek`/`updateSpecIntensityBias` restored to the prior value) before the error is rethrown, with no quota refund. On **reject**, the current plan MUST remain unchanged and NOTHING MUST be consumed. If quota is exhausted, the request MUST fail with a clear error and the plan MUST remain unchanged.
 
 #### Scenario: User rejects adaptation
 
-- GIVEN an adherence recommendation is shown
+- GIVEN a recommendation of any kind is shown
 - WHEN the user rejects it
 - THEN the current plan remains unchanged and no quota is consumed
 
-#### Scenario: User accepts adaptation
+#### Scenario: User accepts a frequency adaptation
 
-- GIVEN an adherence recommendation suggesting `4 → 3` days for `planSpecId`
+- GIVEN an adherence recommendation suggesting `4 → 3` days
 - WHEN the user accepts
-- THEN the plan is regenerated via the existing `POST /plan-specs/:id/regenerate` with `daysPerWeek=3`, consuming exactly one `plan_regeneration` unit
+- THEN the plan regenerates with `daysPerWeek=3`, consuming exactly one `plan_regeneration` unit
+
+#### Scenario: User accepts a load adaptation
+
+- GIVEN an RPE recommendation suggesting `intensityBias: maintain → reduce`
+- WHEN the user accepts
+- THEN `updateSpecIntensityBias` writes `"reduce"` AFTER a successful fresh-key consume, then generation starts, consuming exactly one `plan_regeneration` unit
+
+#### Scenario: Synchronous generation failure rolls back the load mutation
+
+- GIVEN a successful consume and `updateSpecIntensityBias` write for an `adjust_load` accept
+- WHEN `startGeneration` throws synchronously
+- THEN `intensityBias` is rolled back to its prior value before the error is rethrown, with no quota refund
 
 #### Scenario: Accept with exhausted quota fails safely
 
-- GIVEN a Free tenant that has already consumed its monthly `plan_regeneration` unit
-- WHEN the user accepts the recommendation
-- THEN the request fails with a clear quota-exhausted error and the current plan remains unchanged
-
-#### Scenario: No auto-apply path exists
-
-- GIVEN a `low` adherence recommendation is computed at read time
-- WHEN no user confirmation occurs
-- THEN no regeneration runs and no quota is consumed
+- GIVEN a tenant that has already consumed its monthly `plan_regeneration` unit
+- WHEN the user accepts a recommendation of either kind
+- THEN the request fails with a clear quota-exhausted error and the plan remains unchanged
 
 ### Requirement: Shared Adaptation Recommendation Contract
 
-The system MUST define a single shared `AdaptationRecommendation` contract (in `packages/contracts`) carrying a `source` discriminator (`'adherence'` populated now; `'rpe'` reserved for 14b), a `level` (`'ok' | 'low' | 'insufficient_data'`), an optional `suggestedChange` (present only when `level === 'low'` and a change is worth suggesting), an optional `adherence` snapshot (`{ adherence, periodWeeks, completedInWindow, plannedInWindow }`), an optional `rationaleKey` (an i18n key, never raw prose), and an optional `planSpecId` (the spec to regenerate on confirm). Both 14a and 14b MUST compose into ONE dashboard surface via this contract — never two competing banners. A banner MUST render only when `level === 'low'`; `ok` and `insufficient_data` MUST render no banner.
+The system MUST define a single shared `AdaptationRecommendation` contract (in `packages/contracts`) carrying a `source` discriminator (`'adherence' | 'rpe'`), a `level` (`'ok' | 'low' | 'insufficient_data'`), an optional `suggestedChange` (a `reduce_frequency` change carrying `fromDays`/`toDays`, OR an `adjust_load` change carrying `direction: 'increase' | 'decrease'` and `from`/`to: IntensityBias`), an optional `adherence` snapshot, an optional `rpe` snapshot (`RpeSnapshot { meanRpe, windowSessions, sessionsWithRpe, setsWithRpe }`), an optional `rationaleKey` (i18n key, never raw prose), and an optional `planSpecId`. Both 14a and 14b MUST compose into ONE dashboard surface via this contract, resolved by the adherence-wins precedence rule — never two competing banners. A banner MUST render only when `level === 'low'`.
 
 #### Scenario: Adherence populates the shared contract
 
 - GIVEN a `low` adherence result
 - WHEN the recommendation is assembled
-- THEN it carries `source: 'adherence'`, `level: 'low'`, a `suggestedChange`, an `adherence` snapshot, a `rationaleKey`, and the `planSpecId` to regenerate
+- THEN it carries `source: 'adherence'`, `level: 'low'`, a `reduce_frequency` `suggestedChange`, an `adherence` snapshot, a `rationaleKey`, and the `planSpecId`
 
-#### Scenario: RPE source reserved without breaking 14a
+#### Scenario: RPE populates the shared contract
 
-- GIVEN the contract defines `source: 'adherence' | 'rpe'`
-- WHEN 14a emits only `'adherence'`
-- THEN the shape remains valid for a later 14b `'rpe'` recommendation feeding the same banner slot
+- GIVEN a qualifying RPE trend and no adherence-low signal
+- WHEN the recommendation is assembled
+- THEN it carries `source: 'rpe'`, `level: 'low'`, an `adjust_load` `suggestedChange`, an `rpe` snapshot, a `rationaleKey`, and the `planSpecId`
 
 ### Requirement: On-Demand Read Surface
 
@@ -119,16 +141,6 @@ The recommendation MUST be exposed on an on-demand, tenant/user-scoped read (fol
 - GIVEN the dashboard/adaptation read is requested
 - WHEN it is served
 - THEN the recommendation is recomputed from already-fetched data with no background job or scheduler involved
-
-### Requirement: Frequency-Only Adjustment in Slice 1
-
-In this slice the only adaptation the system MAY suggest is a frequency reduction (`daysPerWeek`). Volume reduction, per-session de-load, and intensity tuning are out of scope and MUST NOT be suggested or applied.
-
-#### Scenario: Only frequency is adjusted
-
-- GIVEN a `low` adherence recommendation
-- WHEN a `suggestedChange` is produced
-- THEN its `kind` is `reduce_frequency` and no volume/de-load change is emitted
 
 ### Requirement: Preserve the No-Missed Day State
 
