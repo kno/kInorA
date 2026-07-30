@@ -40,14 +40,11 @@ interface DashboardCoachCardProps {
  */
 export function DashboardCoachCard({ adaptation, onAccept }: DashboardCoachCardProps = {}) {
   const change = adaptation?.suggestedChange;
-  const showBanner =
-    adaptation?.level === "low" &&
-    change?.kind === "reduce_frequency" &&
-    typeof adaptation.planSpecId === "string";
+  const showBanner = adaptation?.level === "low" && typeof adaptation.planSpecId === "string";
 
-  if (showBanner && change && adaptation?.planSpecId) {
+  if (showBanner && change?.kind === "reduce_frequency" && adaptation?.planSpecId) {
     return (
-      <AdaptationBanner
+      <FrequencyAdaptationBanner
         planSpecId={adaptation.planSpecId}
         fromDays={change.fromDays}
         toDays={change.toDays}
@@ -56,10 +53,20 @@ export function DashboardCoachCard({ adaptation, onAccept }: DashboardCoachCardP
     );
   }
 
+  if (showBanner && change?.kind === "adjust_load" && adaptation?.planSpecId) {
+    return (
+      <LoadAdaptationBanner
+        planSpecId={adaptation.planSpecId}
+        direction={change.direction}
+        onAccept={onAccept}
+      />
+    );
+  }
+
   return <StaticCoachCard />;
 }
 
-interface AdaptationBannerProps {
+interface FrequencyAdaptationBannerProps {
   planSpecId: string;
   fromDays: number;
   toDays: number;
@@ -90,7 +97,67 @@ type BannerState =
   | { phase: "regenerating" }
   | { phase: "error"; message: string };
 
-function AdaptationBanner({ planSpecId, fromDays, toDays, onAccept }: AdaptationBannerProps) {
+function FrequencyAdaptationBanner({
+  planSpecId,
+  fromDays,
+  toDays,
+  onAccept,
+}: FrequencyAdaptationBannerProps) {
+  const t = useTranslations("adaptation");
+  return (
+    <AdaptationBannerShell
+      planSpecId={planSpecId}
+      onAccept={onAccept}
+      title={t("title")}
+      body={t("suggestion", { fromDays, toDays })}
+      acceptLabel={t("accept", { toDays })}
+    />
+  );
+}
+
+interface LoadAdaptationBannerProps {
+  planSpecId: string;
+  direction: "increase" | "decrease";
+  onAccept?: (planSpecId: string) => Promise<AdaptAcceptResult>;
+}
+
+/**
+ * RPE-driven `adjust_load` variant of the adaptation banner (14b-v1.1 Slice
+ * B). Same accept/dismiss/error state machine as the frequency banner — only
+ * the copy differs (no from/to day counts here, since `intensityBias` steps
+ * one rung on a `reduce < maintain < increase` ladder rather than a numeric
+ * day count).
+ */
+function LoadAdaptationBanner({ planSpecId, direction, onAccept }: LoadAdaptationBannerProps) {
+  const t = useTranslations("adaptation");
+  const isDecrease = direction === "decrease";
+  return (
+    <AdaptationBannerShell
+      planSpecId={planSpecId}
+      onAccept={onAccept}
+      title={t("rpe.title")}
+      body={t(isDecrease ? "rpe.reduceLoad" : "rpe.increaseLoad")}
+      acceptLabel={t(isDecrease ? "rpe.acceptReduce" : "rpe.acceptIncrease")}
+    />
+  );
+}
+
+interface AdaptationBannerShellProps {
+  planSpecId: string;
+  title: string;
+  body: string;
+  acceptLabel: string;
+  onAccept?: (planSpecId: string) => Promise<AdaptAcceptResult>;
+}
+
+/** Shared accept/dismiss/error/regenerating state machine for BOTH adaptation banner kinds. */
+function AdaptationBannerShell({
+  planSpecId,
+  title,
+  body,
+  acceptLabel,
+  onAccept,
+}: AdaptationBannerShellProps) {
   const t = useTranslations("adaptation");
   const [state, setState] = useState<BannerState>({ phase: "idle" });
   const [dismissed, setDismissed] = useState(false);
@@ -128,8 +195,8 @@ function AdaptationBanner({ planSpecId, fromDays, toDays, onAccept }: Adaptation
   return (
     <article className="dash-card dash-coach-card">
       <div className="dash-coach-main">
-        <div className="dash-eyebrow">{t("title")}</div>
-        <p className="dash-coach-text">{t("suggestion", { fromDays, toDays })}</p>
+        <div className="dash-eyebrow">{title}</div>
+        <p className="dash-coach-text">{body}</p>
         <div className="dash-coach-actions">
           <button
             type="button"
@@ -137,7 +204,7 @@ function AdaptationBanner({ planSpecId, fromDays, toDays, onAccept }: Adaptation
             onClick={handleAccept}
             disabled={isSubmitting}
           >
-            {t("accept", { toDays })}
+            {acceptLabel}
           </button>
           <button
             type="button"

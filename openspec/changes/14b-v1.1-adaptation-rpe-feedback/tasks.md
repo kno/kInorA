@@ -57,24 +57,24 @@ Note: evaluated against this session's 800-line budget (not the skill-default 40
 
 ## Phase 5: Web + Mobile Banner Copy
 
-- [ ] 5.1 RED: `DashboardCoachCard.test.tsx` — `adjust_load` increase/decrease copy.
-- [ ] 5.2 GREEN: branch copy by `suggestedChange.kind` in `DashboardCoachCard.tsx`.
-- [ ] 5.3 RED: mobile `AdherenceBanner` test, same branch.
-- [ ] 5.4 GREEN: implement in `AdherenceBanner.tsx`.
+- [x] 5.1 RED: `DashboardCoachCard.test.tsx` — `adjust_load` increase/decrease copy.
+- [x] 5.2 GREEN: branch copy by `suggestedChange.kind` in `DashboardCoachCard.tsx`.
+- [x] 5.3 RED: mobile `AdherenceBanner` test, same branch.
+- [x] 5.4 GREEN: implement in `AdherenceBanner.tsx`.
 
 ## Phase 6: Mobile RPE Capture
 
-- [ ] 6.1 RED: `ExerciseCard.test.tsx` — optional 0-10 RPE input renders.
-- [ ] 6.2 GREEN: add RPE input to `ExerciseCard.tsx`.
-- [ ] 6.3 RED: `WorkoutTrackerScreen.test.tsx` — submit payload includes `rpe` when entered, omits when not.
-- [ ] 6.4 GREEN: wire `rpe` at `WorkoutTrackerScreen.tsx:661`.
+- [x] 6.1 RED: `ExerciseCard.test.tsx` — optional 0-10 RPE input renders.
+- [x] 6.2 GREEN: add RPE input to `ExerciseCard.tsx`.
+- [x] 6.3 RED: `WorkoutTrackerScreen.test.tsx` — submit payload includes `rpe` when entered, omits when not.
+- [x] 6.4 GREEN: wire `rpe` at `WorkoutTrackerScreen.tsx:661`.
 
 ## Phase 7: i18n
 
-- [ ] 7.1 Add `adaptation.rpe.reduceLoad`/`increaseLoad` copy keys to `en` catalog.
-- [ ] 7.2 Add matching `es` keys; run catalog-parity test.
+- [x] 7.1 Add `adaptation.rpe.reduceLoad`/`increaseLoad` copy keys to `en` catalog.
+- [x] 7.2 Add matching `es` keys; run catalog-parity test.
 
 ## Phase 8: Verification
 
-- [ ] 8.1 Run domain + api + web + mobile suites; confirm no half-applied `intensityBias` write on any failure branch.
-- [ ] 8.2 Manual smoke: full accept flow for `adjust_load` on web and mobile.
+- [x] 8.1 Run domain + api + web + mobile suites; confirm no half-applied `intensityBias` write on any failure branch. (Slice B verified `web`, `mobile`, `@kinora/i18n` — all GREEN + type-check clean. Domain/api were verified in Slice A; Slice B did not touch backend files.)
+- [ ] 8.2 Manual smoke: full accept flow for `adjust_load` on web and mobile. (Left for the orchestrator/QA — outside automated test scope.)

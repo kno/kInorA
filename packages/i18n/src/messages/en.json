@@ -720,7 +720,14 @@
     "regenerating": "Adjusting your plan…",
     "quotaExhausted": "You've used your plan change for this period. Upgrade to adjust more often — your plan is unchanged.",
     "upToDate": "Your plan already looks like a good fit — nothing to change right now.",
-    "error": "We couldn't adjust your plan — it's unchanged. Please try again."
+    "error": "We couldn't adjust your plan — it's unchanged. Please try again.",
+    "rpe": {
+      "title": "How's the intensity feeling?",
+      "reduceLoad": "Your recent sets have felt tough — want to ease off the load a bit?",
+      "increaseLoad": "Your recent sets have felt easy — want to bump up the load?",
+      "acceptReduce": "Ease off load",
+      "acceptIncrease": "Increase load"
+    }
   },
   "planStatus": {
     "loading": "Loading your plan…",
@@ -1067,7 +1074,10 @@
       "withPlan": "You already have an active session in \"{planName}\". Finish it before starting another.",
       "generic": "You already have an active session. Finish it before starting another."
     },
-    "retry": "Retry"
+    "retry": "Retry",
+    "rpe": {
+      "a11y": "RPE, optional, 0 to 10"
+    }
   },
   "chat": {
     "coachName": "kInorA Coach",

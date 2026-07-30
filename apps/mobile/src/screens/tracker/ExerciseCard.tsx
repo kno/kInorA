@@ -9,7 +9,7 @@
  */
 
 import React from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
 import { FormattedMessage, useIntl } from "react-intl";
 
 import { formatWeight, WEIGHT_STEPS } from "./tracker-logic";
@@ -35,6 +35,9 @@ interface ExerciseCardProps {
   isResting: boolean;
   submitting: boolean;
   showRecordError: boolean;
+  /** Optional 0-10 RPE draft value (raw text; parsed/clamped by the container). */
+  rpeInput: string;
+  onChangeRpe: (text: string) => void;
 }
 
 export function ExerciseCard({
@@ -52,6 +55,8 @@ export function ExerciseCard({
   isResting,
   submitting,
   showRecordError,
+  rpeInput,
+  onChangeRpe,
 }: ExerciseCardProps) {
   const intl = useIntl();
 
@@ -128,6 +133,20 @@ export function ExerciseCard({
             );
           })}
         </View>
+      </View>
+
+      <View style={styles.rpeField}>
+        <Text style={styles.rpeLabel}>
+          <FormattedMessage {...M.rpeLabel} />
+        </Text>
+        <TextInput
+          style={styles.rpeInput}
+          value={rpeInput}
+          onChangeText={onChangeRpe}
+          keyboardType="numeric"
+          accessibilityLabel={intl.formatMessage(M.rpeInputA11y)}
+          editable={!isResting}
+        />
       </View>
 
       <Pressable

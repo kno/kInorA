@@ -27,6 +27,7 @@ vi.mock("react-native", () => ({
   View: "View",
   Text: "Text",
   ScrollView: "ScrollView",
+  TextInput: (props: any) => <input {...props} />,
   Pressable: ({ children, ...rest }: any) => (
     <button type="button" {...rest}>
       {typeof children === "function" ? children({ pressed: false }) : children}
