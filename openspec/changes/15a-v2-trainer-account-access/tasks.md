@@ -56,14 +56,14 @@ Independently shippable: S1 (schema only, dark). Dependent chain: S2 depends on 
 
 ## Phase 3 (Slice S3): Invite/Assignment Flow
 
-- [ ] 3.1 RED: `POST /trainer/clients/invite` — non-trainer/non-entitled caller → 403.
-- [ ] 3.2 RED: `POST /trainer/clients/invite` — valid trainer, new email → creates membership row (status `invited`) + `trainer_client_assignments` row (status `invited`).
-- [ ] 3.3 RED: invite acceptance transitions membership + assignment to `active`.
-- [ ] 3.4 RED: one-trainer-per-client unique violation — second trainer inviting an already-assigned client → constraint error surfaced as 409.
-- [ ] 3.5 RED: `GET /trainer/clients` — returns only assignments where `trainer_user_id = actor`, using `ClientSummaryDTO`.
-- [ ] 3.6 GREEN: implement invite/accept/list endpoints in `apps/api/src/routes/trainer.ts`, wired through `requireRole("trainer")` + assignment repo from S1.
-- [ ] 3.7 GREEN: session issuance — `apps/api/src/auth/social.ts` (or equivalent) picks among active memberships so a client's session can be scoped to the trainer's tenant.
-- [ ] 3.8 Update the S2 regression guard (2.12) fixture list to include the new invite/list routes; confirm it now passes for those routes.
+- [x] 3.1 RED: `POST /trainer/clients/invite` — non-trainer/non-entitled caller → 403.
+- [x] 3.2 RED: `POST /trainer/clients/invite` — valid trainer, new email → creates membership row (status `invited`) + `trainer_client_assignments` row (status `invited`).
+- [x] 3.3 RED: invite acceptance transitions membership + assignment to `active`.
+- [x] 3.4 RED: one-trainer-per-client unique violation — second trainer inviting an already-assigned client → constraint error surfaced as 409.
+- [x] 3.5 RED: `GET /trainer/clients` — returns only assignments where `trainer_user_id = actor`, using `ClientSummaryDTO`.
+- [x] 3.6 GREEN: implement invite/accept/list endpoints in `apps/api/src/routes/trainer.ts`, wired through `requireRole("trainer")` + assignment repo from S1.
+- [x] 3.7 GREEN: session active-tenant-selection minimal enabler — `apps/api/src/auth/tenant-selection.ts` (`selectActiveTenant`, pure + unit-tested) + `MembershipRepository.findActiveMemberships` (`auth-context.ts`). Deliberately NOT wired into the default login path (`social.ts`) this slice — see deviations note; the client-facing consumption is deferred with the plan-VIEW (S5/follow-up).
+- [x] 3.8 Extended the S2 regression guard (2.12): `TRAINER_SCOPED_ROUTES` now enumerates `POST /trainer/clients/invite` and `GET /trainer/clients`, with real route-level probes (via the actual `trainerRoutes` plugin) proving both deny (403) before any repo call for a non-trainer role AND for a trainer role without the trainer entitlement. GREEN.
 
 ## Phase 4 (Slice S4): Client-Owned Plan Creation
 

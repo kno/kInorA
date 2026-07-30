@@ -81,6 +81,39 @@ export async function resolveAuthorizedOwner(
     return ctx.actorUserId;
   }
 
+  await assertTrainerEntitled(ctx, deps);
+
+  const assignment = await deps.assignmentRepo.findActiveAssignment(
+    ctx.tenantId,
+    ctx.actorUserId,
+    requestedOwnerUserId,
+  );
+  if (!assignment) {
+    throw new ForbiddenOwnerAccess();
+  }
+
+  return requestedOwnerUserId;
+}
+
+/**
+ * The role+entitlement half of the widening branch above (steps 1-2),
+ * extracted so trainer-scoped routes that do NOT resolve a specific client
+ * owner — inviting a new client, listing the trainer's own clients
+ * (15a-v2-trainer-account-access, Slice 3) — can reuse the EXACT SAME gate
+ * `resolveAuthorizedOwner` uses instead of reimplementing the role/tier
+ * checks. Any route that DOES resolve ownership over a specific client's data
+ * must still go through `resolveAuthorizedOwner` (which calls this
+ * internally) — this helper alone never checks assignment and must not be
+ * used as a substitute for it.
+ *
+ * Throws `ForbiddenOwnerAccess` (the SAME error type as the full resolver)
+ * when `ctx.role !== "trainer"` or the resolved billing tier is not
+ * `"trainer"`.
+ */
+export async function assertTrainerEntitled(
+  ctx: ActorOwnerContext,
+  deps: Pick<OwnerAccessDeps, "entitlementReader">,
+): Promise<void> {
   if (ctx.role !== "trainer") {
     throw new ForbiddenOwnerAccess();
   }
@@ -93,15 +126,4 @@ export async function resolveAuthorizedOwner(
   if (effective.tier !== "trainer") {
     throw new ForbiddenOwnerAccess();
   }
-
-  const assignment = await deps.assignmentRepo.findActiveAssignment(
-    ctx.tenantId,
-    ctx.actorUserId,
-    requestedOwnerUserId,
-  );
-  if (!assignment) {
-    throw new ForbiddenOwnerAccess();
-  }
-
-  return requestedOwnerUserId;
 }
