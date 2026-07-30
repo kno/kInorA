@@ -149,12 +149,40 @@ describe("PlanStatusClient tracker flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /start workout/i }));
     await screen.findByRole("region", { name: /live workout/i });
 
+    // #266 flake fix: `handleCompleteSet` is a useCallback closing over
+    // weight/reps/rpeInput/note. Under contended parallel coverage, firing all
+    // the steps synchronously can let the "complete set" click read a STALE
+    // closure before the earlier state updates commit. `@testing-library/user-event`
+    // is not a dependency in this workspace, so instead we settle each step:
+    // `await waitFor` on the VISIBLE value flushes act + microtasks, proving the
+    // state committed (and the button re-rendered with a fresh closure) before
+    // the next interaction — deterministic without weakening any assertion.
+
+    // The stepper value span sits in the wrap immediately before its +/- button
+    // (see Stepper.tsx); reading that sibling avoids brittle class/i18n queries.
+    const increaseLoad = screen.getByRole("button", { name: /increase load/i });
+    const increaseReps = screen.getByRole("button", { name: /increase reps/i });
+
     // Steppers seed from the set (weight 45, reps from targetReps "8"). Nudge both.
-    fireEvent.click(screen.getByRole("button", { name: /increase load/i }));
-    fireEvent.click(screen.getByRole("button", { name: /increase reps/i }));
-    fireEvent.change(screen.getByLabelText(/^rpe$/i), { target: { value: "8" } });
+    fireEvent.click(increaseLoad);
+    await waitFor(() => {
+      expect(increaseLoad.previousElementSibling?.textContent).toContain("47.5");
+    });
+
+    fireEvent.click(increaseReps);
+    await waitFor(() => {
+      expect(increaseReps.previousElementSibling?.textContent).toContain("9");
+    });
+
+    const rpe = screen.getByLabelText(/^rpe$/i) as HTMLInputElement;
+    fireEvent.change(rpe, { target: { value: "8" } });
+    await waitFor(() => expect(rpe.value).toBe("8"));
+
     fireEvent.click(screen.getByRole("button", { name: /add note/i }));
-    fireEvent.change(screen.getByLabelText(/notes/i), { target: { value: "Strong set" } });
+    const notes = (await screen.findByLabelText(/notes/i)) as HTMLTextAreaElement;
+    fireEvent.change(notes, { target: { value: "Strong set" } });
+    await waitFor(() => expect(notes.value).toBe("Strong set"));
+
     fireEvent.click(screen.getByRole("button", { name: /complete set/i }));
 
     await waitFor(() => {
