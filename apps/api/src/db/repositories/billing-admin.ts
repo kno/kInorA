@@ -9,7 +9,7 @@ import {
   tenantBillingStates,
   tenantQuotaCounters,
 } from "../schema.js";
-import type { MemberQuotaUsageDTO, TenantQuotaUsageDTO, UserId } from "@kinora/contracts";
+import type { BillingTier, MemberQuotaUsageDTO, TenantQuotaUsageDTO, UserId } from "@kinora/contracts";
 import { resolveEffectiveTier, type EntitlementContext } from "../../billing/entitlement.js";
 import type {
   AdminMembershipView,
@@ -51,10 +51,18 @@ export class BillingAdminRepository implements QuotaAdminPort {
       .select({ role: memberships.role, status: memberships.status })
       .from(memberships)
       .where(and(eq(memberships.tenantId, tenantId), eq(memberships.userId, userId)));
-    return row ? { role: row.role, status: row.status } : null;
+    if (!row) return null;
+    // `membership_role` gained 'trainer' (15a-v2-trainer-account-access,
+    // Slice 1, additive). Quota-admin authorization has NO concept of a
+    // 'trainer' role — an active OWNER is the only authorized quota admin
+    // (see this interface's docstring) — so this narrows the type back to
+    // AdminMembershipView's existing contract. Zero behavior change: a
+    // 'trainer' role membership was never `=== "owner"`/`=== "member"`
+    // before this slice either, so every existing comparison is unaffected.
+    return { role: row.role as AdminMembershipView["role"], status: row.status };
   }
 
-  async loadTenantTier(tenantId: string, now: Date): Promise<"free" | "pro" | null> {
+  async loadTenantTier(tenantId: string, now: Date): Promise<BillingTier | null> {
     const [billingRow] = await this.db
       .select({
         tier: tenantBillingStates.tier,

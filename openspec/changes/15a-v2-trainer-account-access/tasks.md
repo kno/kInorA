@@ -8,12 +8,12 @@
 | 400-line budget risk | High |
 | Chained PRs recommended | Yes |
 | Suggested split | PR1 (S1) → PR2 (S2) → PR3 (S3) → PR4 (S4) → PR5 (S5) |
-| Delivery strategy | ask-on-risk |
-| Chain strategy | pending (user decision required) |
+| Delivery strategy | ask-on-risk (resolved: stacked-to-main for this run) |
+| Chain strategy | stacked-to-main |
 
-Decision needed before apply: Yes
+Decision needed before apply: No (resolved by orchestrator: chained PRs, stacked-to-main, S1 only for this run)
 Chained PRs recommended: Yes
-Chain strategy: pending
+Chain strategy: stacked-to-main
 400-line budget risk: High
 
 ### Suggested Work Units
@@ -30,13 +30,13 @@ Independently shippable: S1 (schema only, dark). Dependent chain: S2 depends on 
 
 ## Phase 1 (Slice S1): Schema, Contracts, Entitlement — no behavior change
 
-- [ ] 1.1 RED: write migration test asserting `trainer` exists in `membership_role` and `billing_tier` enums, `trainer_assignment_status` enum exists, `trainer_client_assignments` table + partial unique index `(client_user_id) WHERE status <> 'revoked'` + `unique(tenant_id, client_user_id)` exist.
-- [ ] 1.2 GREEN: add migration step A — `ALTER TYPE membership_role ADD VALUE 'trainer'`; `ALTER TYPE billing_tier ADD VALUE 'trainer'` (separate migration file per Postgres same-transaction gotcha).
-- [ ] 1.3 GREEN: add migration step B (separate file) — create `trainer_assignment_status` enum + `trainer_client_assignments` table + both indexes in `apps/api/src/db/schema.ts`.
-- [ ] 1.4 RED: write `resolveTenantFeatureLimit("trainer", ...)` test expecting non-Free limits (currently fails/falls back to Free).
-- [ ] 1.5 GREEN: add `TRAINER_TIER_LIMITS` (≥ pro) in `apps/api/src/billing/plan-limits.ts`.
-- [ ] 1.6 GREEN: extend `MembershipRole`/`BillingTier` unions, add `TrainerAssignmentStatus`, `TrainerClientAssignmentDTO`, `InviteClientRequest`, `ClientSummaryDTO` in `packages/contracts/src/index.ts`.
-- [ ] 1.7 Create `apps/api/src/db/repositories/trainer-assignment.ts` with CRUD + `findActiveAssignment(tenantId, trainerUserId, clientUserId)` (no route wiring yet).
+- [x] 1.1 RED: write migration test asserting `trainer` exists in `membership_role` and `billing_tier` enums, `trainer_assignment_status` enum exists, `trainer_client_assignments` table + partial unique index `(client_user_id) WHERE status <> 'revoked'` + `unique(tenant_id, client_user_id)` exist.
+- [x] 1.2 GREEN: add migration step A — `ALTER TYPE membership_role ADD VALUE 'trainer'`; `ALTER TYPE billing_tier ADD VALUE 'trainer'` (separate migration file per Postgres same-transaction gotcha).
+- [x] 1.3 GREEN: add migration step B (separate file) — create `trainer_assignment_status` enum + `trainer_client_assignments` table + both indexes in `apps/api/src/db/schema.ts`.
+- [x] 1.4 RED: write `resolveTenantFeatureLimit("trainer", ...)` test expecting non-Free limits (currently fails/falls back to Free).
+- [x] 1.5 GREEN: add `TRAINER_TIER_LIMITS` (≥ pro) in `apps/api/src/billing/plan-limits.ts`.
+- [x] 1.6 GREEN: extend `MembershipRole`/`BillingTier` unions, add `TrainerAssignmentStatus`, `TrainerClientAssignmentDTO`, `InviteClientRequest`, `ClientSummaryDTO` in `packages/contracts/src/index.ts`.
+- [x] 1.7 Create `apps/api/src/db/repositories/trainer-assignment.ts` with CRUD + `findActiveAssignment(tenantId, trainerUserId, clientUserId)` (no route wiring yet).
 
 ## Phase 2 (Slice S2): Authorization Resolver + Guard — heavily reviewed
 

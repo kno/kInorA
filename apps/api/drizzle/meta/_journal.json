@@ -113,6 +113,20 @@
       "when": 1785060000000,
       "tag": "0015_plan_draft_version",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1785120000000,
+      "tag": "0016_trainer_role_tier_enum",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785120060000,
+      "tag": "0017_trainer_client_assignments",
+      "breakpoints": true
     }
   ]
 }

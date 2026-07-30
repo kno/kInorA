@@ -395,15 +395,23 @@ export interface TenantQueryContextDTO {
 
 /**
  * Membership role enum values — mirrors the database pgEnum.
+ * `trainer` (15a-v2-trainer-account-access, Slice 1) is additive: it is not
+ * yet gated or granted anywhere — the authorization seam that checks it lands
+ * in Slice 2.
  */
-export type MembershipRole = "owner" | "member";
+export type MembershipRole = "owner" | "member" | "trainer";
 
 /**
  * Membership status enum values — mirrors the database pgEnum.
  */
 export type MembershipStatus = "invited" | "active" | "suspended";
 
-export type BillingTier = "free" | "pro";
+/**
+ * `trainer` (15a-v2-trainer-account-access, Slice 1) is additive: entitlement
+ * plumbing (`resolveTenantFeatureLimit`) knows about it, but no route gates a
+ * capability on it yet — that lands with the authorization seam in Slice 2.
+ */
+export type BillingTier = "free" | "pro" | "trainer";
 
 export type BillingStatus = "active" | "trialing" | "expired" | "overridden";
 
@@ -619,6 +627,51 @@ export interface SessionContext {
   userId: UserId;
   tenantId: TenantId;
   sessionId: SessionId;
+}
+
+// ---------------------------------------------------------------------------
+// Trainer account access contracts (15a-v2-trainer-account-access, Slice 1).
+// Additive DTOs for the same-tenant trainer/client assignment. No route or
+// authorization behavior change lands in this slice — see design.md.
+// ---------------------------------------------------------------------------
+
+/**
+ * Lifecycle of a `trainer_client_assignments` row — mirrors the database
+ * pgEnum `trainer_assignment_status`.
+ *   invited  — the trainer has invited the client, not yet accepted
+ *   active   — the client accepted; the trainer may act on their behalf
+ *   revoked  — the assignment no longer grants access (kept for audit)
+ */
+export type TrainerAssignmentStatus = "invited" | "active" | "revoked";
+
+/**
+ * A trainer/client assignment record. One-trainer-per-client is enforced at
+ * the data layer (partial unique index on `client_user_id` where
+ * `status <> 'revoked'`), not by this DTO shape.
+ */
+export interface TrainerClientAssignmentDTO {
+  id: string;
+  tenantId: TenantId;
+  trainerUserId: UserId;
+  clientUserId: UserId;
+  status: TrainerAssignmentStatus;
+}
+
+/**
+ * Request payload to invite a client by email into the trainer's tenant.
+ * Wired to a route in Slice 3 — this is type-only scaffolding in Slice 1.
+ */
+export interface InviteClientRequest {
+  email: string;
+}
+
+/**
+ * Trainer-facing client-list row. Wired to a route in Slice 3.
+ */
+export interface ClientSummaryDTO {
+  clientUserId: UserId;
+  email: string;
+  status: TrainerAssignmentStatus;
 }
 
 /**

@@ -100,7 +100,8 @@ describe("shared contracts boundary", () => {
     expectTypeOf<TenantQueryContextDTO>().toHaveProperty("actorUserId").toMatchTypeOf<
       string | undefined
     >();
-    expectTypeOf<MembershipRole>().toEqualTypeOf<"owner" | "member">();
+    // 15a-v2-trainer-account-access Slice 1: additive 'trainer' role value.
+    expectTypeOf<MembershipRole>().toEqualTypeOf<"owner" | "member" | "trainer">();
     expectTypeOf<MembershipStatus>().toEqualTypeOf<"invited" | "active" | "suspended">();
   });
 

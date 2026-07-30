@@ -45,6 +45,37 @@ describe("resolveTenantFeatureLimit — real Pro caps (11b Slice 3)", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// 15a-v2-trainer-account-access, Slice 1 — dark/additive entitlement
+// plumbing. The `trainer` BillingTier must NOT silently fall back to the Free
+// caps once it exists in the enum (task 1.4/1.5). No route gates a capability
+// on `trainer` yet; this only proves the limit resolver knows about the tier.
+// ---------------------------------------------------------------------------
+const FREE_TIER_LIMITS_FOR_TEST: Record<BillingFeature, number> = {
+  plan_generation: 1,
+  plan_regeneration: 1,
+  memory_write: 0,
+  memory_retrieval: 0,
+};
+
+describe("resolveTenantFeatureLimit — trainer tier (15a-v2 Slice 1)", () => {
+  it("resolves 'trainer' to TRAINER_TIER_LIMITS, never silently falling back to Free", () => {
+    for (const feature of FEATURES) {
+      expect(resolveTenantFeatureLimit("trainer", feature)).not.toBe(
+        FREE_TIER_LIMITS_FOR_TEST[feature],
+      );
+    }
+  });
+
+  it("resolves 'trainer' limits at-or-above the Pro caps for every feature", () => {
+    for (const feature of FEATURES) {
+      expect(resolveTenantFeatureLimit("trainer", feature)).toBeGreaterThanOrEqual(
+        PRO_TIER_LIMITS[feature],
+      );
+    }
+  });
+});
+
 // A faithful in-memory ledger: denies once `used >= tenantLimit`, mirroring the
 // real atomic conditional UPDATE ... WHERE used < limit (same shape as the
 // quota-consumption unit suite).
