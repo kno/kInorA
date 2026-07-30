@@ -125,7 +125,11 @@ describe("@kinora/i18n package assembly", () => {
         !key.startsWith("planStatus.") &&
         // 14a-v1.1 Slice C3: the `home.*` mobile home-screen namespace has its
         // own scoped count test below.
-        !key.startsWith("home."),
+        !key.startsWith("home.") &&
+        // 15a-v2-trainer-account-access Slice 5: the `clients.*` trainer
+        // client-list/create-plan-for-client namespace has its own scoped
+        // count test below, per the frozen-total convention.
+        !key.startsWith("clients."),
     );
     // +1 `tracker.restartLabel` authored for #251 (restart-timer control on
     // the live tracker topbar; pause/restart now persist across navigation).
@@ -323,6 +327,21 @@ describe("@kinora/i18n package assembly", () => {
     expect(mobileTrackerKeys).toHaveLength(24);
     expect(flat["mobileTracker.retry"]).toBe("Retry");
     expect(flattenMessages(catalogs.es)["mobileTracker.retry"]).toBe("Reintentar");
+  });
+
+  it("the clients namespace is present with EN+ES parity (15a-v2-trainer-account-access Slice 5)", () => {
+    expect(catalogs.en.clients).toBeDefined();
+    expect(catalogs.es.clients).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+
+    const flat = flattenMessages(catalogs.en);
+    const clientsKeys = Object.keys(flat).filter((key) => key.startsWith("clients."));
+    // Trainer client-list (19) + status.* (3) + createPlan.* (10) = 32.
+    expect(clientsKeys).toHaveLength(32);
+    expect(flat["clients.pageTitle"]).toBe("My Clients");
+    expect(flattenMessages(catalogs.es)["clients.pageTitle"]).toBe("Mis clientes");
   });
 
   it("flattenMessages + mergeWithBase compose over the full catalogs", () => {

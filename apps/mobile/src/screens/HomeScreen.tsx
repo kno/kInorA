@@ -75,6 +75,9 @@ export default function HomeScreen({
   const historyLabel = intl.formatMessage({ id: "history.title" });
   const createPlanLabel = intl.formatMessage({ id: "chat.teaser.title" });
   const voiceLabel = intl.formatMessage({ id: "voice.screenTitle" });
+  // 15a-v2-trainer-account-access Slice 5: always shown — `ClientListScreen`
+  // itself gates on the API's 403 (no client-visible role/tier exists today).
+  const clientsLabel = intl.formatMessage({ id: "clients.navLabel" });
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [summary, setSummary] = useState<DashboardSummaryDTO | undefined>();
@@ -197,6 +200,15 @@ export default function HomeScreen({
         accessibilityLabel={historyLabel}
       >
         <Text style={styles.historyText}>{historyLabel}</Text>
+      </Pressable>
+
+      <Pressable
+        style={({ pressed }) => [styles.historyButton, pressed && styles.historyButtonPressed]}
+        onPress={() => navigationRef.current.navigate("ClientList")}
+        accessibilityRole="button"
+        accessibilityLabel={clientsLabel}
+      >
+        <Text style={styles.historyText}>{clientsLabel}</Text>
       </Pressable>
 
       <Pressable
