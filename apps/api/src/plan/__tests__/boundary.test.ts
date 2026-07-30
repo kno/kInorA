@@ -306,6 +306,34 @@ describe("assertPlanSpecShape — updated for 07-v1-plan-wizard", () => {
     expect(() => assertPlanSpecShape(spec)).not.toThrow();
   });
 
+  // --- intensityBias validation (14b-v1.1) ---
+
+  it("accepts a PlanSpec with an absent intensityBias (14b — legacy/never-adjusted)", () => {
+    expect(() => assertPlanSpecShape(VALID_SPEC)).not.toThrow();
+  });
+
+  it.each(["reduce", "maintain", "increase"] as const)(
+    "accepts a PlanSpec with intensityBias %s",
+    (intensityBias) => {
+      const spec = { ...VALID_SPEC, intensityBias };
+      expect(() => assertPlanSpecShape(spec)).not.toThrow();
+    }
+  );
+
+  it("rejects a PlanSpec with an invalid intensityBias value", () => {
+    const invalid = { ...VALID_SPEC, intensityBias: "double" };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /intensityBias/i
+    );
+  });
+
+  it("rejects a PlanSpec with a non-string intensityBias", () => {
+    const invalid = { ...VALID_SPEC, intensityBias: 1 };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /intensityBias/i
+    );
+  });
+
   // --- assertPlanSpecInput — input-only validator (no preferenceScores, no confirmed) ---
 
 describe("assertPlanSpecInput — wizard input validator", () => {

@@ -171,6 +171,27 @@ describe("buildPlanPrompt", () => {
     });
   });
 
+  // 14b-v1.1 — the generator steers intensity up/down via `PlanSpec.intensityBias`.
+  describe("intensity bias inclusion (14b-v1.1)", () => {
+    it("adds a steer-down intensity-bias line when intensityBias is 'reduce', absent from the baseline prompt", () => {
+      const prompt = buildPlanPrompt({ ...baseSpec, intensityBias: "reduce" });
+      const basePrompt = buildPlanPrompt(baseSpec);
+      expect(basePrompt.toLowerCase()).not.toMatch(/intensity bias/);
+      expect(prompt.toLowerCase()).toMatch(/intensity bias.*(reduce|lighter|less intens)/);
+    });
+
+    it("adds a steer-up intensity-bias line when intensityBias is 'increase'", () => {
+      const prompt = buildPlanPrompt({ ...baseSpec, intensityBias: "increase" });
+      expect(prompt.toLowerCase()).toMatch(/intensity bias.*(increase|heavier|more intens)/);
+    });
+
+    it("does not add a bias instruction when intensityBias is 'maintain' (same prompt as absent)", () => {
+      const maintainPrompt = buildPlanPrompt({ ...baseSpec, intensityBias: "maintain" });
+      const absentPrompt = buildPlanPrompt(baseSpec);
+      expect(maintainPrompt).toBe(absentPrompt);
+    });
+  });
+
   it.each([
     "I have sciatica",
     "I have arthritis",

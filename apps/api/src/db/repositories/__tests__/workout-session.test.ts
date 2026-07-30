@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SQL } from "drizzle-orm";
 import type { WorkoutProgram } from "@kinora/contracts";
 import { WorkoutSessionRepository } from "../workout-session.js";
-import { sessionExercises, setRecords, workoutPlans, workoutSessions } from "../../schema.js";
+import { planSpecs, sessionExercises, setRecords, workoutPlans, workoutSessions } from "../../schema.js";
 
 const TENANT_A = "aaaaaaaa-0000-0000-0000-000000000001";
 const USER_A = "aaaaaaaa-0000-0000-0000-000000000002";
@@ -1176,6 +1176,13 @@ describe("WorkoutSessionRepository", () => {
       planRows: unknown[];
       exerciseRows?: unknown[];
       setRows?: unknown[];
+      /**
+       * 14b-v1.1 — the confirmed plan_specs row backing `latestReadyPlan`, read
+       * ONLY when the RPE fold runs (adherence not `"low"` and there IS a
+       * ready plan with at least one completed session). Defaults to a spec
+       * with no `intensityBias` (→ `"maintain"`).
+       */
+      specRows?: unknown[];
     }) {
       const sessionsWhere = vi.fn().mockReturnValue({
         orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(input.sessionRows) }),
@@ -1185,6 +1192,7 @@ describe("WorkoutSessionRepository", () => {
       });
       const exercisesWhere = vi.fn().mockResolvedValue(input.exerciseRows ?? []);
       const setsWhere = vi.fn().mockResolvedValue(input.setRows ?? []);
+      const specWhere = vi.fn().mockResolvedValue(input.specRows ?? [{ specJson: {} }]);
 
       const select = vi.fn().mockImplementation(() => ({
         from: vi.fn().mockImplementation((table: object) => {
@@ -1192,11 +1200,12 @@ describe("WorkoutSessionRepository", () => {
           if (table === workoutPlans) return { where: plansWhere };
           if (table === sessionExercises) return { where: exercisesWhere };
           if (table === setRecords) return { where: setsWhere };
+          if (table === planSpecs) return { where: specWhere };
           throw new Error(`Unexpected select table: ${String(table)}`);
         }),
       }));
 
-      return { select, sessionsWhere, plansWhere, exercisesWhere, setsWhere };
+      return { select, sessionsWhere, plansWhere, exercisesWhere, setsWhere, specWhere };
     }
 
     it("returns the empty-state DTO when there is no history and no ready plan", async () => {
@@ -1230,14 +1239,17 @@ describe("WorkoutSessionRepository", () => {
         { dayIndex: 0, focus: "Tirón técnico", loadKg: 500, loadPercent: 100 },
         { dayIndex: 1, focus: "Pierna ligera", loadKg: 0, loadPercent: 0 },
       ]);
-      // Bounded: exactly two lookup queries (sessions, plans) issued once each.
-      expect(select).toHaveBeenCalledTimes(4);
+      // Bounded: sessions(1) + plans(1) + weekly-rollup exercises/sets(2) +
+      // 14b RPE-fold exercises/sets/planSpec(3) — adherence is
+      // insufficient_data here (dashReadyPlanRow is younger than the window),
+      // so the RPE fold runs.
+      expect(select).toHaveBeenCalledTimes(7);
       expect(sessionsWhere).toHaveBeenCalledTimes(1);
       expect(plansWhere).toHaveBeenCalledTimes(1);
     });
 
-    it("skips the exercise/set follow-up queries when nothing completed this week", async () => {
-      const { select, exercisesWhere, setsWhere } = createDashboardDb({
+    it("skips the exercise/set/RPE follow-up queries when there is no completed session at all", async () => {
+      const { select, exercisesWhere, setsWhere, specWhere } = createDashboardDb({
         sessionRows: [],
         planRows: [dashReadyPlanRow],
       });
@@ -1247,6 +1259,9 @@ describe("WorkoutSessionRepository", () => {
 
       expect(exercisesWhere).not.toHaveBeenCalled();
       expect(setsWhere).not.toHaveBeenCalled();
+      // No completed session at all → the RPE fold has nothing to analyze
+      // and is skipped entirely (no planSpecs round-trip either).
+      expect(specWhere).not.toHaveBeenCalled();
       expect(select).toHaveBeenCalledTimes(2);
     });
 
@@ -1349,7 +1364,11 @@ describe("WorkoutSessionRepository", () => {
       expect(summary.adaptation!.suggestedChange).toBeUndefined();
       expect(summary.adaptation!.rationaleKey).toBeUndefined();
       expect(summary.adaptation!.planSpecId).toBe("spec-ok-1");
-      expect(select).toHaveBeenCalledTimes(2);
+      // adherence "ok" (not "low") → the RPE fold still runs (2 more selects:
+      // RPE-window exercises + planSpec; the sets query is skipped because no
+      // exercise rows are stubbed here) but finds no rated sets at all →
+      // insufficient_data → does NOT override the adherence-sourced slot.
+      expect(select).toHaveBeenCalledTimes(4);
     });
 
     it("reports insufficient_data when the latest ready plan is younger than the window", async () => {
@@ -1368,6 +1387,116 @@ describe("WorkoutSessionRepository", () => {
       expect(summary.adaptation!.level).toBe("insufficient_data");
       expect(summary.adaptation!.suggestedChange).toBeUndefined();
       expect(summary.adaptation!.adherence).toBeUndefined();
+    });
+
+    // 14b-v1.1 Slice A3 — RPE fold + adherence-wins precedence. Builds
+    // sessionExercises/setRecords rows for the last N completed sessions so
+    // computeRpeAdaptation has a real window to aggregate.
+    function buildRpeExerciseAndSetRows(sessionIds: string[], rpePerSession: number[][]) {
+      const exerciseRows: unknown[] = [];
+      const setRows: unknown[] = [];
+      sessionIds.forEach((sessionId, sessionIndex) => {
+        const exerciseId = `rpe-ex-${sessionIndex}`;
+        exerciseRows.push({
+          id: exerciseId,
+          workoutSessionId: sessionId,
+          exerciseIndex: 0,
+          title: "Squat",
+          restSeconds: 90,
+          notes: null,
+          muscleGroup: null,
+        });
+        (rpePerSession[sessionIndex] ?? []).forEach((rpe, setIndex) => {
+          setRows.push({
+            id: `rpe-set-${sessionIndex}-${setIndex}`,
+            sessionExerciseId: exerciseId,
+            setIndex,
+            targetReps: "8",
+            actualReps: 8,
+            weightKg: "50.00",
+            rpe,
+            completed: true,
+            notes: null,
+          });
+        });
+      });
+      return { exerciseRows, setRows };
+    }
+
+    it("surfaces an rpe adjust_load(decrease) recommendation when adherence is ok and the RPE trend is too hard", async () => {
+      const okPlanRow = {
+        ...readyPlanRow,
+        planSpecId: "spec-ok-1",
+        programJson: buildProgramWithDays(1),
+        createdAt: ADAPT_PLAN_CREATED_BEFORE_WINDOW,
+      };
+      const okSessions = buildInWindowSessions(
+        ["2026-06-20", "2026-07-01", "2026-07-10"],
+        "aaaaaaaa-3333-0000-0000-00000000000"
+      );
+      const { exerciseRows, setRows } = buildRpeExerciseAndSetRows(
+        okSessions.map((row) => row.id),
+        [[9, 9], [9, 9], [9, 9]]
+      );
+      const { select } = createDashboardDb({
+        sessionRows: okSessions,
+        planRows: [okPlanRow],
+        exerciseRows,
+        setRows,
+      });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const summary = await repo.getDashboardSummary(TENANT_A, USER_A, NOW);
+
+      expect(summary.adaptation!.source).toBe("rpe");
+      expect(summary.adaptation!.level).toBe("low");
+      expect(summary.adaptation!.suggestedChange).toEqual({
+        kind: "adjust_load",
+        direction: "decrease",
+        from: "maintain",
+        to: "reduce",
+      });
+      expect(summary.adaptation!.rationaleKey).toBe("adaptation.rpe.reduceLoad");
+      expect(summary.adaptation!.planSpecId).toBe("spec-ok-1");
+      expect(summary.adaptation!.rpe).toMatchObject({ meanRpe: 9, sessionsWithRpe: 3, setsWithRpe: 6 });
+      // Pre-existing weekly board fields are untouched by the RPE override.
+      expect(summary.weeklyPlanned).toBe(1);
+    });
+
+    it("adherence-low precedence suppresses the RPE signal even when the RPE trend is also actionable", async () => {
+      const lowPlanRow = {
+        ...readyPlanRow,
+        planSpecId: "spec-low-1",
+        programJson: buildProgramWithDays(4),
+        createdAt: ADAPT_PLAN_CREATED_BEFORE_WINDOW,
+      };
+      const lowSessions = buildInWindowSessions(
+        ["2026-06-20", "2026-06-25", "2026-07-01", "2026-07-05", "2026-07-10"],
+        "aaaaaaaa-2222-0000-0000-00000000000"
+      );
+      const { exerciseRows, setRows } = buildRpeExerciseAndSetRows(
+        lowSessions.map((row) => row.id),
+        [[9, 9], [9, 9], [9, 9], [9, 9], [9, 9]]
+      );
+      const { select, specWhere } = createDashboardDb({
+        sessionRows: lowSessions,
+        planRows: [lowPlanRow],
+        exerciseRows,
+        setRows,
+      });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const summary = await repo.getDashboardSummary(TENANT_A, USER_A, NOW);
+
+      // Adherence is "low" (31.25% < 70%) — it wins the single slot; the RPE
+      // policy is never even invoked (no planSpecs round-trip for its bias).
+      expect(summary.adaptation!.source).toBe("adherence");
+      expect(summary.adaptation!.suggestedChange).toEqual({
+        kind: "reduce_frequency",
+        fromDays: 4,
+        toDays: 3,
+      });
+      expect(specWhere).not.toHaveBeenCalled();
     });
 
     it("reports insufficient_data with no planSpecId when there is no active ready plan", async () => {

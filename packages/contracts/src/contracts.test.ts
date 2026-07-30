@@ -4,6 +4,8 @@ import type {
   AdaptationSignalSource,
   AdaptationLevel,
   AdherenceSnapshot,
+  IntensityBias,
+  RpeSnapshot,
   SuggestedChange,
   AdaptationRecommendation,
   DashboardSummaryDTO,
@@ -89,6 +91,7 @@ describe("shared contracts boundary", () => {
       preferenceScores: PlanPreferenceScores;
       confirmed: boolean;
       name?: string | null;
+      intensityBias?: IntensityBias;
     }>();
   });
 
@@ -274,7 +277,7 @@ describe("shared contracts boundary", () => {
   // 14a-v1.1-adaptation-adherence — shared, type-only adaptation contract
   // ---------------------------------------------------------------------------
 
-  it("defines the type-only AdaptationRecommendation contract (14a; 'rpe' reserved for 14b)", () => {
+  it("defines the type-only AdaptationRecommendation contract (14a adherence + 14b rpe)", () => {
     expectTypeOf<AdaptationSignalSource>().toEqualTypeOf<"adherence" | "rpe">();
     expectTypeOf<AdaptationLevel>().toEqualTypeOf<"ok" | "low" | "insufficient_data">();
 
@@ -285,11 +288,20 @@ describe("shared contracts boundary", () => {
       plannedInWindow: number;
     }>();
 
-    expectTypeOf<SuggestedChange>().toEqualTypeOf<{
-      kind: "reduce_frequency";
-      fromDays: number;
-      toDays: number;
+    expectTypeOf<IntensityBias>().toEqualTypeOf<"reduce" | "maintain" | "increase">();
+
+    expectTypeOf<RpeSnapshot>().toEqualTypeOf<{
+      meanRpe: number;
+      windowSessions: number;
+      sessionsWithRpe: number;
+      setsWithRpe: number;
     }>();
+
+    // 14b adds the `adjust_load` member to the union.
+    expectTypeOf<SuggestedChange>().toEqualTypeOf<
+      | { kind: "reduce_frequency"; fromDays: number; toDays: number }
+      | { kind: "adjust_load"; direction: "increase" | "decrease"; from: IntensityBias; to: IntensityBias }
+    >();
 
     expectTypeOf<AdaptationRecommendation>().toEqualTypeOf<{
       source: AdaptationSignalSource;
@@ -298,6 +310,7 @@ describe("shared contracts boundary", () => {
       rationaleKey?: string;
       planSpecId?: string;
       adherence?: AdherenceSnapshot;
+      rpe?: RpeSnapshot;
     }>();
   });
 
@@ -305,6 +318,10 @@ describe("shared contracts boundary", () => {
     expectTypeOf<DashboardSummaryDTO>()
       .toHaveProperty("adaptation")
       .toEqualTypeOf<AdaptationRecommendation | undefined>();
+  });
+
+  it("adds an optional intensityBias field to PlanSpec (14b; absent = maintain)", () => {
+    expectTypeOf<PlanSpec>().toHaveProperty("intensityBias").toEqualTypeOf<IntensityBias | undefined>();
   });
 
   it("exposes the configurable default vector embedding metadata", () => {

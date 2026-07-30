@@ -10,7 +10,13 @@ import {
 import { derivePreferenceScores } from "@kinora/domain";
 import { mergePlanSpecDraft } from "@kinora/domain/plan";
 import type { MergePlanSpecDraftResult } from "@kinora/domain/plan";
-import type { BillingFeature, DashboardSummaryDTO, PlanSpec, PlanSpecDraft } from "@kinora/contracts";
+import type {
+  BillingFeature,
+  DashboardSummaryDTO,
+  IntensityBias,
+  PlanSpec,
+  PlanSpecDraft,
+} from "@kinora/contracts";
 import type { WarningLocale } from "@kinora/domain";
 import type { PlanGenerationService } from "../ai/generation-service.js";
 import type { ConsumeDecision } from "../billing/types.js";
@@ -111,6 +117,20 @@ export interface PlanRouteRepo {
     userId: string,
     specId: string,
     toDays: number
+  ): Promise<number>;
+  /**
+   * 14b-v1.1 — in-place, tenant/user-scoped write of `spec_json.intensityBias`
+   * on the caller's confirmed plan_specs row (the RPE-adaptation confirm
+   * write, the LOAD branch of `/adapt`). Resolves to the number of rows
+   * updated (1 when the caller owns the confirmed spec, 0 otherwise).
+   * Optional: when absent, an `adjust_load` accept is simply not confirmable
+   * (409 `no_adaptation`) — every other `/adapt` behavior is unaffected.
+   */
+  updateSpecIntensityBias?(
+    tenantId: string,
+    userId: string,
+    specId: string,
+    intensityBias: IntensityBias
   ): Promise<number>;
 }
 
@@ -726,7 +746,13 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   // extra generation). A caller-supplied `Idempotency-Key` header (a genuine
   // client retry) is still honored and replays as before. Registered only
   // when the adherence reader AND the repo's `updateSpecDaysPerWeek` are wired.
+  // 14b-v1.1 — generalized to ALSO accept the `adjust_load` LOAD branch
+  // (RPE-adaptation confirm). The #244-class discipline below (assertGeneratable
+  // → re-derive → consume-before-write → write → startGeneration with
+  // compensating rollback on a synchronous throw) applies IDENTICALLY to both
+  // kinds; only the write target (`daysPerWeek` vs `intensityBias`) differs.
   const adherenceReader = options.adherenceReader;
+  const updateSpecIntensityBias = repo.updateSpecIntensityBias?.bind(repo);
   if (adherenceReader && repo.updateSpecDaysPerWeek) {
     const updateSpecDaysPerWeek = repo.updateSpecDaysPerWeek.bind(repo);
     fastify.post(
@@ -749,16 +775,15 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         const suggestedChange = adaptation?.suggestedChange;
         const isConfirmable =
           adaptation?.level === "low" &&
-          suggestedChange?.kind === "reduce_frequency" &&
-          adaptation.planSpecId === id;
+          adaptation.planSpecId === id &&
+          (suggestedChange?.kind === "reduce_frequency" ||
+            (suggestedChange?.kind === "adjust_load" && updateSpecIntensityBias !== undefined));
         if (!isConfirmable || !suggestedChange) {
-          // Stale (adherence recovered), a forged accept, or a mismatched spec:
-          // no persist, no consume, no generation.
+          // Stale (recovered), a forged accept, a mismatched spec, or a LOAD
+          // accept with no write target wired: no persist, no consume, no
+          // generation.
           return reply.code(409).send({ error: "no_adaptation" });
         }
-
-        // The reduced frequency is DERIVED here — never read from the body.
-        const toDays = suggestedChange.toDays;
 
         // Consume BEFORE the write: an exhausted/denied quota returns 403 with
         // the spec untouched, so a failed consume never leaves a mutated spec
@@ -779,18 +804,22 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
           }
         }
 
-        // Persist the reduced daysPerWeek in place so generation regenerates at
-        // the adjusted frequency (write AFTER a successful consume, BEFORE
-        // generation reads the spec).
-        await updateSpecDaysPerWeek(tenantId, userId, id, toDays);
+        // Persist the server-derived change in place so generation
+        // regenerates with it (write AFTER a successful consume, BEFORE
+        // generation reads the spec). Never read from the request body.
+        if (suggestedChange.kind === "reduce_frequency") {
+          await updateSpecDaysPerWeek(tenantId, userId, id, suggestedChange.toDays);
+        } else {
+          await updateSpecIntensityBias!(tenantId, userId, id, suggestedChange.to);
+        }
 
         // #244: make the write + startGeneration atomic via a compensating
-        // rollback. If startGeneration throws SYNCHRONOUSLY after the
-        // daysPerWeek write already committed (e.g. its internal
-        // `createGenerating` insert fails, or a race makes `loadValidatedSpec`
-        // throw), restore the ORIGINAL frequency so the spec is not left
-        // reduced with a consumed unit and NO fresh generation. Then rethrow so
-        // the client still gets the error (the app error handler maps it).
+        // rollback. If startGeneration throws SYNCHRONOUSLY after the write
+        // already committed (e.g. its internal `createGenerating` insert
+        // fails, or a race makes `loadValidatedSpec` throw), restore the
+        // ORIGINAL value so the spec is not left mutated with a consumed unit
+        // and NO fresh generation. Then rethrow so the client still gets the
+        // error (the app error handler maps it).
         let result;
         try {
           result = await generationService.startGeneration(
@@ -800,14 +829,18 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
             resolveWarningLocale(request)
           );
         } catch (err) {
-          // Best-effort restore to the original frequency (suggestedChange.fromDays).
-          // If the restore itself throws, swallow it and let the ORIGINAL
-          // startGeneration error propagate (the spec remains self-healing on the
-          // next regenerate/adapt). The consumed plan_regeneration unit is NOT
+          // Best-effort restore to the original value. If the restore itself
+          // throws, swallow it and let the ORIGINAL startGeneration error
+          // propagate (the spec remains self-healing on the next
+          // regenerate/adapt). The consumed plan_regeneration unit is NOT
           // refunded here: the billing port exposes no reversal API (same as
           // /regenerate) and the unit is intentionally spent — a retry re-consumes.
           try {
-            await updateSpecDaysPerWeek(tenantId, userId, id, suggestedChange.fromDays);
+            if (suggestedChange.kind === "reduce_frequency") {
+              await updateSpecDaysPerWeek(tenantId, userId, id, suggestedChange.fromDays);
+            } else {
+              await updateSpecIntensityBias!(tenantId, userId, id, suggestedChange.from);
+            }
           } catch {
             /* swallow — the original startGeneration error is the meaningful one */
           }

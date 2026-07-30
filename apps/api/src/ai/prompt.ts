@@ -41,6 +41,15 @@ export function buildPlanPrompt(spec: PlanPromptInput): string {
       : "User context: No specific physical considerations reported.";
 
   const { strength, hypertrophy, endurance, mobility } = spec.preferenceScores;
+  // 14b-v1.1 — RPE-driven load steer. Absent/"maintain" adds nothing to the
+  // prompt (back-compat: a legacy/never-adjusted spec produces the exact
+  // same prompt as before this slice).
+  const intensityBiasSection =
+    spec.intensityBias === "reduce"
+      ? "\nIntensity bias: the user's recent RPE trend has been too hard — reduce overall training intensity for this program (lighter loads and/or less intense progression than you would otherwise choose)."
+      : spec.intensityBias === "increase"
+        ? "\nIntensity bias: the user's recent RPE trend has been too easy — increase overall training intensity for this program (heavier loads and/or more intense progression than you would otherwise choose)."
+        : "";
   const safeMemoryContext = sanitizeMemoryContext(spec.memoryContext);
   const memorySection =
     safeMemoryContext && safeMemoryContext.length > 0
@@ -68,7 +77,7 @@ USER TRAINING PROFILE:
 - Session duration: ${spec.sessionDurationMinutes} minutes
 - Training location: ${spec.location}
 - Available equipment: ${equipmentList}
-- Training emphasis (0–1 weights): strength=${strength}, hypertrophy=${hypertrophy}, endurance=${endurance}, mobility=${mobility}
+- Training emphasis (0–1 weights): strength=${strength}, hypertrophy=${hypertrophy}, endurance=${endurance}, mobility=${mobility}${intensityBiasSection}
 
 ${limitationsSection}
 ${memorySection}

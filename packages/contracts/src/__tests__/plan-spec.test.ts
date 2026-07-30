@@ -1,5 +1,6 @@
 import { describe, it, expectTypeOf } from "vitest";
 import type {
+  IntensityBias,
   PlanLimitation,
   PlanPreferenceScores,
   PlanSpec,
@@ -55,6 +56,12 @@ describe("PlanSpec contract types (07-v1-plan-wizard)", () => {
       preferenceScores: PlanPreferenceScores;
       confirmed: boolean;
       name?: string | null;
+      intensityBias?: IntensityBias;
     }>();
+  });
+
+  // 14b-v1.1: server-authoritative load bias, absent = "maintain" (back-compat).
+  it("PlanSpec includes an optional intensityBias (14b)", () => {
+    expectTypeOf<PlanSpec>().toHaveProperty("intensityBias").toEqualTypeOf<IntensityBias | undefined>();
   });
 });

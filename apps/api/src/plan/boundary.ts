@@ -1,4 +1,6 @@
-import type { PlanSpec } from "@kinora/contracts";
+import type { IntensityBias, PlanSpec } from "@kinora/contracts";
+
+const VALID_INTENSITY_BIASES: readonly IntensityBias[] = ["reduce", "maintain", "increase"];
 
 /**
  * Maximum length of a plan `name` (#93). Mirrors the `workout_plans.name` column
@@ -26,6 +28,29 @@ function assertPlanName(name: unknown): void {
   }
   if (typeof name !== "string") {
     throw new Error("PlanSpec.name must be a string or null when present");
+  }
+}
+
+/**
+ * Validates the optional `intensityBias` TYPE (14b-v1.1): when present it
+ * must be one of `"reduce" | "maintain" | "increase"`. Absent is valid
+ * (legacy/never-adjusted specs — the contract documents absent as
+ * `"maintain"`). This is a full PlanSpec (shape) concern only, NOT a wizard
+ * input field — the wizard never writes it, only the `/adapt` LOAD confirm
+ * branch does — so it is validated in `assertPlanSpecShape`, not
+ * `assertInputFields`.
+ */
+function assertIntensityBias(intensityBias: unknown): void {
+  if (intensityBias === undefined) {
+    return;
+  }
+  if (
+    typeof intensityBias !== "string" ||
+    !VALID_INTENSITY_BIASES.includes(intensityBias as IntensityBias)
+  ) {
+    throw new Error(
+      `PlanSpec.intensityBias must be one of ${VALID_INTENSITY_BIASES.join(", ")} when present`
+    );
   }
 }
 
@@ -152,6 +177,10 @@ export function assertPlanSpecShape(input: unknown): asserts input is PlanSpec {
   if (typeof obj.confirmed !== "boolean") {
     throw new Error("PlanSpec.confirmed must be a boolean");
   }
+
+  // Optional load bias (14b-v1.1) — server-written only via `/adapt`'s LOAD
+  // branch, never by the wizard; absent = "maintain".
+  assertIntensityBias(obj.intensityBias);
 
   // Optional plan name (#93) is validated by assertInputFields (called above)
   // via assertPlanName: string|null type + VARCHAR(120) length bound. A blank
