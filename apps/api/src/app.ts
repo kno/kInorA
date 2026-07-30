@@ -375,6 +375,12 @@ export async function buildApp(
     planDraftRepo,
     workoutPlanRepo,
   });
+  // 15a-v2-trainer-account-access, Slice 4 — constructed here (ahead of
+  // `planRoutes` registration below) so the SAME instance is reused by the
+  // trainer invite/list routes further down; `entitlementReader` reuses the
+  // SAME `BillingStateReaderRepository` instance every other billing decision
+  // in this file uses.
+  const trainerAssignmentRepo = new TrainerAssignmentRepository(database);
   // 12-interactive-text-chat (S2b): Pro-only chat gate + the real extractor.
   // The gate reuses the SAME entitlement reader as every other billing decision
   // (server-side, authContext-scoped, fail-closed). PRODUCTION ALWAYS uses the
@@ -442,6 +448,13 @@ export async function buildApp(
     transcriber,
     synthesizer,
     voicePreferences,
+    // 15a-v2-trainer-account-access, Slice 4 — enables
+    // `POST /clients/:clientUserId/plan-specs`. Reuses the exact same
+    // `resolveAuthorizedOwner` deps every trainer-scoped route uses.
+    trainerAccess: {
+      assignmentRepo: trainerAssignmentRepo,
+      entitlementReader: billingStateReader,
+    },
   });
 
   await app.register(workoutSessionRoutes, {
@@ -506,7 +519,8 @@ export async function buildApp(
   // `BillingStateReaderRepository` instance every other billing decision in
   // this file uses — one entitlement reader, no duplicated wiring.
   const trainerMembershipRepo = new MembershipRepository(database);
-  const trainerAssignmentRepo = new TrainerAssignmentRepository(database);
+  // `trainerAssignmentRepo` is constructed above (reused by `planRoutes`'
+  // `trainerAccess` option) — do not re-instantiate.
   await app.register(trainerRoutes, {
     assignmentRepo: trainerAssignmentRepo,
     membershipRepo: trainerMembershipRepo,

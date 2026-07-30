@@ -67,12 +67,12 @@ Independently shippable: S1 (schema only, dark). Dependent chain: S2 depends on 
 
 ## Phase 4 (Slice S4): Client-Owned Plan Creation
 
-- [ ] 4.1 RED: `POST /clients/:clientUserId/plan-specs` — trainer entitled, assignment active → spec created with `ownerUserId = clientUserId`, `tenantId = trainerTenantId`.
-- [ ] 4.2 RED: `POST /clients/:clientUserId/plan-specs` — trainer with no/revoked assignment for `:clientUserId` → 403 (matches design's non-assigned-client case).
-- [ ] 4.3 RED: quota/limits check — plan creation for a client is metered against the trainer's tenant quota, not the client's personal tenant.
-- [ ] 4.4 GREEN: modify `apps/api/src/routes/plan.ts` to derive `ActorOwnerContext`, call `resolveAuthorizedOwner(ctx, clientUserId)`, then thread `ownerUserId` into `PlanSpecRepository.create` and `ai/generation-service.ts` `startGeneration`.
-- [ ] 4.5 Update the S2 regression guard (2.12) fixture list to include `plan.ts`'s client-owned-creation route; confirm full green.
-- [ ] 4.6 E2E: invite → accept → trainer creates plan for client → client (session scoped to trainer tenant) sees and executes only that plan; trainer sees only assigned clients' plans.
+- [x] 4.1 RED: `POST /clients/:clientUserId/plan-specs` — trainer entitled, assignment active → spec created with `ownerUserId = clientUserId`, `tenantId = trainerTenantId`.
+- [x] 4.2 RED: `POST /clients/:clientUserId/plan-specs` — trainer with no/revoked assignment for `:clientUserId` → 403 (matches design's non-assigned-client case).
+- [x] 4.3 RED: quota/limits check — plan creation for a client is metered against the trainer's tenant quota, not the client's personal tenant.
+- [x] 4.4 GREEN: modify `apps/api/src/routes/plan.ts` to derive `ActorOwnerContext`, call `resolveAuthorizedOwner(ctx, clientUserId)`, then thread `ownerUserId` into the spec-creation path (`PlanRouteRepo.promoteDraftToSpec` — reused byte-identically, the paired draft-delete is a documented no-op with no prior draft) and `ai/generation-service.ts` `startGeneration`.
+- [x] 4.5 Update the S2/S3 regression guard (2.12/3.8) fixture list to include `plan.ts`'s client-owned-creation route (`POST /clients/:clientUserId/plan-specs`), with real route-level probes (via the actual `planRoutes` plugin) proving deny-before-any-repo/generation/billing-call for a non-trainer role AND a trainer without the entitlement; confirm full green.
+- [x] 4.6 E2E: invite → accept (replicated directly via the assignment repo) → trainer creates plan for client → client (session scoped to trainer tenant) sees and executes only that plan; a different, unassigned client sees nothing; trainer's own tenant/userId is what the billing ledger records, never the client's.
 
 ## Phase 5 (Slice S5): Web + Mobile Surfaces
 
