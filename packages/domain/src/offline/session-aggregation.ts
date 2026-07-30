@@ -49,6 +49,29 @@ export function computeAverageRpe(session: WorkoutSessionRecord): number | undef
 }
 
 /**
+ * RPE of every *completed* working set in the session that recorded one
+ * (14b-v1.1 RPE-driven plan adaptation). Unlike `computeAverageRpe`, an
+ * incomplete set is excluded even if it happens to carry an `rpe` value —
+ * the adaptation window only counts working sets that were actually
+ * performed. Returns `[]` when no completed set recorded an rpe.
+ *
+ * Pure — no I/O.
+ */
+export function extractCompletedSetRpeValues(session: WorkoutSessionRecord): number[] {
+  const values: number[] = [];
+
+  for (const exercise of session.exercises) {
+    for (const set of exercise.setRecords) {
+      if (set.completed && set.rpe !== undefined) {
+        values.push(set.rpe);
+      }
+    }
+  }
+
+  return values;
+}
+
+/**
  * Compares `current` session volume against the immediately-prior completed
  * session for the same plan/exercise scope. Returns `undefined` when there
  * is no prior session (e.g. the first session in scope) — the caller

@@ -13,6 +13,7 @@ export {
   computeStreak,
   computeAdherence,
   computeAdherenceAdaptation,
+  computeRpeAdaptation,
   computeWeeklyRollup,
   delta,
   computeMuscleGroupDistribution,
@@ -25,4 +26,6 @@ export {
 export type {
   MuscleGroupDistributionExercise,
   PersonalRecordSetInput,
+  RpeSessionInput,
+  IntensityBias as DomainIntensityBias,
 } from "@kinora/domain/progress";

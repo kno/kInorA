@@ -45,4 +45,5 @@ export {
   computeAverageRpe,
   computeSessionVolume,
   computeVolumeTrend,
+  extractCompletedSetRpeValues,
 } from "./offline/session-aggregation.js";

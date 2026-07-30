@@ -1,10 +1,17 @@
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
-import { computeAverageRpe, computeSessionVolume, computeVolumeTrend, defaultPlanName } from "@kinora/domain";
+import {
+  computeAverageRpe,
+  computeSessionVolume,
+  computeVolumeTrend,
+  defaultPlanName,
+  extractCompletedSetRpeValues,
+} from "@kinora/domain";
 import { classifyExerciseMuscleGroup } from "../muscle-classifier.js";
 import {
   addUtcDays as domainAddUtcDays,
   computeAdherence,
   computeAdherenceAdaptation,
+  computeRpeAdaptation,
   computeMuscleGroupDistribution,
   computePersonalRecords,
   computeStreak,
@@ -15,6 +22,8 @@ import {
   utcWeekBounds as domainUtcWeekBounds,
   type MuscleGroupDistributionExercise,
   type PersonalRecordSetInput,
+  type RpeSessionInput,
+  type DomainIntensityBias,
 } from "../progress-domain.js";
 import type {
   AdaptationRecommendation,
@@ -23,6 +32,7 @@ import type {
   ExerciseDetailDTO,
   KpiWithDelta,
   MuscleGroup,
+  PlanSpec,
   SessionExerciseRecord,
   SetRecordDTO,
   StartSessionOutcome,
@@ -35,7 +45,10 @@ import type {
   WorkoutSessionRecord,
 } from "@kinora/contracts";
 import type { Database } from "../client.js";
-import { sessionExercises, setRecords, users, workoutPlans, workoutSessions } from "../schema.js";
+import { planSpecs, sessionExercises, setRecords, users, workoutPlans, workoutSessions } from "../schema.js";
+
+/** 14b-v1.1 — session-count window for the RPE-fold's session fetch (mirrors `RPE_WINDOW_SESSIONS`). */
+const RPE_WINDOW_SESSIONS = 3;
 
 interface WorkoutPlanRow {
   id: string;
@@ -738,13 +751,39 @@ export class WorkoutSessionRepository {
       },
       now
     );
-    const adaptation: AdaptationRecommendation = {
+    let adaptation: AdaptationRecommendation = {
       ...adaptationResult,
       ...(latestReadyPlan ? { planSpecId: latestReadyPlan.planSpecId } : {}),
       ...(adaptationResult.level === "low" && adaptationResult.suggestedChange
         ? { rationaleKey: "adaptation.adherence.reduceFrequency" }
         : {}),
     };
+
+    // 14b-v1.1 Slice A3 — RPE fold with ADHERENCE-WINS precedence (design.md
+    // "adherence-wins precedence, single slot preserved"). RPE is computed
+    // and can override the single `adaptation` slot ONLY when adherence did
+    // NOT already surface a "low" (actionable) signal — a genuinely inactive
+    // user gets the frequency nudge, never a contradictory load nudge. Also
+    // skipped when there is no ready plan or no completed session at all
+    // (nothing to analyze, no extra round-trip).
+    if (adaptationResult.level !== "low" && latestReadyPlan && completedRows.length > 0) {
+      const rpeSessions = await this.buildRpeSessions(completedRows.slice(0, RPE_WINDOW_SESSIONS));
+      const currentBias = await this.getIntensityBias(tenantId, userId, latestReadyPlan.planSpecId);
+      const rpeResult = computeRpeAdaptation({ sessions: rpeSessions, currentBias }, now);
+      if (rpeResult.level === "low" && rpeResult.suggestedChange) {
+        adaptation = {
+          source: "rpe",
+          level: "low",
+          suggestedChange: rpeResult.suggestedChange,
+          rationaleKey:
+            rpeResult.suggestedChange.direction === "decrease"
+              ? "adaptation.rpe.reduceLoad"
+              : "adaptation.rpe.increaseLoad",
+          planSpecId: latestReadyPlan.planSpecId,
+          rpe: rpeResult.rpe,
+        };
+      }
+    }
 
     const { start: weekStart, end: weekEnd } = utcWeekBounds(now);
     const weeklyCompletedRows = completedRows.filter(
@@ -818,6 +857,84 @@ export class WorkoutSessionRepository {
         volumeKg: computeSessionVolume(session),
       };
     });
+  }
+
+  /**
+   * 14b-v1.1 Slice A3 — builds the `computeRpeAdaptation` window input for a
+   * small set of already-fetched completed session rows (the caller passes
+   * only the last `RPE_WINDOW_SESSIONS`). Two bounded `inArray` queries
+   * (never per-session), mirroring `buildWeeklyRollupSessions`. Extracts only
+   * `extractCompletedSetRpeValues`-eligible sets (completed + rated) via
+   * `mapWorkoutSessionRecord` + `extractCompletedSetRpeValues`, so the
+   * shared session-record mapping is reused rather than re-implemented.
+   */
+  private async buildRpeSessions(rows: WorkoutSessionRow[]): Promise<RpeSessionInput[]> {
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const sessionIds = rows.map((row) => row.id);
+    const exerciseRows = (await this.db
+      .select()
+      .from(sessionExercises)
+      .where(inArray(sessionExercises.workoutSessionId, sessionIds))) as SessionExerciseRow[];
+
+    const exerciseIds = exerciseRows.map((exercise) => exercise.id);
+    const setRows =
+      exerciseIds.length === 0
+        ? []
+        : ((await this.db
+            .select()
+            .from(setRecords)
+            .where(inArray(setRecords.sessionExerciseId, exerciseIds))) as SetRecordRow[]);
+
+    const exercisesBySession = new Map<string, SessionExerciseRow[]>();
+    for (const exerciseRow of exerciseRows) {
+      const current = exercisesBySession.get(exerciseRow.workoutSessionId) ?? [];
+      current.push(exerciseRow);
+      exercisesBySession.set(exerciseRow.workoutSessionId, current);
+    }
+
+    const setsByExercise = new Map<string, SetRecordRow[]>();
+    for (const setRow of setRows) {
+      const current = setsByExercise.get(setRow.sessionExerciseId) ?? [];
+      current.push(setRow);
+      setsByExercise.set(setRow.sessionExerciseId, current);
+    }
+
+    return rows.map((sessionRow) => {
+      const ownExercises = exercisesBySession.get(sessionRow.id) ?? [];
+      const ownSets = ownExercises.flatMap((exercise) => setsByExercise.get(exercise.id) ?? []);
+      const session = mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets);
+      return {
+        completedAt: sessionRow.completedAt!.toISOString(),
+        rpeValues: extractCompletedSetRpeValues(session),
+      };
+    });
+  }
+
+  /**
+   * 14b-v1.1 Slice A3 — reads the caller's confirmed `PlanSpec.intensityBias`
+   * for the RPE ladder's `currentBias`/`from`. A single tenant/user-scoped
+   * row read by id; absent `intensityBias` (legacy/never-adjusted specs)
+   * defaults to `"maintain"`, mirroring the contract's documented default.
+   */
+  private async getIntensityBias(
+    tenantId: string,
+    userId: string,
+    planSpecId: string
+  ): Promise<DomainIntensityBias> {
+    const rows = (await this.db
+      .select()
+      .from(planSpecs)
+      .where(
+        and(
+          eq(planSpecs.tenantId, tenantId),
+          eq(planSpecs.userId, userId),
+          eq(planSpecs.id, planSpecId)
+        )
+      )) as Array<{ specJson: PlanSpec }>;
+    return rows[0]?.specJson?.intensityBias ?? "maintain";
   }
 
   /**

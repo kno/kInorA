@@ -349,6 +349,14 @@ export interface PlanSpec {
    * at write time.
    */
   name?: string | null;
+  /**
+   * Server-authoritative load bias (14b-v1.1). Absent = `"maintain"` — a
+   * legacy/pre-14b spec is untouched (no migration needed; back-compat by
+   * construction). Written ONLY via the `/adapt` LOAD confirm branch, never
+   * by the wizard; the generator prompt (`buildPlanPrompt`) consumes it to
+   * steer intensity up/down. Mirrors how `daysPerWeek` is the frequency lever.
+   */
+  intensityBias?: IntensityBias;
 }
 
 // ---------------------------------------------------------------------------
@@ -863,21 +871,36 @@ export interface AdherenceSnapshot {
   plannedInWindow: number;
 }
 
-/** The only adaptation Slice 1 may suggest: a frequency reduction (`daysPerWeek`). */
-export type SuggestedChange = { kind: "reduce_frequency"; fromDays: number; toDays: number };
+/** Server-authoritative load bias steered by the generator prompt (14b-v1.1). Rides on `PlanSpec.intensityBias`. */
+export type IntensityBias = "reduce" | "maintain" | "increase";
+
+/** The adaptation Slice 1 (14a) or 14b may suggest: a frequency reduction, or a load (`intensityBias`) adjustment. */
+export type SuggestedChange =
+  | { kind: "reduce_frequency"; fromDays: number; toDays: number }
+  | { kind: "adjust_load"; direction: "increase" | "decrease"; from: IntensityBias; to: IntensityBias };
+
+/** Signal context for an actionable/`ok` RPE result over the last `WINDOW_SESSIONS` completed sessions (14b-v1.1). */
+export interface RpeSnapshot {
+  meanRpe: number;
+  windowSessions: number;
+  sessionsWithRpe: number;
+  setsWithRpe: number;
+}
 
 /** Single shared adaptation recommendation carried on the dashboard read; both 14a (adherence) and 14b (rpe) compose into ONE banner via this shape. */
 export interface AdaptationRecommendation {
   source: AdaptationSignalSource;
   level: AdaptationLevel;
-  /** Present only when `level === "low"` and a real reduction exists (`toDays < fromDays`). */
+  /** Present only when `level === "low"` and a real reduction/ladder-step exists. */
   suggestedChange?: SuggestedChange;
   /** i18n key, never raw prose (API-attached). */
   rationaleKey?: string;
   /** The spec to `POST /plan-specs/:id/adapt` on confirm (API-attached). */
   planSpecId?: string;
-  /** Signal context for the adherence source (14a); 14b adds its own. */
+  /** Signal context for the adherence source (14a). */
   adherence?: AdherenceSnapshot;
+  /** Signal context for the rpe source (14b). */
+  rpe?: RpeSnapshot;
 }
 
 /** Dashboard summary DTO. Weekly progress is always measured in sessions, never any other unit (design.md "Dashboard"). */

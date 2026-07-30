@@ -174,4 +174,30 @@ describe("PlanSpecRepository", () => {
       expect(affected).toBe(0);
     });
   });
+
+  // 14b-v1.1 — analogous in-place, tenant/user-scoped `spec_json.intensityBias`
+  // write for the RPE-adaptation confirm route (the LOAD branch of `/adapt`).
+  describe("updateSpecIntensityBias", () => {
+    it("updates spec_json.intensityBias in place and returns 1 for the owning tenant/user", async () => {
+      const { update, set, where, returning } = updateChain([planSpecRow()]);
+      const repo = new PlanSpecRepository({ update } as never);
+
+      const affected = await repo.updateSpecIntensityBias(TENANT_A, USER_A, "spec-uuid-1", "reduce");
+
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(set).toHaveBeenCalledTimes(1);
+      expect(where).toHaveBeenCalledTimes(1);
+      expect(returning).toHaveBeenCalledTimes(1);
+      expect(affected).toBe(1);
+    });
+
+    it("is a no-op (0 rows) for a cross-tenant / cross-user id", async () => {
+      const { update } = updateChain([]);
+      const repo = new PlanSpecRepository({ update } as never);
+
+      const affected = await repo.updateSpecIntensityBias(TENANT_B, USER_B, "spec-uuid-1", "increase");
+
+      expect(affected).toBe(0);
+    });
+  });
 });

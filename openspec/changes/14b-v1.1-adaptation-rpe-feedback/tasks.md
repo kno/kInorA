@@ -18,6 +18,8 @@ Chain strategy: stacked-to-main
 
 Note: evaluated against this session's 800-line budget (not the skill-default 400). Slice A alone (~735 lines) is close to the 800-line ceiling; if the real diff runs over, split A further into A1 (contract+domain policy) and A2 (api fold+confirm route) before requesting review.
 
+**Apply result (actual):** Slice A landed at ~1199 changed lines (603 diff on existing files + 596 in 3 new files), OVER the 800-line budget — test coverage (route/repo/domain fixtures for the #244-class rollback + precedence matrix) grew larger than forecast. Recommend the orchestrator split the review into A1 (contracts + domain policy: `packages/contracts/src/index.ts`, `rpe-adaptation.ts` + tests, `session-aggregation.ts` + tests — ~450 lines) and A2 (api fold + confirm route: `workout-session.ts`, `plan-spec.ts`, `plan.ts`, `prompt.ts`, `boundary.ts`, `plan-route-repo.ts` + tests — ~750 lines) before requesting review, per the contingency plan above.
+
 ### Suggested Work Units
 
 | Unit | Goal | Likely PR | Focused test command | Runtime harness | Rollback boundary |
@@ -27,31 +29,31 @@ Note: evaluated against this session's 800-line budget (not the skill-default 40
 
 ## Phase 1: Contracts (Foundation)
 
-- [ ] 1.1 RED: failing type/boundary tests for `IntensityBias`, `adjust_load` `SuggestedChange`, `RpeSnapshot`, `PlanSpec.intensityBias` in `packages/contracts`.
-- [ ] 1.2 GREEN: add these types/schemas to `packages/contracts/src/index.ts`.
+- [x] 1.1 RED: failing type/boundary tests for `IntensityBias`, `adjust_load` `SuggestedChange`, `RpeSnapshot`, `PlanSpec.intensityBias` in `packages/contracts`.
+- [x] 1.2 GREEN: add these types/schemas to `packages/contracts/src/index.ts`.
 
 ## Phase 2: Domain Policy (pure)
 
-- [ ] 2.1 RED: `packages/domain/src/progress/rpe-adaptation.test.ts` — high/low RPE, in-zone no-op, insufficient-data, ladder floor/ceiling (spec scenarios).
-- [ ] 2.2 GREEN: create `computeRpeAdaptation` + constants in `rpe-adaptation.ts`.
-- [ ] 2.3 RED: test for rolling-window RPE helper in `packages/domain/src/offline/session-aggregation.ts`.
-- [ ] 2.4 GREEN: implement the helper.
+- [x] 2.1 RED: `packages/domain/src/progress/rpe-adaptation.test.ts` — high/low RPE, in-zone no-op, insufficient-data, ladder floor/ceiling (spec scenarios).
+- [x] 2.2 GREEN: create `computeRpeAdaptation` + constants in `rpe-adaptation.ts`.
+- [x] 2.3 RED: test for rolling-window RPE helper in `packages/domain/src/offline/session-aggregation.ts` (`extractCompletedSetRpeValues`).
+- [x] 2.4 GREEN: implement the helper.
 
 ## Phase 3: API Fold + Precedence
 
-- [ ] 3.1 RED: `getDashboardSummary`/`workout-session.test.ts` — adherence-low suppresses RPE; RPE surfaces when adherence ok/insufficient.
-- [ ] 3.2 GREEN: modify `workout-session.ts:725-747` (adherence-first, RPE fold, precedence, `RpeSnapshot`).
-- [ ] 3.3 RED: repo test for `updateSpecIntensityBias` (jsonb_set, tenant/user scoped, restore-prior-value).
-- [ ] 3.4 GREEN: implement in `plan-spec.ts`.
+- [x] 3.1 RED: `getDashboardSummary`/`workout-session.test.ts` — adherence-low suppresses RPE; RPE surfaces when adherence ok/insufficient.
+- [x] 3.2 GREEN: modify `workout-session.ts` (adherence-first, RPE fold via `buildRpeSessions`/`getIntensityBias`, precedence, `RpeSnapshot`).
+- [x] 3.3 RED: repo test for `updateSpecIntensityBias` (jsonb_set, tenant/user scoped, restore-prior-value).
+- [x] 3.4 GREEN: implement in `plan-spec.ts`.
 
 ## Phase 4: Confirm Route Generalization
 
-- [ ] 4.1 RED: `plan.test.ts` — 404 pre-consume, 409 stale mismatch, fresh-`randomUUID()` consume-before-write, 403 quota leaves spec untouched, successful accept, rollback on synchronous `startGeneration` throw (mirror #244).
-- [ ] 4.2 GREEN: generalize `isConfirmable` + LOAD write/rollback branch in `plan.ts:750-815`.
-- [ ] 4.3 RED: `prompt.ts` test — intensity-bias line present per bias value.
-- [ ] 4.4 GREEN: implement in `buildPlanPrompt`.
-- [ ] 4.5 RED: `boundary.ts` test — optional `intensityBias` enum validation.
-- [ ] 4.6 GREEN: implement.
+- [x] 4.1 RED: `plan-adapt-load.test.ts` — 404 pre-consume, 409 stale mismatch, fresh-`randomUUID()` consume-before-write, 403 quota leaves spec untouched, successful accept, rollback on synchronous `startGeneration` throw (mirror #244).
+- [x] 4.2 GREEN: generalize `isConfirmable` + LOAD write/rollback branch in `plan.ts`.
+- [x] 4.3 RED: `prompt.ts` test — intensity-bias line present per bias value.
+- [x] 4.4 GREEN: implement in `buildPlanPrompt`.
+- [x] 4.5 RED: `boundary.ts` test — optional `intensityBias` enum validation.
+- [x] 4.6 GREEN: implement.
 
 ## Phase 5: Web + Mobile Banner Copy
 

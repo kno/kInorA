@@ -31,3 +31,19 @@ export type { PersonalRecordSetInput } from "./personal-records.js";
 export { computeWeeklyPlanVsCompletion } from "./weekly-plan-vs-completion.js";
 export type { WeeklyPlanVsCompletionInput } from "./weekly-plan-vs-completion.js";
 export { utcWeekBounds, utcDayKey, startOfUtcDay, addUtcDays, utcWeekdayIndex } from "./utc-week.js";
+export {
+  computeRpeAdaptation,
+  WINDOW_SESSIONS as RPE_WINDOW_SESSIONS,
+  RPE_HIGH_THRESHOLD,
+  RPE_LOW_THRESHOLD,
+  MIN_SESSIONS_WITH_RPE,
+  MIN_SETS_WITH_RPE,
+} from "./rpe-adaptation.js";
+export type {
+  IntensityBias,
+  RpeSessionInput,
+  ComputeRpeAdaptationInput,
+  RpeAdaptationResult,
+  RpeSuggestedChange,
+  RpeSnapshot,
+} from "./rpe-adaptation.js";

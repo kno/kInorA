@@ -4,6 +4,7 @@ import {
   computeAverageRpe,
   computeSessionVolume,
   computeVolumeTrend,
+  extractCompletedSetRpeValues,
 } from "../session-aggregation.js";
 
 function set(overrides: Partial<SetRecordDTO> = {}): SetRecordDTO {
@@ -98,6 +99,34 @@ describe("computeAverageRpe", () => {
     ]);
 
     expect(computeAverageRpe(s)).toBe(7);
+  });
+});
+
+// 14b-v1.1 — the RPE adaptation policy's window input is built from ONLY
+// completed working sets that recorded an rpe (design.md "session-count
+// window"), distinct from computeAverageRpe which includes every set
+// (completed or not) that recorded one.
+describe("extractCompletedSetRpeValues", () => {
+  it("returns [] for a session with no sets", () => {
+    expect(extractCompletedSetRpeValues(session([exercise([])]))).toEqual([]);
+  });
+
+  it("excludes sets without a recorded rpe", () => {
+    const s = session([exercise([set({ rpe: undefined }), set({ rpe: undefined })])]);
+    expect(extractCompletedSetRpeValues(s)).toEqual([]);
+  });
+
+  it("excludes a set that recorded rpe but is not completed", () => {
+    const s = session([exercise([set({ rpe: 9, completed: false })])]);
+    expect(extractCompletedSetRpeValues(s)).toEqual([]);
+  });
+
+  it("returns the rpe of every completed set that recorded one, across exercises", () => {
+    const s = session([
+      exercise([set({ rpe: 8, completed: true }), set({ rpe: undefined, completed: true })]),
+      exercise([set({ rpe: 6, completed: true })]),
+    ]);
+    expect(extractCompletedSetRpeValues(s)).toEqual([8, 6]);
   });
 });
 
