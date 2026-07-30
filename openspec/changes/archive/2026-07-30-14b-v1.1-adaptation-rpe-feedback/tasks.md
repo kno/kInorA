@@ -20,6 +20,8 @@ Note: evaluated against this session's 800-line budget (not the skill-default 40
 
 **Apply result (actual):** Slice A landed at ~1199 changed lines (603 diff on existing files + 596 in 3 new files), OVER the 800-line budget — test coverage (route/repo/domain fixtures for the #244-class rollback + precedence matrix) grew larger than forecast. Recommend the orchestrator split the review into A1 (contracts + domain policy: `packages/contracts/src/index.ts`, `rpe-adaptation.ts` + tests, `session-aggregation.ts` + tests — ~450 lines) and A2 (api fold + confirm route: `workout-session.ts`, `plan-spec.ts`, `plan.ts`, `prompt.ts`, `boundary.ts`, `plan-route-repo.ts` + tests — ~750 lines) before requesting review, per the contingency plan above.
 
+**Delivered as (actual):** Slice A shipped as PR #273 (backend, squash-merged). Slice B shipped as PR #275 (mobile RPE capture + web/mobile banner copy + i18n, squash-merged — superseded the auto-closed PR #274). Both merged to `main` on 2026-07-30.
+
 ### Suggested Work Units
 
 | Unit | Goal | Likely PR | Focused test command | Runtime harness | Rollback boundary |
@@ -78,3 +80,9 @@ Note: evaluated against this session's 800-line budget (not the skill-default 40
 
 - [x] 8.1 Run domain + api + web + mobile suites; confirm no half-applied `intensityBias` write on any failure branch. (Slice B verified `web`, `mobile`, `@kinora/i18n` — all GREEN + type-check clean. Domain/api were verified in Slice A; Slice B did not touch backend files.)
 - [ ] 8.2 Manual smoke: full accept flow for `adjust_load` on web and mobile. (Left for the orchestrator/QA — outside automated test scope.)
+
+---
+
+## Archive Note (2026-07-30)
+
+Task 8.2 (manual real-device smoke of the full accept flow) remains an open, intentionally deferred follow-up at archive time — consistent with the project's existing real-device follow-up pattern (see issues #228/#245 for the adjacent voice/mobile-tracker deferrals). It is NOT a stale checkbox: every automated task (8.1) and all implementation phases (1-7) are complete and merged. This is an explicit exceptional archive per orchestrator-provided final-state facts, since 8.2 requires physical-device QA outside the automated pipeline. Tracked as an open item in the archive report; no GitHub follow-up issue number was supplied for it at archive time.
