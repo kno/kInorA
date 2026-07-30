@@ -259,16 +259,29 @@ describe("PlanWeekView — summary strip", () => {
 });
 
 describe("PlanWeekView — limitation warning banner", () => {
-  it("SC-16: banner renders when limitationWarnings has entries", async () => {
+  it("SC-16: banner renders cleaned limitation text + a single advisory line (issue #250)", async () => {
+    // The generator emits the domain template (one localized advisory string per
+    // limitation, each with the identical " — Consult…this area." tail). The
+    // banner must show just the limitation TEXT per bullet and the advisory ONCE.
     const programWithWarnings: WorkoutProgram = {
       ...twoSessionProgram,
-      limitationWarnings: ["Avoid overhead movements", "Limit knee flexion"],
+      limitationWarnings: [
+        "Limitation: lower back pain — Consult a professional before attempting exercises that stress this area.",
+        "Limitation: shoulder impingement — Consult a professional before attempting exercises that stress this area.",
+      ],
     };
     const view = await PlanWeekView({ program: programWithWarnings, planId: "plan-x" });
     const text = textOf(view);
     expect(text).toContain("Important note");
-    expect(text).toContain("Avoid overhead movements");
-    expect(text).toContain("Limit knee flexion");
+    // Cleaned limitation text (prefix + advisory tail stripped, first char cap).
+    expect(text).toContain("Lower back pain");
+    expect(text).toContain("Shoulder impingement");
+    // The repeated per-bullet advisory tail is gone…
+    expect(text).not.toContain("stress this area");
+    // …and the single advisory line appears exactly once.
+    const advisory = "Consult a professional before attempting exercises that stress these areas.";
+    expect(text).toContain(advisory);
+    expect(text.split(advisory).length - 1).toBe(1);
   });
 
   it("SC-17: banner is absent when limitationWarnings is empty", async () => {

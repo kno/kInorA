@@ -240,7 +240,8 @@
     },
     "limitation": {
       "warningLabel": "Nota",
-      "title": "Nota importante"
+      "title": "Nota importante",
+      "advisory": "Consulta con un profesional antes de realizar ejercicios que exijan estas zonas."
     },
     "backToDashboard": "Volver al dashboard",
     "nav": {
