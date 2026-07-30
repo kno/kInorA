@@ -63,6 +63,13 @@ services:
       # vars listed under environment:, so without this line a VPS .env override
       # would be silently ignored and the adapter would use its built-in default.
       DEEPGRAM_TTS_MODEL: ${DEEPGRAM_TTS_MODEL:-aura-2-carina-es}
+      # Deepgram STT model/language knobs. Same forwarding gotcha: compose only
+      # injects vars listed under environment:, so without these lines a VPS
+      # .env override would be silently ignored and the adapter would use its
+      # built-in defaults. Defaults must match the adapter (nova-2 / es) so
+      # behavior is unchanged unless the VPS .env overrides them.
+      DEEPGRAM_STT_MODEL: ${DEEPGRAM_STT_MODEL:-nova-2}
+      DEEPGRAM_STT_LANGUAGE: ${DEEPGRAM_STT_LANGUAGE:-es}
       # 13 voice provider selection. MUST be forwarded — the voice factory reads
       # these at boot; without them the container ignores the VPS .env and falls
       # back to `openai`, so the OpenAI-free Google (Gemini) STT+TTS stack is dead
