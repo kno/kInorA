@@ -135,7 +135,10 @@ describe("@kinora/i18n package assembly", () => {
     // +1 `plan.limitation.advisory` authored for #250 (single localized advisory
     // line shown once below the cleaned limitation bullets on the web plan
     // screens).
-    expect(nonBillingKeys).toHaveLength(614);
+    // + 1 `mobileTracker.rpe.a11y` authored for 14b-v1.1 Slice B (mobile RPE
+    // capture input accessibility label — the `tracker.rpe` label itself is a
+    // shared key already counted).
+    expect(nonBillingKeys).toHaveLength(615);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
@@ -224,7 +227,11 @@ describe("@kinora/i18n package assembly", () => {
     // distinct UX-state copy: `submitting` (pending affordance while the accept
     // POST is in flight), `quotaExhausted` (403 — plan change used this period /
     // upgrade), and `upToDate` (409 no_adaptation — plan already a good fit).
-    expect(adaptationKeys).toHaveLength(9);
+    // 14b-v1.1 Slice B adds 5 `adaptation.rpe.*` keys (title, reduceLoad,
+    // increaseLoad, acceptReduce, acceptIncrease) for the `adjust_load`
+    // suggestedChange banner copy branch — reusing the generic dismiss/
+    // submitting/regenerating/quotaExhausted/upToDate/error copy.
+    expect(adaptationKeys).toHaveLength(14);
     // The from→to interpolation is the option-framed suggestion.
     expect(en["adaptation.suggestion"]).toContain("{toDays}");
     expect(en["adaptation.suggestion"]).toContain("{fromDays}");
@@ -311,7 +318,9 @@ describe("@kinora/i18n package assembly", () => {
 
     const flat = flattenMessages(catalogs.en);
     const mobileTrackerKeys = Object.keys(flat).filter((key) => key.startsWith("mobileTracker."));
-    expect(mobileTrackerKeys).toHaveLength(23);
+    // 14b-v1.1 Slice B: +1 `mobileTracker.rpe.a11y` (RPE input accessibility
+    // label on the mobile tracker's `ExerciseCard`).
+    expect(mobileTrackerKeys).toHaveLength(24);
     expect(flat["mobileTracker.retry"]).toBe("Retry");
     expect(flattenMessages(catalogs.es)["mobileTracker.retry"]).toBe("Reintentar");
   });

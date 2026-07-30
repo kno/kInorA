@@ -33,6 +33,12 @@ export const messages = defineMessages({
   loadStepOptionA11y: { id: "tracker.load.stepOptionA11y" },
   decreaseReps: { id: "mobileTracker.reps.decrease" },
   increaseReps: { id: "mobileTracker.reps.increase" },
+  // 14b-v1.1 Slice B: optional 0-10 RPE capture, mobile parity with web's
+  // `ExerciseCard`. `rpeLabel` reuses the shared `tracker.rpe` catalog key
+  // ("RPE") web already surfaces; `rpeInputA11y` is mobile-only (the
+  // accessible label for the numeric text input).
+  rpeLabel: { id: "tracker.rpe" },
+  rpeInputA11y: { id: "mobileTracker.rpe.a11y" },
   completeSet: { id: "tracker.completeSet.cta" },
   completeSetA11y: { id: "mobileTracker.completeSet.a11y" },
   restActive: { id: "tracker.rest.active" },

@@ -166,12 +166,31 @@ export default function AdherenceBanner({
   const show =
     !dismissed &&
     adaptation?.level === "low" &&
-    change?.kind === "reduce_frequency" &&
+    (change?.kind === "reduce_frequency" || change?.kind === "adjust_load") &&
     typeof planSpecId === "string";
 
   if (!show || !change) return null;
 
   const isBusy = phase.kind === "submitting" || phase.kind === "regenerating";
+
+  // 14b-v1.1 Slice B: an `adjust_load` recommendation (RPE-driven) branches to
+  // distinct copy — no from/to day counts, since `intensityBias` steps one
+  // rung on a `reduce < maintain < increase` ladder rather than a numeric
+  // day count. `reduce_frequency` keeps its existing title/suggestion/accept
+  // keys unchanged.
+  const isLoadChange = change.kind === "adjust_load";
+  const isDecrease = isLoadChange && change.direction === "decrease";
+  const titleKey = isLoadChange ? "adaptation.rpe.title" : "adaptation.title";
+  const bodyKey = isLoadChange
+    ? isDecrease
+      ? "adaptation.rpe.reduceLoad"
+      : "adaptation.rpe.increaseLoad"
+    : "adaptation.suggestion";
+  const acceptKey = isLoadChange
+    ? isDecrease
+      ? "adaptation.rpe.acceptReduce"
+      : "adaptation.rpe.acceptIncrease"
+    : "adaptation.accept";
 
   if (phase.kind === "regenerating") {
     return (
@@ -186,13 +205,15 @@ export default function AdherenceBanner({
   return (
     <View style={styles.card} testID="adherence-banner">
       <Text style={styles.eyebrow}>
-        {intl.formatMessage({ id: "adaptation.title" })}
+        {intl.formatMessage({ id: titleKey })}
       </Text>
       <Text style={styles.body}>
-        {intl.formatMessage(
-          { id: "adaptation.suggestion" },
-          { fromDays: change.fromDays, toDays: change.toDays },
-        )}
+        {isLoadChange
+          ? intl.formatMessage({ id: bodyKey })
+          : intl.formatMessage(
+              { id: bodyKey },
+              { fromDays: change.fromDays, toDays: change.toDays },
+            )}
       </Text>
 
       <View style={styles.actions}>
@@ -207,19 +228,19 @@ export default function AdherenceBanner({
           onPress={handleAccept}
           accessibilityRole="button"
           accessibilityState={{ disabled: isBusy }}
-          accessibilityLabel={intl.formatMessage(
-            { id: "adaptation.accept" },
-            { toDays: change.toDays },
-          )}
+          accessibilityLabel={
+            isLoadChange
+              ? intl.formatMessage({ id: acceptKey })
+              : intl.formatMessage({ id: acceptKey }, { toDays: change.toDays })
+          }
         >
           {phase.kind === "submitting" ? (
             <ActivityIndicator color={styles.acceptText.color} />
           ) : (
             <Text style={styles.acceptText}>
-              {intl.formatMessage(
-                { id: "adaptation.accept" },
-                { toDays: change.toDays },
-              )}
+              {isLoadChange
+                ? intl.formatMessage({ id: acceptKey })
+                : intl.formatMessage({ id: acceptKey }, { toDays: change.toDays })}
             </Text>
           )}
         </Pressable>

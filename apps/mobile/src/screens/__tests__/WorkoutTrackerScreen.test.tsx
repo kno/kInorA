@@ -27,6 +27,7 @@ vi.mock("react-native", () => ({
   View: "View",
   Text: "Text",
   ScrollView: "ScrollView",
+  TextInput: (props: any) => <input {...props} />,
   Pressable: ({ children, ...rest }: any) => (
     <button type="button" {...rest}>
       {typeof children === "function" ? children({ pressed: false }) : children}
@@ -315,5 +316,65 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
       await Promise.resolve();
     });
     expect(renderedText(es)).toContain("No pudimos cargar la sesión. Inténtalo de nuevo.");
+  });
+});
+
+// 14b-v1.1 Slice B: mobile RPE capture — the set-record submit must carry the
+// entered `rpe`, and must omit it (stay optional) when none was entered.
+describe("WorkoutTrackerScreen — mobile RPE capture parity (14b-v1.1 Slice B)", () => {
+  function findByAccessibilityLabelPrefix(
+    renderer: ReturnType<typeof create>,
+    prefix: string,
+  ) {
+    return renderer.root.find(
+      (n) =>
+        typeof n.props.accessibilityLabel === "string" &&
+        n.props.accessibilityLabel.startsWith(prefix),
+    );
+  }
+
+  it("includes the entered rpe in the recordWorkoutSet payload", async () => {
+    recordWorkoutSet.mockClear();
+    getWorkoutSession.mockResolvedValue({ kind: "ok", session: activeSession });
+    recordWorkoutSet.mockResolvedValue({ kind: "ok", session: activeSession });
+
+    const renderer = renderScreen("en");
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const rpeInput = renderer.root.find(
+      (n) => n.props.accessibilityLabel === "RPE, optional, 0 to 10",
+    );
+    act(() => {
+      rpeInput.props.onChangeText("8");
+    });
+
+    const completeButton = findByAccessibilityLabelPrefix(renderer, "Complete set");
+    await act(async () => {
+      await completeButton.props.onPress();
+    });
+
+    expect(recordWorkoutSet).toHaveBeenCalledTimes(1);
+    expect(recordWorkoutSet.mock.calls[0]?.[2]).toMatchObject({ rpe: 8 });
+  });
+
+  it("omits rpe from the payload when none was entered (stays optional)", async () => {
+    recordWorkoutSet.mockClear();
+    getWorkoutSession.mockResolvedValue({ kind: "ok", session: activeSession });
+    recordWorkoutSet.mockResolvedValue({ kind: "ok", session: activeSession });
+
+    const renderer = renderScreen("en");
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const completeButton = findByAccessibilityLabelPrefix(renderer, "Complete set");
+    await act(async () => {
+      await completeButton.props.onPress();
+    });
+
+    expect(recordWorkoutSet).toHaveBeenCalledTimes(1);
+    expect(recordWorkoutSet.mock.calls[0]?.[2]).not.toHaveProperty("rpe");
   });
 });

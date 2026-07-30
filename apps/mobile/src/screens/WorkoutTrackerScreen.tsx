@@ -209,6 +209,9 @@ export default function WorkoutTrackerScreen({
   // Stepper values for the current set.
   const [weight, setWeight] = useState(0);
   const [reps, setReps] = useState(0);
+  // 14b-v1.1 Slice B: optional 0-10 RPE draft (raw text, mirrors web's
+  // `ExerciseCard` — parsed/clamped only on submit). Re-seeded per set below.
+  const [rpe, setRpe] = useState("");
   // The +/- load increment. Persists across active-set changes within the
   // session — deliberately NOT re-seeded when the current set changes. #253.
   const [weightStep, setWeightStep] = useState<number>(WEIGHT_STEP);
@@ -545,6 +548,7 @@ export default function WorkoutTrackerScreen({
       const seed = seedFromSet(view.currentSet);
       setWeight(seed.weightKg);
       setReps(seed.reps);
+      setRpe(view.currentSet.rpe != null ? String(view.currentSet.rpe) : "");
     }
     // Only re-seed when the identity of the current set changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -658,7 +662,19 @@ export default function WorkoutTrackerScreen({
     const setId = view.currentSet.id;
     const restSeconds = view.currentExercise?.restSeconds ?? DEFAULT_REST_SECONDS;
     const sessionId = session.id;
-    const input = { completed: true, weightKg: weight, actualReps: reps };
+    // 14b-v1.1 Slice B: optional 0-10 RPE, parsed/clamped from the raw draft
+    // text — mirrors web's `ExerciseCard.handleCompleteSet`. Absent/blank/
+    // non-finite stays `undefined` so the set does not count toward the RPE
+    // sample floor (spec: "RPE remains optional on mobile").
+    const parsedRpe = rpe.trim() === "" ? undefined : Number(rpe);
+    const input = {
+      completed: true,
+      weightKg: weight,
+      actualReps: reps,
+      ...(parsedRpe != null && Number.isFinite(parsedRpe)
+        ? { rpe: Math.min(10, Math.max(0, parsedRpe)) }
+        : {}),
+    };
 
     const startRestTimer = () => {
       // Start the rest timer, anchored to a wall-clock END target so it
@@ -740,7 +756,7 @@ export default function WorkoutTrackerScreen({
       submittingRef.current = false;
       if (mountedRef.current) setSubmitting(false);
     }
-  }, [session, view, submitting, weight, reps, paused, handleUnauthenticatedSession, flush, revalidateOfflineIdentity]);
+  }, [session, view, submitting, weight, reps, rpe, paused, handleUnauthenticatedSession, flush, revalidateOfflineIdentity]);
 
   const handleAddRestTime = useCallback(() => {
     if (restEndsAtRef.current == null) return;
@@ -1002,6 +1018,8 @@ export default function WorkoutTrackerScreen({
           isResting={isResting}
           submitting={submitting}
           showRecordError={errorKey === "errorRecord"}
+          rpeInput={rpe}
+          onChangeRpe={setRpe}
         />
 
         {isResting && (
