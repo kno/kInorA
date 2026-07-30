@@ -22,6 +22,7 @@
 import { useTranslations } from "next-intl";
 import { OrbitProgress } from "@/components/orbit";
 import type { WorkoutProgram } from "@kinora/contracts";
+import { cleanLimitationNotes } from "../limitation-notes";
 
 export interface PlanStatusViewProps {
   planId: string;
@@ -138,16 +139,19 @@ export function PlanStatusView({
         </section>
       ))}
       {program?.limitationWarnings && program.limitationWarnings.length > 0 && (
-        // Dedupe (issue #250): the generator can emit the same advisory string
-        // once per user-declared limitation, so render each DISTINCT note once
-        // instead of repeating identical copies.
+        // Presentation-only fix (issue #250): the generator emits one fully
+        // localized advisory string per user-declared limitation, repeating the
+        // identical advisory tail on every entry. `cleanLimitationNotes` strips
+        // that tail + the "Limitation:" prefix and dedupes, so we render each
+        // limitation TEXT as a bullet and the advisory ONCE below the list.
         <section className="kin-card kin-card--warning" role="note">
           <h3 className="kin-subtitle">{t("plan.limitation.warningLabel")}</h3>
           <ul>
-            {Array.from(new Set(program.limitationWarnings)).map((warning) => (
-              <li key={warning}>{warning}</li>
+            {cleanLimitationNotes(program.limitationWarnings).map((note) => (
+              <li key={note}>{note}</li>
             ))}
           </ul>
+          <p className="kin-text kin-muted">{t("plan.limitation.advisory")}</p>
         </section>
       )}
     </main>

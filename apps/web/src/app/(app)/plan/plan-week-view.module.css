@@ -105,6 +105,14 @@
   color: var(--fg);
 }
 
+/* Single advisory line shown once below the limitation list (issue #250) —
+   muted + smaller so it reads as a footnote, not another bullet. */
+.limitationBannerAdvisory {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* ---- Week board header (Slice 4a — web-plan.html `.board-head`) ---- */
 
 .boardHead {

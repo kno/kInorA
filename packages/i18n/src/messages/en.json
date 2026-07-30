@@ -240,7 +240,8 @@
     },
     "limitation": {
       "warningLabel": "Note",
-      "title": "Important note"
+      "title": "Important note",
+      "advisory": "Consult a professional before attempting exercises that stress these areas."
     },
     "backToDashboard": "Back to dashboard",
     "nav": {

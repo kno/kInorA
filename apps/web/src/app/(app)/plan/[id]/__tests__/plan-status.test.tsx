@@ -78,23 +78,40 @@ describe("PlanStatusView — ready state", () => {
 });
 
 describe("PlanStatusView — limitation warnings (issue #250)", () => {
-  const dupWarningProgram: WorkoutProgram = {
+  // The generator emits the domain template: one localized advisory string per
+  // limitation, each carrying the identical " — Consult…this area." tail. The
+  // view must render just the limitation TEXT per bullet, dedupe, and show the
+  // advisory ONCE below the list.
+  const templateWarningProgram: WorkoutProgram = {
     weeklySessions: sampleProgram.weeklySessions,
     limitationWarnings: [
-      "Avoid deep knee flexion.",
-      "Avoid deep knee flexion.",
-      "Keep the spine neutral.",
+      "Limitation: deep knee flexion — Consult a professional before attempting exercises that stress this area.",
+      "Limitation: deep knee flexion — Consult a professional before attempting exercises that stress this area.",
+      "Limitation: spinal loading — Consult a professional before attempting exercises that stress this area.",
     ],
   };
 
-  it("renders each distinct limitation warning only once (dedupes repeated notes)", () => {
+  it("renders each distinct limitation text once, with the advisory tail stripped", () => {
     renderWithIntl(
-      <PlanStatusView status="ready" planId="plan-1" program={dupWarningProgram} />,
+      <PlanStatusView status="ready" planId="plan-1" program={templateWarningProgram} />,
     );
-    // The backend can emit the same advisory string per limitation; the UI must
-    // collapse identical notes so they are not repeated verbatim.
-    expect(screen.getAllByText("Avoid deep knee flexion.")).toHaveLength(1);
-    expect(screen.getAllByText("Keep the spine neutral.")).toHaveLength(1);
+    // Cleaned bullets (prefix + advisory tail stripped, first char capitalized),
+    // deduped so identical notes are not repeated verbatim.
+    expect(screen.getAllByText("Deep knee flexion")).toHaveLength(1);
+    expect(screen.getAllByText("Spinal loading")).toHaveLength(1);
+    // The repeated per-bullet advisory tail no longer appears anywhere.
+    expect(screen.queryByText(/stress this area/)).toBeNull();
+  });
+
+  it("renders the localized advisory exactly once below the list", () => {
+    renderWithIntl(
+      <PlanStatusView status="ready" planId="plan-1" program={templateWarningProgram} />,
+    );
+    expect(
+      screen.getAllByText(
+        "Consult a professional before attempting exercises that stress these areas.",
+      ),
+    ).toHaveLength(1);
   });
 });
 
