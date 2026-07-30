@@ -14,6 +14,24 @@ const lowAdaptation: AdaptationRecommendation = {
   adherence: { adherence: 0.31, periodWeeks: 4, completedInWindow: 5, plannedInWindow: 16 },
 };
 
+const decreaseLoadAdaptation: AdaptationRecommendation = {
+  source: "rpe",
+  level: "low",
+  suggestedChange: { kind: "adjust_load", direction: "decrease", from: "maintain", to: "reduce" },
+  rationaleKey: "adaptation.rpe.highTrend",
+  planSpecId: "spec-2",
+  rpe: { meanRpe: 9.0, windowSessions: 3, sessionsWithRpe: 3, setsWithRpe: 12 },
+};
+
+const increaseLoadAdaptation: AdaptationRecommendation = {
+  source: "rpe",
+  level: "low",
+  suggestedChange: { kind: "adjust_load", direction: "increase", from: "maintain", to: "increase" },
+  rationaleKey: "adaptation.rpe.lowTrend",
+  planSpecId: "spec-3",
+  rpe: { meanRpe: 5.0, windowSessions: 3, sessionsWithRpe: 3, setsWithRpe: 12 },
+};
+
 describe("DashboardCoachCard — static fallback (no adaptation)", () => {
   it("renders the presentational coach copy when there is no low adaptation", () => {
     renderWithIntl(<DashboardCoachCard />);
@@ -197,5 +215,32 @@ describe("DashboardCoachCard — adherence adaptation banner", () => {
 
     resolveAccept?.({ kind: "ok" });
     expect(await screen.findByText(/Adjusting your plan/)).toBeDefined();
+  });
+});
+
+describe("DashboardCoachCard — RPE (adjust_load) adaptation banner", () => {
+  it("renders the reduce-load copy for a decrease direction, distinct from reduce_frequency", () => {
+    renderWithIntl(<DashboardCoachCard adaptation={decreaseLoadAdaptation} />);
+
+    expect(screen.getByText(/ease off the load/)).toBeDefined();
+    expect(screen.getByRole("button", { name: "Ease off load" })).toBeDefined();
+    expect(screen.queryByText(/days per week/)).toBeNull();
+  });
+
+  it("renders the increase-load copy for an increase direction", () => {
+    renderWithIntl(<DashboardCoachCard adaptation={increaseLoadAdaptation} />);
+
+    expect(screen.getByText(/bump up the load/)).toBeDefined();
+    expect(screen.getByRole("button", { name: "Increase load" })).toBeDefined();
+  });
+
+  it("accept → calls onAccept with the planSpecId for an adjust_load recommendation", async () => {
+    const onAccept = vi.fn().mockResolvedValue({ kind: "ok" });
+    renderWithIntl(<DashboardCoachCard adaptation={decreaseLoadAdaptation} onAccept={onAccept} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Ease off load" }));
+
+    expect(onAccept).toHaveBeenCalledTimes(1);
+    expect(onAccept).toHaveBeenCalledWith("spec-2");
   });
 });
