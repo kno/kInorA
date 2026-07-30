@@ -9,7 +9,7 @@ import { SessionRepository } from "../db/repositories/session.js";
 import { MembershipRepository } from "../db/repositories/auth-context.js";
 import { computeTokenHash } from "./session.js";
 import { isValidTokenFormat, isSessionExpired } from "@kinora/domain";
-import type { SessionContext, UserId, TenantId, SessionId } from "@kinora/contracts";
+import type { SessionContext, UserId, TenantId, SessionId, MembershipRole } from "@kinora/contracts";
 
 /**
  * Shared token-string → SessionContext|null resolution logic.
@@ -63,18 +63,30 @@ export async function resolveAuthContextFromToken(
   // Fail-secure tenant-scoped membership re-check: deny if the membership for
   // THIS session's tenant is gone or no longer active, regardless of how long
   // the session token is still valid or of the user's status in other tenants.
+  //
+  // `role` (15a-v2-trainer-account-access, Slice 2) is read from this SAME
+  // row — zero extra query — and attached to the returned SessionContext.
+  // When no membershipRepo is supplied (public/extraction-only callers), no
+  // membership row is fetched at all, so `role` defaults to the
+  // least-privileged "member" value: this keeps the type total without
+  // granting any capability, since every widening check in
+  // resolveAuthorizedOwner requires role === "trainer" AND an entitlement AND
+  // an active assignment — a defaulted "member" can never satisfy that.
+  let role: MembershipRole = "member";
   if (deps.membershipRepo) {
     const membership = await deps.membershipRepo.findByTenantAndUser(
       session.tenantId,
       session.userId
     );
     if (!membership || membership.status !== "active") return null;
+    role = membership.role;
   }
 
   return {
     userId: session.userId as UserId,
     tenantId: session.tenantId as TenantId,
     sessionId: session.tokenHash as SessionId,
+    role,
   };
 }
 
@@ -172,6 +184,30 @@ export function requireAuth() {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     if (!request.authContext) {
       return sendUnauthorized(reply, "missing_session");
+    }
+  };
+}
+
+/**
+ * requireRole(role) preHandler — gates a route to a single membership role
+ * (15a-v2-trainer-account-access, Slice 2). Used ahead of `resolveAuthorizedOwner`
+ * for trainer-only routes: this checks ONLY `request.authContext.role` — it
+ * never queries entitlement or assignment persistence. Both role (here) AND
+ * the `trainer` billing entitlement AND an active client assignment must all
+ * pass before a trainer action is authorized end-to-end; the entitlement and
+ * assignment checks live in `resolveAuthorizedOwner` (trainer/owner-access.ts).
+ *
+ * 403 (not 401) for both a missing session and a role mismatch — matches
+ * `buildRequireAdmin`'s convention: the client already knows authentication is
+ * required at this level, the specific signal is "access denied". In the
+ * normal flow `requireAuth()` runs first and 401s before this guard ever sees
+ * a null authContext; the null-check here is defence-in-depth only.
+ */
+export function requireRole(role: SessionContext["role"]) {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (!request.authContext || request.authContext.role !== role) {
+      reply.code(403).send({ error: "forbidden" });
+      return;
     }
   };
 }

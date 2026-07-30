@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
-import { authPlugin, requireAuth, resolveAuthContextFromToken } from "../plugin.js";
+import { authPlugin, requireAuth, requireRole, resolveAuthContextFromToken } from "../plugin.js";
 import {
   createAuthMockDb,
   createTenantAwareAuthMockDb,
@@ -567,6 +567,42 @@ describe("membership re-check uses findByTenantAndUser with the session tenant",
     expect(ctx).not.toBeNull();
     expect(ctx!.tenantId).toBe("tenant-scoped-1");
   });
+
+  // 15a-v2-trainer-account-access Slice 2 (task 2.9): SessionContext.role is
+  // populated from the SAME fail-secure membership row this check already
+  // fetches — zero extra query.
+  it("attaches the membership row's role to the returned SessionContext", async () => {
+    const membershipRepo = {
+      findByTenantAndUser: vi.fn().mockResolvedValue({
+        status: "active",
+        role: "trainer",
+      }),
+    };
+
+    const ctx = await resolveAuthContextFromToken(VALID_TOKEN, {
+      sessionRepo: sessionRepo(session),
+      membershipRepo,
+    });
+
+    expect(ctx).not.toBeNull();
+    expect(ctx!.role).toBe("trainer");
+  });
+
+  it("attaches role='member' for a normal member's membership row", async () => {
+    const membershipRepo = {
+      findByTenantAndUser: vi.fn().mockResolvedValue({
+        status: "active",
+        role: "member",
+      }),
+    };
+
+    const ctx = await resolveAuthContextFromToken(VALID_TOKEN, {
+      sessionRepo: sessionRepo(session),
+      membershipRepo,
+    });
+
+    expect(ctx!.role).toBe("member");
+  });
 });
 
 describe("requireAuth footgun — no code runs after an unauthorized send", () => {
@@ -621,5 +657,66 @@ describe("requireAuth footgun — no code runs after an unauthorized send", () =
     expect(response.statusCode).toBe(401);
     expect(response.json()).toEqual({ error: "unauthorized" });
     expect(response.headers["x-auth-error"]).toBe("missing_session");
+  });
+});
+
+// 15a-v2-trainer-account-access Slice 2 (tasks 2.10/2.11): requireRole(role)
+// preHandler. This gates on `request.authContext.role` ONLY — it never
+// touches entitlement or assignment persistence (that widening logic lives
+// solely in `resolveAuthorizedOwner`, see trainer/owner-access.ts).
+describe("requireRole preHandler", () => {
+  function buildRequest(authContext: import("@kinora/contracts").SessionContext | null) {
+    return { authContext } as unknown as import("fastify").FastifyRequest;
+  }
+
+  function buildReply() {
+    const reply = {
+      code: vi.fn().mockReturnThis(),
+      send: vi.fn().mockReturnThis(),
+    };
+    return reply as unknown as import("fastify").FastifyReply;
+  }
+
+  it("returns 403 when authContext.role does not match the required role", async () => {
+    const guard = requireRole("trainer");
+    const request = buildRequest({
+      userId: "u1" as never,
+      tenantId: "t1" as never,
+      sessionId: "s1" as never,
+      role: "member",
+    });
+    const reply = buildReply();
+
+    await guard(request, reply);
+
+    expect(reply.code).toHaveBeenCalledWith(403);
+    expect(reply.send).toHaveBeenCalledWith({ error: "forbidden" });
+  });
+
+  it("passes through (no send) when authContext.role matches the required role", async () => {
+    const guard = requireRole("trainer");
+    const request = buildRequest({
+      userId: "u1" as never,
+      tenantId: "t1" as never,
+      sessionId: "s1" as never,
+      role: "trainer",
+    });
+    const reply = buildReply();
+
+    await guard(request, reply);
+
+    expect(reply.code).not.toHaveBeenCalled();
+    expect(reply.send).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 when authContext is null (defence-in-depth; requireAuth runs first in practice)", async () => {
+    const guard = requireRole("trainer");
+    const request = buildRequest(null);
+    const reply = buildReply();
+
+    await guard(request, reply);
+
+    expect(reply.code).toHaveBeenCalledWith(403);
+    expect(reply.send).toHaveBeenCalledWith({ error: "forbidden" });
   });
 });
