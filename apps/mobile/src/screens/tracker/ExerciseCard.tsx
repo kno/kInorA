@@ -12,7 +12,7 @@ import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { FormattedMessage, useIntl } from "react-intl";
 
-import { formatWeight } from "./tracker-logic";
+import { formatWeight, WEIGHT_STEPS } from "./tracker-logic";
 import { CheckIcon } from "./icons";
 import { Stepper } from "./Stepper";
 import { messages as M } from "./messages";
@@ -26,6 +26,9 @@ interface ExerciseCardProps {
   objective: string;
   weight: number;
   reps: number;
+  /** Currently selected +/- load increment (one of `WEIGHT_STEPS`). */
+  weightStep: number;
+  onSelectWeightStep: (step: number) => void;
   onStepWeight: (direction: 1 | -1) => void;
   onStepReps: (direction: 1 | -1) => void;
   onCompleteSet: () => void;
@@ -41,6 +44,8 @@ export function ExerciseCard({
   objective,
   weight,
   reps,
+  weightStep,
+  onSelectWeightStep,
   onStepWeight,
   onStepReps,
   onCompleteSet,
@@ -89,6 +94,40 @@ export function ExerciseCard({
           incrementLabel={intl.formatMessage(M.increaseReps)}
           disabled={isResting}
         />
+      </View>
+
+      <View
+        style={styles.stepSizeRow}
+        accessibilityLabel={intl.formatMessage(M.loadStepGroupLabel)}
+      >
+        <Text style={styles.stepSizeLabel}>
+          <FormattedMessage {...M.loadStepLabel} />
+        </Text>
+        <View style={styles.stepSizeOptions}>
+          {WEIGHT_STEPS.map((step) => {
+            const selected = weightStep === step;
+            return (
+              <Pressable
+                key={step}
+                style={[styles.stepSizeOption, selected && styles.stepSizeOptionActive]}
+                onPress={() => onSelectWeightStep(step)}
+                disabled={isResting}
+                accessibilityRole="button"
+                accessibilityLabel={intl.formatMessage(M.loadStepOptionA11y, { step })}
+                accessibilityState={{ selected, disabled: isResting }}
+              >
+                <Text
+                  style={[
+                    styles.stepSizeOptionText,
+                    selected && styles.stepSizeOptionTextActive,
+                  ]}
+                >
+                  {formatWeight(step)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       <Pressable

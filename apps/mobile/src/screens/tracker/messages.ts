@@ -25,6 +25,12 @@ export const messages = defineMessages({
   repsUnit: { id: "tracker.unit.reps" },
   decreaseLoad: { id: "tracker.weight.downLabel" },
   increaseLoad: { id: "tracker.weight.upLabel" },
+  // Selectable load step size (0.5/1/2.5/5 kg) — reuses the SAME shared
+  // `tracker.load.*` catalog keys web's ExerciseCard surfaces (#253). Mobile
+  // renders these as a segmented control below the steppers.
+  loadStepLabel: { id: "tracker.load.stepLabel" },
+  loadStepGroupLabel: { id: "tracker.load.stepGroupLabel" },
+  loadStepOptionA11y: { id: "tracker.load.stepOptionA11y" },
   decreaseReps: { id: "mobileTracker.reps.decrease" },
   increaseReps: { id: "mobileTracker.reps.increase" },
   completeSet: { id: "tracker.completeSet.cta" },
