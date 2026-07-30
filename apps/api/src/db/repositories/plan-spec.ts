@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { planSpecs } from "../schema.js";
 import type { Database } from "../client.js";
-import type { PlanSpec } from "@kinora/contracts";
+import type { IntensityBias, PlanSpec } from "@kinora/contracts";
 
 /** A transaction executor compatible with Database — a subset of Database passed inside db.transaction(). */
 type DbOrTx = Pick<Database, "insert">;
@@ -119,6 +119,44 @@ export class PlanSpecRepository {
         // Rewrite ONLY spec_json.daysPerWeek; `to_jsonb(int)` keeps it a JSON
         // number and every sibling field is preserved by jsonb_set.
         specJson: sql`jsonb_set(${planSpecs.specJson}, '{daysPerWeek}', to_jsonb(${toDays}::int), true)`,
+      })
+      .where(
+        and(
+          eq(planSpecs.tenantId, tenantId),
+          eq(planSpecs.userId, userId),
+          eq(planSpecs.id, id),
+          eq(planSpecs.confirmed, true)
+        )
+      )
+      .returning();
+    return rows.length;
+  }
+
+  /**
+   * 14b-v1.1 — in-place, tenant/user-scoped update of `spec_json.intensityBias`
+   * on an existing confirmed plan_specs row. Analogous to `updateSpecDaysPerWeek`:
+   * this is the RPE-adaptation confirm write (the LOAD branch of `/adapt`) —
+   * the server has already re-derived the ladder-stepped bias, so this only
+   * rewrites the ONE field via `jsonb_set`, leaving every other spec field
+   * (including `daysPerWeek`) intact.
+   *
+   * Scoped to `(tenantId, userId, id, confirmed = true)`: a cross-tenant or
+   * cross-user id matches nothing and is a no-op. Returns the number of rows
+   * updated (1 when the caller owns the confirmed spec, 0 otherwise) so the
+   * route can treat 0 as a 404 without a separate read.
+   */
+  async updateSpecIntensityBias(
+    tenantId: string,
+    userId: string,
+    id: string,
+    intensityBias: IntensityBias
+  ): Promise<number> {
+    const rows = await this.db
+      .update(planSpecs)
+      .set({
+        // Rewrite ONLY spec_json.intensityBias; `to_jsonb(text)` keeps it a
+        // JSON string and every sibling field is preserved by jsonb_set.
+        specJson: sql`jsonb_set(${planSpecs.specJson}, '{intensityBias}', to_jsonb(${intensityBias}::text), true)`,
       })
       .where(
         and(

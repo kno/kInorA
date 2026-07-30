@@ -12,4 +12,5 @@ export {
   computeAverageRpe,
   computeSessionVolume,
   computeVolumeTrend,
+  extractCompletedSetRpeValues,
 } from "./session-aggregation.js";
