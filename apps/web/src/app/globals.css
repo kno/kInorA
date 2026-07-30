@@ -170,11 +170,15 @@ a {
 }
 
 /* Limitation / advisory notes card (issue #250). Uses the design-system warning
- * accent (see plan-week-view `.limitationBanner`) for a bit more prominence, and
- * a top margin so it isn't flush against the session content / CTA above it. */
+ * accent (see plan-week-view `.limitationBanner`) for prominence, inner padding
+ * so the tinted surface reads as a distinct panel rather than hugging the text,
+ * and a generous top margin so it is clearly separated from the session content
+ * / Start CTA above it (the screenshot showed it glued to the button). */
 .kin-card--warning {
-  margin-top: var(--sp-4);
+  margin-top: var(--sp-5);
+  padding: var(--sp-4);
   border-left: 3px solid var(--warning);
+  border-radius: var(--r-card, 12px);
   background: color-mix(in oklab, var(--warning) 8%, var(--surface));
 }
 

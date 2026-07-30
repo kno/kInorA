@@ -27,6 +27,7 @@ import styles from "./plan-week-view.module.css";
 import { PlanTrackerClient } from "./PlanTrackerClient";
 import { PlanHero, PlanSideRail, PlanToolbar } from "./plan-presentational";
 import { estimateSessionMinutes, restDays } from "./plan-utils";
+import { cleanLimitationNotes } from "./limitation-notes";
 import { getWeeklyOverviewAction } from "./actions";
 
 export interface PlanWeekViewProps {
@@ -125,19 +126,26 @@ export async function PlanWeekView({ program, planName, planId, weekStart }: Pla
       {/* Hero panel (presentational) wrapping the DATA-WIRED metrics grid. */}
       <PlanHero>{metrics}</PlanHero>
 
-      {/* Limitation warning banner — shown above the board when warnings present */}
+      {/* Limitation warning banner — shown above the board when warnings present.
+          Presentation-only fix (issue #250): the generator emits one localized
+          advisory string per limitation, repeating the identical advisory tail
+          on every entry. `cleanLimitationNotes` strips that tail + prefix and
+          dedupes, so we list each limitation TEXT and show the advisory ONCE. */}
       {hasWarnings && (
         <div className={styles.limitationBanner} role="alert">
           <div className={styles.limitationBannerTitle}>
             {t("plan.limitation.title")}
           </div>
           <ul className={styles.limitationBannerList}>
-            {program.limitationWarnings.map((warning, idx) => (
-              <li key={idx} className={styles.limitationBannerItem}>
-                {warning}
+            {cleanLimitationNotes(program.limitationWarnings).map((note) => (
+              <li key={note} className={styles.limitationBannerItem}>
+                {note}
               </li>
             ))}
           </ul>
+          <p className={styles.limitationBannerAdvisory}>
+            {t("plan.limitation.advisory")}
+          </p>
         </div>
       )}
 
