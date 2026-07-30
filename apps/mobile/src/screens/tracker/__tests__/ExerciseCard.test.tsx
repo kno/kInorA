@@ -10,6 +10,7 @@ import { renderWithIntl, renderedText, findAllByType } from "./render-helpers.js
 vi.mock("react-native", () => ({
   View: "View",
   Text: "Text",
+  TextInput: (props: any) => <input {...props} />,
   Pressable: ({ children, ...rest }: any) => (
     <button type="button" {...rest}>
       {typeof children === "function" ? children({ pressed: false }) : children}
@@ -42,6 +43,8 @@ function makeProps(overrides: Record<string, unknown> = {}) {
     isResting: false,
     submitting: false,
     showRecordError: false,
+    rpeInput: "",
+    onChangeRpe: vi.fn(),
     ...overrides,
   };
 }
@@ -133,5 +136,30 @@ describe("ExerciseCard", () => {
 
     const withErr = renderWithIntl(<ExerciseCard {...(makeProps({ showRecordError: true }) as any)} />);
     expect(renderedText(withErr)).toContain("We couldn't save the set. Please try again.");
+  });
+
+  // 14b-v1.1 Slice B: mobile RPE capture parity with web's ExerciseCard.
+  function rpeInputNode(r: ReturnType<typeof renderWithIntl>) {
+    return findAllByType(r, "input").find((n) => n.props.accessibilityLabel === "RPE, optional, 0 to 10");
+  }
+
+  it("renders an optional 0-10 RPE input with an accessible label", () => {
+    const r = renderWithIntl(<ExerciseCard {...(makeProps({ rpeInput: "7" }) as any)} />);
+    const node = rpeInputNode(r);
+    expect(node).toBeDefined();
+    expect(node!.props.value).toBe("7");
+    expect(node!.props.keyboardType).toBe("numeric");
+  });
+
+  it("calls onChangeRpe with the raw text as the user types", () => {
+    const props = makeProps();
+    const r = renderWithIntl(<ExerciseCard {...(props as any)} />);
+    rpeInputNode(r)!.props.onChangeText("8");
+    expect(props.onChangeRpe).toHaveBeenCalledWith("8");
+  });
+
+  it("renders with an empty RPE input when none was entered (optional)", () => {
+    const r = renderWithIntl(<ExerciseCard {...(makeProps({ rpeInput: "" }) as any)} />);
+    expect(rpeInputNode(r)!.props.value).toBe("");
   });
 });

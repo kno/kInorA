@@ -62,6 +62,24 @@ const lowNoChange: AdaptationRecommendation = {
   planSpecId: "spec_1",
 };
 
+/** A `low` RPE recommendation with a `decrease` direction (too-hard trend). */
+const decreaseLoad = (planSpecId = "spec_2"): AdaptationRecommendation => ({
+  source: "rpe",
+  level: "low",
+  planSpecId,
+  suggestedChange: { kind: "adjust_load", direction: "decrease", from: "maintain", to: "reduce" },
+  rationaleKey: "adaptation.rpe.highTrend",
+});
+
+/** A `low` RPE recommendation with an `increase` direction (too-easy trend). */
+const increaseLoad = (planSpecId = "spec_3"): AdaptationRecommendation => ({
+  source: "rpe",
+  level: "low",
+  planSpecId,
+  suggestedChange: { kind: "adjust_load", direction: "increase", from: "maintain", to: "increase" },
+  rationaleKey: "adaptation.rpe.lowTrend",
+});
+
 function renderBanner(props: Record<string, unknown> = {}) {
   const navigation = { navigate: vi.fn(), reset: vi.fn(), replace: vi.fn() } as any;
   const clearSession = vi.fn(async () => {});
@@ -257,5 +275,40 @@ describe("AdherenceBanner (D1 — mobile adherence suggestion banner)", () => {
       index: 0,
       routes: [{ name: "Login" }],
     });
+  });
+});
+
+describe("AdherenceBanner — RPE (adjust_load) copy branch (14b-v1.1 Slice B)", () => {
+  it("renders the reduce-load copy for a decrease direction, distinct from reduce_frequency", () => {
+    const { renderer } = renderBanner({ adaptation: decreaseLoad() });
+    expect(has(renderer, "adherence-banner")).toBe(true);
+    const body = renderer.root.findAll(
+      (n) => typeof n.props.children === "string" && /ease off the load/.test(n.props.children),
+    );
+    expect(body.length).toBeGreaterThan(0);
+    const daysCopy = renderer.root.findAll(
+      (n) => typeof n.props.children === "string" && /days per week/.test(n.props.children),
+    );
+    expect(daysCopy.length).toBe(0);
+  });
+
+  it("renders the increase-load copy for an increase direction", () => {
+    const { renderer } = renderBanner({ adaptation: increaseLoad() });
+    const body = renderer.root.findAll(
+      (n) => typeof n.props.children === "string" && /bump up the load/.test(n.props.children),
+    );
+    expect(body.length).toBeGreaterThan(0);
+  });
+
+  it("accept calls adaptPlan(planSpecId) for an adjust_load recommendation", async () => {
+    const adaptPlan = vi.fn(async (_specId: string): Promise<GenerateResult> => ({
+      kind: "ok",
+      planId: "plan_new",
+      status: "generating",
+    }));
+    const { renderer } = renderBanner({ adaptation: decreaseLoad("spec_99"), adaptPlan });
+    await press(renderer, "adherence-accept");
+    expect(adaptPlan).toHaveBeenCalledTimes(1);
+    expect(adaptPlan.mock.calls[0]?.[0]).toBe("spec_99");
   });
 });
