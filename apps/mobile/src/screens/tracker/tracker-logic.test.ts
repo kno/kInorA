@@ -98,6 +98,23 @@ describe("steppers", () => {
     expect(stepWeight(0, -1)).toBe(0);
     expect(stepWeight(300, 1)).toBe(300);
   });
+  it("steps weight by an explicit selectable step (0.5 / 1 / 5)", () => {
+    expect(stepWeight(45, 1, 0.5)).toBe(45.5);
+    expect(stepWeight(45, -1, 0.5)).toBe(44.5);
+    expect(stepWeight(45, 1, 1)).toBe(46);
+    expect(stepWeight(45, -1, 1)).toBe(44);
+    expect(stepWeight(45, 1, 5)).toBe(50);
+    expect(stepWeight(45, -1, 5)).toBe(40);
+  });
+  it("clamps to WEIGHT_MIN/WEIGHT_MAX with a non-default step", () => {
+    expect(stepWeight(0.5, -1, 5)).toBe(0);
+    expect(stepWeight(298, 1, 5)).toBe(300);
+    expect(stepWeight(0, -1, 0.5)).toBe(0);
+  });
+  it("uses the default 2.5 step when the step is omitted", () => {
+    expect(stepWeight(45, 1)).toBe(47.5);
+    expect(stepWeight(45, -1)).toBe(42.5);
+  });
   it("steps reps by 1 and clamps to >= 1", () => {
     expect(stepReps(8, 1)).toBe(9);
     expect(stepReps(1, -1)).toBe(1);

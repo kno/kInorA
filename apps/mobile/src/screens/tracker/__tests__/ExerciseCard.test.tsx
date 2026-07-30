@@ -34,6 +34,8 @@ function makeProps(overrides: Record<string, unknown> = {}) {
     objective: "40 kg × 8 reps",
     weight: 42.5,
     reps: 8,
+    weightStep: 2.5,
+    onSelectWeightStep: vi.fn(),
     onStepWeight: vi.fn(),
     onStepReps: vi.fn(),
     onCompleteSet: vi.fn(),
@@ -87,6 +89,42 @@ describe("ExerciseCard", () => {
     const r = renderWithIntl(<ExerciseCard {...(props as any)} />);
     completeBtn(r)!.props.onPress();
     expect(props.onCompleteSet).toHaveBeenCalledTimes(1);
+  });
+
+  // The load-step selector a11y label is "Set increment to {step} kg".
+  function stepOption(r: ReturnType<typeof renderWithIntl>, step: number) {
+    return btn(r, `Set increment to ${step} kg`);
+  }
+
+  it("renders all four selectable load-step options", () => {
+    const r = renderWithIntl(<ExerciseCard {...(makeProps() as any)} />);
+    for (const step of [0.5, 1, 2.5, 5]) {
+      expect(stepOption(r, step)).toBeDefined();
+    }
+  });
+
+  it("marks the option equal to weightStep as selected", () => {
+    const r = renderWithIntl(<ExerciseCard {...(makeProps({ weightStep: 5 }) as any)} />);
+    expect(stepOption(r, 5)!.props.accessibilityState.selected).toBe(true);
+    expect(stepOption(r, 2.5)!.props.accessibilityState.selected).toBe(false);
+    expect(stepOption(r, 0.5)!.props.accessibilityState.selected).toBe(false);
+    expect(stepOption(r, 1)!.props.accessibilityState.selected).toBe(false);
+  });
+
+  it("calls onSelectWeightStep with the numeric value when an option is pressed", () => {
+    const props = makeProps();
+    const r = renderWithIntl(<ExerciseCard {...(props as any)} />);
+    stepOption(r, 0.5)!.props.onPress();
+    stepOption(r, 5)!.props.onPress();
+    expect(props.onSelectWeightStep).toHaveBeenCalledWith(0.5);
+    expect(props.onSelectWeightStep).toHaveBeenCalledWith(5);
+  });
+
+  it("disables the load-step options while resting", () => {
+    const r = renderWithIntl(<ExerciseCard {...(makeProps({ isResting: true }) as any)} />);
+    for (const step of [0.5, 1, 2.5, 5]) {
+      expect(stepOption(r, step)!.props.accessibilityState.disabled).toBe(true);
+    }
   });
 
   it("shows the inline record error only when showRecordError is true", () => {

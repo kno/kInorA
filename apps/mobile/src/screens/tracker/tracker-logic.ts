@@ -15,6 +15,12 @@ import type {
 
 /** Weight stepper increment (kg), matching the design's ±2.5. */
 export const WEIGHT_STEP = 2.5;
+/**
+ * Selectable load-step sizes (kg) for the +/- load stepper. `WEIGHT_STEP`
+ * (2.5) is the default and stays the current behavior; the others let the
+ * user dial the increment finer (0.5/1) or coarser (5). #253.
+ */
+export const WEIGHT_STEPS = [0.5, 1, WEIGHT_STEP, 5] as const;
 export const WEIGHT_MIN = 0;
 export const WEIGHT_MAX = 300;
 export const REPS_MIN = 1;
@@ -116,9 +122,17 @@ export function objectiveWeightFor(set: SetRecordDTO | undefined): number | unde
   return set?.weightKg;
 }
 
-/** Step the weight by ±WEIGHT_STEP, clamped, normalized to at most 1 decimal. */
-export function stepWeight(current: number, direction: 1 | -1): number {
-  const next = current + direction * WEIGHT_STEP;
+/**
+ * Step the weight by ±`step`, clamped, normalized to at most 1 decimal. The
+ * increment is the user-selectable load step (one of `WEIGHT_STEPS`), defaulting
+ * to `WEIGHT_STEP` (2.5) so existing callers keep the current behavior. #253.
+ */
+export function stepWeight(
+  current: number,
+  direction: 1 | -1,
+  step: number = WEIGHT_STEP,
+): number {
+  const next = current + direction * step;
   return clamp(Number(next.toFixed(1)), WEIGHT_MIN, WEIGHT_MAX);
 }
 

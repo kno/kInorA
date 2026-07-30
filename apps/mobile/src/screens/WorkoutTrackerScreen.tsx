@@ -84,6 +84,8 @@ import {
   segmentStates,
   stepReps,
   stepWeight,
+  WEIGHT_STEP,
+  WEIGHT_STEPS,
 } from "./tracker/tracker-logic";
 import { messages as M } from "./tracker/messages";
 import { SessionHeader } from "./tracker/SessionHeader";
@@ -207,6 +209,9 @@ export default function WorkoutTrackerScreen({
   // Stepper values for the current set.
   const [weight, setWeight] = useState(0);
   const [reps, setReps] = useState(0);
+  // The +/- load increment. Persists across active-set changes within the
+  // session — deliberately NOT re-seeded when the current set changes. #253.
+  const [weightStep, setWeightStep] = useState<number>(WEIGHT_STEP);
 
   // Elapsed session timer (display only; pause freezes the display).
   const [elapsed, setElapsed] = useState(0);
@@ -640,8 +645,8 @@ export default function WorkoutTrackerScreen({
   }, [reconcileElapsed, reconcileRest]);
 
   const handleStepWeight = useCallback(
-    (direction: 1 | -1) => setWeight((w) => stepWeight(w, direction)),
-    [],
+    (direction: 1 | -1) => setWeight((w) => stepWeight(w, direction, weightStep)),
+    [weightStep],
   );
   const handleStepReps = useCallback(
     (direction: 1 | -1) => setReps((r) => stepReps(r, direction)),
@@ -989,6 +994,8 @@ export default function WorkoutTrackerScreen({
           objective={objective}
           weight={weight}
           reps={reps}
+          weightStep={weightStep}
+          onSelectWeightStep={setWeightStep}
           onStepWeight={handleStepWeight}
           onStepReps={handleStepReps}
           onCompleteSet={handleCompleteSet}
