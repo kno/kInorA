@@ -54,3 +54,7 @@ No — three product/scope questions must be resolved with the user before sdd-p
 1. Is Trainer a `MembershipRole` value, a `BillingTier` value, or both?
 2. Do clients stay in their own tenant, or join the trainer's tenant?
 3. Can a trainer add any existing user as a client or only newly invited ones, and can a client have multiple trainers?
+
+### Archive Note (2026-07-31)
+
+All three open questions were resolved by the user (LOCKED approach 3, hybrid) before proposal; see proposal.md and design.md for the locked decisions.
