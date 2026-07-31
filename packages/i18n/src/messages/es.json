@@ -1165,5 +1165,43 @@
     "logout": "Cerrar sesión",
     "logoutLabel": "Cerrar sesión",
     "userAreaAria": "Menú de usuario"
+  },
+  "clients": {
+    "pageTitle": "Mis clientes",
+    "pageDescription": "Invita a clientes y crea planes en su nombre.",
+    "navLabel": "Clientes",
+    "loadingLabel": "Cargando clientes…",
+    "retryLabel": "Reintentar",
+    "loadError": "No se pudieron cargar tus clientes. Inténtalo de nuevo.",
+    "emptyState": "Todavía no tienes clientes. Invita a uno a continuación.",
+    "listAria": "Lista de clientes",
+    "accessRestrictedTitle": "Se requiere una cuenta de entrenador",
+    "accessRestrictedBody": "Esta página solo está disponible para cuentas de entrenador.",
+    "inviteFormAria": "Invitar a un cliente",
+    "inviteTitle": "Invitar a un cliente",
+    "inviteEmailLabel": "Correo del cliente",
+    "inviteSubmit": "Enviar invitación",
+    "inviteSuccess": "Invitación enviada.",
+    "inviteErrorAlreadyAssigned": "Este cliente ya está asignado a un entrenador.",
+    "inviteErrorNotFound": "No se encontró ninguna cuenta con ese correo.",
+    "inviteErrorGeneric": "No se pudo enviar la invitación. Inténtalo de nuevo.",
+    "createPlanCta": "Crear plan",
+    "status": {
+      "invited": "Invitado",
+      "active": "Activo",
+      "revoked": "Revocado"
+    },
+    "createPlan": {
+      "title": "Crear un plan para este cliente",
+      "goalLabel": "Objetivo",
+      "daysPerWeekLabel": "Días por semana",
+      "sessionDurationLabel": "Duración de la sesión (minutos)",
+      "locationLabel": "Lugar de entrenamiento",
+      "submit": "Crear plan",
+      "submitting": "Creando…",
+      "success": "Plan creado.",
+      "errorGeneric": "No se pudo crear el plan. Inténtalo de nuevo.",
+      "errorForbidden": "No tienes autorización para crear un plan para este cliente."
+    }
   }
 }
