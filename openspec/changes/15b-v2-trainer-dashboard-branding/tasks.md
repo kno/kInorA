@@ -66,12 +66,12 @@ Rationale: S1 independently shippable (no #283 dep). S2 is the highest-risk secu
 
 ## Phase S4: Branding Rendering (Web + Mobile)
 
-- [ ] 4.1 RED: web `PlanWeekView`/`PlanStatusView` render `--plan-accent` from `branding.accentColor`; absent → base token
-- [ ] 4.2 GREEN: wire `style={{ "--plan-accent": accentColor }}` + CSS module fallback
-- [ ] 4.3 RED: mobile `PlanWeekView`/`PlanStatusView` accent prop test; absent → `colors.<default>`
-- [ ] 4.4 GREEN: thread `branding?.accentColor` prop through mobile plan screens
-- [ ] 4.5 Run `pnpm architecture`
-- [ ] 4.6 Run `pnpm ui-api-guard` — confirm web components import only client-safe branding types
+- [x] 4.1 RED: web `PlanWeekView`/`PlanStatusView` render `--plan-accent` from `branding.accentColor`; absent → base token
+- [x] 4.2 GREEN: wire `style={{ "--plan-accent": accentColor }}` + CSS module fallback
+- [x] 4.3 RED: mobile `PlanWeekView`/`PlanStatusView` accent prop test; absent → `colors.<default>`
+- [x] 4.4 GREEN: thread `branding?.accentColor` prop through mobile plan screens
+- [x] 4.5 Run `pnpm architecture`
+- [x] 4.6 Run `pnpm ui-api-guard` — confirm web components import only client-safe branding types
 
 ## Phase S5: Client-Facing Branded-Plan View
 

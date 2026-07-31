@@ -22,7 +22,7 @@
  */
 
 import { getTranslations } from "next-intl/server";
-import type { WorkoutProgram } from "@kinora/contracts";
+import type { PlanBranding, WorkoutProgram } from "@kinora/contracts";
 import styles from "./plan-week-view.module.css";
 import { PlanTrackerClient } from "./PlanTrackerClient";
 import { PlanHero, PlanSideRail, PlanToolbar } from "./plan-presentational";
@@ -49,9 +49,23 @@ export interface PlanWeekViewProps {
    * defaults to the current week.
    */
   weekStart?: string;
+  /**
+   * Optional trainer-authored branding (15b-v2 S4). When present, the accent
+   * color renders as the `--plan-accent` CSS custom property on the plan
+   * container (consumed by `plan-week-view.module.css`'s accent surfaces),
+   * and `title`/`trainerName` override the topbar heading + add a byline.
+   * Absent branding renders exactly as before this slice (safe rollback).
+   */
+  branding?: PlanBranding;
 }
 
-export async function PlanWeekView({ program, planName, planId, weekStart }: PlanWeekViewProps) {
+export async function PlanWeekView({
+  program,
+  planName,
+  planId,
+  weekStart,
+  branding,
+}: PlanWeekViewProps) {
   const t = await getTranslations();
 
   // Fail-open: an unreachable/erroring overview fetch leaves `weeklyOverview`
@@ -102,11 +116,21 @@ export async function PlanWeekView({ program, planName, planId, weekStart }: Pla
   // presentational actions. Rendered full-width above the cockpit grid. The
   // plan-name <h1> stays conditional so an absent label renders no level-1
   // heading (the only other headings on the page are h2s).
+  //
+  // 15b-v2 S4: a trainer-authored `branding.title` overrides the plain
+  // `planName` heading, and `branding.trainerName` renders as a byline below
+  // it. Absent branding leaves this identical to the pre-S4 rendering.
+  const displayTitle = branding?.title ?? planName;
   const topbar = (
     <header className={styles.topbar}>
       <div className={styles.topbarCopy}>
         <div className={styles.eyebrow}>{t("plan.hero.eyebrow")}</div>
-        {planName && <h1 className={styles.pageTitle}>{planName}</h1>}
+        {displayTitle && <h1 className={styles.pageTitle}>{displayTitle}</h1>}
+        {branding?.trainerName && (
+          <p className={styles.brandingByline}>
+            {t("plan.branding.byTrainer", { trainerName: branding.trainerName })}
+          </p>
+        )}
         <p className={styles.lead}>{t("plan.hero.lead")}</p>
       </div>
       {/* presentational only — no data model yet (topbar actions) */}
@@ -122,6 +146,7 @@ export async function PlanWeekView({ program, planName, planId, weekStart }: Pla
       weeklyOverview={weeklyOverview}
       topbar={topbar}
       sideRail={<PlanSideRail />}
+      branding={branding}
     >
       {/* Hero panel (presentational) wrapping the DATA-WIRED metrics grid. */}
       <PlanHero>{metrics}</PlanHero>

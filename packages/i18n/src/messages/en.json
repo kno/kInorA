@@ -382,6 +382,9 @@
       "action2Sub": "+2.5 kg if it's clean",
       "action2Note": "Progression marked: next bench suggested at 85 kg if you finish 4×6.",
       "appliedToast": "Suggestion applied to your plan."
+    },
+    "branding": {
+      "byTrainer": "By {trainerName}"
     }
   },
   "tracker": {
@@ -743,7 +746,8 @@
     "error": "Something went wrong. Please try again.",
     "stalledTitle": "Taking longer than expected",
     "stalledBody": "Your plan is still generating — this is taking a bit longer than usual. You can wait or refresh to check again.",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "brandedBy": "By {trainerName}"
   },
   "exercises": {
     "title": "Exercises",

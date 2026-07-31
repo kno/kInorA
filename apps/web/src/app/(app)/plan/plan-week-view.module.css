@@ -224,8 +224,8 @@
 }
 
 .dayCardActive {
-  border-color: var(--accent);
-  background: color-mix(in oklch, var(--surface-2), var(--accent) 7%);
+  border-color: var(--plan-accent, var(--accent));
+  background: color-mix(in oklch, var(--surface-2), var(--plan-accent, var(--accent)) 7%);
   box-shadow: inset 0 0 0 1px var(--accent-dim, oklch(89% 0.2 128 / 0.18));
 }
 
@@ -500,13 +500,13 @@
 }
 
 .btnPrimary {
-  background: var(--accent);
+  background: var(--plan-accent, var(--accent));
   color: var(--accent-fg);
-  border-color: var(--accent);
+  border-color: var(--plan-accent, var(--accent));
 }
 
 .btnPrimary:hover {
-  background: var(--accent);
+  background: var(--plan-accent, var(--accent));
   filter: brightness(1.04);
 }
 
@@ -551,6 +551,16 @@
   margin-top: 8px;
   color: var(--muted);
   font-size: 15px;
+}
+
+/* Trainer byline (15b-v2 S4) — shown below the branded title when
+   `branding.trainerName` is set. Muted like `.lead`, but smaller so the
+   title stays the visual anchor. */
+.brandingByline {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .topbarActions {
@@ -623,7 +633,7 @@
 .pillActive {
   background: var(--accent-dim);
   border-color: transparent;
-  color: var(--accent);
+  color: var(--plan-accent, var(--accent));
 }
 
 .heroTitle {
@@ -728,9 +738,9 @@
   gap: 8px;
   padding: 8px 11px;
   border-radius: var(--r-pill);
-  border: 1px solid color-mix(in oklch, var(--accent), transparent 52%);
+  border: 1px solid color-mix(in oklch, var(--plan-accent, var(--accent)), transparent 52%);
   background: oklch(5% 0.006 270 / 0.66);
-  color: var(--accent);
+  color: var(--plan-accent, var(--accent));
   font-size: 12px;
   font-weight: 800;
   -webkit-backdrop-filter: blur(12px);
@@ -767,7 +777,7 @@
   display: block;
   height: 100%;
   width: 72%;
-  background: var(--accent);
+  background: var(--plan-accent, var(--accent));
   border-radius: inherit;
 }
 
@@ -856,7 +866,7 @@
   width: 132px;
   height: 132px;
   border-radius: 50%;
-  background: conic-gradient(var(--accent) 0 82%, var(--surface-2) 82% 100%);
+  background: conic-gradient(var(--plan-accent, var(--accent)) 0 82%, var(--surface-2) 82% 100%);
   display: grid;
   place-items: center;
   position: relative;
@@ -940,7 +950,7 @@
 }
 
 .exerciseActive .exerciseIndex {
-  background: var(--accent);
+  background: var(--plan-accent, var(--accent));
   color: var(--accent-fg);
 }
 
@@ -974,7 +984,7 @@
 }
 
 .coachNote {
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--plan-accent, var(--accent));
   padding-left: 14px;
   color: var(--muted);
   font-size: 14px;
