@@ -74,10 +74,16 @@ export const experienceLevelEnum = pgEnum("experience_level", [
 /**
  * Membership role: owner is the tenant creator; member is an invited user.
  * Extensible for future roles (e.g., admin).
+ *
+ * `trainer` (15a-v2-trainer-account-access, Slice 1) is appended additively —
+ * existing ordinals are preserved (`ALTER TYPE ... ADD VALUE`). It is dark in
+ * this slice: nothing grants it or checks for it yet. The authorization seam
+ * (`resolveAuthorizedOwner`) that gates on this role lands in Slice 2.
  */
 export const membershipRoleEnum = pgEnum("membership_role", [
   "owner",
   "member",
+  "trainer",
 ]);
 
 /**
@@ -92,7 +98,13 @@ export const membershipStatusEnum = pgEnum("membership_status", [
   "suspended",
 ]);
 
-export const billingTierEnum = pgEnum("billing_tier", ["free", "pro"]);
+/**
+ * `trainer` (15a-v2-trainer-account-access, Slice 1) is appended additively,
+ * mirroring `membershipRoleEnum`. `resolveTenantFeatureLimit` (plan-limits.ts)
+ * knows about it via `TRAINER_TIER_LIMITS`, but no route gates a capability on
+ * it in this slice — see design.md's Slice Plan.
+ */
+export const billingTierEnum = pgEnum("billing_tier", ["free", "pro", "trainer"]);
 
 export const billingStatusEnum = pgEnum("billing_status", [
   "active",
@@ -945,4 +957,62 @@ export const userPreferences = pgTable(
       table.userId
     ),
   })
+);
+
+/**
+ * Trainer/client assignment lifecycle (15a-v2-trainer-account-access):
+ *   invited — the trainer has invited the client, not yet accepted
+ *   active  — the client accepted; the trainer may act on their behalf
+ *   revoked — the assignment no longer grants access (kept for audit)
+ */
+export const trainerAssignmentStatusEnum = pgEnum("trainer_assignment_status", [
+  "invited",
+  "active",
+  "revoked",
+]);
+
+/**
+ * Trainer/client assignments — the auditable link that lets an entitled
+ * trainer act on an assigned client's training data (15a-v2, Slice 1: dark,
+ * additive; no route wires this table yet — that lands in Slice 3/4).
+ *
+ * Both trainer and client are `memberships` rows in the SAME tenant (the
+ * trainer's tenant); the client keeps a separate personal-tenant membership
+ * untouched. `(tenant_id, client_user_id)` is unique per assignment record,
+ * and the partial unique index on `client_user_id` (excluding `revoked`
+ * rows) enforces the one-active-trainer-per-client invariant across the
+ * whole table, not just within one tenant.
+ */
+export const trainerClientAssignments = pgTable(
+  "trainer_client_assignments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    trainerUserId: uuid("trainer_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    clientUserId: uuid("client_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: trainerAssignmentStatusEnum("status").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantClientUnique: uniqueIndex("trainer_client_assignments_tenant_client_unique").on(
+      table.tenantId,
+      table.clientUserId,
+    ),
+    // One-active-trainer-per-client: only one non-revoked assignment row may
+    // exist per client, across all trainers/tenants.
+    clientActiveUnique: uniqueIndex("trainer_client_assignments_client_active_unique")
+      .on(table.clientUserId)
+      .where(sql`${table.status} <> 'revoked'`),
+    trainerIdx: index("trainer_client_assignments_trainer_idx").on(
+      table.tenantId,
+      table.trainerUserId,
+    ),
+  }),
 );

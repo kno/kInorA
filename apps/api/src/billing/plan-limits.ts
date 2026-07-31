@@ -15,6 +15,22 @@ const FREE_TIER_LIMITS: Record<BillingFeature, number> = {
 };
 
 /**
+ * Trainer tier limits (15a-v2-trainer-account-access, Slice 1). Set at or
+ * above the Pro caps so a `trainer`-tier tenant is never silently downgraded
+ * to Free limits once the `trainer` BillingTier value exists. This slice is
+ * dark/additive: no route yet grants or checks the `trainer` tier — that
+ * gating lands with the authorization seam in Slice 2. Values chosen as a
+ * multiple of the Pro caps to leave headroom for a trainer's multi-client
+ * usage; they are not yet config-driven (no pricing exists for this tier).
+ */
+const TRAINER_TIER_LIMITS: Record<BillingFeature, number> = {
+  plan_generation: PRO_TIER_LIMITS.plan_generation * 2,
+  plan_regeneration: PRO_TIER_LIMITS.plan_regeneration * 2,
+  memory_write: PRO_TIER_LIMITS.memory_write * 2,
+  memory_retrieval: PRO_TIER_LIMITS.memory_retrieval * 2,
+};
+
+/**
  * The tenant aggregate limit for a `(tier, feature)` pair (11b Slice 3). Free
  * uses the fixed monthly allowances; Pro uses the config-driven, per-feature
  * {@link PRO_TIER_LIMITS} from `pricing-config.ts`. This is the point Pro
@@ -22,9 +38,14 @@ const FREE_TIER_LIMITS: Record<BillingFeature, number> = {
  * an over-cap Pro consumption is denied with `tenant_quota_exhausted` exactly
  * like a Free tenant over its allowance. Entitlement/tier RESOLUTION
  * (`resolveEffectiveTier`) is untouched; only the LIMIT resolution changed.
+ *
+ * `trainer` (15a-v2, Slice 1) resolves to {@link TRAINER_TIER_LIMITS} so it
+ * never silently falls back to Free — see that const's docstring.
  */
 export function resolveTenantFeatureLimit(tier: BillingTier, feature: BillingFeature): number {
-  return tier === "pro" ? PRO_TIER_LIMITS[feature] : FREE_TIER_LIMITS[feature];
+  if (tier === "pro") return PRO_TIER_LIMITS[feature];
+  if (tier === "trainer") return TRAINER_TIER_LIMITS[feature];
+  return FREE_TIER_LIMITS[feature];
 }
 
 /**
