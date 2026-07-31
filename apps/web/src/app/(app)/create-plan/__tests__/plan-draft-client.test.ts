@@ -5,6 +5,7 @@ import {
   promotePlanSpec,
   isSpecComplete,
   fetchUserPlans,
+  fetchTrainerPlan,
   adaptPlan,
   confirmPlanGen,
   regeneratePlan,
@@ -317,6 +318,98 @@ describe("fetchUserPlans", () => {
   it("returns an error when the fetch itself throws (network unreachable)", async () => {
     const fetchImpl = vi.fn().mockRejectedValue(new Error("Network error"));
     const result = await fetchUserPlans("tok", { fetchImpl });
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.message).toBe("api_unreachable");
+    }
+  });
+});
+
+// 15b-v2-trainer-dashboard-branding, Phase S5 — client-facing branded-plan
+// view. `fetchTrainerPlan` GETs `/me/trainer-plan` (the S2 authorization
+// primitive's route) and surfaces `branding` on the resolved plan when the
+// trainer set it.
+describe("fetchTrainerPlan", () => {
+  it("GETs /me/trainer-plan with the Bearer token and returns the plan (including branding) on 200", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "plan-1",
+          status: "ready",
+          program: { weeklySessions: [], limitationWarnings: [] },
+          specId: "spec-1",
+          name: "Summer Cut",
+          branding: { trainerName: "Coach Ana", title: "Ana's Cut", accentColor: "#1E90FF" },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    const result = await fetchTrainerPlan("tok-abc", { fetchImpl, apiBaseUrl: "http://api.test" });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.plan.id).toBe("plan-1");
+      expect(result.plan.branding).toEqual({
+        trainerName: "Coach Ana",
+        title: "Ana's Cut",
+        accentColor: "#1E90FF",
+      });
+    }
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://api.test/me/trainer-plan",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({ authorization: "Bearer tok-abc" }),
+      }),
+    );
+  });
+
+  it("returns a plan with no branding key when the base plan has none (absent branding renders base plan)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "plan-1",
+          status: "ready",
+          program: { weeklySessions: [], limitationWarnings: [] },
+          specId: "spec-1",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    const result = await fetchTrainerPlan("tok-abc", { fetchImpl, apiBaseUrl: "http://api.test" });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.plan.branding).toBeUndefined();
+    }
+  });
+
+  it("returns an error when no token is provided", async () => {
+    const fetchImpl = vi.fn();
+    const result = await fetchTrainerPlan(undefined, { fetchImpl });
+    expect(result.kind).toBe("error");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("returns a 403 error when the caller has no active trainer assignment (S2 denial preserved)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: "forbidden" }), {
+        status: 403,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const result = await fetchTrainerPlan("tok", { fetchImpl });
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.message).toBe("forbidden");
+    }
+  });
+
+  it("returns an error when the fetch itself throws (network unreachable)", async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error("Network error"));
+    const result = await fetchTrainerPlan("tok", { fetchImpl });
     expect(result.kind).toBe("error");
     if (result.kind === "error") {
       expect(result.message).toBe("api_unreachable");

@@ -17,7 +17,7 @@ import "server-only";
  * Docker address http://api:4000) which only resolves from within the Docker
  * network. Client components must call a server action instead.
  */
-import type { PlanSpec } from "@kinora/contracts";
+import type { PlanBranding, PlanSpec } from "@kinora/contracts";
 
 /** True when every required PlanSpec field is present (equipment/limitations may be empty). */
 export function isSpecComplete(spec: Partial<PlanSpec>): boolean {
@@ -410,6 +410,64 @@ export async function fetchUserPlans(
   }
 
   return { kind: "ok", plans: body };
+}
+
+/**
+ * A trainer-plan status response, extending `PlanStatusResponse` with the
+ * optional trainer-authored `branding` (15b-v2 S5). Absent branding renders
+ * the base (unbranded) plan — see `PlanStatusResponse.name` for the same
+ * additive convention.
+ */
+export interface TrainerPlanStatusResponse extends PlanStatusResponse {
+  branding?: PlanBranding;
+}
+
+export type FetchTrainerPlanResult =
+  | { kind: "ok"; plan: TrainerPlanStatusResponse }
+  | { kind: "error"; message: string };
+
+/**
+ * Fetch the caller's own trainer-built plan via `GET /me/trainer-plan`
+ * (15b-v2-trainer-dashboard-branding, Phase S2's `resolveClientTrainerTenant`
+ * primitive — Phase S5 client-facing consumer). A `403` means the caller has
+ * no active trainer assignment (the S2 deny-by-default authorization); a
+ * `404` means the assignment exists but no ready plan does yet. Both surface
+ * as a typed error the caller renders as a denied/pending state — never a
+ * thrown exception.
+ */
+export async function fetchTrainerPlan(
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<FetchTrainerPlanResult> {
+  if (!token) {
+    return { kind: "error", message: "no_session" };
+  }
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}/me/trainer-plan`, {
+      method: "GET",
+      headers: { authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? "fetch_trainer_plan_failed" };
+  }
+
+  const body = (await res.json().catch(() => null)) as TrainerPlanStatusResponse | null;
+  if (!body?.id) {
+    return { kind: "error", message: "invalid_response" };
+  }
+
+  return { kind: "ok", plan: body };
 }
 
 /**
