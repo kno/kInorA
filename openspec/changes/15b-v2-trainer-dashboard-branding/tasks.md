@@ -9,11 +9,11 @@
 | Chained PRs recommended | Yes |
 | Suggested split | PR1 (S1) → PR2 (S2) → PR3 (S3) → PR4 (S4) → PR5 (S5) |
 | Delivery strategy | ask-on-risk |
-| Chain strategy | pending (user decision required) |
+| Chain strategy | stacked-to-main (resolved for S1 apply run) |
 
 Decision needed before apply: Yes
 Chained PRs recommended: Yes
-Chain strategy: pending
+Chain strategy: stacked-to-main
 400-line budget risk: High
 
 ### Suggested Work Units
@@ -30,17 +30,17 @@ Rationale: S1 independently shippable (no #283 dep). S2 is the highest-risk secu
 
 ## Phase S1: Trainer Dashboard Read
 
-- [ ] 1.1 RED: `packages/domain/src/progress/rpe-trend.test.ts` — 8-week bucket window, gap when <2 rated sets, Monday-first boundary
-- [ ] 1.2 GREEN: `packages/domain/src/progress/rpe-trend.ts` `computeRpeTrend`
-- [ ] 1.3 RED: completion-rate math test (28-day window, `percent = min(100, round(...))`)
-- [ ] 1.4 GREEN: implement completion-rate calc alongside `computeRpeTrend` call site
-- [ ] 1.5 Add `ClientDashboardDTO`, `RpeTrendPoint` to `packages/contracts/src/index.ts`
-- [ ] 1.6 RED: `workout-session.test.ts` — `getClientDashboard` tenant-safety (decoy other-tenant session excluded)
-- [ ] 1.7 GREEN: `apps/api/src/db/repositories/workout-session.ts` `getClientDashboard(tenantId, ownerUserId, now)`
-- [ ] 1.8 RED: route test — non-assigned client rejected (403, no repo call), non-entitled trainer rejected (403)
-- [ ] 1.9 GREEN: `GET /trainer/clients/:clientUserId/dashboard` in `apps/api/src/routes/trainer.ts` via `resolveAuthorizedOwner`
-- [ ] 1.10 Run `pnpm architecture` — confirm route uses injected repo interface, not direct import
-- [ ] 1.11 Run `pnpm ui-api-guard` (N/A, no web change this slice — confirm no-op pass)
+- [x] 1.1 RED: `packages/domain/src/progress/rpe-trend.test.ts` — 8-week bucket window, gap when <2 rated sets, Monday-first boundary
+- [x] 1.2 GREEN: `packages/domain/src/progress/rpe-trend.ts` `computeRpeTrend`
+- [x] 1.3 RED: completion-rate math test (28-day window, `percent = min(100, round(...))`)
+- [x] 1.4 GREEN: implement completion-rate calc alongside `computeRpeTrend` call site
+- [x] 1.5 Add `ClientDashboardDTO`, `RpeTrendPoint` to `packages/contracts/src/index.ts`
+- [x] 1.6 RED: `workout-session.test.ts` — `getClientDashboard` tenant-safety (decoy other-tenant session excluded)
+- [x] 1.7 GREEN: `apps/api/src/db/repositories/workout-session.ts` `getClientDashboard(tenantId, ownerUserId, now)`
+- [x] 1.8 RED: route test — non-assigned client rejected (403, no repo call), non-entitled trainer rejected (403)
+- [x] 1.9 GREEN: `GET /trainer/clients/:clientUserId/dashboard` in `apps/api/src/routes/trainer.ts` via `resolveAuthorizedOwner`
+- [x] 1.10 Run `pnpm architecture` — confirm route uses injected repo interface, not direct import
+- [x] 1.11 Run `pnpm ui-api-guard` (N/A, no web change this slice — confirm no-op pass)
 
 ## Phase S2: Client-to-Trainer-Tenant Read Authorization (#283)
 

@@ -12,6 +12,8 @@ import {
   computeAdherence,
   computeAdherenceAdaptation,
   computeRpeAdaptation,
+  computeRpeTrend,
+  computeCompletionRate,
   computeMuscleGroupDistribution,
   computePersonalRecords,
   computeStreak,
@@ -27,6 +29,7 @@ import {
 } from "../progress-domain.js";
 import type {
   AdaptationRecommendation,
+  ClientDashboardDTO,
   DashboardSummaryDTO,
   DeleteSessionOutcome,
   ExerciseDetailDTO,
@@ -126,6 +129,9 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  */
 const EXERCISE_DETAIL_SESSION_SCAN_LIMIT = 60;
 const EXERCISE_DETAIL_RECENT_SETS_LIMIT = 10;
+
+/** `ClientDashboardDTO.recentSessions` — last N completed sessions (design.md "recentSessions = last 5"). */
+const RECENT_SESSIONS_LIMIT = 5;
 
 function startOfUtcDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -809,6 +815,131 @@ export class WorkoutSessionRepository {
       weeklyRollup: computeWeeklyRollup({ planDays, sessions: weeklySessions }, now),
       adaptation,
     };
+  }
+
+  /**
+   * Trainer dashboard read (15b-v2-trainer-dashboard-branding, Phase S1) —
+   * RPE trend, completion rate, and recent sessions for a client owned by
+   * `ownerUserId`. Tenant-safe BY CONSTRUCTION (design.md "Tenant-Safe
+   * Dashboard Data", req 3): the query filters on `(tenantId, ownerUserId,
+   * status="completed")` — the SAME predicate `getDashboardSummary` uses —
+   * so a decoy session under a different tenant for the same userId can
+   * never be included. The caller (route) resolves `ownerUserId` via
+   * `resolveAuthorizedOwner` BEFORE calling this method; trainer and client
+   * always share the caller's `tenantId` for this read.
+   *
+   * Bounded, no N+1: one page of the owner's completed sessions
+   * (`DASHBOARD_HISTORY_LIMIT`), one latest-ready-plan lookup, and — only
+   * when there is at least one completed session — one further pair of
+   * bounded `inArray` queries (session_exercises, set_records) to compute
+   * volume/RPE for those sessions. Mirrors `getDashboardSummary`'s query
+   * shape.
+   */
+  async getClientDashboard(
+    tenantId: string,
+    ownerUserId: string,
+    now: Date = new Date()
+  ): Promise<ClientDashboardDTO> {
+    const completedRows = (await this.db
+      .select()
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, ownerUserId),
+          eq(workoutSessions.status, "completed")
+        )
+      )
+      .orderBy(desc(workoutSessions.completedAt))
+      .limit(DASHBOARD_HISTORY_LIMIT)) as WorkoutSessionRow[];
+
+    const planRows = (await this.db
+      .select()
+      .from(workoutPlans)
+      .where(
+        and(
+          eq(workoutPlans.tenantId, tenantId),
+          eq(workoutPlans.userId, ownerUserId),
+          eq(workoutPlans.status, "ready")
+        )
+      )
+      .orderBy(desc(workoutPlans.createdAt))
+      .limit(1)) as WorkoutPlanRow[];
+
+    const latestReadyPlan = planRows[0];
+    const completedAtDates = completedRows
+      .map((row) => row.completedAt?.toISOString())
+      .filter((iso): iso is string => iso !== undefined);
+    const plannedSessionsPerWeek = latestReadyPlan?.programJson?.weeklySessions.length ?? 0;
+
+    const completionRate = computeCompletionRate({ completedAtDates, plannedSessionsPerWeek }, now);
+
+    const sessions =
+      completedRows.length === 0 ? [] : await this.buildSessionRecords(completedRows);
+
+    const rpeTrend = computeRpeTrend(
+      sessions.map((session, index): RpeSessionInput => ({
+        completedAt: completedRows[index]!.completedAt!.toISOString(),
+        rpeValues: extractCompletedSetRpeValues(session),
+      })),
+      now
+    );
+
+    const recentSessions = sessions.slice(0, RECENT_SESSIONS_LIMIT).map((session, index) => ({
+      date: completedRows[index]!.completedAt!.toISOString(),
+      volumeKg: computeSessionVolume(session),
+      meanRpe: computeAverageRpe(session) ?? null,
+    }));
+
+    return { rpeTrend, completionRate, recentSessions };
+  }
+
+  /**
+   * Maps a bounded set of already-fetched completed session rows to full
+   * `WorkoutSessionRecord`s — two bounded `inArray` queries (never
+   * per-session), mirroring `buildRpeSessions`/`buildWeeklyRollupSessions`.
+   * Used by `getClientDashboard`, which needs BOTH volume and RPE per
+   * session (unlike those two single-purpose helpers).
+   */
+  private async buildSessionRecords(rows: WorkoutSessionRow[]): Promise<WorkoutSessionRecord[]> {
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const sessionIds = rows.map((row) => row.id);
+    const exerciseRows = (await this.db
+      .select()
+      .from(sessionExercises)
+      .where(inArray(sessionExercises.workoutSessionId, sessionIds))) as SessionExerciseRow[];
+
+    const exerciseIds = exerciseRows.map((exercise) => exercise.id);
+    const setRows =
+      exerciseIds.length === 0
+        ? []
+        : ((await this.db
+            .select()
+            .from(setRecords)
+            .where(inArray(setRecords.sessionExerciseId, exerciseIds))) as SetRecordRow[]);
+
+    const exercisesBySession = new Map<string, SessionExerciseRow[]>();
+    for (const exerciseRow of exerciseRows) {
+      const current = exercisesBySession.get(exerciseRow.workoutSessionId) ?? [];
+      current.push(exerciseRow);
+      exercisesBySession.set(exerciseRow.workoutSessionId, current);
+    }
+
+    const setsByExercise = new Map<string, SetRecordRow[]>();
+    for (const setRow of setRows) {
+      const current = setsByExercise.get(setRow.sessionExerciseId) ?? [];
+      current.push(setRow);
+      setsByExercise.set(setRow.sessionExerciseId, current);
+    }
+
+    return rows.map((sessionRow) => {
+      const ownExercises = exercisesBySession.get(sessionRow.id) ?? [];
+      const ownSets = ownExercises.flatMap((exercise) => setsByExercise.get(exercise.id) ?? []);
+      return mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets);
+    });
   }
 
   /**

@@ -526,6 +526,10 @@ export async function buildApp(
     membershipRepo: trainerMembershipRepo,
     userRepo: adminUserRepo,
     entitlementReader: billingStateReader,
+    // 15b-v2-trainer-dashboard-branding, Phase S1 — enables
+    // `GET /trainer/clients/:clientUserId/dashboard`. Reuses the SAME
+    // `WorkoutSessionRepository` instance every other progress read uses.
+    dashboardRepo: workoutSessionRepo,
   });
 
   // 11a billing routes (Phase 3 quota administration + Phase 4 member

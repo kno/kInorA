@@ -27,12 +27,29 @@ function entitlementReader(tier: "free" | "pro" | "trainer" = "trainer") {
   };
 }
 
+function activeAssignment() {
+  return {
+    id: "assignment-1",
+    tenantId: TENANT_ID,
+    trainerUserId: TRAINER_ID,
+    clientUserId: CLIENT_ID,
+    status: "active" as const,
+  };
+}
+
+const emptyDashboard = {
+  rpeTrend: [],
+  completionRate: { periodDays: 28, planned: 0, completed: 0, percent: 0 },
+  recentSessions: [],
+};
+
 function buildRepos(
   overrides: Partial<{
     assignmentRepo: Record<string, unknown>;
     membershipRepo: Record<string, unknown>;
     userRepo: Record<string, unknown>;
     entitlementReader: Record<string, unknown>;
+    dashboardRepo: Record<string, unknown>;
   }> = {},
 ) {
   return {
@@ -47,6 +64,7 @@ function buildRepos(
       findByClientUserId: vi.fn().mockResolvedValue(undefined),
       updateStatus: vi.fn().mockResolvedValue(1),
       listByTrainer: vi.fn().mockResolvedValue([]),
+      findActiveAssignment: vi.fn().mockResolvedValue(activeAssignment()),
       ...overrides.assignmentRepo,
     },
     membershipRepo: {
@@ -66,6 +84,10 @@ function buildRepos(
       ...overrides.userRepo,
     },
     entitlementReader: overrides.entitlementReader ?? entitlementReader("trainer"),
+    dashboardRepo: {
+      getClientDashboard: vi.fn().mockResolvedValue(emptyDashboard),
+      ...overrides.dashboardRepo,
+    },
   };
 }
 
@@ -270,6 +292,61 @@ describe("POST /trainer/clients/accept", () => {
     });
 
     expect(res.statusCode).toBe(404);
+  });
+});
+
+describe("GET /trainer/clients/:clientUserId/dashboard", () => {
+  let app: FastifyInstance;
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("1.8 denies a trainer with no active assignment to the client with 403, no repo call (task 1.8)", async () => {
+    const repos = buildRepos({ assignmentRepo: { findActiveAssignment: vi.fn().mockResolvedValue(undefined) } });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/dashboard`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.dashboardRepo.getClientDashboard).not.toHaveBeenCalled();
+  });
+
+  it("1.8 denies a trainer-role actor without the trainer entitlement with 403, no repo call (task 1.8)", async () => {
+    const repos = buildRepos({ entitlementReader: entitlementReader("pro") });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/dashboard`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.dashboardRepo.getClientDashboard).not.toHaveBeenCalled();
+  });
+
+  it("1.9 returns the ClientDashboardDTO for a trainer with an active assignment to the client", async () => {
+    const dashboard = {
+      rpeTrend: [{ weekStart: "2026-07-13T00:00:00.000Z", meanRpe: 8, sessionsWithRpe: 2 }],
+      completionRate: { periodDays: 28, planned: 12, completed: 6, percent: 50 },
+      recentSessions: [{ date: "2026-07-15T09:00:00.000Z", volumeKg: 1000, meanRpe: 8.5 }],
+    };
+    const repos = buildRepos({ dashboardRepo: { getClientDashboard: vi.fn().mockResolvedValue(dashboard) } });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/dashboard`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(dashboard);
+    expect(repos.dashboardRepo.getClientDashboard).toHaveBeenCalledWith(TENANT_ID, CLIENT_ID);
   });
 });
 
