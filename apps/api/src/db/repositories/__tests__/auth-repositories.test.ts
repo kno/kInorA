@@ -190,6 +190,26 @@ describe("MembershipRepository", () => {
 
       expect(result).toBeNull();
     });
+
+    // 15a-v2-trainer-account-access Slice 2 (task 2.8): the returned row must
+    // include `role` (already present in the selected columns — this asserts
+    // the type accepts the widened `trainer` role value too, since
+    // resolveAuthorizedOwner/SessionContext.role are populated from this read).
+    it("returns a role of 'trainer' when the membership row has that role", async () => {
+      const trainerMembership: MembershipRecord = {
+        ...membership,
+        role: "trainer",
+      };
+      const mockSelect = vi.fn().mockReturnValue(selectChain([trainerMembership]));
+      const repo = new MembershipRepository({ select: mockSelect } as never);
+
+      const result = await repo.findByTenantAndUser(
+        "tenant-uuid-1",
+        "user-uuid-1"
+      );
+
+      expect(result?.role).toBe("trainer");
+    });
   });
 });
 

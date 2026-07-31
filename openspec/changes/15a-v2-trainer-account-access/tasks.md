@@ -40,19 +40,19 @@ Independently shippable: S1 (schema only, dark). Dependent chain: S2 depends on 
 
 ## Phase 2 (Slice S2): Authorization Resolver + Guard — heavily reviewed
 
-- [ ] 2.1 RED: `resolveAuthorizedOwner` — self path: no `requested` → returns `ctx.actorUserId`.
-- [ ] 2.2 RED: `resolveAuthorizedOwner` — `member` role requesting another user's id → throws `ForbiddenOwnerAccess`.
-- [ ] 2.3 RED: `resolveAuthorizedOwner` — `trainer` role, tier not `"trainer"` (entitlement missing) → throws.
-- [ ] 2.4 RED: `resolveAuthorizedOwner` — `trainer` role + entitled, but no assignment row → throws.
-- [ ] 2.5 RED: `resolveAuthorizedOwner` — `trainer` role + entitled, assignment `status="revoked"` → throws.
-- [ ] 2.6 RED: `resolveAuthorizedOwner` — `trainer` role + entitled + assignment `status="active"` → returns `requested` (positive case, last).
-- [ ] 2.7 GREEN: implement `ActorOwnerContext`, `resolveAuthorizedOwner`, `ForbiddenOwnerAccess` in `apps/api/src/trainer/owner-access.ts` per design's deny-by-default order (role → tier → assignment).
-- [ ] 2.8 RED: extend `findByTenantAndUser` test to assert returned row includes `role`.
-- [ ] 2.9 GREEN: modify `apps/api/src/db/repositories/auth-context.ts` `findByTenantAndUser` to return `role`; attach `role` to `SessionContext` in `apps/api/src/auth/plugin.ts`.
-- [ ] 2.10 RED: `requireRole("trainer")` preHandler test — non-trainer role → 403; trainer role → passes through.
-- [ ] 2.11 GREEN: implement `requireRole()` guard in `apps/api/src/auth/plugin.ts`.
-- [ ] 2.12 RED (regression guard): write a test enumerating all trainer-scoped routes (from `apps/api/src/routes/trainer.ts` + modified `plan.ts`) and asserting each calls `resolveAuthorizedOwner` before any repo call (grep/AST or route-level integration probe) — this test must fail until S3/S4 wire routes through the resolver, and stays red intentionally until those slices land; keep it in this slice so the guard exists before the routes it will police are built.
-- [ ] 2.13 Integration: non-trainer request for another user's `plan_spec`/`workout_plan` still returns `undefined` (repo isolation intact, self path unaffected).
+- [x] 2.1 RED: `resolveAuthorizedOwner` — self path: no `requested` → returns `ctx.actorUserId`.
+- [x] 2.2 RED: `resolveAuthorizedOwner` — `member` role requesting another user's id → throws `ForbiddenOwnerAccess`.
+- [x] 2.3 RED: `resolveAuthorizedOwner` — `trainer` role, tier not `"trainer"` (entitlement missing) → throws.
+- [x] 2.4 RED: `resolveAuthorizedOwner` — `trainer` role + entitled, but no assignment row → throws.
+- [x] 2.5 RED: `resolveAuthorizedOwner` — `trainer` role + entitled, assignment `status="revoked"` → throws.
+- [x] 2.6 RED: `resolveAuthorizedOwner` — `trainer` role + entitled + assignment `status="active"` → returns `requested` (positive case, last).
+- [x] 2.7 GREEN: implement `ActorOwnerContext`, `resolveAuthorizedOwner`, `ForbiddenOwnerAccess` in `apps/api/src/trainer/owner-access.ts` per design's deny-by-default order (role → tier → assignment).
+- [x] 2.8 RED: extend `findByTenantAndUser` test to assert returned row includes `role`.
+- [x] 2.9 GREEN: modify `apps/api/src/db/repositories/auth-context.ts` `findByTenantAndUser` to return `role`; attach `role` to `SessionContext` in `apps/api/src/auth/plugin.ts`.
+- [x] 2.10 RED: `requireRole("trainer")` preHandler test — non-trainer role → 403; trainer role → passes through.
+- [x] 2.11 GREEN: implement `requireRole()` guard in `apps/api/src/auth/plugin.ts`.
+- [x] 2.12 Regression guard (CORRECTED per apply-time review): `apps/api/src/trainer/__tests__/route-authz-guard.test.ts` enumerates `TRAINER_SCOPED_ROUTES` (empty in S2 — S3 task 3.8 / S4 task 4.5 extend it as each trainer-scoped route lands) via `it.each` (zero cases now, a legitimate pass, not a skip) AND directly asserts the resolver's own deny-by-default invariants (self-only for non-trainer roles; trainer needs role+entitlement+active-assignment; non-assigned/wrong-client denied). GREEN on this branch, not intentionally red — S2 must be independently mergeable with a fully passing suite.
+- [x] 2.13 Integration: non-trainer request for another user's `plan_spec`/`workout_plan` still returns `undefined` — already covered by existing, unmodified tests in `plan-spec.test.ts` ("returns undefined for a confirmed spec owned by another user", cross-tenant isolation) and `workout-plan.test.ts`; PlanSpecRepository/WorkoutPlanRepository were not touched in this slice, confirming repo isolation and the self path are unaffected.
 
 ## Phase 3 (Slice S3): Invite/Assignment Flow
 
