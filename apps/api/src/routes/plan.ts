@@ -16,6 +16,7 @@ import type {
   IntensityBias,
   PlanSpec,
   PlanSpecDraft,
+  UserId,
 } from "@kinora/contracts";
 import type { WarningLocale } from "@kinora/domain";
 import type { PlanGenerationService } from "../ai/generation-service.js";
@@ -25,6 +26,8 @@ import type { PlanSpecExtractor } from "../ai/extraction-port.js";
 import type { SpeechTranscriber } from "../ai/speech-transcriber-port.js";
 import type { SpeechSynthesizer } from "../ai/speech-synthesizer-port.js";
 import { ProviderRateLimitError } from "../ai/provider-errors.js";
+import { resolveAuthorizedOwner, ForbiddenOwnerAccess } from "../trainer/owner-access.js";
+import type { ActorOwnerContext, OwnerAccessDeps } from "../trainer/owner-access.js";
 
 /**
  * A workout plan record as returned to the route (structural shape, declared
@@ -239,6 +242,17 @@ export interface PlanRoutesOptions {
    * route reads it ONLY for the authenticated `userId` from `authContext`.
    */
   voicePreferences?: VoicePreferenceReader;
+  /**
+   * Trainer-account-access authorization deps (15a-v2-trainer-account-access,
+   * Slice 4). REQUIRED (alongside the repo/generationService already required
+   * above) to register `POST /clients/:clientUserId/plan-specs` — the
+   * client-owned plan creation route. Absent it, that route is simply not
+   * registered and every wizard/generation route above is entirely
+   * unaffected. Reuses the EXACT SAME `resolveAuthorizedOwner` deny-by-default
+   * gate as `trainer/owner-access.ts` — this route never reimplements
+   * role/tier/assignment checks.
+   */
+  trainerAccess?: OwnerAccessDeps;
 }
 
 /**
@@ -445,6 +459,70 @@ const adaptSchema = {
   },
 };
 
+/** Outcome of {@link buildConfirmedSpecFromInput}: either a validated spec or the HTTP error to return. */
+type BuildConfirmedSpecResult =
+  | { ok: true; spec: PlanSpec }
+  | { ok: false; code: 409 | 422; error: string };
+
+/**
+ * Validate a raw wizard-shaped input (goal, daysPerWeek, sessionDurationMinutes,
+ * location, equipment, limitations, optional name) and derive the full
+ * CONFIRMED `PlanSpec` — the shared logic behind both `POST /plan-specs`
+ * (self, promoted from the caller's own draft) and
+ * `POST /clients/:clientUserId/plan-specs` (15a-v2-trainer-account-access
+ * Slice 4 — a trainer supplies the input directly for an assigned client, with
+ * no draft phase). Extracted so the two routes share ONE validation/derivation
+ * path rather than duplicating it.
+ *
+ * Returns `{ ok: false, code: 409, error: "incomplete_spec" }` when the input
+ * fails `assertPlanSpecInput`, or `{ ok: false, code: 422, error:
+ * "plan_name_too_long" }` when a supplied `name` exceeds
+ * `PLAN_NAME_MAX_LENGTH` after trimming. `preferenceScores` is ALWAYS derived
+ * server-side (never trusted from input) and the final result is re-validated
+ * via `assertPlanSpecShape` as an integrity guard.
+ */
+function buildConfirmedSpecFromInput(rawSpec: unknown): BuildConfirmedSpecResult {
+  try {
+    assertPlanSpecInput(rawSpec);
+  } catch {
+    return { ok: false, code: 409, error: "incomplete_spec" };
+  }
+
+  const inputSpec = rawSpec as Pick<
+    PlanSpec,
+    "goal" | "daysPerWeek" | "sessionDurationMinutes" | "location" | "equipment" | "limitations"
+  > & { name?: unknown };
+  const preferenceScores = derivePreferenceScores(inputSpec);
+
+  // #93: preserve a wizard/trainer-captured plan name. Trim FIRST, then bound
+  // the trimmed length to the DB column (workout_plans.name is VARCHAR(120)).
+  // An over-long name is rejected here as a clean 422 — NOT allowed to reach
+  // the INSERT and blow up as a 500.
+  const trimmedName = typeof inputSpec.name === "string" ? inputSpec.name.trim() : "";
+  if (trimmedName.length > PLAN_NAME_MAX_LENGTH) {
+    return { ok: false, code: 422, error: "plan_name_too_long" };
+  }
+  const name = trimmedName !== "" ? trimmedName : null;
+
+  const confirmedSpec: PlanSpec = {
+    goal: inputSpec.goal,
+    daysPerWeek: inputSpec.daysPerWeek,
+    sessionDurationMinutes: inputSpec.sessionDurationMinutes,
+    location: inputSpec.location,
+    equipment: inputSpec.equipment,
+    limitations: inputSpec.limitations,
+    preferenceScores,
+    confirmed: true,
+    name,
+  };
+
+  // Final integrity guard — confirmedSpec must now satisfy the full PlanSpec shape.
+  // This should always pass given correct derivation; if it throws, it is a server bug.
+  assertPlanSpecShape(confirmedSpec);
+
+  return { ok: true, spec: confirmedSpec };
+}
+
 /**
  * Best-effort detection of a Gemini rate-limit/quota-exhausted failure
  * surfaced through LangChain's `ChatGoogleGenerativeAI` (`/plan-specs/chat`).
@@ -481,6 +559,10 @@ export function isLikelyRateLimitMessage(error: unknown): boolean {
  *   POST /plan-specs/:id/regenerate     — re-trigger generation for confirmed spec; returns 202 { planId, status: "generating" }
  *   GET  /workout-plans/:id             — fetch a plan by id (tenant + user scoped)
  *   GET  /plan-specs/:id/workout-plan   — fetch the latest plan for a spec (tenant + user scoped)
+ *   POST /clients/:clientUserId/plan-specs — 15a-v2-trainer-account-access Slice 4: an
+ *     entitled, assigned trainer creates a CONFIRMED plan spec + starts generation
+ *     OWNED BY the client (`userId = clientUserId`), not the trainer. Registered
+ *     only when `trainerAccess` is wired.
  *
  * Stuck-generating strategy: MANUAL REGENERATE ONLY.
  * Stale "generating" rows from aborted generation (e.g. server restart) are
@@ -567,57 +649,18 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         return reply.code(409).send({ error: "no_active_draft" });
       }
 
-      // Validate wizard input fields (goal, daysPerWeek, etc.) BEFORE deriving.
-      // A real wizard draft never has preferenceScores or confirmed — those are
-      // server-derived. assertPlanSpecInput does NOT require them.
-      const rawSpec = draft.specJson as unknown;
-      try {
-        assertPlanSpecInput(rawSpec);
-      } catch {
-        return reply.code(409).send({ error: "incomplete_spec" });
+      // Validate wizard input fields + derive the confirmed spec. A real
+      // wizard draft never has preferenceScores or confirmed — those are
+      // server-derived by buildConfirmedSpecFromInput.
+      const built = buildConfirmedSpecFromInput(draft.specJson);
+      if (!built.ok) {
+        return reply.code(built.code).send({ error: built.error });
       }
-
-      // Derive preferenceScores server-side (source of truth) and build the
-      // full confirmed spec from the validated input fields.
-      const inputSpec = rawSpec as Pick<
-        PlanSpec,
-        "goal" | "daysPerWeek" | "sessionDurationMinutes" | "location" | "equipment" | "limitations"
-      > & { name?: unknown };
-      const preferenceScores = derivePreferenceScores(inputSpec);
-      // #93: preserve the wizard-captured plan name onto the confirmed spec so it
-      // survives to the later generation request (the draft is deleted on promote,
-      // so spec_json is the only durable carrier). Normalize a blank/whitespace or
-      // non-string value to null — the date-based default is resolved once on READ
-      // via defaultPlanName; we never default at write time.
-      // Trim FIRST, then bound the trimmed length to the DB column
-      // (workout_plans.name is VARCHAR(120)). An over-long name is rejected here
-      // as a clean 422 — NOT allowed to reach the INSERT and blow up as a 500.
-      const trimmedName =
-        typeof inputSpec.name === "string" ? inputSpec.name.trim() : "";
-      if (trimmedName.length > PLAN_NAME_MAX_LENGTH) {
-        return reply.code(422).send({ error: "plan_name_too_long" });
-      }
-      const name = trimmedName !== "" ? trimmedName : null;
-      const confirmedSpec: PlanSpec = {
-        goal: inputSpec.goal,
-        daysPerWeek: inputSpec.daysPerWeek,
-        sessionDurationMinutes: inputSpec.sessionDurationMinutes,
-        location: inputSpec.location,
-        equipment: inputSpec.equipment,
-        limitations: inputSpec.limitations,
-        preferenceScores,
-        confirmed: true,
-        name,
-      };
-
-      // Final integrity guard — confirmedSpec must now satisfy the full PlanSpec shape.
-      // This should always pass given correct derivation; if it throws, it is a server bug.
-      assertPlanSpecShape(confirmedSpec);
 
       // Insert the confirmed plan_specs row and delete the draft atomically.
       // The single db.transaction wrapping both writes is owned by the app.ts
       // adapter behind this port method — the route never sees a transaction.
-      const result = await repo.promoteDraftToSpec(tenantId, userId, confirmedSpec);
+      const result = await repo.promoteDraftToSpec(tenantId, userId, built.spec);
 
       return reply.code(201).send({ id: result.id, spec: result.spec });
     }
@@ -708,6 +751,108 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       return reply.code(202).send(result);
     }
   );
+
+  // POST /clients/:clientUserId/plan-specs  (15a-v2-trainer-account-access, Slice 4)
+  //
+  // Client-owned plan creation: an entitled, assigned trainer creates a
+  // CONFIRMED plan spec + starts generation for a CLIENT, not themselves.
+  // There is no draft phase for this path — the trainer supplies the full
+  // wizard-shaped input directly in the body (same flat shape `POST
+  // /plan-specs` validates from a draft).
+  //
+  // Order of operations (fail-closed):
+  //   1. requireAuth                     — 401 if no session
+  //   2. resolveAuthorizedOwner(:clientUserId) — the SAME deny-by-default gate
+  //      `trainer/owner-access.ts` uses everywhere else: role → tier →
+  //      ACTIVE assignment for THIS client, all before any write. Denied →
+  //      403, zero repo/generation calls. A non-trainer caller supplying
+  //      their OWN id still takes the unchanged self path (identical to
+  //      `POST /plan-specs`); only a DIFFERENT owner ever reaches the
+  //      widening branch.
+  //   3. buildConfirmedSpecFromInput      — 409/422 on a bad body, BEFORE any
+  //      quota consumption (mirrors confirm/regenerate's
+  //      validate-before-consume discipline).
+  //   4. checkAndConsume `plan_generation` — METERED AGAINST THE TRAINER'S OWN
+  //      TENANT + MEMBER QUOTA (design.md: "trainer's tenant quota, not the
+  //      client's personal tenant"), NOT the client's. The billing scope is
+  //      `{ tenantId: trainer's tenant, userId: actor }` — the client is
+  //      never billed and need not even have an entitlement of their own.
+  //      403 with the spec UNTOUCHED (no write yet) on denial.
+  //   5. repo.promoteDraftToSpec(tenantId, ownerUserId, spec) — reuses the
+  //      EXACT SAME atomic insert-confirmed-spec path as the self route
+  //      (the paired draft-delete is a documented no-op when no draft exists
+  //      for `ownerUserId`, so this is safe to call directly without a prior
+  //      draft). The repo's `(tenantId, userId)` filter is untouched — only
+  //      WHO computes `ownerUserId` differs (design.md's core invariant).
+  //   6. generationService.startGeneration(tenantId, ownerUserId, ...) — the
+  //      EXISTING signature, unmodified; the resolved owner is threaded
+  //      through it exactly like every other call site.
+  if (options.trainerAccess) {
+    const trainerAccess = options.trainerAccess;
+    fastify.post(
+      "/clients/:clientUserId/plan-specs",
+      { preHandler: requireAuth() },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        const { tenantId, userId, role } = request.authContext!;
+        const { clientUserId } = request.params as { clientUserId: string };
+        const ctx: ActorOwnerContext = { tenantId, actorUserId: userId, role };
+
+        let ownerUserId: UserId;
+        try {
+          ownerUserId = await resolveAuthorizedOwner(
+            ctx,
+            trainerAccess,
+            clientUserId as UserId
+          );
+        } catch (err) {
+          if (err instanceof ForbiddenOwnerAccess) {
+            return reply.code(403).send({ error: "forbidden" });
+          }
+          throw err;
+        }
+
+        const built = buildConfirmedSpecFromInput(request.body);
+        if (!built.ok) {
+          return reply.code(built.code).send({ error: built.error });
+        }
+
+        // Quota metered against the TRAINER's own tenant/membership, never the
+        // client's. A fresh operation key per request — there is no prior
+        // draft/spec id to key on here (unlike regenerate/adapt, which key off
+        // an EXISTING spec id), so each explicit client-plan-creation request
+        // consumes its own unit; a caller-supplied Idempotency-Key header is
+        // still honored for a genuine retry.
+        if (billing) {
+          const decision = await billing.checkAndConsume(
+            { tenantId, userId },
+            "plan_generation",
+            resolveOperationKey(
+              request,
+              `plan_generation_for_client:${clientUserId}:${randomUUID()}`
+            ),
+          );
+          if (!decision.allowed) {
+            return reply.code(403).send({ error: decision.reason });
+          }
+        }
+
+        const persisted = await repo.promoteDraftToSpec(tenantId, ownerUserId, built.spec);
+        const generation = await generationService.startGeneration(
+          tenantId,
+          ownerUserId,
+          persisted.id,
+          resolveWarningLocale(request)
+        );
+
+        return reply.code(201).send({
+          id: persisted.id,
+          spec: persisted.spec,
+          planId: generation.planId,
+          status: generation.status,
+        });
+      }
+    );
+  }
 
   // POST /plan-specs/:id/adapt  (14a-v1.1-adaptation-adherence, Slice B1)
   //
