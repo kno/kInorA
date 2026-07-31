@@ -43,6 +43,16 @@ const emptyDashboard = {
   recentSessions: [],
 };
 
+function activeClientAssignment() {
+  return {
+    id: "client-assignment-1",
+    tenantId: TENANT_ID,
+    trainerUserId: TRAINER_ID,
+    clientUserId: CLIENT_ID,
+    status: "active" as const,
+  };
+}
+
 function buildRepos(
   overrides: Partial<{
     assignmentRepo: Record<string, unknown>;
@@ -50,6 +60,7 @@ function buildRepos(
     userRepo: Record<string, unknown>;
     entitlementReader: Record<string, unknown>;
     dashboardRepo: Record<string, unknown>;
+    planRepo: Record<string, unknown>;
   }> = {},
 ) {
   return {
@@ -87,6 +98,10 @@ function buildRepos(
     dashboardRepo: {
       getClientDashboard: vi.fn().mockResolvedValue(emptyDashboard),
       ...overrides.dashboardRepo,
+    },
+    planRepo: {
+      findLatestReadyByOwner: vi.fn().mockResolvedValue(undefined),
+      ...overrides.planRepo,
     },
   };
 }
@@ -347,6 +362,155 @@ describe("GET /trainer/clients/:clientUserId/dashboard", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual(dashboard);
     expect(repos.dashboardRepo.getClientDashboard).toHaveBeenCalledWith(TENANT_ID, CLIENT_ID);
+  });
+});
+
+describe("GET /me/trainer-plan (15b-v2 Phase S2 — #283)", () => {
+  let app: FastifyInstance;
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  const readyPlan = {
+    id: "plan-1",
+    tenantId: TENANT_ID,
+    userId: CLIENT_ID,
+    planSpecId: "spec-1",
+    status: "ready" as const,
+    name: "Summer Cut",
+    programJson: { weeklySessions: [], limitationWarnings: [] },
+    errorMessage: null,
+    createdAt: new Date("2026-07-01T00:00:00Z"),
+    updatedAt: new Date("2026-07-01T00:00:00Z"),
+  };
+
+  it("2.1 revoked assignment denies with a flat 403, no plan repo call", async () => {
+    const repos = buildRepos({
+      assignmentRepo: {
+        findByClientUserId: vi.fn().mockResolvedValue({ ...activeClientAssignment(), status: "revoked" }),
+      },
+    });
+    app = await buildTestApp(repos, "member", CLIENT_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/me/trainer-plan",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.planRepo.findLatestReadyByOwner).not.toHaveBeenCalled();
+  });
+
+  it("2.1 no assignment row at all denies with a flat 403, no plan repo call", async () => {
+    const repos = buildRepos({
+      assignmentRepo: { findByClientUserId: vi.fn().mockResolvedValue(undefined) },
+    });
+    app = await buildTestApp(repos, "member", CLIENT_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/me/trainer-plan",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.planRepo.findLatestReadyByOwner).not.toHaveBeenCalled();
+  });
+
+  it("2.2 the plan read is always filtered by the caller's own userId, never a different client's id", async () => {
+    const repos = buildRepos({
+      assignmentRepo: { findByClientUserId: vi.fn().mockResolvedValue(activeClientAssignment()) },
+      planRepo: { findLatestReadyByOwner: vi.fn().mockResolvedValue(readyPlan) },
+    });
+    app = await buildTestApp(repos, "member", CLIENT_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/me/trainer-plan",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(repos.planRepo.findLatestReadyByOwner).toHaveBeenCalledWith(TENANT_ID, CLIENT_ID);
+  });
+
+  it("2.3 a client assigned only to trainer T can never have their read resolve trainer U's tenant", async () => {
+    const OTHER_TENANT = "other-tenant-u";
+    const repos = buildRepos({
+      assignmentRepo: {
+        findByClientUserId: vi.fn().mockResolvedValue({
+          ...activeClientAssignment(),
+          tenantId: OTHER_TENANT,
+        }),
+      },
+      planRepo: { findLatestReadyByOwner: vi.fn().mockResolvedValue(readyPlan) },
+    });
+    app = await buildTestApp(repos, "member", CLIENT_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/me/trainer-plan",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(repos.planRepo.findLatestReadyByOwner).toHaveBeenCalledWith(OTHER_TENANT, CLIENT_ID);
+    expect(repos.planRepo.findLatestReadyByOwner).not.toHaveBeenCalledWith(TENANT_ID, CLIENT_ID);
+  });
+
+  it("2.4 an ordinary member with no trainer/client relationship at all is denied with 403", async () => {
+    const repos = buildRepos({
+      assignmentRepo: { findByClientUserId: vi.fn().mockResolvedValue(undefined) },
+    });
+    app = await buildTestApp(repos, "member", MEMBER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/me/trainer-plan",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("2.6 happy path: client reads their own ready plan in the trainer's tenant", async () => {
+    const repos = buildRepos({
+      assignmentRepo: { findByClientUserId: vi.fn().mockResolvedValue(activeClientAssignment()) },
+      planRepo: { findLatestReadyByOwner: vi.fn().mockResolvedValue(readyPlan) },
+    });
+    app = await buildTestApp(repos, "member", CLIENT_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/me/trainer-plan",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      id: "plan-1",
+      status: "ready",
+      program: readyPlan.programJson,
+      specId: "spec-1",
+      name: "Summer Cut",
+    });
+  });
+
+  it("returns 404 when the client has an active assignment but no ready plan exists yet", async () => {
+    const repos = buildRepos({
+      assignmentRepo: { findByClientUserId: vi.fn().mockResolvedValue(activeClientAssignment()) },
+      planRepo: { findLatestReadyByOwner: vi.fn().mockResolvedValue(undefined) },
+    });
+    app = await buildTestApp(repos, "member", CLIENT_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/me/trainer-plan",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(404);
   });
 });
 

@@ -530,6 +530,10 @@ export async function buildApp(
     // `GET /trainer/clients/:clientUserId/dashboard`. Reuses the SAME
     // `WorkoutSessionRepository` instance every other progress read uses.
     dashboardRepo: workoutSessionRepo,
+    // 15b-v2-trainer-dashboard-branding, Phase S2 (#283) — enables
+    // `GET /me/trainer-plan`. Reuses the SAME `WorkoutPlanRepository`
+    // instance every other plan read uses.
+    planRepo: workoutPlanRepo,
   });
 
   // 11a billing routes (Phase 3 quota administration + Phase 4 member
