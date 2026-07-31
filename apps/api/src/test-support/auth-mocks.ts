@@ -55,7 +55,7 @@ export interface MembershipRowOptions {
   tenantId?: string;
   userId?: string;
   status?: MembershipStatus;
-  role?: "owner" | "member";
+  role?: "owner" | "member" | "trainer";
   id?: string;
 }
 
@@ -76,7 +76,7 @@ export function buildMembershipRow(opts: MembershipRowOptions = {}) {
     id: string;
     tenantId: string;
     userId: string;
-    role: "owner" | "member";
+    role: "owner" | "member" | "trainer";
     status: MembershipStatus;
     createdAt: Date;
   };

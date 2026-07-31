@@ -24,6 +24,8 @@ import { adminAiConfigRoutes } from "./routes/admin-ai-config.js";
 import { userProfileRoutes } from "./routes/user-profile.js";
 import { userMemoryRoutes } from "./routes/user-memories.js";
 import { userPreferencesRoutes } from "./routes/user-preferences.js";
+import { trainerRoutes } from "./routes/trainer.js";
+import { TrainerAssignmentRepository } from "./db/repositories/trainer-assignment.js";
 import {
   DEFAULT_EMBEDDING_RUNTIME_CONFIG,
   createOpenAIEmbeddingGenerator,
@@ -498,6 +500,19 @@ export async function buildApp(
     repo: userPreferencesRouteRepo,
   });
   await app.register(userMemoryRoutes, { service: userMemoryService });
+
+  // Trainer invite/assignment/list-clients routes (15a-v2-trainer-account-
+  // access, Slice 3). `entitlementReader` reuses the SAME
+  // `BillingStateReaderRepository` instance every other billing decision in
+  // this file uses — one entitlement reader, no duplicated wiring.
+  const trainerMembershipRepo = new MembershipRepository(database);
+  const trainerAssignmentRepo = new TrainerAssignmentRepository(database);
+  await app.register(trainerRoutes, {
+    assignmentRepo: trainerAssignmentRepo,
+    membershipRepo: trainerMembershipRepo,
+    userRepo: adminUserRepo,
+    entitlementReader: billingStateReader,
+  });
 
   // 11a billing routes (Phase 3 quota administration + Phase 4 member
   // visibility). Owner-only endpoints set per-member allocations (audited)

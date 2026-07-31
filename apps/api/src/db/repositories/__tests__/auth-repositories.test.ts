@@ -211,6 +211,100 @@ describe("MembershipRepository", () => {
       expect(result?.role).toBe("trainer");
     });
   });
+
+  // 15a-v2-trainer-account-access Slice 3 (tasks 3.2/3.3): invite/accept flow
+  // needs to CREATE and TRANSITION membership rows, not just read them.
+  describe("create", () => {
+    it("inserts a new membership row with the given role and status", async () => {
+      const inserted = { ...membership, role: "member", status: "invited" };
+      const returning = vi.fn().mockResolvedValue([inserted]);
+      const values = vi.fn().mockReturnValue({ returning });
+      const insert = vi.fn().mockReturnValue({ values });
+      const repo = new MembershipRepository({ insert } as never);
+
+      const result = await repo.create("tenant-uuid-1", "user-uuid-1", "member", "invited");
+
+      expect(values).toHaveBeenCalledWith({
+        tenantId: "tenant-uuid-1",
+        userId: "user-uuid-1",
+        role: "member",
+        status: "invited",
+      });
+      expect(result).toEqual(inserted);
+    });
+  });
+
+  describe("upsertInvited", () => {
+    it("inserts or resets an existing (tenantId, userId) row to invited", async () => {
+      const upserted = { ...membership, role: "member", status: "invited" };
+      const returning = vi.fn().mockResolvedValue([upserted]);
+      const onConflictDoUpdate = vi.fn().mockReturnValue({ returning });
+      const values = vi.fn().mockReturnValue({ onConflictDoUpdate });
+      const insert = vi.fn().mockReturnValue({ values });
+      const repo = new MembershipRepository({ insert } as never);
+
+      const result = await repo.upsertInvited("tenant-uuid-1", "user-uuid-1", "member");
+
+      expect(result).toEqual(upserted);
+      expect(onConflictDoUpdate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("updateStatusByTenantAndUser", () => {
+    it("transitions the (tenantId, userId) membership to the given status", async () => {
+      const returning = vi.fn().mockResolvedValue([{ ...membership, status: "active" }]);
+      const where = vi.fn().mockReturnValue({ returning });
+      const set = vi.fn().mockReturnValue({ where });
+      const update = vi.fn().mockReturnValue({ set });
+      const repo = new MembershipRepository({ update } as never);
+
+      const result = await repo.updateStatusByTenantAndUser(
+        "tenant-uuid-1",
+        "user-uuid-1",
+        "active",
+      );
+
+      expect(result).toBe(1);
+    });
+
+    it("returns 0 when no row matches the (tenantId, userId) pair", async () => {
+      const returning = vi.fn().mockResolvedValue([]);
+      const where = vi.fn().mockReturnValue({ returning });
+      const set = vi.fn().mockReturnValue({ where });
+      const update = vi.fn().mockReturnValue({ set });
+      const repo = new MembershipRepository({ update } as never);
+
+      const result = await repo.updateStatusByTenantAndUser("tenant-other", "user-uuid-1", "active");
+
+      expect(result).toBe(0);
+    });
+  });
+
+  describe("findActiveMemberships", () => {
+    // 15a-v2-trainer-account-access Slice 3 (task 3.7): the minimal
+    // active-tenant-selection primitive — returns EVERY active membership for
+    // a user (not just the first), so a caller CAN choose among them. Not yet
+    // wired into the default login path (see auth/tenant-selection.ts); the
+    // client-facing tenant switch UI is deferred to S5.
+    it("returns every active membership for the user", async () => {
+      const other = { ...membership, id: "member-uuid-2", tenantId: "tenant-uuid-2" };
+      const mockSelect = vi.fn().mockReturnValue(selectChain([membership, other]));
+      const repo = new MembershipRepository({ select: mockSelect } as never);
+
+      const result = await repo.findActiveMemberships("user-uuid-1");
+
+      expect(result).toEqual([membership, other]);
+    });
+
+    it("returns an empty array when the user has no active memberships", async () => {
+      const mockSelect = vi.fn().mockReturnValue(selectChain([]));
+      const repo = new MembershipRepository({ select: mockSelect } as never);
+
+      const result = await repo.findActiveMemberships("orphan");
+
+      expect(result).toEqual([]);
+    });
+  });
 });
 
 // --- TenantLookupRepository ---

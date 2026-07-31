@@ -14,6 +14,30 @@ import type { TrainerAssignmentStatus, TrainerClientAssignmentDTO } from "@kinor
  * another tenant is never returned even if the caller supplies a matching
  * trainer/client user id pair.
  */
+/**
+ * Thrown by `TrainerAssignmentRepository.create` when the insert violates the
+ * one-active-trainer-per-client partial unique index (15a-v2-trainer-account-
+ * access, Slice 3, task 3.4). Translates the raw Postgres unique-violation
+ * (error code `23505`) into a typed, DB-agnostic error so route code never
+ * needs to know a Postgres error code — it maps this to 409.
+ */
+export class TrainerAssignmentConflictError extends Error {
+  constructor(message = "trainer_assignment_conflict") {
+    super(message);
+    this.name = "TrainerAssignmentConflictError";
+  }
+}
+
+/** True when `err` looks like a Postgres unique-violation error (code 23505). */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: unknown }).code === "23505"
+  );
+}
+
 export class TrainerAssignmentRepository {
   constructor(private db: Database) {}
 
@@ -23,8 +47,8 @@ export class TrainerAssignmentRepository {
    * The data layer enforces one-active-trainer-per-client via the partial
    * unique index `trainer_client_assignments_client_active_unique`; a second
    * concurrent active assignment for the same client raises a unique
-   * violation the caller must surface (409 in Slice 3), never silently
-   * overwritten here.
+   * violation, translated here into `TrainerAssignmentConflictError` (the
+   * route layer maps it to 409 without inspecting Postgres error codes).
    */
   async create(
     tenantId: string,
@@ -32,10 +56,18 @@ export class TrainerAssignmentRepository {
     clientUserId: string,
     status: TrainerAssignmentStatus = "invited",
   ): Promise<TrainerClientAssignmentDTO> {
-    const rows = await this.db
-      .insert(trainerClientAssignments)
-      .values({ tenantId, trainerUserId, clientUserId, status })
-      .returning();
+    let rows: unknown[];
+    try {
+      rows = await this.db
+        .insert(trainerClientAssignments)
+        .values({ tenantId, trainerUserId, clientUserId, status })
+        .returning();
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new TrainerAssignmentConflictError();
+      }
+      throw err;
+    }
     const row = rows[0] as {
       id: string;
       tenantId: string;
@@ -43,6 +75,45 @@ export class TrainerAssignmentRepository {
       clientUserId: string;
       status: TrainerAssignmentStatus;
     };
+    return {
+      id: row.id,
+      tenantId: row.tenantId as TrainerClientAssignmentDTO["tenantId"],
+      trainerUserId: row.trainerUserId as TrainerClientAssignmentDTO["trainerUserId"],
+      clientUserId: row.clientUserId as TrainerClientAssignmentDTO["clientUserId"],
+      status: row.status,
+    };
+  }
+
+  /**
+   * Find the client's single non-revoked assignment, regardless of tenant
+   * (15a-v2-trainer-account-access, Slice 3 — invite acceptance). Deliberately
+   * NOT tenant-scoped: unlike every other read in this repository, the caller
+   * (the client accepting an invite) is not yet a member of the trainer's
+   * tenant, so there is no request-scoped tenantId to filter by. This is safe
+   * ONLY because the partial unique index
+   * (`trainer_client_assignments_client_active_unique`, `WHERE status <>
+   * 'revoked'`) guarantees at most one non-revoked row per client across the
+   * WHOLE table — there is no ambiguity to resolve.
+   */
+  async findByClientUserId(
+    clientUserId: string,
+  ): Promise<TrainerClientAssignmentDTO | undefined> {
+    const rows = await this.db
+      .select()
+      .from(trainerClientAssignments)
+      .where(eq(trainerClientAssignments.clientUserId, clientUserId));
+    const row = rows.find(
+      (r) => (r as { status: TrainerAssignmentStatus }).status !== "revoked",
+    ) as
+      | {
+          id: string;
+          tenantId: string;
+          trainerUserId: string;
+          clientUserId: string;
+          status: TrainerAssignmentStatus;
+        }
+      | undefined;
+    if (!row) return undefined;
     return {
       id: row.id,
       tenantId: row.tenantId as TrainerClientAssignmentDTO["tenantId"],
