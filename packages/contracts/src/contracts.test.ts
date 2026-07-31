@@ -111,10 +111,13 @@ describe("shared contracts boundary", () => {
     expectTypeOf<SessionId>().toMatchTypeOf<string>();
     expectTypeOf<string>().not.toMatchTypeOf<SessionId>();
 
+    // 15a-v2-trainer-account-access Slice 2: additive 'role' field, populated
+    // from the fail-secure membership re-check (zero extra query).
     expectTypeOf<SessionContext>().toEqualTypeOf<{
       userId: UserId;
       tenantId: TenantId;
       sessionId: SessionId;
+      role: MembershipRole;
     }>();
   });
 

@@ -622,11 +622,17 @@ export type SessionId = string & { readonly __brand: unique symbol };
 /**
  * Authenticated request context attached to `request.authContext`.
  * Carries the session's user and tenant identity across boundaries.
+ *
+ * `role` (15a-v2-trainer-account-access, Slice 2) is populated from the
+ * membership row the fail-secure re-check already fetches per request — zero
+ * extra query. It is the input `resolveAuthorizedOwner` and `requireRole`
+ * gate on; it never widens access by itself.
  */
 export interface SessionContext {
   userId: UserId;
   tenantId: TenantId;
   sessionId: SessionId;
+  role: MembershipRole;
 }
 
 // ---------------------------------------------------------------------------

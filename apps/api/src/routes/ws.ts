@@ -68,7 +68,7 @@ export interface WsMembershipRecord {
   id: string;
   tenantId: string;
   userId: string;
-  role: "owner" | "member";
+  role: "owner" | "member" | "trainer";
   status: "invited" | "active" | "suspended";
   createdAt: Date;
 }
