@@ -1165,5 +1165,43 @@
     "logout": "Log out",
     "logoutLabel": "Log out",
     "userAreaAria": "User menu"
+  },
+  "clients": {
+    "pageTitle": "My Clients",
+    "pageDescription": "Invite clients and create plans on their behalf.",
+    "navLabel": "Clients",
+    "loadingLabel": "Loading clients…",
+    "retryLabel": "Retry",
+    "loadError": "We couldn't load your clients. Please try again.",
+    "emptyState": "You don't have any clients yet. Invite one below.",
+    "listAria": "Client list",
+    "accessRestrictedTitle": "Trainer access required",
+    "accessRestrictedBody": "This page is only available to trainer accounts.",
+    "inviteFormAria": "Invite a client",
+    "inviteTitle": "Invite a client",
+    "inviteEmailLabel": "Client email",
+    "inviteSubmit": "Send invite",
+    "inviteSuccess": "Invitation sent.",
+    "inviteErrorAlreadyAssigned": "This client is already assigned to a trainer.",
+    "inviteErrorNotFound": "No account found for that email.",
+    "inviteErrorGeneric": "We couldn't send the invite. Please try again.",
+    "createPlanCta": "Create plan",
+    "status": {
+      "invited": "Invited",
+      "active": "Active",
+      "revoked": "Revoked"
+    },
+    "createPlan": {
+      "title": "Create a plan for this client",
+      "goalLabel": "Goal",
+      "daysPerWeekLabel": "Days per week",
+      "sessionDurationLabel": "Session duration (minutes)",
+      "locationLabel": "Training location",
+      "submit": "Create plan",
+      "submitting": "Creating…",
+      "success": "Plan created.",
+      "errorGeneric": "We couldn't create the plan. Please try again.",
+      "errorForbidden": "You are not authorized to create a plan for this client."
+    }
   }
 }

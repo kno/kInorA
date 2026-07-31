@@ -76,13 +76,13 @@ Independently shippable: S1 (schema only, dark). Dependent chain: S2 depends on 
 
 ## Phase 5 (Slice S5): Web + Mobile Surfaces
 
-- [ ] 5.1 RED (web): client-list page renders `ClientSummaryDTO[]` from `GET /trainer/clients`, empty state, error state.
-- [ ] 5.2 GREEN (web): implement client-list view + invite-client form in `apps/web`.
-- [ ] 5.3 RED (web): create-plan-for-client flow — selecting a client threads `clientUserId` into existing plan-creation wizard.
-- [ ] 5.4 GREEN (web): wire create-plan-for-client surface in `apps/web`.
-- [ ] 5.5 RED (mobile): equivalent client-list screen test in `apps/mobile`.
-- [ ] 5.6 GREEN (mobile): implement client-list + invite screen in `apps/mobile`.
-- [ ] 5.7 GREEN (mobile): create-plan-for-client screen in `apps/mobile`.
+- [x] 5.1 RED (web): client-list page renders `ClientSummaryDTO[]` from `GET /trainer/clients`, empty state, error state. Implemented as `apps/web/src/app/(app)/clients/__tests__/{trainer-client,ClientListClient,page}.test.tsx`.
+- [x] 5.2 GREEN (web): implement client-list view + invite-client form in `apps/web` (`clients/trainer-client.ts`, `clients/actions.ts`, `clients/ClientListClient.tsx`, `clients/page.tsx`).
+- [x] 5.3 RED (web): create-plan-for-client flow. DEVIATION (see apply-progress): implemented as a dedicated minimal form (`CreatePlanForClientForm`) rather than threading `clientUserId` into the existing multi-mode `CreatePlanShell` wizard — the client-owned route (`POST /clients/:clientUserId/plan-specs`, S4) has NO draft phase server-side, so a separate one-shot form avoids a risky rework of the shared Asistente/Formulario wizard state machine. Tests: `clients/[clientUserId]/create-plan/__tests__/{CreatePlanForClientForm,page}.test.tsx`.
+- [x] 5.4 GREEN (web): wire create-plan-for-client surface in `apps/web` (`clients/[clientUserId]/create-plan/{page.tsx,CreatePlanForClientForm.tsx}`).
+- [x] 5.5 RED (mobile): equivalent client-list screen test in `apps/mobile` — `screens/clients/__tests__/ClientListScreen.test.tsx`, `api/__tests__/trainer-client.test.ts`.
+- [x] 5.6 GREEN (mobile): implement client-list + invite screen in `apps/mobile` (`api/trainer-client.ts`, `screens/clients/{ClientListScreen.tsx,ClientListScreen.styles.ts,messages.ts}`), wired into `App.tsx`'s stack (`ClientList` route) + a `HomeScreen` entry point.
+- [x] 5.7 GREEN (mobile): create-plan-for-client screen in `apps/mobile` (`screens/clients/ClientCreatePlanScreen.tsx`, wired as the `ClientCreatePlan` route), tested in `screens/clients/__tests__/ClientCreatePlanScreen.test.tsx`.
 - [ ] 5.8 DEFERRED (explicit, not built this change): client-facing view of trainer-built plans depends on active-tenant selection UX (design Open Question) — track as a follow-up item, do not implement in this slice.
 
 ## Phase 6: Cleanup / Docs

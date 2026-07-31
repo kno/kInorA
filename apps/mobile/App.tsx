@@ -59,6 +59,10 @@ import VoiceScreen from "./src/screens/voice/VoiceScreen";
 import PlanStatusScreen, {
   type PlanStatusRouteParams,
 } from "./src/screens/plan/PlanStatusScreen";
+import ClientListScreen from "./src/screens/clients/ClientListScreen";
+import ClientCreatePlanScreen, {
+  type ClientCreatePlanRouteParams,
+} from "./src/screens/clients/ClientCreatePlanScreen";
 
 import {
   getSessionToken,
@@ -82,6 +86,8 @@ type RootStackParamList = {
   CreatePlanAssistant: undefined;
   CreatePlanVoice: undefined;
   PlanStatus: PlanStatusRouteParams;
+  ClientList: undefined;
+  ClientCreatePlan: ClientCreatePlanRouteParams;
 };
 
 /** Routes that require an authenticated session; auth routes are never guarded. */
@@ -92,6 +98,8 @@ const PROTECTED_ROUTES: (keyof RootStackParamList)[] = [
   "CreatePlanAssistant",
   "CreatePlanVoice",
   "PlanStatus",
+  "ClientList",
+  "ClientCreatePlan",
 ];
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -218,6 +226,16 @@ export default function App() {
             name="PlanStatus"
             component={PlanStatusScreen}
             options={{ title: "Your plan" }}
+          />
+          <Stack.Screen
+            name="ClientList"
+            component={ClientListScreen}
+            options={{ title: "Clients" }}
+          />
+          <Stack.Screen
+            name="ClientCreatePlan"
+            component={ClientCreatePlanScreen}
+            options={{ title: "Create plan" }}
           />
         </Stack.Navigator>
       </NavigationContainer>
