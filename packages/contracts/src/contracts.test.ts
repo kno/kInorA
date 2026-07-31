@@ -92,6 +92,11 @@ describe("shared contracts boundary", () => {
       confirmed: boolean;
       name?: string | null;
       intensityBias?: IntensityBias;
+      branding?: {
+        trainerName?: string | null;
+        title?: string | null;
+        accentColor?: string | null;
+      };
     }>();
   });
 

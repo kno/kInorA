@@ -357,6 +357,21 @@ export interface PlanSpec {
    * steer intensity up/down. Mirrors how `daysPerWeek` is the frequency lever.
    */
   intensityBias?: IntensityBias;
+  /**
+   * Optional trainer-authored plan branding (15b-v2 S3). Rides on the
+   * confirmed spec (`spec_json`) the same way `name`/`intensityBias` do — no
+   * new table, no migration. Authored at plan-creation time via the
+   * client-owned plan-create route (`POST /clients/:clientUserId/plan-specs`);
+   * absent means the plan renders unbranded (safe rollback). `accentColor`
+   * MUST be a `^#[0-9a-fA-F]{6}$` hex string when present (validated at the
+   * boundary, see `apps/api/src/plan/boundary.ts`); `trainerName`/`title` are
+   * capped at 60 characters.
+   */
+  branding?: {
+    trainerName?: string | null;
+    title?: string | null;
+    accentColor?: string | null;
+  };
 }
 
 // ---------------------------------------------------------------------------

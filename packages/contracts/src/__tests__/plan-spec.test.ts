@@ -57,7 +57,21 @@ describe("PlanSpec contract types (07-v1-plan-wizard)", () => {
       confirmed: boolean;
       name?: string | null;
       intensityBias?: IntensityBias;
+      branding?: {
+        trainerName?: string | null;
+        title?: string | null;
+        accentColor?: string | null;
+      };
     }>();
+  });
+
+  // 15b-v2 S3: branding rides on the confirmed spec (spec_json), mirrors
+  // name/intensityBias — no new table, no migration.
+  it("PlanSpec includes an optional branding object (15b-v2 S3)", () => {
+    expectTypeOf<PlanSpec>().toHaveProperty("branding").toEqualTypeOf<
+      | { trainerName?: string | null; title?: string | null; accentColor?: string | null }
+      | undefined
+    >();
   });
 
   // 14b-v1.1: server-authoritative load bias, absent = "maintain" (back-compat).
