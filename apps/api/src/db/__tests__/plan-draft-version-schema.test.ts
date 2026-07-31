@@ -32,12 +32,12 @@ describe("plan_drafts version migration (#215)", () => {
     expect(migrationSql).not.toContain("DROP");
   });
 
-  it("registers the migration as the latest journal entry with a monotonic timestamp", () => {
+  it("registers the migration at idx 15, appended after 0014_tts_enabled with a monotonic timestamp", () => {
     const entry = migrationJournal.entries.find((e) => e.tag === "0015_plan_draft_version");
     expect(entry).toBeDefined();
-    // Highest idx — appended after 0014_tts_enabled.
-    const maxIdx = Math.max(...migrationJournal.entries.map((e) => e.idx));
-    expect(entry!.idx).toBe(maxIdx);
+    // Fixed position — later migrations (15a-v2-trainer-account-access) are
+    // appended after this one, so idx 15 is no longer necessarily the max.
+    expect(entry!.idx).toBe(15);
     const prior = migrationJournal.entries.find((e) => e.idx === entry!.idx - 1);
     expect(prior).toBeDefined();
     expect(entry!.when).toBeGreaterThan(prior!.when);
