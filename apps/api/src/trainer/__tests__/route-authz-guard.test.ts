@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import { resolveAuthorizedOwner, ForbiddenOwnerAccess } from "../owner-access.js";
 import type { EntitlementContext } from "../../billing/entitlement.js";
 import type { TrainerClientAssignmentDTO } from "@kinora/contracts";
 import { authPlugin } from "../../auth/plugin.js";
 import { trainerRoutes } from "../../routes/trainer.js";
+import { planRoutes } from "../../routes/plan.js";
 import {
   VALID_TOKEN,
   createAuthMockDb,
@@ -29,13 +30,18 @@ import {
  *      before any repository call — proving `requireRole` alone is not
  *      sufficient and the entitlement gate genuinely runs.
  *
- * S4 (task 4.5) extends `TRAINER_SCOPED_ROUTES` further once
- * `routes/plan.ts` threads `ownerUserId` through `resolveAuthorizedOwner`.
+ * S4 (task 4.5) extends `TRAINER_SCOPED_ROUTES` with
+ * `POST /clients/:clientUserId/plan-specs` (`routes/plan.ts`) now that it
+ * threads `ownerUserId` through the FULL `resolveAuthorizedOwner` (role + tier
+ * + active-assignment) — the same probes as the Slice 3 routes above, plus an
+ * assertion that the billing `checkAndConsume` quota gate never fires on a
+ * denial either.
  */
 
 const TENANT_ID = "bbbbbbbb-0000-0000-0000-000000000001";
 const TRAINER_ID = "aaaaaaaa-0000-0000-0000-000000000001";
 const MEMBER_ID = "aaaaaaaa-0000-0000-0000-000000000002";
+const PLAN_CLIENT_ID = "aaaaaaaa-0000-0000-0000-000000000003";
 
 /** A trainer-scoped route entry: how to call it + repo methods that must not fire on denial. */
 interface TrainerScopedRoute {
@@ -46,6 +52,12 @@ interface TrainerScopedRoute {
   buildRepos: (entitlementReader: { loadContext: ReturnType<typeof vi.fn> }) => Record<string, unknown>;
   /** Repo methods (by [repoKey, methodKey]) that must never be called when denied. */
   guardedCalls: Array<[string, string]>;
+  /** Register the ACTUAL route plugin under test against `app`, given its repo mocks + entitlement reader. */
+  register: (
+    app: FastifyInstance,
+    repos: Record<string, unknown>,
+    entitlementReader: { loadContext: ReturnType<typeof vi.fn> },
+  ) => Promise<void>;
 }
 
 function entitlementReaderMock(tier: "free" | "pro" | "trainer") {
@@ -79,6 +91,8 @@ const TRAINER_SCOPED_ROUTES: ReadonlyArray<TrainerScopedRoute> = [
       ["membershipRepo", "upsertInvited"],
       ["userRepo", "findByEmail"],
     ],
+    register: (app, repos, entitlementReader) =>
+      app.register(trainerRoutes, { ...repos, entitlementReader } as never),
   },
   {
     method: "GET",
@@ -95,6 +109,57 @@ const TRAINER_SCOPED_ROUTES: ReadonlyArray<TrainerScopedRoute> = [
       userRepo: { findByEmail: vi.fn(), findById: vi.fn() },
     }),
     guardedCalls: [["assignmentRepo", "listByTrainer"]],
+    register: (app, repos, entitlementReader) =>
+      app.register(trainerRoutes, { ...repos, entitlementReader } as never),
+  },
+  {
+    // S4 (task 4.5): `routes/plan.ts`'s client-owned-plan-creation route. It
+    // resolves ownership over a SPECIFIC client (unlike invite/list above), so
+    // it exercises the FULL `resolveAuthorizedOwner` (role → tier → active
+    // assignment), never just its `assertTrainerEntitled` half. The probe
+    // calls it with `PLAN_CLIENT_ID` — a DIFFERENT id than the actor's own —
+    // so a denial always represents the widening branch, never the self path.
+    method: "POST",
+    path: "/clients/:clientUserId/plan-specs",
+    request: {
+      method: "POST",
+      url: `/clients/${PLAN_CLIENT_ID}/plan-specs`,
+      payload: {
+        goal: "strength",
+        location: "gym",
+        daysPerWeek: 3,
+        sessionDurationMinutes: 60,
+        equipment: ["barbell"],
+        limitations: [],
+      },
+    },
+    buildRepos: () => ({
+      repo: {
+        upsertDraft: vi.fn(),
+        commitDraft: vi.fn(),
+        findCurrentDraft: vi.fn().mockResolvedValue(null),
+        promoteDraftToSpec: vi.fn(),
+        findPlanById: vi.fn(),
+        findLatestPlanBySpec: vi.fn(),
+        findAllPlansByUser: vi.fn().mockResolvedValue([]),
+      },
+      generationService: { startGeneration: vi.fn(), assertGeneratable: vi.fn() },
+      billing: { checkAndConsume: vi.fn() },
+      assignmentRepo: { findActiveAssignment: vi.fn() },
+    }),
+    guardedCalls: [
+      ["repo", "promoteDraftToSpec"],
+      ["generationService", "startGeneration"],
+      ["billing", "checkAndConsume"],
+      ["assignmentRepo", "findActiveAssignment"],
+    ],
+    register: (app, repos, entitlementReader) =>
+      app.register(planRoutes, {
+        repo: repos.repo,
+        generationService: repos.generationService,
+        billing: repos.billing,
+        trainerAccess: { assignmentRepo: repos.assignmentRepo, entitlementReader },
+      } as never),
   },
 ];
 
@@ -133,15 +198,16 @@ async function buildProbeApp(
     membershipRows: [buildActiveMembershipRow({ tenantId: TENANT_ID, userId, role })],
   }).db;
   await app.register(authPlugin, { db });
-  await app.register(trainerRoutes, { ...repos, entitlementReader } as never);
+  await route.register(app, repos, entitlementReader);
   return app;
 }
 
 describe("regression guard: trainer-scoped routes must resolve ownership via resolveAuthorizedOwner", () => {
-  it("enumerates the current set of trainer-scoped routes — extend in S4 (task 4.5)", () => {
+  it("enumerates the current set of trainer-scoped routes (S3 + S4)", () => {
     expect(TRAINER_SCOPED_ROUTES.map((r) => `${r.method} ${r.path}`)).toEqual([
       "POST /trainer/clients/invite",
       "GET /trainer/clients",
+      "POST /clients/:clientUserId/plan-specs",
     ]);
   });
 
