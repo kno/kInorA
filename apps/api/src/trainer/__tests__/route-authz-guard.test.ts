@@ -1,37 +1,102 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import Fastify from "fastify";
 import { resolveAuthorizedOwner, ForbiddenOwnerAccess } from "../owner-access.js";
 import type { EntitlementContext } from "../../billing/entitlement.js";
 import type { TrainerClientAssignmentDTO } from "@kinora/contracts";
+import { authPlugin } from "../../auth/plugin.js";
+import { trainerRoutes } from "../../routes/trainer.js";
+import {
+  VALID_TOKEN,
+  createAuthMockDb,
+  buildSessionRow,
+  buildActiveMembershipRow,
+} from "../../test-support/auth-mocks.js";
 
 /**
- * Regression guard (15a-v2-trainer-account-access, task 2.12) — assignment-
- * check omission guard.
+ * Regression guard (15a-v2-trainer-account-access, task 2.12, extended by
+ * task 3.8) — assignment-check omission guard.
  *
  * Intent: no trainer-scoped route may EVER read/write another user's owned
  * data without first routing the requested owner through
- * `resolveAuthorizedOwner`. In Slice 2 there is NO trainer-scoped route yet
- * (S3 adds invite/list, S4 adds client-owned plan creation) — this file exists
- * NOW, before those routes, so the security seam is reviewed and the guard
- * mechanism proven BEFORE anything it is meant to police is built.
+ * `resolveAuthorizedOwner` (or, for routes that don't resolve a specific
+ * client owner — invite/list — its reused role+entitlement half,
+ * `assertTrainerEntitled`; see owner-access.ts). In Slice 2 there was no
+ * trainer-scoped route yet; Slice 3 (task 3.8) fills in the two routes it
+ * added (`POST /trainer/clients/invite`, `GET /trainer/clients`) and proves,
+ * through the REAL registered route plugin (not a reimplementation), that:
+ *   1. a non-trainer role is denied (403) BEFORE any repository call, and
+ *   2. a trainer role WITHOUT the trainer entitlement is ALSO denied (403)
+ *      before any repository call — proving `requireRole` alone is not
+ *      sufficient and the entitlement gate genuinely runs.
  *
- * Per the S2 correction to the original plan: this slice must ship with a
- * GREEN suite. The guard therefore does two things instead of asserting a
- * currently-nonexistent route wiring:
- *   1. Enumerates `TRAINER_SCOPED_ROUTES` (below) — currently empty — as the
- *      single source of truth S3 (task 3.8) and S4 (task 4.5) extend when
- *      each new trainer-scoped route lands. `it.each` over an empty array
- *      produces zero test cases, which is a legitimate pass, not a skip.
- *   2. Asserts the resolver's OWN deny-by-default invariants directly, since
- *      those are exactly what any future route-level probe must observe:
- *      self-only for non-trainer roles, and role+entitlement+active-assignment
- *      all required for a trainer to widen to a client.
+ * S4 (task 4.5) extends `TRAINER_SCOPED_ROUTES` further once
+ * `routes/plan.ts` threads `ownerUserId` through `resolveAuthorizedOwner`.
  */
 
-// TODO(S3 task 3.8): add `{ method: "POST", path: "/trainer/clients/invite" }`,
-//   `{ method: "GET", path: "/trainer/clients" }` once routes/trainer.ts lands.
-// TODO(S4 task 4.5): add `{ method: "POST", path: "/clients/:clientUserId/plan-specs" }`
-//   once routes/plan.ts threads ownerUserId through resolveAuthorizedOwner.
-const TRAINER_SCOPED_ROUTES: ReadonlyArray<{ method: string; path: string }> = [];
+const TENANT_ID = "bbbbbbbb-0000-0000-0000-000000000001";
+const TRAINER_ID = "aaaaaaaa-0000-0000-0000-000000000001";
+const MEMBER_ID = "aaaaaaaa-0000-0000-0000-000000000002";
+
+/** A trainer-scoped route entry: how to call it + repo methods that must not fire on denial. */
+interface TrainerScopedRoute {
+  method: string;
+  path: string;
+  request: { method: "GET" | "POST"; url: string; payload?: unknown };
+  /** Build the repo mocks for this route, so the test can assert none were reached on denial. */
+  buildRepos: (entitlementReader: { loadContext: ReturnType<typeof vi.fn> }) => Record<string, unknown>;
+  /** Repo methods (by [repoKey, methodKey]) that must never be called when denied. */
+  guardedCalls: Array<[string, string]>;
+}
+
+function entitlementReaderMock(tier: "free" | "pro" | "trainer") {
+  return {
+    loadContext: vi.fn().mockResolvedValue({
+      membershipStatus: "active",
+      billing: { tier, status: "active", source: "system", trialStartedAt: null, trialEndsAt: null },
+      activeOverrideTier: null,
+    }),
+  };
+}
+
+const TRAINER_SCOPED_ROUTES: ReadonlyArray<TrainerScopedRoute> = [
+  {
+    method: "POST",
+    path: "/trainer/clients/invite",
+    request: { method: "POST", url: "/trainer/clients/invite", payload: { email: "client@example.com" } },
+    buildRepos: () => ({
+      assignmentRepo: {
+        create: vi.fn(),
+        findByClientUserId: vi.fn(),
+        updateStatus: vi.fn(),
+        listByTrainer: vi.fn(),
+      },
+      membershipRepo: { upsertInvited: vi.fn(), updateStatusByTenantAndUser: vi.fn() },
+      userRepo: { findByEmail: vi.fn(), findById: vi.fn() },
+    }),
+    guardedCalls: [
+      ["assignmentRepo", "findByClientUserId"],
+      ["assignmentRepo", "create"],
+      ["membershipRepo", "upsertInvited"],
+      ["userRepo", "findByEmail"],
+    ],
+  },
+  {
+    method: "GET",
+    path: "/trainer/clients",
+    request: { method: "GET", url: "/trainer/clients" },
+    buildRepos: () => ({
+      assignmentRepo: {
+        create: vi.fn(),
+        findByClientUserId: vi.fn(),
+        updateStatus: vi.fn(),
+        listByTrainer: vi.fn(),
+      },
+      membershipRepo: { upsertInvited: vi.fn(), updateStatusByTenantAndUser: vi.fn() },
+      userRepo: { findByEmail: vi.fn(), findById: vi.fn() },
+    }),
+    guardedCalls: [["assignmentRepo", "listByTrainer"]],
+  },
+];
 
 const TENANT = "tenant-1" as never;
 const TRAINER = "trainer-1" as never;
@@ -55,21 +120,76 @@ function assignmentRepo(row: TrainerClientAssignmentDTO | undefined) {
   return { findActiveAssignment: async () => row };
 }
 
+async function buildProbeApp(
+  route: TrainerScopedRoute,
+  repos: ReturnType<TrainerScopedRoute["buildRepos"]>,
+  entitlementReader: { loadContext: ReturnType<typeof vi.fn> },
+  role: "member" | "trainer",
+  userId: string,
+) {
+  const app = Fastify();
+  const db = createAuthMockDb({
+    sessionRows: [buildSessionRow({ tenantId: TENANT_ID, userId })],
+    membershipRows: [buildActiveMembershipRow({ tenantId: TENANT_ID, userId, role })],
+  }).db;
+  await app.register(authPlugin, { db });
+  await app.register(trainerRoutes, { ...repos, entitlementReader } as never);
+  return app;
+}
+
 describe("regression guard: trainer-scoped routes must resolve ownership via resolveAuthorizedOwner", () => {
-  it("enumerates the current (possibly empty) set of trainer-scoped routes — extend in S3/S4", () => {
-    expect(TRAINER_SCOPED_ROUTES).toEqual([]);
+  it("enumerates the current set of trainer-scoped routes — extend in S4 (task 4.5)", () => {
+    expect(TRAINER_SCOPED_ROUTES.map((r) => `${r.method} ${r.path}`)).toEqual([
+      "POST /trainer/clients/invite",
+      "GET /trainer/clients",
+    ]);
   });
 
   it.each(TRAINER_SCOPED_ROUTES)(
-    "$method $path resolves ownership via resolveAuthorizedOwner before any repo call",
-    () => {
-      // Placeholder for a future route-level probe (spy on resolveAuthorizedOwner
-      // + assert it is called before any repository method on the route's
-      // handler). No entries exist in Slice 2, so this never actually runs —
-      // it is here so adding an entry to TRAINER_SCOPED_ROUTES immediately
-      // creates a case that must be filled in, rather than being silently
-      // uncovered.
-      expect.fail("wire a route-level resolveAuthorizedOwner probe for this route");
+    "$method $path denies a non-trainer role (403) before any repository call",
+    async (route) => {
+      const entitlementReader = entitlementReaderMock("trainer");
+      const repos = route.buildRepos(entitlementReader);
+      const app = await buildProbeApp(route, repos, entitlementReader, "member", MEMBER_ID);
+
+      const res = await app.inject({
+        method: route.request.method,
+        url: route.request.url,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: route.request.payload,
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(entitlementReader.loadContext).not.toHaveBeenCalled();
+      for (const [repoKey, methodKey] of route.guardedCalls) {
+        expect((repos[repoKey] as Record<string, ReturnType<typeof vi.fn>>)[methodKey]).not.toHaveBeenCalled();
+      }
+      await app.close();
+    },
+  );
+
+  it.each(TRAINER_SCOPED_ROUTES)(
+    "$method $path denies a trainer role WITHOUT the trainer entitlement (403) before any repository call",
+    async (route) => {
+      const entitlementReader = entitlementReaderMock("pro");
+      const repos = route.buildRepos(entitlementReader);
+      const app = await buildProbeApp(route, repos, entitlementReader, "trainer", TRAINER_ID);
+
+      const res = await app.inject({
+        method: route.request.method,
+        url: route.request.url,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: route.request.payload,
+      });
+
+      expect(res.statusCode).toBe(403);
+      // The entitlement gate DID run (proving requireRole alone is not the
+      // whole story) but every repo call downstream of it must not fire.
+      expect(entitlementReader.loadContext).toHaveBeenCalledTimes(1);
+      for (const [repoKey, methodKey] of route.guardedCalls) {
+        expect((repos[repoKey] as Record<string, ReturnType<typeof vi.fn>>)[methodKey]).not.toHaveBeenCalled();
+      }
+      await app.close();
     },
   );
 

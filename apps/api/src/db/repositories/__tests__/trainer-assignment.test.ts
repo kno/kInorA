@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { TrainerAssignmentRepository } from "../trainer-assignment.js";
+import { TrainerAssignmentRepository, TrainerAssignmentConflictError } from "../trainer-assignment.js";
 
 const TENANT_A = "aaaaaaaa-0000-0000-0000-000000000001";
 const TRAINER_A = "aaaaaaaa-0000-0000-0000-000000000002";
@@ -73,6 +73,67 @@ describe("TrainerAssignmentRepository (15a-v2 Slice 1 — dark, no route wiring)
       expect(values).toHaveBeenCalledWith(
         expect.objectContaining({ status: "active" }),
       );
+    });
+
+    // 15a-v2-trainer-account-access Slice 3 (task 3.4): a second trainer
+    // inviting an already-assigned client hits the partial unique index
+    // (`trainer_client_assignments_client_active_unique`) — the raw Postgres
+    // unique-violation (code 23505) is translated to a typed
+    // `TrainerAssignmentConflictError` so the route layer never needs to know
+    // about Postgres error codes.
+    it("translates a Postgres unique violation (23505) into TrainerAssignmentConflictError", async () => {
+      const pgError = Object.assign(new Error("duplicate key value"), { code: "23505" });
+      const returning = vi.fn().mockRejectedValue(pgError);
+      const values = vi.fn().mockReturnValue({ returning });
+      const insert = vi.fn().mockReturnValue({ values });
+      const repo = new TrainerAssignmentRepository({ insert } as never);
+
+      await expect(repo.create(TENANT_A, TRAINER_A, CLIENT_A)).rejects.toThrow(
+        TrainerAssignmentConflictError,
+      );
+    });
+
+    it("rethrows a non-conflict error unchanged", async () => {
+      const otherError = new Error("connection reset");
+      const returning = vi.fn().mockRejectedValue(otherError);
+      const values = vi.fn().mockReturnValue({ returning });
+      const insert = vi.fn().mockReturnValue({ values });
+      const repo = new TrainerAssignmentRepository({ insert } as never);
+
+      await expect(repo.create(TENANT_A, TRAINER_A, CLIENT_A)).rejects.toThrow(otherError);
+    });
+  });
+
+  describe("findByClientUserId", () => {
+    // Deliberately NOT tenant-scoped: the partial unique index guarantees at
+    // most one non-revoked assignment per client across the whole table, and
+    // the client accepting an invite is not yet a member of the trainer's
+    // tenant, so there is no request-scoped tenantId to filter by. This is a
+    // narrow, documented exception to the "every read is tenant-scoped"
+    // convention, justified by the data-layer invariant above.
+    it("returns the client's single non-revoked assignment regardless of tenant", async () => {
+      const row = assignmentRow({ status: "invited" });
+      const { select } = selectChain([row]);
+      const repo = new TrainerAssignmentRepository({ select } as never);
+
+      const result = await repo.findByClientUserId(CLIENT_A);
+
+      expect(result).toEqual({
+        id: "assignment-uuid-1",
+        tenantId: TENANT_A,
+        trainerUserId: TRAINER_A,
+        clientUserId: CLIENT_A,
+        status: "invited",
+      });
+    });
+
+    it("returns undefined when the client has no assignment", async () => {
+      const { select } = selectChain([]);
+      const repo = new TrainerAssignmentRepository({ select } as never);
+
+      const result = await repo.findByClientUserId(CLIENT_A);
+
+      expect(result).toBeUndefined();
     });
   });
 

@@ -101,6 +101,85 @@ export class MembershipRepository {
       .where(and(eq(memberships.userId, userId), eq(memberships.status, "active")));
     return (rows[0] as MembershipRecord | undefined) ?? null;
   }
+
+  /**
+   * Find EVERY active membership for a user, across all tenants
+   * (15a-v2-trainer-account-access, Slice 3, task 3.7 — the minimal
+   * active-tenant-selection enabler). Once a client accepts a trainer's
+   * invite they have TWO active memberships (their personal tenant + the
+   * trainer's tenant); this is the primitive a caller CAN use to choose among
+   * them. Not wired into the default login path yet — the client-facing
+   * tenant switch UI is deferred to a follow-up (S5 scope), see
+   * `auth/tenant-selection.ts`.
+   */
+  async findActiveMemberships(userId: string): Promise<MembershipRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(memberships)
+      .where(and(eq(memberships.userId, userId), eq(memberships.status, "active")));
+    return rows as MembershipRecord[];
+  }
+
+  /**
+   * Create a new membership row (15a-v2-trainer-account-access, Slice 3 —
+   * invite flow). Used when the invited email has no prior membership in the
+   * trainer's tenant; a re-invite of a previously-revoked membership should
+   * use `upsertInvited` instead, which resets the existing row in place.
+   */
+  async create(
+    tenantId: string,
+    userId: string,
+    role: MembershipRecord["role"],
+    status: MembershipRecord["status"],
+  ): Promise<MembershipRecord> {
+    const rows = await this.db
+      .insert(memberships)
+      .values({ tenantId, userId, role, status })
+      .returning();
+    return rows[0] as MembershipRecord;
+  }
+
+  /**
+   * Insert a fresh `invited` membership, or reset an EXISTING (tenantId,
+   * userId) row back to `invited` (e.g. re-inviting a client whose prior
+   * membership was revoked). Matches the
+   * `memberships_tenant_id_user_id_unique` index used by `findByTenantAndUser`.
+   */
+  async upsertInvited(
+    tenantId: string,
+    userId: string,
+    role: MembershipRecord["role"],
+  ): Promise<MembershipRecord> {
+    const rows = await this.db
+      .insert(memberships)
+      .values({ tenantId, userId, role, status: "invited" })
+      .onConflictDoUpdate({
+        target: [memberships.tenantId, memberships.userId],
+        set: { role, status: "invited" },
+      })
+      .returning();
+    return rows[0] as MembershipRecord;
+  }
+
+  /**
+   * Transition the membership status for a (tenantId, userId) pair — used by
+   * the Slice 3 invite-accept flow to move `invited -> active`. Scoped to
+   * BOTH tenantId and userId so an accept can never touch a different
+   * tenant's membership row for the same user id. Returns the number of rows
+   * updated (0 = no membership for this exact tenant/user pair).
+   */
+  async updateStatusByTenantAndUser(
+    tenantId: string,
+    userId: string,
+    status: MembershipRecord["status"],
+  ): Promise<number> {
+    const rows = await this.db
+      .update(memberships)
+      .set({ status })
+      .where(and(eq(memberships.tenantId, tenantId), eq(memberships.userId, userId)))
+      .returning();
+    return rows.length;
+  }
 }
 
 /**
