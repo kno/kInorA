@@ -99,4 +99,8 @@ Migration REQUIRED (additive): `ALTER TYPE membership_role ADD VALUE 'trainer'`;
 5. **Web + mobile surfaces**: client list, create-plan-for-client.
 
 ## Open Questions
-- [ ] Client visibility of trainer-built plans requires the client's session to be scoped to the trainer's tenant — the active-tenant selection at login/switch is the minimal enabler; confirm its UX is acceptable for v1 (else defer client-facing view to a follow-up).
+- [x] Client visibility of trainer-built plans requires the client's session to be scoped to the trainer's tenant — the active-tenant selection at login/switch is the minimal enabler; confirm its UX is acceptable for v1 (else defer client-facing view to a follow-up). **Resolved (archive-time): deferred.** S3 shipped the minimal enabler (`selectActiveTenant`, `findActiveMemberships`) unwired from the default login path; the dedicated client-facing view of trainer-built plans (task 5.8) is explicitly deferred to a follow-up change pending an explicit active-tenant-selection UX decision.
+
+## Archive Note (2026-07-31)
+
+Shipped as designed across 5 slices (PRs #277-#281). No architectural deviations from this design except the documented S5 create-plan-for-client form (see tasks.md 5.3) and the deferred 5.8 item above.

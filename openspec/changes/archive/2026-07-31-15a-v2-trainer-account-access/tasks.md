@@ -83,9 +83,9 @@ Independently shippable: S1 (schema only, dark). Dependent chain: S2 depends on 
 - [x] 5.5 RED (mobile): equivalent client-list screen test in `apps/mobile` — `screens/clients/__tests__/ClientListScreen.test.tsx`, `api/__tests__/trainer-client.test.ts`.
 - [x] 5.6 GREEN (mobile): implement client-list + invite screen in `apps/mobile` (`api/trainer-client.ts`, `screens/clients/{ClientListScreen.tsx,ClientListScreen.styles.ts,messages.ts}`), wired into `App.tsx`'s stack (`ClientList` route) + a `HomeScreen` entry point.
 - [x] 5.7 GREEN (mobile): create-plan-for-client screen in `apps/mobile` (`screens/clients/ClientCreatePlanScreen.tsx`, wired as the `ClientCreatePlan` route), tested in `screens/clients/__tests__/ClientCreatePlanScreen.test.tsx`.
-- [ ] 5.8 DEFERRED (explicit, not built this change): client-facing view of trainer-built plans depends on active-tenant selection UX (design Open Question) — track as a follow-up item, do not implement in this slice.
+- [ ] 5.8 DEFERRED (explicit, not built this change): client-facing view of trainer-built plans depends on active-tenant selection UX (design Open Question) — track as a follow-up item, do not implement in this slice. **STATUS AT ARCHIVE (2026-07-31): still deferred, not a failure.** Blocked on an open active-tenant-selection UX decision. Recorded as an open follow-up in the archive report — no follow-up issue number was provided to this agent; the orchestrator should file one if not already tracked.
 
 ## Phase 6: Cleanup / Docs
 
-- [ ] 6.1 Update `openspec/specs/{05b,11a}/spec.md` deltas confirmation notes (already drafted in specs/) once archived.
-- [ ] 6.2 Remove feature flag gating trainer registration once S5 is verified in staging (rollout step from design).
+- [x] 6.1 Update `openspec/specs/{05b,11a}/spec.md` deltas confirmation notes (already drafted in specs/) once archived. DONE during archive (2026-07-31): merged into `openspec/specs/15a-v2-trainer-account-access/spec.md` (new, supersedes roadmap placeholder), `openspec/specs/05b-v1-security-tenant-validation/spec.md` (ADDED requirement appended), and `openspec/specs/11a-v1-billing-plans-tiers/spec.md` (MODIFIED Plan Tiers requirement + terminology note).
+- [x] 6.2 N/A — no feature flag was introduced for trainer registration; access is server-authoritative via `memberships.role='trainer'` + `trainer` BillingTier entitlement (see 15a spec, Requirement: Trainer Role and Entitlement Gating). There is no separate flag to remove.

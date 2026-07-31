@@ -62,15 +62,19 @@ Feature-flag trainer registration + guards. Revert per slice: assignment table i
 
 ## Open Questions (for design)
 
-- [ ] Exact placement of the assignment check (repository vs. service vs. guard layer).
-- [ ] Invite flow mechanics (email invite, invite acceptance, membership status transitions).
-- [ ] What happens to a client's pre-existing personal tenant/data when they join a trainer's tenant.
-- [ ] Role-guard middleware shape (per-route vs. resolver decorator).
-- [ ] Entitlement source: new billing tier vs. add-on entitlement on existing tier.
+- [x] Exact placement of the assignment check (repository vs. service vs. guard layer). — Resolved in design: dedicated resolver (`resolveAuthorizedOwner`) at the route boundary.
+- [x] Invite flow mechanics (email invite, invite acceptance, membership status transitions). — Resolved in S3.
+- [x] What happens to a client's pre-existing personal tenant/data when they join a trainer's tenant. — Resolved: dual membership, personal tenant untouched.
+- [x] Role-guard middleware shape (per-route vs. resolver decorator). — Resolved: `requireRole()` preHandler + resolver.
+- [x] Entitlement source: new billing tier vs. add-on entitlement on existing tier. — Resolved: new `trainer` BillingTier value.
 
 ## Success Criteria
 
-- [ ] A billing-entitled trainer can invite a client and see only their own assigned clients.
-- [ ] Trainer creates a plan OWNED by client A; only client A can see/execute it.
-- [ ] Normal (non-trainer) users retain strict self-only access — no regression to 05b invariants.
-- [ ] One-trainer-per-client enforced at the data layer.
+- [x] A billing-entitled trainer can invite a client and see only their own assigned clients.
+- [x] Trainer creates a plan OWNED by client A; only client A can see/execute it.
+- [x] Normal (non-trainer) users retain strict self-only access — no regression to 05b invariants.
+- [x] One-trainer-per-client enforced at the data layer.
+
+## Archive Note (2026-07-31)
+
+Shipped in 5 chained slices, all merged to `main`: PR #277 (S1), #278 (S2), #279 (S3), #280 (S4), #281 (S5). See `sdd/15a-v2-trainer-account-access/archive-report` for full closure record.

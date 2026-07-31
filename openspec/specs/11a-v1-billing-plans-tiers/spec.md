@@ -12,7 +12,7 @@ Define launch billing tiers, 30-day Pro trial behavior, hybrid tenant/member quo
 
 ### Requirement: Plan Tiers
 
-The system MUST maintain one authoritative tenant-owned billing state for personal and trainer-managed tenants with tier `free` or `pro`, status `active`, `trialing`, `expired`, or `overridden`, and source `system`, `backfill`, `admin_override`, or `stripe`. Free MUST allow each tenant 1 plan generation per calendar month, 1 regeneration per calendar month, and 0 premium vector-memory AI writes/retrievals. Pro MUST be gated by finite, high, per-feature monthly metered caps (replacing the provisional `1_000_000` placeholder); the confirmable initial Pro caps are `plan_generation` 500, `plan_regeneration` 1000, `memory_write` 50000, `memory_retrieval` 200000 per calendar month. `resolveEffectiveTier` remains the source of truth for tier resolution and MUST NOT read Stripe metadata columns. Pro-over-cap requests MUST be denied with the same hybrid tenant/member gating and denial reasons as Free-over-limit.
+The system MUST maintain one authoritative tenant-owned billing state for personal and trainer-managed tenants with tier `free`, `pro`, or `trainer`, status `active`, `trialing`, `expired`, or `overridden`, and source `system`, `backfill`, `admin_override`, or `stripe`. Free MUST allow each tenant 1 plan generation per calendar month, 1 regeneration per calendar month, and 0 premium vector-memory AI writes/retrievals. Pro MUST be gated by finite, high, per-feature monthly metered caps (replacing the provisional `1_000_000` placeholder); the confirmable initial Pro caps are `plan_generation` 500, `plan_regeneration` 1000, `memory_write` 50000, `memory_retrieval` 200000 per calendar month. The `trainer` tier MUST be gated by its own explicit metered caps (`TRAINER_TIER_LIMITS`, at least as high as Pro's) so a `trainer`-tier tenant is never silently treated as Free. `resolveEffectiveTier` remains the source of truth for tier resolution and MUST NOT read Stripe metadata columns. Pro- and trainer-over-cap requests MUST be denied with the same hybrid tenant/member gating and denial reasons as Free-over-limit.
 
 #### Scenario: Free tier access
 
@@ -49,6 +49,20 @@ The system MUST maintain one authoritative tenant-owned billing state for person
 - GIVEN a Pro tenant has Stripe metadata columns populated
 - WHEN `resolveEffectiveTier` runs
 - THEN it resolves tier only from status/override/trial and never reads the Stripe metadata columns
+
+#### Scenario: Trainer tier not silently Free
+
+- GIVEN a tenant's billing state resolves to tier `trainer`
+- WHEN `resolveEffectiveTier` and `resolveTenantFeatureLimit` run
+- THEN the tenant receives `TRAINER_TIER_LIMITS`, not the Free defaults
+
+#### Scenario: Trainer-over-cap denied like Free/Pro
+
+- GIVEN a `trainer`-tier tenant has reached its per-feature monthly metered cap
+- WHEN another request for that feature is made
+- THEN it is denied with reason `tenant_quota_exhausted` and no AI work starts
+
+**Note**: This `trainer` BillingTier value gates the 15a trainer ROLE capability (who may act on client rows). It is distinct from 11a's pre-existing "trainer-managed tenant" concept, where the tenant `owner` administers member quotas — that owner-as-administrator model is unchanged and requires neither the `trainer` role nor the `trainer` tier.
 
 ### Requirement: Trial Period
 
