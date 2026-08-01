@@ -1512,6 +1512,133 @@ describe("WorkoutSessionRepository", () => {
     });
   });
 
+  describe("getClientDashboard", () => {
+    // Fixed "now" — Friday of the week 2026-07-13 (Mon) .. 2026-07-19 (Sun),
+    // matching the getDashboardSummary fixture above.
+    const NOW = new Date("2026-07-17T12:00:00.000Z");
+
+    const CD_SESSION_1_ID = "aaaaaaaa-3333-0000-0000-000000000001";
+    const CD_EXERCISE_1_ID = "bbbbbbbb-3333-0000-0000-000000000001";
+    const CD_SET_1_ID = "cccccccc-3333-0000-0000-000000000001";
+
+    const cdProgram: WorkoutProgram = {
+      weeklySessions: [{ day: 1, title: "Full Body", exercises: [{ name: "Squat", sets: 1, reps: "5", restSeconds: 120 }] }],
+      limitationWarnings: [],
+    };
+
+    const cdReadyPlanRow = { ...readyPlanRow, programJson: cdProgram };
+
+    function buildCdSessionRow(id: string, completedAt: Date) {
+      return {
+        id,
+        tenantId: TENANT_A,
+        userId: USER_A,
+        workoutPlanId: PLAN_ID,
+        status: "completed" as const,
+        day: 1,
+        startedAt: new Date(completedAt.getTime() - 30 * 60 * 1000),
+        completedAt,
+      };
+    }
+
+    const cdSession1 = buildCdSessionRow(CD_SESSION_1_ID, new Date("2026-07-15T09:00:00Z"));
+
+    const cdExercise1 = {
+      id: CD_EXERCISE_1_ID,
+      workoutSessionId: CD_SESSION_1_ID,
+      exerciseIndex: 0,
+      title: "Squat",
+      restSeconds: 120,
+      notes: null,
+    };
+    const cdSet1 = {
+      id: CD_SET_1_ID,
+      sessionExerciseId: CD_EXERCISE_1_ID,
+      setIndex: 0,
+      targetReps: "5",
+      actualReps: 5,
+      weightKg: "100.00",
+      rpe: 8,
+      completed: true,
+      notes: null,
+    };
+    const cdSet2 = { ...cdSet1, id: "cccccccc-3333-0000-0000-000000000002", setIndex: 1, rpe: 9 };
+
+    function createClientDashboardDb(input: {
+      sessionRows: unknown[];
+      planRows: unknown[];
+      exerciseRows?: unknown[];
+      setRows?: unknown[];
+    }) {
+      const sessionsWhere = vi.fn().mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(input.sessionRows) }),
+      });
+      const plansWhere = vi.fn().mockReturnValue({
+        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(input.planRows) }),
+      });
+      const exercisesWhere = vi.fn().mockResolvedValue(input.exerciseRows ?? []);
+      const setsWhere = vi.fn().mockResolvedValue(input.setRows ?? []);
+
+      const select = vi.fn().mockImplementation(() => ({
+        from: vi.fn().mockImplementation((table: object) => {
+          if (table === workoutSessions) return { where: sessionsWhere };
+          if (table === workoutPlans) return { where: plansWhere };
+          if (table === sessionExercises) return { where: exercisesWhere };
+          if (table === setRecords) return { where: setsWhere };
+          throw new Error(`Unexpected select table: ${String(table)}`);
+        }),
+      }));
+
+      return { select, sessionsWhere, plansWhere, exercisesWhere, setsWhere };
+    }
+
+    it("1.6 returns the empty-state DTO when there is no history and no ready plan", async () => {
+      const { select } = createClientDashboardDb({ sessionRows: [], planRows: [] });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const dashboard = await repo.getClientDashboard(TENANT_A, USER_A, NOW);
+
+      expect(dashboard.rpeTrend).toHaveLength(8);
+      expect(dashboard.rpeTrend.every((point) => point.meanRpe === null)).toBe(true);
+      expect(dashboard.completionRate).toEqual({ periodDays: 28, planned: 0, completed: 0, percent: 0 });
+      expect(dashboard.recentSessions).toEqual([]);
+    });
+
+    it("1.7 aggregates rpeTrend/completionRate/recentSessions from the caller's own completed sessions", async () => {
+      const { select } = createClientDashboardDb({
+        sessionRows: [cdSession1],
+        planRows: [cdReadyPlanRow],
+        exerciseRows: [cdExercise1],
+        setRows: [cdSet1, cdSet2],
+      });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const dashboard = await repo.getClientDashboard(TENANT_A, USER_A, NOW);
+
+      // The current week's bucket (2026-07-13) aggregates both rated sets (8, 9).
+      const currentWeekBucket = dashboard.rpeTrend[7]!;
+      expect(currentWeekBucket.meanRpe).toBeCloseTo(8.5, 5);
+      expect(currentWeekBucket.sessionsWithRpe).toBe(1);
+
+      // plannedSessionsPerWeek=1 -> planned=4; 1 completion in the 28-day window.
+      expect(dashboard.completionRate).toEqual({ periodDays: 28, planned: 4, completed: 1, percent: 25 });
+
+      expect(dashboard.recentSessions).toEqual([
+        { date: "2026-07-15T09:00:00.000Z", volumeKg: 1000, meanRpe: 8.5 },
+      ]);
+    });
+
+    it("1.6/req3 tenant-safe by construction — reading a different tenant returns the empty state (real filtering proven in the Postgres integration test)", async () => {
+      const { select } = createClientDashboardDb({ sessionRows: [], planRows: [] });
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const dashboard = await repo.getClientDashboard(TENANT_B, USER_A, NOW);
+
+      expect(dashboard.recentSessions).toEqual([]);
+      expect(dashboard.completionRate.completed).toBe(0);
+    });
+  });
+
   describe("getStatsRange", () => {
     // Fixed "now" — mid-month, so the current/previous month split is unambiguous.
     const NOW = new Date("2026-07-17T12:00:00.000Z");

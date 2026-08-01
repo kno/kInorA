@@ -1,7 +1,13 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
-import type { ClientSummaryDTO, InviteClientRequest, TrainerClientAssignmentDTO } from "@kinora/contracts";
+import type {
+  ClientDashboardDTO,
+  ClientSummaryDTO,
+  InviteClientRequest,
+  TrainerClientAssignmentDTO,
+  UserId,
+} from "@kinora/contracts";
 import { requireRole, requireAuth } from "../auth/plugin.js";
-import { assertTrainerEntitled, ForbiddenOwnerAccess } from "../trainer/owner-access.js";
+import { assertTrainerEntitled, resolveAuthorizedOwner, ForbiddenOwnerAccess } from "../trainer/owner-access.js";
 import type { ActorOwnerContext } from "../trainer/owner-access.js";
 import type { EntitlementReaderPort } from "../billing/entitlement.js";
 
@@ -46,6 +52,29 @@ interface TrainerRouteAssignmentRepo {
     status: TrainerClientAssignmentDTO["status"],
   ): Promise<number>;
   listByTrainer(tenantId: string, trainerUserId: string): Promise<TrainerClientAssignmentDTO[]>;
+  /**
+   * Backs `resolveAuthorizedOwner`'s widening branch (15b-v2, Phase S1) for
+   * `GET /trainer/clients/:clientUserId/dashboard`. Same method the
+   * `POST /clients/:clientUserId/plan-specs` route's `trainerAccess` deps use
+   * (see `plan.ts`) — this route builds the SAME `OwnerAccessDeps` shape
+   * inline from `assignmentRepo` + `entitlementReader` rather than adding a
+   * separate options field, since both are already top-level options here.
+   */
+  findActiveAssignment(
+    tenantId: string,
+    trainerUserId: string,
+    clientUserId: string,
+  ): Promise<TrainerClientAssignmentDTO | undefined>;
+}
+
+/**
+ * Local structural port for the trainer dashboard read
+ * (`WorkoutSessionRepository.getClientDashboard`, 15b-v2 Phase S1) — the
+ * route never imports the DB layer directly (architecture rule
+ * `routes-no-db-layer`).
+ */
+interface TrainerRouteDashboardRepo {
+  getClientDashboard(tenantId: string, ownerUserId: string, now?: Date): Promise<ClientDashboardDTO>;
 }
 
 /**
@@ -87,6 +116,8 @@ export interface TrainerRoutesOptions {
   membershipRepo: TrainerRouteMembershipRepo;
   userRepo: TrainerRouteUserRepo;
   entitlementReader: Pick<EntitlementReaderPort, "loadContext">;
+  /** Backs `GET /trainer/clients/:clientUserId/dashboard` (15b-v2, Phase S1). */
+  dashboardRepo: TrainerRouteDashboardRepo;
 }
 
 const inviteSchema = {
@@ -106,7 +137,41 @@ function toActorOwnerContext(request: FastifyRequest): ActorOwnerContext {
 }
 
 export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fastify, options) => {
-  const { assignmentRepo, membershipRepo, userRepo, entitlementReader } = options;
+  const { assignmentRepo, membershipRepo, userRepo, entitlementReader, dashboardRepo } = options;
+
+  // GET /trainer/clients/:clientUserId/dashboard (15b-v2-trainer-dashboard-
+  // branding, Phase S1). `resolveAuthorizedOwner` is the SAME deny-by-default
+  // choke point `POST /clients/:clientUserId/plan-specs` uses (plan.ts) —
+  // built here from the SAME `assignmentRepo`/`entitlementReader` this file
+  // already receives as top-level options (no new `trainerAccess` field
+  // needed). Trainer and client always share `ctx.tenantId` for the read
+  // (design.md "Tenant-Safe Dashboard Data") — the resolved `ownerUserId` is
+  // passed to `getClientDashboard` with the SAME tenantId, never widened.
+  fastify.get(
+    "/trainer/clients/:clientUserId/dashboard",
+    { preHandler: requireAuth() },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const ctx = toActorOwnerContext(request);
+      const { clientUserId } = request.params as { clientUserId: string };
+
+      let ownerUserId: UserId;
+      try {
+        ownerUserId = await resolveAuthorizedOwner(
+          ctx,
+          { assignmentRepo, entitlementReader },
+          clientUserId as UserId,
+        );
+      } catch (err) {
+        if (err instanceof ForbiddenOwnerAccess) {
+          return reply.code(403).send({ error: "forbidden" });
+        }
+        throw err;
+      }
+
+      const dashboard = await dashboardRepo.getClientDashboard(ctx.tenantId, ownerUserId);
+      return reply.code(200).send(dashboard);
+    },
+  );
 
   // POST /trainer/clients/invite
   fastify.post(

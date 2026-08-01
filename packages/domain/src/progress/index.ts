@@ -47,3 +47,5 @@ export type {
   RpeSuggestedChange,
   RpeSnapshot,
 } from "./rpe-adaptation.js";
+export { computeRpeTrend, computeCompletionRate } from "./rpe-trend.js";
+export type { RpeTrendPoint, ComputeCompletionRateInput, CompletionRateResult } from "./rpe-trend.js";
