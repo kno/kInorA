@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { screen, cleanup, fireEvent } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import { catalogs } from "@kinora/i18n";
 import { usePathname } from "next/navigation";
 import { MobileNav } from "../MobileNav";
+import { renderWithIntl } from "@/test-utils/render-with-intl";
 
 vi.mock("next/navigation", () => ({
   usePathname: vi.fn(),
@@ -14,6 +17,14 @@ vi.mock("@/app/(app)/dashboard/actions", () => ({
 }));
 
 const mockedUsePathname = vi.mocked(usePathname);
+
+function renderToStringWithIntl(ui: Parameters<typeof renderToString>[0]) {
+  return renderToString(
+    <NextIntlClientProvider locale="en" messages={catalogs.en} timeZone="UTC">
+      {ui}
+    </NextIntlClientProvider>,
+  );
+}
 
 afterEach(() => {
   cleanup();
@@ -26,7 +37,7 @@ describe("MobileNav", () => {
   });
 
   it("renders the primary bar tabs (Dashboard, Plan, History) + FAB + More", () => {
-    render(<MobileNav />);
+    renderWithIntl(<MobileNav />);
 
     expect(screen.getByRole("link", { name: /^Dashboard$/i })).toBeTruthy();
     expect(screen.getByRole("link", { name: /^Plan$/i })).toBeTruthy();
@@ -36,7 +47,7 @@ describe("MobileNav", () => {
   });
 
   it("does NOT render Statistics/Exercises/Profile/Memory/Billing as bar tabs by default", () => {
-    render(<MobileNav memoryNavLabel="Memory" billingNavLabel="Billing" />);
+    renderWithIntl(<MobileNav memoryNavLabel="Memory" billingNavLabel="Billing" />);
 
     // The overflow menu is closed, so these must not be exposed in the
     // accessibility tree as bar tabs (they live in the hidden panel).
@@ -48,14 +59,14 @@ describe("MobileNav", () => {
   });
 
   it("renders a centered FAB linking to /create-plan", () => {
-    render(<MobileNav />);
+    renderWithIntl(<MobileNav />);
     expect(screen.getByRole("link", { name: /Create Plan/i }).getAttribute("href")).toBe(
       "/create-plan",
     );
   });
 
   it("clicking More reveals the overflow menu with Statistics, Exercises, Profile and Log out", () => {
-    render(<MobileNav />);
+    renderWithIntl(<MobileNav />);
 
     const moreButton = screen.getByRole("button", { name: /More/i });
     expect(moreButton.getAttribute("aria-expanded")).toBe("false");
@@ -70,7 +81,7 @@ describe("MobileNav", () => {
   });
 
   it("shows Memory and Billing in the overflow menu when their labels are provided", () => {
-    render(<MobileNav memoryNavLabel="Memory" billingNavLabel="Billing" />);
+    renderWithIntl(<MobileNav memoryNavLabel="Memory" billingNavLabel="Billing" />);
 
     fireEvent.click(screen.getByRole("button", { name: /More/i }));
 
@@ -79,7 +90,7 @@ describe("MobileNav", () => {
   });
 
   it("omits Memory/Billing from the overflow menu when their labels are not provided", () => {
-    render(<MobileNav />);
+    renderWithIntl(<MobileNav />);
 
     fireEvent.click(screen.getByRole("button", { name: /More/i }));
 
@@ -88,7 +99,7 @@ describe("MobileNav", () => {
   });
 
   it("closes the menu when selecting an overflow item", () => {
-    render(<MobileNav />);
+    renderWithIntl(<MobileNav />);
 
     const moreButton = screen.getByRole("button", { name: /More/i });
     fireEvent.click(moreButton);
@@ -101,7 +112,7 @@ describe("MobileNav", () => {
   });
 
   it("closes the menu on Escape", () => {
-    render(<MobileNav />);
+    renderWithIntl(<MobileNav />);
 
     const moreButton = screen.getByRole("button", { name: /More/i });
     fireEvent.click(moreButton);
@@ -112,8 +123,21 @@ describe("MobileNav", () => {
     expect(moreButton.getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("closes the menu when tapping More a second time (regression, GH #294)", () => {
+    renderWithIntl(<MobileNav />);
+
+    const moreButton = screen.getByRole("button", { name: /More/i });
+    expect(moreButton.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(moreButton);
+    expect(moreButton.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(moreButton);
+    expect(moreButton.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("closes the menu when clicking outside (the backdrop)", () => {
-    render(<MobileNav />);
+    renderWithIntl(<MobileNav />);
 
     const moreButton = screen.getByRole("button", { name: /More/i });
     fireEvent.click(moreButton);
@@ -125,7 +149,7 @@ describe("MobileNav", () => {
   });
 
   it("the logout form is present in the overflow menu and submittable", () => {
-    render(<MobileNav />);
+    renderWithIntl(<MobileNav />);
     fireEvent.click(screen.getByRole("button", { name: /More/i }));
 
     const logoutButton = screen.getByRole("menuitem", { name: /Log out/i });
@@ -136,7 +160,7 @@ describe("MobileNav", () => {
 
   it("highlights the corresponding bar tab when pathname is a primary route", () => {
     mockedUsePathname.mockReturnValue("/dashboard");
-    render(<MobileNav />);
+    renderWithIntl(<MobileNav />);
 
     expect(screen.getByRole("link", { name: /^Dashboard$/i }).getAttribute("aria-current")).toBe(
       "page",
@@ -148,7 +172,7 @@ describe("MobileNav", () => {
 
   it("highlights the More button (not a bar tab) when pathname is a secondary route", () => {
     mockedUsePathname.mockReturnValue("/stats");
-    render(<MobileNav />);
+    renderWithIntl(<MobileNav />);
 
     const moreButton = screen.getByRole("button", { name: /More/i });
     // The active style class is applied to the More button.
@@ -161,7 +185,7 @@ describe("MobileNav", () => {
   });
 
   it("renders exactly one link for /create-plan (FAB only)", () => {
-    render(<MobileNav />);
+    renderWithIntl(<MobileNav />);
     const createLinks = screen.getAllByRole("link", { name: /Create Plan/i });
     expect(createLinks.length).toBe(1);
   });
@@ -170,7 +194,7 @@ describe("MobileNav", () => {
 describe("MobileNav (SSR/server-render smoke tests)", () => {
   it("server-renders without the overflow menu content visually exposed by default (still SSR-safe)", () => {
     mockedUsePathname.mockReturnValue("/dashboard");
-    const html = renderToString(<MobileNav />);
+    const html = renderToStringWithIntl(<MobileNav />);
 
     // Primary tabs + FAB present in the markup.
     expect(html).toContain("Dashboard");
@@ -182,7 +206,7 @@ describe("MobileNav (SSR/server-render smoke tests)", () => {
 
   it("includes memory/billing labels in the server-rendered markup (overflow panel content)", () => {
     mockedUsePathname.mockReturnValue("/dashboard");
-    const html = renderToString(
+    const html = renderToStringWithIntl(
       <MobileNav memoryNavLabel="Memory" billingNavLabel="Billing" />,
     );
 

@@ -133,7 +133,10 @@ describe("@kinora/i18n package assembly", () => {
         // 15b-v2-trainer-dashboard-branding Slice S5: the `trainerPlan.*`
         // client-facing branded-plan-view namespace has its own scoped count
         // test below, per the frozen-total convention.
-        !key.startsWith("trainerPlan."),
+        !key.startsWith("trainerPlan.") &&
+        // GH #294: the `appNav.*` web app-shell nav-label namespace has its
+        // own scoped count test below, per the frozen-total convention.
+        !key.startsWith("appNav."),
     );
     // +1 `tracker.restartLabel` authored for #251 (restart-timer control on
     // the live tracker topbar; pause/restart now persist across navigation).
@@ -365,6 +368,22 @@ describe("@kinora/i18n package assembly", () => {
     expect(trainerPlanKeys).toHaveLength(5);
     expect(flat["trainerPlan.navLabel"]).toBe("My trainer's plan");
     expect(flattenMessages(catalogs.es)["trainerPlan.navLabel"]).toBe("Plan de mi entrenador");
+  });
+
+  it("the appNav namespace is present with EN+ES parity (GH #294)", () => {
+    expect(catalogs.en.appNav).toBeDefined();
+    expect(catalogs.es.appNav).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+
+    const flat = flattenMessages(catalogs.en);
+    const appNavKeys = Object.keys(flat).filter((key) => key.startsWith("appNav."));
+    // dashboard, plan, statistics, history, createPlan, exercises, profile,
+    // more, logout = 9 web app-shell nav-label keys (MobileNav + SidebarNav).
+    expect(appNavKeys).toHaveLength(9);
+    expect(flat["appNav.dashboard"]).toBe("Dashboard");
+    expect(flattenMessages(catalogs.es)["appNav.dashboard"]).toBe("Panel");
   });
 
   it("flattenMessages + mergeWithBase compose over the full catalogs", () => {
