@@ -988,6 +988,32 @@ export interface DashboardSummaryDTO {
   adaptation?: AdaptationRecommendation;
 }
 
+/**
+ * One weekly RPE bucket in the trainer dashboard's trend series (15b-v2,
+ * Phase S1). `meanRpe` is `null` when the week has fewer than 2 rated
+ * working sets — rendered as a gap, never a fabricated zero.
+ */
+export interface RpeTrendPoint {
+  weekStart: string;
+  meanRpe: number | null;
+  sessionsWithRpe: number;
+}
+
+/**
+ * Trainer dashboard read DTO for `GET /trainer/clients/:clientUserId/dashboard`
+ * (15b-v2, Phase S1). Resolved via `resolveAuthorizedOwner` before any
+ * repository call; trainer and client always share the same `tenantId` for
+ * this read (design.md "Tenant-Safe Dashboard Data").
+ */
+export interface ClientDashboardDTO {
+  /** Up to 8 weekly buckets over the trailing 8 UTC weeks (Monday-first). */
+  rpeTrend: RpeTrendPoint[];
+  /** Rolling 28-day completion rate; `percent = min(100, round(completed/planned*100))`. */
+  completionRate: { periodDays: 28; planned: number; completed: number; percent: number };
+  /** Last 5 completed sessions; `meanRpe` is `null` when the session recorded no rated set. */
+  recentSessions: Array<{ date: string; volumeKg: number; meanRpe: number | null }>;
+}
+
 /** Statistics summary DTO. Deliberately carries no adherence KPI (design.md "Adherence lives on the Dashboard, not Statistics"). */
 export interface StatsSummaryDTO {
   range: "week" | "month" | "year";
