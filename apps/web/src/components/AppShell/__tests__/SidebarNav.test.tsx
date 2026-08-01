@@ -1,6 +1,7 @@
-import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { renderToString } from "react-dom/server";
+import { NextIntlClientProvider } from "next-intl";
+import { catalogs } from "@kinora/i18n";
 import { usePathname } from "next/navigation";
 import { SidebarNav } from "../SidebarNav";
 
@@ -16,8 +17,13 @@ vi.mock("@/app/(app)/dashboard/actions", () => ({
 
 const mockedUsePathname = vi.mocked(usePathname);
 
-type AnyProps = Record<string, unknown> & { children?: ReactNode };
-type AnyElement = ReactElement<AnyProps>;
+function renderToStringWithIntl(ui: Parameters<typeof renderToString>[0]) {
+  return renderToString(
+    <NextIntlClientProvider locale="en" messages={catalogs.en} timeZone="UTC">
+      {ui}
+    </NextIntlClientProvider>,
+  );
+}
 
 describe("SidebarNav", () => {
   beforeEach(() => {
@@ -25,20 +31,20 @@ describe("SidebarNav", () => {
   });
 
   it("renders the brand wordmark", () => {
-    const el = SidebarNav();
-    expect(textOf(el)).toContain("kInorA");
+    const html = renderToStringWithIntl(<SidebarNav />);
+    expect(html).toContain("kInorA");
   });
 
   it("renders all 6 navigation items with correct labels", () => {
-    const el = SidebarNav();
+    const html = renderToStringWithIntl(<SidebarNav />);
     const labels = ["Dashboard", "Plan", "Statistics", "History", "Create Plan", "Exercises"];
     for (const label of labels) {
-      expect(textOf(el)).toContain(label);
+      expect(html).toContain(label);
     }
   });
 
   it("marks the current route as active with aria-current=\"page\"", () => {
-    const html = renderToString(SidebarNav());
+    const html = renderToStringWithIntl(<SidebarNav />);
 
     // Exactly one item should have aria-current="page"
     const activeCount = (html.match(/aria-current="page"/g) || []).length;
@@ -49,7 +55,7 @@ describe("SidebarNav", () => {
   });
 
   it("renders all nav links with correct href values", () => {
-    const html = renderToString(SidebarNav());
+    const html = renderToStringWithIntl(<SidebarNav />);
     const expectedHrefs = ["/dashboard", "/plan", "/stats", "/history", "/create-plan", "/exercises"];
     for (const href of expectedHrefs) {
       expect(html).toContain(`href="${href}"`);
@@ -57,39 +63,40 @@ describe("SidebarNav", () => {
   });
 
   it("uses shared icon accessibility defaults for every navigation item", () => {
-    const html = renderToString(SidebarNav());
+    const html = renderToStringWithIntl(<SidebarNav />);
 
     const iconCount = (html.match(/focusable="false"/g) || []).length;
     expect(iconCount).toBe(7);
   });
 
   it("renders a user area with placeholder initials when no user prop is given", () => {
-    const el = SidebarNav();
-    expect(textOf(el)).toContain("?");
-    expect(textOf(el)).toContain("Guest");
+    const html = renderToStringWithIntl(<SidebarNav />);
+    expect(html).toContain("?");
+    expect(html).toContain("Guest");
   });
 
   it("renders the provided user identity when the user prop is supplied", () => {
-    const el = SidebarNav({ user: { initials: "AR", name: "Ada Rivera", plan: "Pro" } });
-    const text = textOf(el);
-    expect(text).toContain("AR");
-    expect(text).toContain("Ada Rivera");
-    expect(text).toContain("Pro");
+    const html = renderToStringWithIntl(
+      <SidebarNav user={{ initials: "AR", name: "Ada Rivera", plan: "Pro" }} />,
+    );
+    expect(html).toContain("AR");
+    expect(html).toContain("Ada Rivera");
+    expect(html).toContain("Pro");
     // Fallback must NOT leak through when a user is provided.
-    expect(text).not.toContain("?");
-    expect(text).not.toContain("Guest");
+    expect(html).not.toContain(">?<");
+    expect(html).not.toContain("Guest");
   });
 
   it("renders a logout button in the user area", () => {
-    const html = renderToString(SidebarNav());
+    const html = renderToStringWithIntl(<SidebarNav />);
     expect(html).toContain("Log out");
     // The logout icon SVG should be present.
     expect(html).toContain('<svg viewBox="0 0 24 24"');
   });
 
   it("wraps the user identity (avatar + name) in a link to /profile", () => {
-    const html = renderToString(
-      SidebarNav({ user: { initials: "AR", name: "Ada Rivera", plan: "Pro" } }),
+    const html = renderToStringWithIntl(
+      <SidebarNav user={{ initials: "AR", name: "Ada Rivera", plan: "Pro" }} />,
     );
 
     // The user-area link points to the profile page.
@@ -112,7 +119,7 @@ describe("SidebarNav", () => {
   });
 
   it("wraps the fallback user identity in a link to /profile when no user prop is given", () => {
-    const html = renderToString(SidebarNav());
+    const html = renderToStringWithIntl(<SidebarNav />);
     expect(html).toMatch(/<a[^>]*href="\/profile"[^>]*>/);
     // The fallback initials still render inside the link.
     expect(html).toContain("?");
@@ -120,7 +127,7 @@ describe("SidebarNav", () => {
   });
 
   it("renders a billing nav item with the translated label and /billing link when billingNavLabel is provided", () => {
-    const html = renderToString(SidebarNav({ billingNavLabel: "Billing" }));
+    const html = renderToStringWithIntl(<SidebarNav billingNavLabel="Billing" />);
 
     expect(html).toContain('href="/billing"');
     // The link content is the supplied i18n label, not a hardcoded string.
@@ -130,14 +137,14 @@ describe("SidebarNav", () => {
   });
 
   it("omits the billing nav item when billingNavLabel is not provided", () => {
-    const html = renderToString(SidebarNav());
+    const html = renderToStringWithIntl(<SidebarNav />);
     expect(html).not.toContain('href="/billing"');
   });
 
   it("marks the billing nav item active on the /billing route", () => {
     mockedUsePathname.mockReturnValueOnce("/billing");
 
-    const html = renderToString(SidebarNav({ billingNavLabel: "Billing" }));
+    const html = renderToStringWithIntl(<SidebarNav billingNavLabel="Billing" />);
 
     const billingLink = html.match(/<a[^>]*href="\/billing"[^>]*>/);
     expect(billingLink).toBeTruthy();
@@ -147,7 +154,7 @@ describe("SidebarNav", () => {
   it("highlights a different nav item when pathname changes", () => {
     mockedUsePathname.mockReturnValueOnce("/stats");
 
-    const html = renderToString(SidebarNav());
+    const html = renderToStringWithIntl(<SidebarNav />);
 
     // Only one item should have aria-current="page"
     const activeCount = (html.match(/aria-current="page"/g) || []).length;
@@ -167,35 +174,3 @@ describe("SidebarNav", () => {
     }
   });
 });
-
-// --- Tree inspection helpers ---
-
-function findFirst(
-  node: ReactNode,
-  match: (el: ReactNode) => boolean
-): ReactNode | undefined {
-  if (match(node)) return node;
-  if (isReactElement(node)) {
-    const inChildren = findFirst(node.props.children, match);
-    if (inChildren) return inChildren;
-  }
-  if (Array.isArray(node)) {
-    for (const child of node) {
-      const found = findFirst(child, match);
-      if (found) return found;
-    }
-  }
-  return undefined;
-}
-
-function textOf(node: ReactNode): string {
-  if (typeof node === "string") return node;
-  if (typeof node === "number") return String(node);
-  if (Array.isArray(node)) return node.map(textOf).join("");
-  if (isReactElement(node)) return textOf(node.props.children);
-  return "";
-}
-
-function isReactElement(node: ReactNode): node is AnyElement {
-  return typeof node === "object" && node !== null && "props" in node;
-}

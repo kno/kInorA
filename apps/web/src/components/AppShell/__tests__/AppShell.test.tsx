@@ -2,14 +2,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
 import { render, screen, cleanup } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import { catalogs } from "@kinora/i18n";
 import { usePathname } from "next/navigation";
 import { AppShell } from "../AppShell";
+import { renderWithIntl } from "@/test-utils/render-with-intl";
 
 vi.mock("next/navigation", () => ({
   usePathname: vi.fn(() => "/dashboard"),
 }));
 
 vi.mocked(usePathname);
+
+function renderToStringWithIntl(ui: Parameters<typeof renderToString>[0]) {
+  return renderToString(
+    <NextIntlClientProvider locale="en" messages={catalogs.en} timeZone="UTC">
+      {ui}
+    </NextIntlClientProvider>,
+  );
+}
 
 afterEach(() => {
   cleanup();
@@ -18,7 +29,7 @@ afterEach(() => {
 
 describe("AppShell", () => {
   it("renders children inside the shell", () => {
-    const html = renderToString(
+    const html = renderToStringWithIntl(
       <AppShell>
         <p>Hello from child</p>
       </AppShell>
@@ -27,7 +38,7 @@ describe("AppShell", () => {
   });
 
   it("renders the mobile navigation by default (server render)", () => {
-    const html = renderToString(
+    const html = renderToStringWithIntl(
       <AppShell>
         <p>test content</p>
       </AppShell>
@@ -38,7 +49,7 @@ describe("AppShell", () => {
   });
 
   it("renders a main content area wrapping children", () => {
-    const html = renderToString(
+    const html = renderToStringWithIntl(
       <AppShell>
         <h1>Content area</h1>
       </AppShell>
@@ -48,7 +59,7 @@ describe("AppShell", () => {
   });
 
   it("renders the memory navigation item when the shell receives a translated memory label", () => {
-    const html = renderToString(
+    const html = renderToStringWithIntl(
       <AppShell memoryNavLabel="Memory">
         <p>content</p>
       </AppShell>
@@ -74,7 +85,7 @@ describe("AppShell", () => {
       })),
     );
 
-    render(
+    renderWithIntl(
       <AppShell>
         <p>desktop child</p>
       </AppShell>,

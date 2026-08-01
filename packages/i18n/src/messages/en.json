@@ -16,6 +16,17 @@
     "menuLabel": "Open menu",
     "ariaLabel": "Main"
   },
+  "appNav": {
+    "dashboard": "Dashboard",
+    "plan": "Plan",
+    "statistics": "Statistics",
+    "history": "History",
+    "createPlan": "Create Plan",
+    "exercises": "Exercises",
+    "profile": "Profile",
+    "more": "More",
+    "logout": "Log out"
+  },
   "hero": {
     "eyebrow": "AI Coach",
     "title": "Your personal trainer, ",
