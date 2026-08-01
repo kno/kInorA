@@ -57,11 +57,17 @@ export interface RecordEventInput {
  * `processed` — the event was recorded and the billing state applied.
  * `duplicate` — the event id was already processed; no side effect (exactly-once).
  * `stale` — an older, out-of-order event; recorded but state NOT regressed.
+ * `unknown_tenant` — the event's `tenantId` has no row in `tenants` (#290,
+ *   e.g. a checkout whose tenant was later deleted). This is a PERMANENT
+ *   condition, not a transient failure: the idempotency row is still recorded
+ *   (so Stripe stops retrying), but the billing-state write is skipped
+ *   entirely (it would otherwise violate the `tenants` FK and 5xx forever).
  */
 export type RecordEventOutcome =
   | { outcome: "processed" }
   | { outcome: "duplicate" }
-  | { outcome: "stale" };
+  | { outcome: "stale" }
+  | { outcome: "unknown_tenant" };
 
 /**
  * Transactional store port. The adapter MUST run steps atomically:
@@ -75,6 +81,20 @@ export type RecordEventOutcome =
  */
 export interface StripeEventStorePort {
   recordEventAndApply(input: RecordEventInput): Promise<RecordEventOutcome>;
+}
+
+/**
+ * Structured, PII-free log line (tenantId + event type/id ONLY — never
+ * secrets or payload) for observability when a paid webhook arrives for a
+ * tenant that no longer exists — worth surfacing even though it is
+ * acknowledged rather than retried (#290).
+ */
+function logUnknownTenant(tenantId: string, eventType: string, eventId: string): void {
+  console.warn("[billing:webhook] event for unknown tenant — acknowledged, no billing write", {
+    tenantId,
+    eventType,
+    eventId,
+  });
 }
 
 /** The tenant's currently stored high-water mark, or `null` when no row exists yet. */
@@ -123,6 +143,11 @@ export function shouldAcceptStoreWrite(
   return !(existing.status === "expired" && incoming.status === "active");
 }
 
+/**
+ * `ignored` covers both a signed event with no actionable subscription/tenant
+ * AND a store-reported `unknown_tenant` (#290) — both acknowledge (route →
+ * 200) with no billing write.
+ */
 export type ProcessWebhookResult =
   | { status: "ok"; outcome: "processed" | "duplicate" | "stale" | "ignored" }
   | { status: "invalid_signature" };
@@ -230,6 +255,13 @@ export class ProcessStripeWebhook {
       eventTs: event.eventTs,
       write,
     });
+    if (result.outcome === "unknown_tenant") {
+      // Recorded for idempotency by the store; a paid checkout webhook
+      // arriving for a tenant that no longer exists is worth surfacing even
+      // though it's a permanent, non-retryable condition (#290).
+      logUnknownTenant(write.tenantId, event.type, event.id);
+      return { status: "ok", outcome: "ignored" };
+    }
     return { status: "ok", outcome: result.outcome };
   }
 }
