@@ -53,6 +53,25 @@
   flex: none;
 }
 
+/* Belt-and-suspenders: a tab label can never overflow its cell, no matter
+   how many tabs share the bar or how narrow the viewport is. */
+.tab span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The "More" trigger is a <button>, not a <Link> — reset button chrome so
+   it visually matches the other .tab items. */
+.moreButton {
+  border: none;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  appearance: none;
+}
+
 /* FAB overlay area — sits above the tab bar, centered. */
 .fabArea {
   position: relative;
@@ -128,4 +147,101 @@
 .logoutButton:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Backdrop behind the "More" overflow panel — dims the page and closes the
+   panel on click/tap outside of it. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 41; /* above the bar (40) */
+}
+
+/* The "More" overflow menu — a small bottom sheet anchored above the bar. */
+.menuPanel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  z-index: 42; /* above the backdrop and the bar */
+  padding: 8px;
+  gap: 2px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/* Force the panel to disappear entirely while closed — an author rule is
+   needed because a class selector otherwise outranks the UA [hidden]
+   default in the cascade. */
+.menuPanel[hidden] {
+  display: none;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+
+.menuItem:hover {
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+
+.menuItemActive {
+  color: var(--accent);
+}
+
+.menuDivider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 4px;
+}
+
+.menuLogoutForm {
+  display: flex;
+}
+
+.menuLogoutButton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.menuLogoutButton:hover {
+  color: var(--danger);
+  background: var(--danger-dim);
+}
+
+.menuLogoutButton:focus-visible,
+.menuItem:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
