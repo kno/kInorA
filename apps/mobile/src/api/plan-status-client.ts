@@ -30,7 +30,7 @@
  *   GET  /progress/dashboard            → 200 DashboardSummaryDTO (incl. optional `adaptation`)
  */
 
-import type { DashboardSummaryDTO, WorkoutProgram } from "@kinora/contracts";
+import type { DashboardSummaryDTO, PlanBranding, WorkoutProgram } from "@kinora/contracts";
 
 /**
  * Default token source. Imported lazily so this module's graph does not pull in
@@ -97,6 +97,14 @@ export interface PlanStatus {
   specId?: string;
   /** Resolved plan label (server applies the blank→default rule). */
   name?: string;
+  /**
+   * Optional trainer-authored branding (15b-v2 S4 — accent-only theming
+   * seam). When present, `PlanStatusScreen` overrides the ready-state title
+   * with `title`, renders `trainerName` as a byline, and themes the accent
+   * surfaces with `accentColor` instead of the static `colors.accent` token.
+   * Absent branding renders the base (unbranded) plan unchanged.
+   */
+  branding?: PlanBranding;
 }
 
 export type FetchPlanStatusResult =

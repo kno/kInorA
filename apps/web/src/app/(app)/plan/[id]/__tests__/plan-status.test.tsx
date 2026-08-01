@@ -166,3 +166,49 @@ describe("PlanStatusView — status-fetch fallback (WS not connected)", () => {
     expect(screen.getByText("Generating your plan…")).toBeDefined();
   });
 });
+
+describe("PlanStatusView — trainer branding render (15b-v2 S4)", () => {
+  it("renders the branded title, trainer byline, and --plan-accent on <main> when branding is present", () => {
+    const { container } = renderWithIntl(
+      <PlanStatusView
+        status="ready"
+        planId="plan-1"
+        program={sampleProgram}
+        branding={{ trainerName: "Coach Ana", title: "Ana's Summer Cut", accentColor: "#1E90FF" }}
+      />,
+    );
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(
+      "Ana's Summer Cut",
+    );
+    expect(screen.getByText(/Coach Ana/)).toBeDefined();
+    const main = container.querySelector("main") as HTMLElement | null;
+    expect(main?.style.getPropertyValue("--plan-accent")).toBe("#1E90FF");
+  });
+
+  it("triangulation: a different branding renders its own title/trainer/accent", () => {
+    const { container } = renderWithIntl(
+      <PlanStatusView
+        status="ready"
+        planId="plan-1"
+        program={sampleProgram}
+        branding={{ trainerName: "Coach Ben", title: "Winter Strength", accentColor: "#FF4500" }}
+      />,
+    );
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(
+      "Winter Strength",
+    );
+    expect(screen.getByText(/Coach Ben/)).toBeDefined();
+    const main = container.querySelector("main") as HTMLElement | null;
+    expect(main?.style.getPropertyValue("--plan-accent")).toBe("#FF4500");
+  });
+
+  it("renders the base (unbranded) plan unchanged when branding is absent", () => {
+    const { container } = renderWithIntl(
+      <PlanStatusView status="ready" planId="plan-1" program={sampleProgram} />,
+    );
+    // The default "Your plan is ready" heading is untouched.
+    expect(screen.getByText("Your plan is ready")).toBeDefined();
+    const main = container.querySelector("main") as HTMLElement | null;
+    expect(main?.style.getPropertyValue("--plan-accent")).toBe("");
+  });
+});

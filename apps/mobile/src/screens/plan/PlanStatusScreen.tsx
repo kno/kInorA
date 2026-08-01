@@ -456,13 +456,28 @@ export default function PlanStatusScreen({
 
   /* ── Ready ── */
   const sessions = plan?.program?.weeklySessions ?? [];
+  // 15b-v2 S4 accent-only theming seam: `branding.accentColor` overrides the
+  // static `colors.accent` token on the accent-themed surfaces (session
+  // count) when present; absent branding leaves the base token untouched.
+  const branding = plan?.branding;
+  const accentOverride = branding?.accentColor
+    ? { color: branding.accentColor }
+    : null;
   return (
     <View style={styles.screen} testID="plan-status-ready">
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>
-          {plan?.name ?? intl.formatMessage(M.readyTitle)}
+          {branding?.title ?? plan?.name ?? intl.formatMessage(M.readyTitle)}
         </Text>
-        <Text style={styles.sessionCount} testID="ready-sessions">
+        {branding?.trainerName && (
+          <Text style={styles.body} testID="branding-byline">
+            <FormattedMessage {...M.brandedBy} values={{ trainerName: branding.trainerName }} />
+          </Text>
+        )}
+        <Text
+          style={[styles.sessionCount, accentOverride]}
+          testID="ready-sessions"
+        >
           <FormattedMessage {...M.readySessions} values={{ count: sessions.length }} />
         </Text>
 

@@ -362,3 +362,96 @@ describe("PlanStatusScreen (C2 — generating/ready/failed + regenerate)", () =>
     expect(fetchPlanStatus).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("PlanStatusScreen — trainer branding accent seam (15b-v2 S4)", () => {
+  // Style props on RN "Text" host elements are arrays like
+  // [styles.sessionCount, { color: accentColor }] once the accent-only theming
+  // seam merges an override on top of the static token — find the merged
+  // color by flattening whatever `style` shape the node carries.
+  function flattenColor(style: unknown): string | undefined {
+    // RN merges style arrays LEFT-TO-RIGHT, later entries winning — walk in
+    // reverse so an override (appended last) is found before the base token.
+    if (Array.isArray(style)) {
+      for (let i = style.length - 1; i >= 0; i -= 1) {
+        const color = flattenColor(style[i]);
+        if (color) return color;
+      }
+      return undefined;
+    }
+    if (style && typeof style === "object" && "color" in (style as Record<string, unknown>)) {
+      return (style as Record<string, unknown>).color as string;
+    }
+    return undefined;
+  }
+
+  // `<FormattedMessage>` resolves to plain text only once react-intl actually
+  // renders it — a "Text" instance's `props.children` still holds the
+  // unresolved `<FormattedMessage>` element description, not the rendered
+  // string. Walking the RENDERED JSON tree (`renderer.toJSON()`) sidesteps
+  // that and gives the real, resolved text content — mirrors the `textOf`
+  // tree-walk helper used by the web PlanWeekView tests.
+  function flattenText(node: unknown): string {
+    if (node == null) return "";
+    if (typeof node === "string" || typeof node === "number") return String(node);
+    if (Array.isArray(node)) return node.map(flattenText).join("");
+    if (typeof node === "object" && "children" in (node as Record<string, unknown>)) {
+      return flattenText((node as { children: unknown }).children);
+    }
+    return "";
+  }
+
+  it("renders the branded title, trainer byline, and accent-themed session count when branding is present", async () => {
+    const client = makeClient({
+      fetchPlanStatus: vi.fn(async () =>
+        ok("ready", {
+          program: program(2),
+          branding: { trainerName: "Coach Ana", title: "Ana's Summer Cut", accentColor: "#1E90FF" },
+        }),
+      ),
+    });
+    const { renderer } = renderScreen({ client });
+    await settle();
+
+    const text = flattenText(renderer.toJSON());
+    expect(text).toContain("Ana's Summer Cut");
+    expect(text).toContain("Coach Ana");
+
+    const sessionCount = renderer.root.find((n) => n.props.testID === "ready-sessions");
+    expect(flattenColor(sessionCount.props.style)).toBe("#1E90FF");
+  });
+
+  it("triangulation: a different accent/title/trainerName render correctly", async () => {
+    const client = makeClient({
+      fetchPlanStatus: vi.fn(async () =>
+        ok("ready", {
+          program: program(2),
+          branding: { trainerName: "Coach Ben", title: "Winter Strength", accentColor: "#FF4500" },
+        }),
+      ),
+    });
+    const { renderer } = renderScreen({ client });
+    await settle();
+
+    const text = flattenText(renderer.toJSON());
+    expect(text).toContain("Winter Strength");
+    expect(text).toContain("Coach Ben");
+
+    const sessionCount = renderer.root.find((n) => n.props.testID === "ready-sessions");
+    expect(flattenColor(sessionCount.props.style)).toBe("#FF4500");
+  });
+
+  it("renders the base (unbranded) plan unchanged when branding is absent", async () => {
+    const client = makeClient({
+      fetchPlanStatus: vi.fn(async () => ok("ready", { program: program(2) })),
+    });
+    const { renderer } = renderScreen({ client });
+    await settle();
+
+    // No branding byline rendered.
+    expect(flattenText(renderer.toJSON())).not.toContain("By ");
+
+    // Session count keeps the default accent token (no override applied).
+    const sessionCount = renderer.root.find((n) => n.props.testID === "ready-sessions");
+    expect(flattenColor(sessionCount.props.style)).toBe("#A8F060");
+  });
+});

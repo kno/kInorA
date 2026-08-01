@@ -333,3 +333,63 @@ describe("PlanWeekView — interactive day grid + start CTA (#93 Slice 3)", () =
     expect(screen.getAllByRole("button", { name: /^Day \d+$/ })).toHaveLength(2);
   });
 });
+
+describe("PlanWeekView — trainer branding render (15b-v2 S4)", () => {
+  // `--plan-accent` is a CSS custom property applied to a "use client"
+  // descendant's DOM output (`PlanTrackerClient`'s root `.frame` div), which
+  // is not yet materialized in the raw `view` element tree returned by the
+  // (server) `PlanWeekView` — only realized once React actually renders it.
+  // So we read it off the real DOM via `container`, not the element tree.
+  function accentValue(container: HTMLElement): string {
+    const frame = container.querySelector(".frame") as HTMLElement | null;
+    return frame?.style.getPropertyValue("--plan-accent") ?? "";
+  }
+
+  it("renders trainer name, custom title, and sets --plan-accent when branding is present", async () => {
+    const view = await PlanWeekView({
+      program: twoSessionProgram,
+      planName: "Summer Cut",
+      planId: "plan-x",
+      branding: { trainerName: "Coach Ana", title: "Ana's Summer Cut", accentColor: "#1E90FF" },
+    });
+    const { container } = renderWithIntl(<>{view}</>);
+
+    // The custom title replaces the plain planName heading.
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.textContent).toContain("Ana's Summer Cut");
+    // The trainer byline is rendered alongside it.
+    expect(screen.getByText(/Coach Ana/)).toBeDefined();
+
+    // The accent color reaches the DOM as a CSS custom property.
+    expect(accentValue(container)).toBe("#1E90FF");
+  });
+
+  it("triangulation: a different accent color/title/trainerName render correctly", async () => {
+    const view = await PlanWeekView({
+      program: twoSessionProgram,
+      planId: "plan-x",
+      branding: { trainerName: "Coach Ben", title: "Winter Strength", accentColor: "#FF4500" },
+    });
+    const { container } = renderWithIntl(<>{view}</>);
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("Winter Strength");
+    expect(screen.getByText(/Coach Ben/)).toBeDefined();
+
+    expect(accentValue(container)).toBe("#FF4500");
+  });
+
+  it("renders the base plan unchanged (no --plan-accent, no branding byline) when branding is absent", async () => {
+    const view = await PlanWeekView({
+      program: twoSessionProgram,
+      planName: "Summer Cut",
+      planId: "plan-x",
+    });
+    const { container } = renderWithIntl(<>{view}</>);
+
+    // planName still renders verbatim as the h1 (base fallback behavior).
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("Summer Cut");
+    // No trainer byline, and no --plan-accent custom property in the DOM.
+    expect(container.querySelector(".brandingByline")).toBeNull();
+    expect(accentValue(container)).toBe("");
+  });
+});

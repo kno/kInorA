@@ -28,7 +28,7 @@
 
 import * as React from "react";
 import { useTranslations } from "next-intl";
-import type { WeeklyOverviewDTO, WorkoutProgram } from "@kinora/contracts";
+import type { PlanBranding, WeeklyOverviewDTO, WorkoutProgram } from "@kinora/contracts";
 import styles from "./plan-week-view.module.css";
 import { DayDetailPanel } from "./DayDetailPanel";
 import { TrackerPanel } from "./[id]/TrackerPanel";
@@ -63,6 +63,14 @@ export interface PlanTrackerClientProps {
    * in the cockpit's right column. Hidden while a session is active. Optional.
    */
   sideRail?: React.ReactNode;
+  /**
+   * Optional trainer-authored branding (15b-v2 S4). Only `accentColor` is
+   * consumed here — it becomes the `--plan-accent` CSS custom property on
+   * the plan container, read by the CSS module's accent surfaces (with the
+   * base `--accent` token as fallback). Absent branding sets no custom
+   * property, so the container's rendering is byte-identical to before S4.
+   */
+  branding?: PlanBranding;
 }
 
 /**
@@ -92,6 +100,7 @@ export function PlanTrackerClient({
   weeklyOverview,
   topbar,
   sideRail,
+  branding,
 }: PlanTrackerClientProps) {
   const {
     activeSession,
@@ -168,8 +177,12 @@ export function PlanTrackerClient({
   // the two-column grid holds the main column (children = hero + metrics +
   // limitation banner, then the DATA-WIRED week board) and the presentational
   // side rail.
+  const accentStyle = branding?.accentColor
+    ? ({ "--plan-accent": branding.accentColor } as React.CSSProperties)
+    : undefined;
+
   return (
-    <div className={styles.frame}>
+    <div className={styles.frame} style={accentStyle}>
       {topbar}
       {syncNoticeBanner}
       {errorKey && (

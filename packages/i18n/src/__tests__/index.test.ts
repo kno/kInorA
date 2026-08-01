@@ -142,7 +142,9 @@ describe("@kinora/i18n package assembly", () => {
     // + 1 `mobileTracker.rpe.a11y` authored for 14b-v1.1 Slice B (mobile RPE
     // capture input accessibility label — the `tracker.rpe` label itself is a
     // shared key already counted).
-    expect(nonBillingKeys).toHaveLength(615);
+    // + 1 `plan.branding.byTrainer` authored for 15b-v2 Slice S4 (web trainer
+    // branding byline shown below the branded plan title).
+    expect(nonBillingKeys).toHaveLength(616);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
@@ -266,7 +268,8 @@ describe("@kinora/i18n package assembly", () => {
     // `adaptation.quotaExhausted`, so no planStatus key duplicates it.)
     // Post-review poll-loop fixes add 3: stalledTitle/Body + refresh (the
     // "taking longer than expected" terminal state after the poll-attempts cap).
-    expect(planStatusKeys).toHaveLength(14);
+    // 15b branding adds 1: brandedBy (the "Plan by <trainer>" byline).
+    expect(planStatusKeys).toHaveLength(15);
     expect(en["planStatus.readySessions"]).toContain("{count}");
     expect(es["planStatus.readySessions"]).toContain("{count}");
     expect(en["planStatus.stalledTitle"]).toBeTruthy();
