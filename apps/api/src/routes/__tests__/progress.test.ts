@@ -116,8 +116,51 @@ describe("GET /progress/dashboard", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual(emptySummary);
+    expect(response.json()).toEqual({ ...emptySummary, viewerIsTrainer: false });
     expect(repo.getDashboardSummary).toHaveBeenCalledWith(TENANT_A, USER_A);
+  });
+
+  // 15b/#294 — the trainer-only mobile nav (Clients, Trainer plan) needs a
+  // signal on the existing dashboard response, derived from the session's
+  // membership role (never a new endpoint/request).
+  it("returns viewerIsTrainer=true when the authenticated membership role is trainer", async () => {
+    const repo = buildRepoMock();
+    app = await buildTestApp(
+      repo,
+      createCyclingAuthMockDb({
+        sessionRows: [buildSessionRow({ tenantId: TENANT_A, userId: USER_A })],
+        membershipRows: [buildActiveMembershipRow({ tenantId: TENANT_A, userId: USER_A, role: "trainer" })],
+      })
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/progress/dashboard",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().viewerIsTrainer).toBe(true);
+  });
+
+  it("returns viewerIsTrainer=false when the authenticated membership role is member or owner", async () => {
+    const repo = buildRepoMock();
+    app = await buildTestApp(
+      repo,
+      createCyclingAuthMockDb({
+        sessionRows: [buildSessionRow({ tenantId: TENANT_A, userId: USER_A })],
+        membershipRows: [buildActiveMembershipRow({ tenantId: TENANT_A, userId: USER_A, role: "owner" })],
+      })
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/progress/dashboard",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().viewerIsTrainer).toBe(false);
   });
 
   // 14a-v1.1 Slice A2 — the adherence adaptation rides the existing dashboard

@@ -329,6 +329,10 @@ describe("shared contracts boundary", () => {
       .toEqualTypeOf<AdaptationRecommendation | undefined>();
   });
 
+  it("adds an optional viewerIsTrainer field to DashboardSummaryDTO (15b/#294, additive, type-only)", () => {
+    expectTypeOf<DashboardSummaryDTO>().toHaveProperty("viewerIsTrainer").toEqualTypeOf<boolean | undefined>();
+  });
+
   it("adds an optional intensityBias field to PlanSpec (14b; absent = maintain)", () => {
     expectTypeOf<PlanSpec>().toHaveProperty("intensityBias").toEqualTypeOf<IntensityBias | undefined>();
   });
