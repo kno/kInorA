@@ -51,6 +51,15 @@ import type {
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
+// #282: `stripe_processed_events` is keyed GLOBALLY by event id (not per
+// tenant). Against a persistent local Postgres that is NOT reset between
+// test runs, a hardcoded event id from a previous run would already be
+// recorded, turning a would-be "processed" outcome into "duplicate" and
+// breaking every assertion that expects a fresh delivery. Suffixing every
+// event id with a per-run token makes each run's ids unique, so reruns
+// against the same persistent DB never collide.
+const RUN = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
 describe.skipIf(!hasDb)("StripeEventStoreRepository / ProcessStripeWebhook (real Postgres)", () => {
   const { db, pool } = createDbClient();
   const store = new StripeEventStoreRepository(db);
@@ -110,21 +119,23 @@ describe.skipIf(!hasDb)("StripeEventStoreRepository / ProcessStripeWebhook (real
       cancelAtPeriodEnd: false,
     };
     const newerTs = new Date("2026-07-25T10:00:00.000Z");
+    const evtId = `evt_int_1_${RUN}`;
 
-    const first = await store.recordEventAndApply({ eventId: "evt_int_1", type: "customer.subscription.updated", eventTs: newerTs, write });
-    const retry = await store.recordEventAndApply({ eventId: "evt_int_1", type: "customer.subscription.updated", eventTs: newerTs, write });
+    const first = await store.recordEventAndApply({ eventId: evtId, type: "customer.subscription.updated", eventTs: newerTs, write });
+    const retry = await store.recordEventAndApply({ eventId: evtId, type: "customer.subscription.updated", eventTs: newerTs, write });
 
     expect(first).toEqual({ outcome: "processed" });
     expect(retry).toEqual({ outcome: "duplicate" });
 
     // Exactly one processed-events row for that id.
-    const events = await db.select().from(stripeProcessedEvents).where(eq(stripeProcessedEvents.eventId, "evt_int_1"));
+    const events = await db.select().from(stripeProcessedEvents).where(eq(stripeProcessedEvents.eventId, evtId));
     expect(events).toHaveLength(1);
 
     // A strictly OLDER event (different id) must be ignored without regressing.
     const staleTs = new Date("2026-07-24T10:00:00.000Z");
     const staleWrite = { ...write, status: "expired" as const, stripeSubscriptionStatus: "canceled" };
-    const stale = await store.recordEventAndApply({ eventId: "evt_int_stale", type: "customer.subscription.deleted", eventTs: staleTs, write: staleWrite });
+    const staleEvtId = `evt_int_stale_${RUN}`;
+    const stale = await store.recordEventAndApply({ eventId: staleEvtId, type: "customer.subscription.deleted", eventTs: staleTs, write: staleWrite });
     expect(stale).toEqual({ outcome: "stale" });
 
     const [row] = await db.select().from(tenantBillingStates).where(eq(tenantBillingStates.tenantId, tenantId));
@@ -230,8 +241,8 @@ describe.skipIf(!hasDb)("StripeEventStoreRepository / ProcessStripeWebhook (real
     };
 
     const [olderResult, newerResult] = await Promise.all([
-      store.recordEventAndApply({ eventId: "evt_race_old", type: "customer.subscription.deleted", eventTs: olderTs, write: olderWrite }),
-      store.recordEventAndApply({ eventId: "evt_race_new", type: "customer.subscription.updated", eventTs: newerTs, write: newerWrite }),
+      store.recordEventAndApply({ eventId: `evt_race_old_${RUN}`, type: "customer.subscription.deleted", eventTs: olderTs, write: olderWrite }),
+      store.recordEventAndApply({ eventId: `evt_race_new_${RUN}`, type: "customer.subscription.updated", eventTs: newerTs, write: newerWrite }),
     ]);
 
     // Which delivery wins the INSERT race is NOT deterministic — Postgres
@@ -285,12 +296,14 @@ describe.skipIf(!hasDb)("StripeEventStoreRepository / ProcessStripeWebhook (real
       };
       const updateWrite = { ...deletionWrite, status: "active" as const, stripeSubscriptionStatus: "active" };
 
+      const delEvtId = `evt_tie_del_${order}_${RUN}`;
+      const updEvtId = `evt_tie_upd_${order}_${RUN}`;
       if (order === "delete-then-update") {
-        await store.recordEventAndApply({ eventId: `evt_tie_del_${order}`, type: "customer.subscription.deleted", eventTs: sameTs, write: deletionWrite });
-        await store.recordEventAndApply({ eventId: `evt_tie_upd_${order}`, type: "customer.subscription.updated", eventTs: sameTs, write: updateWrite });
+        await store.recordEventAndApply({ eventId: delEvtId, type: "customer.subscription.deleted", eventTs: sameTs, write: deletionWrite });
+        await store.recordEventAndApply({ eventId: updEvtId, type: "customer.subscription.updated", eventTs: sameTs, write: updateWrite });
       } else {
-        await store.recordEventAndApply({ eventId: `evt_tie_upd_${order}`, type: "customer.subscription.updated", eventTs: sameTs, write: updateWrite });
-        await store.recordEventAndApply({ eventId: `evt_tie_del_${order}`, type: "customer.subscription.deleted", eventTs: sameTs, write: deletionWrite });
+        await store.recordEventAndApply({ eventId: updEvtId, type: "customer.subscription.updated", eventTs: sameTs, write: updateWrite });
+        await store.recordEventAndApply({ eventId: delEvtId, type: "customer.subscription.deleted", eventTs: sameTs, write: deletionWrite });
       }
 
       const [row] = await db.select().from(tenantBillingStates).where(eq(tenantBillingStates.tenantId, tenantId));
@@ -305,7 +318,7 @@ describe.skipIf(!hasDb)("StripeEventStoreRepository / ProcessStripeWebhook (real
     const { tenantId, userId } = await seedTenantWithMember();
 
     const activeEvent: StripeWebhookEvent = {
-      id: "evt_int_active",
+      id: `evt_int_active_${RUN}`,
       type: "customer.subscription.updated",
       eventTs: new Date("2026-07-25T09:00:00.000Z"),
       subscription: snapshot(tenantId, { status: "active", cycle: "annual" }),
@@ -323,7 +336,7 @@ describe.skipIf(!hasDb)("StripeEventStoreRepository / ProcessStripeWebhook (real
 
     // A later deletion reconciles to expired → Free at read time.
     const deleteEvent: StripeWebhookEvent = {
-      id: "evt_int_delete",
+      id: `evt_int_delete_${RUN}`,
       type: "customer.subscription.deleted",
       eventTs: new Date("2026-07-26T09:00:00.000Z"),
       subscription: snapshot(tenantId, { status: "canceled" }),
@@ -354,7 +367,7 @@ describe.skipIf(!hasDb)("StripeEventStoreRepository / ProcessStripeWebhook (real
     // The webhook writes an EXPIRED subscription state (would resolve to Free
     // on its own) — proving the override still wins REGARDLESS of the write.
     const expiredEvent: StripeWebhookEvent = {
-      id: "evt_int_override",
+      id: `evt_int_override_${RUN}`,
       type: "customer.subscription.deleted",
       eventTs: new Date("2026-07-25T09:00:00.000Z"),
       subscription: snapshot(tenantId, { status: "canceled" }),
@@ -446,7 +459,7 @@ describe.skipIf(!hasDb)("StripeEventStoreRepository — GUARD_MATRIX vs. real Po
     };
 
     const result = await store.recordEventAndApply({
-      eventId: `evt_matrix_${tenantId}`,
+      eventId: `evt_matrix_${tenantId}_${RUN}`,
       type: "customer.subscription.updated",
       eventTs: INCOMING_TS,
       write,
