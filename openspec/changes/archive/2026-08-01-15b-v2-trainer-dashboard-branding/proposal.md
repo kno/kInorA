@@ -75,8 +75,10 @@ Feature is additive. Revert per slice: new routes/DTO fields are unused if rever
 
 ## Success Criteria
 
-- [ ] Trainer opens client dashboard; sees completion rate, recent sessions, and multi-point RPE trend for an assigned client only.
-- [ ] Dashboard excludes any other-tenant client data (req 3).
-- [ ] Trainer sets name/title/accent; client opening the plan sees the branding on web AND mobile.
-- [ ] Client with dual membership can view the trainer-owned branded plan (#283 resolved).
-- [ ] Client→trainer-tenant read is deny-by-default and assignment-scoped (unauthorized returns flat 403).
+- [x] Trainer opens client dashboard; sees completion rate, recent sessions, and multi-point RPE trend for an assigned client only.
+- [x] Dashboard excludes any other-tenant client data (req 3).
+- [x] Trainer sets name/title/accent; client opening the plan sees the branding on web AND mobile.
+- [x] Client with dual membership can view the trainer-owned branded plan (#283 resolved).
+- [x] Client→trainer-tenant read is deny-by-default and assignment-scoped (unauthorized returns flat 403).
+
+> Archive note: all Success Criteria checkboxes updated from open to complete at archive time (2026-08-01) to reflect final shipped state across PRs #285–#289. See `archive-report.md` in this folder for per-slice evidence.

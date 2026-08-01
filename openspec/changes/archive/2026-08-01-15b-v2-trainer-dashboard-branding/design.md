@@ -105,4 +105,14 @@ No migration. Branding rides `plan_specs.spec_json` (back-compat: absent → bas
 
 ## Open Questions
 
-- [ ] S5 client UI entry point (nav placement for trainer-plan view) — product/UX, not blocking design.
+- [x] S5 client UI entry point (nav placement for trainer-plan view) — resolved during S5 implementation (web `/trainer-plan` route, mobile `TrainerPlanScreen`); not a blocking design gap at archive time.
+
+## Shipped Mapping (added at archive)
+
+| Slice | PR | Landed as |
+|-------|-----|-----------|
+| S1 | #285 | `GET /trainer/clients/:id/dashboard`, `ClientDashboardDTO`, `computeRpeTrend`, tenant-safe `getClientDashboard` |
+| S2 | #286 | `resolveClientTrainerTenant`, `GET /me/trainer-plan` — resolves #283 |
+| S3 | #287 | `PlanSpec.branding` on `spec_json` + hex validation + trainer authoring |
+| S4 | #288 | Web `--plan-accent` CSS var + mobile accent seam + i18n |
+| S5 | #289 | Web `/trainer-plan` + mobile `TrainerPlanScreen`, wired branding onto the response |
