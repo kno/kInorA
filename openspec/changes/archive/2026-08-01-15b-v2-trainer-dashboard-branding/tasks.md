@@ -28,7 +28,7 @@ Chain strategy: stacked-to-main
 
 Rationale: S1 independently shippable (no #283 dep). S2 is the highest-risk security slice — isolate for focused review; S3-S5 depend on S2's route existing but S3/S4 are otherwise independent of each other; S5 depends on both S2 (route) and S4 (render).
 
-## Phase S1: Trainer Dashboard Read
+## Phase S1: Trainer Dashboard Read — shipped in PR #285
 
 - [x] 1.1 RED: `packages/domain/src/progress/rpe-trend.test.ts` — 8-week bucket window, gap when <2 rated sets, Monday-first boundary
 - [x] 1.2 GREEN: `packages/domain/src/progress/rpe-trend.ts` `computeRpeTrend`
@@ -42,7 +42,7 @@ Rationale: S1 independently shippable (no #283 dep). S2 is the highest-risk secu
 - [x] 1.10 Run `pnpm architecture` — confirm route uses injected repo interface, not direct import
 - [x] 1.11 Run `pnpm ui-api-guard` (N/A, no web change this slice — confirm no-op pass)
 
-## Phase S2: Client-to-Trainer-Tenant Read Authorization (#283)
+## Phase S2: Client-to-Trainer-Tenant Read Authorization (#283) — shipped in PR #286
 
 - [x] 2.1 RED: revoked/missing assignment → `ForbiddenOwnerAccess` flat 403, no repo call
 - [x] 2.2 RED: client A cannot read client B's data (filter always `ctx.actorUserId`)
@@ -56,7 +56,7 @@ Rationale: S1 independently shippable (no #283 dep). S2 is the highest-risk secu
 - [x] 2.10 Run `pnpm architecture` — route uses injected `PlanRouteRepo`-style interface
 - [x] 2.11 Run `pnpm ui-api-guard` (N/A this slice, API-only)
 
-## Phase S3: Branding Data Model + Authoring
+## Phase S3: Branding Data Model + Authoring — shipped in PR #287
 
 - [x] 3.1 RED: `branding` accentColor regex rejection (400, no persist) + trainerName/title 60-char cap
 - [x] 3.2 GREEN: add `branding?` to `PlanSpec` in `packages/contracts/src/index.ts`
@@ -64,7 +64,7 @@ Rationale: S1 independently shippable (no #283 dep). S2 is the highest-risk secu
 - [x] 3.4 RED: absent branding persists/reads as undefined (base plan)
 - [x] 3.5 Run `pnpm architecture`
 
-## Phase S4: Branding Rendering (Web + Mobile)
+## Phase S4: Branding Rendering (Web + Mobile) — shipped in PR #288
 
 - [x] 4.1 RED: web `PlanWeekView`/`PlanStatusView` render `--plan-accent` from `branding.accentColor`; absent → base token
 - [x] 4.2 GREEN: wire `style={{ "--plan-accent": accentColor }}` + CSS module fallback
@@ -73,7 +73,7 @@ Rationale: S1 independently shippable (no #283 dep). S2 is the highest-risk secu
 - [x] 4.5 Run `pnpm architecture`
 - [x] 4.6 Run `pnpm ui-api-guard` — confirm web components import only client-safe branding types
 
-## Phase S5: Client-Facing Branded-Plan View
+## Phase S5: Client-Facing Branded-Plan View — shipped in PR #289
 
 - [x] 5.1 RED: web e2e — client opens `/me/trainer-plan`, sees branded accent/title/trainerName
 - [x] 5.2 GREEN: wire web client UI to consume S2 route
