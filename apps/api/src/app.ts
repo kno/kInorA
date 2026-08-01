@@ -534,6 +534,10 @@ export async function buildApp(
     // `GET /me/trainer-plan`. Reuses the SAME `WorkoutPlanRepository`
     // instance every other plan read uses.
     planRepo: workoutPlanRepo,
+    // 15b-v2-trainer-dashboard-branding, Phase S5 — threads `branding` onto
+    // the `GET /me/trainer-plan` response. Reuses the SAME
+    // `PlanSpecRepository` instance every other confirmed-spec read uses.
+    specRepo: planSpecRepo,
   });
 
   // 11a billing routes (Phase 3 quota administration + Phase 4 member

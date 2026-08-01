@@ -61,6 +61,7 @@ function buildRepos(
     entitlementReader: Record<string, unknown>;
     dashboardRepo: Record<string, unknown>;
     planRepo: Record<string, unknown>;
+    specRepo: Record<string, unknown>;
   }> = {},
 ) {
   return {
@@ -102,6 +103,10 @@ function buildRepos(
     planRepo: {
       findLatestReadyByOwner: vi.fn().mockResolvedValue(undefined),
       ...overrides.planRepo,
+    },
+    specRepo: {
+      findConfirmedById: vi.fn().mockResolvedValue(undefined),
+      ...overrides.specRepo,
     },
   };
 }
@@ -511,6 +516,62 @@ describe("GET /me/trainer-plan (15b-v2 Phase S2 — #283)", () => {
     });
 
     expect(res.statusCode).toBe(404);
+  });
+
+  // 15b-v2 Phase S5: the client-facing branded-plan view consumes this route,
+  // so the response DTO must carry `branding` when the trainer set it on the
+  // confirmed `PlanSpec` — without ever widening the S2 authorization.
+  it("5.1/5.2 includes branding on the response when the confirmed spec carries it", async () => {
+    const repos = buildRepos({
+      assignmentRepo: { findByClientUserId: vi.fn().mockResolvedValue(activeClientAssignment()) },
+      planRepo: { findLatestReadyByOwner: vi.fn().mockResolvedValue(readyPlan) },
+      specRepo: {
+        findConfirmedById: vi.fn().mockResolvedValue({
+          specJson: { branding: { trainerName: "Coach Ana", title: "Ana's Cut", accentColor: "#1E90FF" } },
+        }),
+      },
+    });
+    app = await buildTestApp(repos, "member", CLIENT_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/me/trainer-plan",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      id: "plan-1",
+      status: "ready",
+      program: readyPlan.programJson,
+      specId: "spec-1",
+      name: "Summer Cut",
+      branding: { trainerName: "Coach Ana", title: "Ana's Cut", accentColor: "#1E90FF" },
+    });
+    // The spec lookup is scoped by the SAME resolved trainerTenantId + the
+    // caller's own userId — never widened beyond the S2 authorization.
+    expect(repos.specRepo.findConfirmedById).toHaveBeenCalledWith(TENANT_ID, CLIENT_ID, "spec-1");
+  });
+
+  it("5.1/5.2 omits branding when the confirmed spec has none (base plan, unchanged shape)", async () => {
+    const repos = buildRepos({
+      assignmentRepo: { findByClientUserId: vi.fn().mockResolvedValue(activeClientAssignment()) },
+      planRepo: { findLatestReadyByOwner: vi.fn().mockResolvedValue(readyPlan) },
+      specRepo: {
+        findConfirmedById: vi.fn().mockResolvedValue({ specJson: {} }),
+      },
+    });
+    app = await buildTestApp(repos, "member", CLIENT_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/me/trainer-plan",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.branding).toBeUndefined();
   });
 });
 

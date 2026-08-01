@@ -225,6 +225,21 @@ export function fetchLatestPlanForSpec(
   );
 }
 
+/**
+ * Fetch the caller's own trainer-built plan via `GET /me/trainer-plan`
+ * (15b-v2-trainer-dashboard-branding, Phase S2's `resolveClientTrainerTenant`
+ * primitive — Phase S5 client-facing consumer). A `403` means the caller has
+ * no active trainer assignment (the S2 deny-by-default authorization); a
+ * `404` means the assignment exists but no ready plan does yet. Both surface
+ * as a typed `PlanStatusError` carrying `status` — never a thrown exception —
+ * so `TrainerPlanScreen` can render a denied/pending state.
+ */
+export function fetchTrainerPlan(
+  options: ClientOptions = {},
+): Promise<FetchPlanStatusResult> {
+  return fetchPlan("/me/trainer-plan", "fetch_trainer_plan_failed", options);
+}
+
 /** Shared POST helper for the regenerate/adapt confirm endpoints (both send `{}`). */
 async function postGeneration(
   path: string,

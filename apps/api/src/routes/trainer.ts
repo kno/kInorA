@@ -3,6 +3,7 @@ import type {
   ClientDashboardDTO,
   ClientSummaryDTO,
   InviteClientRequest,
+  PlanBranding,
   TrainerClientAssignmentDTO,
   UserId,
 } from "@kinora/contracts";
@@ -101,6 +102,22 @@ interface TrainerRoutePlanRepo {
 }
 
 /**
+ * Local structural port for the confirmed-spec read (`PlanSpecRepository.
+ * findConfirmedById`, 15b-v2 Phase S5) — backs `GET /me/trainer-plan`'s
+ * branding lookup. The route never imports the DB layer directly
+ * (architecture rule `routes-no-db-layer`). Scoped the SAME way the S2 plan
+ * read is: `(tenantId, userId, id)` — a cross-tenant or cross-user id matches
+ * nothing, so this can never widen the S2 authorization it rides on.
+ */
+interface TrainerRouteSpecRepo {
+  findConfirmedById(
+    tenantId: string,
+    userId: string,
+    id: string,
+  ): Promise<{ specJson: { branding?: PlanBranding } } | undefined>;
+}
+
+/**
  * Local structural port for the membership repository (see
  * `TrainerRouteAssignmentRepo` doc comment for why this is local, not
  * imported).
@@ -143,6 +160,13 @@ export interface TrainerRoutesOptions {
   dashboardRepo: TrainerRouteDashboardRepo;
   /** Backs `GET /me/trainer-plan` (15b-v2, Phase S2 — #283). */
   planRepo: TrainerRoutePlanRepo;
+  /**
+   * Backs `GET /me/trainer-plan`'s branding lookup (15b-v2, Phase S5).
+   * Optional so existing test/registration call sites that predate S5 keep
+   * compiling unchanged; when absent the route serves the base (unbranded)
+   * plan shape exactly as before this slice.
+   */
+  specRepo?: TrainerRouteSpecRepo;
 }
 
 const inviteSchema = {
@@ -162,7 +186,8 @@ function toActorOwnerContext(request: FastifyRequest): ActorOwnerContext {
 }
 
 export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fastify, options) => {
-  const { assignmentRepo, membershipRepo, userRepo, entitlementReader, dashboardRepo, planRepo } = options;
+  const { assignmentRepo, membershipRepo, userRepo, entitlementReader, dashboardRepo, planRepo, specRepo } =
+    options;
 
   // GET /trainer/clients/:clientUserId/dashboard (15b-v2-trainer-dashboard-
   // branding, Phase S1). `resolveAuthorizedOwner` is the SAME deny-by-default
@@ -231,6 +256,18 @@ export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fa
         return reply.code(404).send({ error: "not_found" });
       }
 
+      // 15b-v2 Phase S5: thread the trainer-authored branding (if any) from
+      // the confirmed PlanSpec onto the response so the client-facing view
+      // can render it. Scoped by the SAME (trainerTenantId, userId) the S2
+      // plan read already resolved — never a caller-supplied tenant/user, so
+      // this can never widen the S2 authorization. `specRepo` is optional
+      // (back-compat for pre-S5 registrations); absent branding or an absent
+      // specRepo both render the base (unbranded) plan.
+      const specRow = specRepo
+        ? await specRepo.findConfirmedById(trainerTenantId, userId, plan.planSpecId)
+        : undefined;
+      const branding = specRow?.specJson?.branding;
+
       // Map to the client DTO (see GET /workout-plans/:id in plan.ts): client
       // reads { id, status, program, specId, name } — not the raw DB row.
       return reply.code(200).send({
@@ -239,6 +276,7 @@ export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fa
         program: plan.programJson ?? undefined,
         specId: plan.planSpecId,
         name: plan.name ?? undefined,
+        ...(branding ? { branding } : {}),
       });
     },
   );

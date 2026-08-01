@@ -75,9 +75,9 @@ Rationale: S1 independently shippable (no #283 dep). S2 is the highest-risk secu
 
 ## Phase S5: Client-Facing Branded-Plan View
 
-- [ ] 5.1 RED: web e2e — client opens `/me/trainer-plan`, sees branded accent/title/trainerName
-- [ ] 5.2 GREEN: wire web client UI to consume S2 route
-- [ ] 5.3 RED: mobile RN test — same branded-view assertion
-- [ ] 5.4 GREEN: wire mobile client UI to consume S2 route
-- [ ] 5.5 Run `pnpm architecture`
-- [ ] 5.6 Run `pnpm ui-api-guard` — verify server-only types not imported client-side; call via server action
+- [x] 5.1 RED: web e2e — client opens `/me/trainer-plan`, sees branded accent/title/trainerName
+- [x] 5.2 GREEN: wire web client UI to consume S2 route
+- [x] 5.3 RED: mobile RN test — same branded-view assertion
+- [x] 5.4 GREEN: wire mobile client UI to consume S2 route
+- [x] 5.5 Run `pnpm architecture`
+- [x] 5.6 Run `pnpm ui-api-guard` — verify server-only types not imported client-side; call via server action

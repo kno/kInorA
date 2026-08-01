@@ -749,6 +749,17 @@
     "refresh": "Actualizar",
     "brandedBy": "De {trainerName}"
   },
+  "trainerPlan": {
+    "navLabel": "Plan de mi entrenador",
+    "denied": {
+      "title": "Aún no tienes un plan de entrenador",
+      "desc": "En este momento no tienes una asignación activa con un entrenador. Pídele a tu entrenador que te invite."
+    },
+    "pending": {
+      "title": "Tu entrenador está preparando tu plan",
+      "desc": "Tu entrenador todavía no ha terminado de crear tu plan. Vuelve a comprobarlo pronto."
+    }
+  },
   "exercises": {
     "title": "Ejercicios",
     "description": "Explora y busca en la biblioteca de ejercicios para tus entrenamientos.",

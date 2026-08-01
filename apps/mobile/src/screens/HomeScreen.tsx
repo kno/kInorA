@@ -78,6 +78,10 @@ export default function HomeScreen({
   // 15a-v2-trainer-account-access Slice 5: always shown — `ClientListScreen`
   // itself gates on the API's 403 (no client-visible role/tier exists today).
   const clientsLabel = intl.formatMessage({ id: "clients.navLabel" });
+  // 15b-v2-trainer-dashboard-branding Slice S5: always shown, mirroring
+  // `clientsLabel` above — `TrainerPlanScreen` itself gates on the API's 403
+  // (no client-visible "has an active trainer assignment" flag exists today).
+  const trainerPlanLabel = intl.formatMessage({ id: "trainerPlan.navLabel" });
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [summary, setSummary] = useState<DashboardSummaryDTO | undefined>();
@@ -209,6 +213,15 @@ export default function HomeScreen({
         accessibilityLabel={clientsLabel}
       >
         <Text style={styles.historyText}>{clientsLabel}</Text>
+      </Pressable>
+
+      <Pressable
+        style={({ pressed }) => [styles.historyButton, pressed && styles.historyButtonPressed]}
+        onPress={() => navigationRef.current.navigate("TrainerPlan")}
+        accessibilityRole="button"
+        accessibilityLabel={trainerPlanLabel}
+      >
+        <Text style={styles.historyText}>{trainerPlanLabel}</Text>
       </Pressable>
 
       <Pressable

@@ -59,6 +59,7 @@ import VoiceScreen from "./src/screens/voice/VoiceScreen";
 import PlanStatusScreen, {
   type PlanStatusRouteParams,
 } from "./src/screens/plan/PlanStatusScreen";
+import TrainerPlanScreen from "./src/screens/plan/TrainerPlanScreen";
 import ClientListScreen from "./src/screens/clients/ClientListScreen";
 import ClientCreatePlanScreen, {
   type ClientCreatePlanRouteParams,
@@ -86,6 +87,7 @@ type RootStackParamList = {
   CreatePlanAssistant: undefined;
   CreatePlanVoice: undefined;
   PlanStatus: PlanStatusRouteParams;
+  TrainerPlan: undefined;
   ClientList: undefined;
   ClientCreatePlan: ClientCreatePlanRouteParams;
 };
@@ -98,6 +100,7 @@ const PROTECTED_ROUTES: (keyof RootStackParamList)[] = [
   "CreatePlanAssistant",
   "CreatePlanVoice",
   "PlanStatus",
+  "TrainerPlan",
   "ClientList",
   "ClientCreatePlan",
 ];
@@ -226,6 +229,11 @@ export default function App() {
             name="PlanStatus"
             component={PlanStatusScreen}
             options={{ title: "Your plan" }}
+          />
+          <Stack.Screen
+            name="TrainerPlan"
+            component={TrainerPlanScreen}
+            options={{ title: "Your trainer's plan" }}
           />
           <Stack.Screen
             name="ClientList"

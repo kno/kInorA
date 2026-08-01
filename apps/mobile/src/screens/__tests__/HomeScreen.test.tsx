@@ -251,4 +251,19 @@ describe("HomeScreen (C3 — dashboard fetch + plan-status nav entry)", () => {
     const logout = renderer.root.findAllByProps({ children: "Cerrar sesión" });
     expect(logout.length).toBeGreaterThan(0);
   });
+
+  // 15b-v2-trainer-dashboard-branding Slice S5: always-shown entry point,
+  // mirroring the `ClientList` nav entry — `TrainerPlanScreen` itself gates
+  // on the API's 403 (no client-visible "has an active assignment" flag
+  // exists today).
+  it("always shows a trainer-plan nav entry that navigates to TrainerPlan", async () => {
+    const { renderer, navigation } = renderScreen();
+    await settle();
+
+    const trainerPlanButton = renderer.root.find(
+      (n) => n.props.accessibilityLabel === "My trainer's plan",
+    );
+    trainerPlanButton.props.onPress();
+    expect(navigation.navigate).toHaveBeenCalledWith("TrainerPlan");
+  });
 });
