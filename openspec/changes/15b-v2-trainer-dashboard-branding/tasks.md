@@ -44,17 +44,17 @@ Rationale: S1 independently shippable (no #283 dep). S2 is the highest-risk secu
 
 ## Phase S2: Client-to-Trainer-Tenant Read Authorization (#283)
 
-- [ ] 2.1 RED: revoked/missing assignment → `ForbiddenOwnerAccess` flat 403, no repo call
-- [ ] 2.2 RED: client A cannot read client B's data (filter always `ctx.actorUserId`)
-- [ ] 2.3 RED: client cannot read beyond assigned trainer (single-assignment resolution)
-- [ ] 2.4 RED: normal user self-only + login byte-identical (`selectActiveTenant` unwired assertion)
-- [ ] 2.5 GREEN: `apps/api/src/trainer/client-access.ts` `resolveClientTrainerTenant(ctx, deps)`
-- [ ] 2.6 RED: happy path — client reads own plan in trainer's tenant via `/me/trainer-plan`
-- [ ] 2.7 GREEN: `findLatestReadyByOwner` in `apps/api/src/db/repositories/workout-plan.ts`
-- [ ] 2.8 GREEN: `GET /me/trainer-plan` route in `trainer.ts`
-- [ ] 2.9 Verify zero diff in `service.ts`/`social.ts`/`plugin.ts` (self-only-unchanged proof)
-- [ ] 2.10 Run `pnpm architecture` — route uses injected `PlanRouteRepo`-style interface
-- [ ] 2.11 Run `pnpm ui-api-guard` (N/A this slice, API-only)
+- [x] 2.1 RED: revoked/missing assignment → `ForbiddenOwnerAccess` flat 403, no repo call
+- [x] 2.2 RED: client A cannot read client B's data (filter always `ctx.actorUserId`)
+- [x] 2.3 RED: client cannot read beyond assigned trainer (single-assignment resolution)
+- [x] 2.4 RED: normal user self-only + login byte-identical (`selectActiveTenant` unwired assertion)
+- [x] 2.5 GREEN: `apps/api/src/trainer/client-access.ts` `resolveClientTrainerTenant(ctx, deps)`
+- [x] 2.6 RED: happy path — client reads own plan in trainer's tenant via `/me/trainer-plan`
+- [x] 2.7 GREEN: `findLatestReadyByOwner` in `apps/api/src/db/repositories/workout-plan.ts`
+- [x] 2.8 GREEN: `GET /me/trainer-plan` route in `trainer.ts`
+- [x] 2.9 Verify zero diff in `service.ts`/`social.ts`/`plugin.ts` (self-only-unchanged proof)
+- [x] 2.10 Run `pnpm architecture` — route uses injected `PlanRouteRepo`-style interface
+- [x] 2.11 Run `pnpm ui-api-guard` (N/A this slice, API-only)
 
 ## Phase S3: Branding Data Model + Authoring
 

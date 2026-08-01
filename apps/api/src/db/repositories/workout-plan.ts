@@ -201,4 +201,39 @@ export class WorkoutPlanRepository {
       );
     return rows[0] as WorkoutPlanRecord | undefined;
   }
+
+  /**
+   * Return the most recently created "ready" plan for a given tenant + owner
+   * userId (15b-v2-trainer-dashboard-branding, Phase S2 — #283 client→
+   * trainer-tenant read). Ordered by createdAt DESC so the latest ready plan
+   * wins when multiple exist (one per confirm/regenerate call).
+   *
+   * Callers MUST supply `tenantId` from a resolved, deny-by-default source
+   * (`resolveClientTrainerTenant` for the client-plan read; never a
+   * caller-supplied tenant) and MUST supply `userId` as the resolved owner —
+   * this method itself does not authorize anything, it is a plain
+   * tenant+user-scoped read exactly like `findAllByUser`/`findById` above.
+   * Both tenantId and userId are required in the WHERE clause: a
+   * cross-tenant or same-tenant cross-user query always returns undefined,
+   * and a "generating"/"failed" plan is never returned even if it is the
+   * newest row for the owner.
+   */
+  async findLatestReadyByOwner(
+    tenantId: string,
+    userId: string
+  ): Promise<WorkoutPlanRecord | undefined> {
+    const rows = await this.db
+      .select()
+      .from(workoutPlans)
+      .where(
+        and(
+          eq(workoutPlans.tenantId, tenantId),
+          eq(workoutPlans.userId, userId),
+          eq(workoutPlans.status, "ready")
+        )
+      )
+      .orderBy(desc(workoutPlans.createdAt))
+      .limit(1);
+    return rows[0] as WorkoutPlanRecord | undefined;
+  }
 }
