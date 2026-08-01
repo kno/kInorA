@@ -9,6 +9,20 @@ export const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     backgroundColor: colors.bg,
   },
+  // #294: the ready state uses a ScrollView. `scroll` is the ScrollView itself;
+  // `scrollContent` is its contentContainerStyle — flexGrow keeps the content
+  // vertically centered when it fits and lets it scroll (no overlap) when the
+  // secondary menu makes it taller than the viewport.
+  scroll: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[4],
+  },
   title: {
     fontFamily: fonts.displayBold,
     fontSize: 28,

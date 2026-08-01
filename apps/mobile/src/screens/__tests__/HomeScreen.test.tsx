@@ -18,6 +18,7 @@ import type { FetchDashboardResult } from "../../api/plan-status-client";
 // reference it (a lingering `<TextInput>` would render `undefined` and throw).
 vi.mock("react-native", () => ({
   View: "View",
+  ScrollView: "ScrollView",
   Text: "Text",
   Pressable: ({ children, style, onPress, ...rest }: any) => (
     <button type="button" onClick={onPress} {...rest}>
@@ -265,5 +266,13 @@ describe("HomeScreen (C3 — dashboard fetch + plan-status nav entry)", () => {
     );
     trainerPlanButton.props.onPress();
     expect(navigation.navigate).toHaveBeenCalledWith("TrainerPlan");
+  });
+
+  it("#294: renders the ready state in a ScrollView so the growing menu never overflows", async () => {
+    const { renderer } = renderScreen();
+    await settle();
+
+    const ready = renderer.root.find((n) => n.props.testID === "home-ready");
+    expect(ready.type).toBe("ScrollView");
   });
 });
