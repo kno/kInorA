@@ -3,6 +3,7 @@ import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import fastifyMultipart from "@fastify/multipart";
 import { requireAuth } from "../auth/plugin.js";
 import {
+  assertBranding,
   assertPlanSpecInput,
   assertPlanSpecShape,
   PLAN_NAME_MAX_LENGTH,
@@ -462,7 +463,7 @@ const adaptSchema = {
 /** Outcome of {@link buildConfirmedSpecFromInput}: either a validated spec or the HTTP error to return. */
 type BuildConfirmedSpecResult =
   | { ok: true; spec: PlanSpec }
-  | { ok: false; code: 409 | 422; error: string };
+  | { ok: false; code: 400 | 409 | 422; error: string };
 
 /**
  * Validate a raw wizard-shaped input (goal, daysPerWeek, sessionDurationMinutes,
@@ -475,11 +476,14 @@ type BuildConfirmedSpecResult =
  * path rather than duplicating it.
  *
  * Returns `{ ok: false, code: 409, error: "incomplete_spec" }` when the input
- * fails `assertPlanSpecInput`, or `{ ok: false, code: 422, error:
+ * fails `assertPlanSpecInput`, `{ ok: false, code: 422, error:
  * "plan_name_too_long" }` when a supplied `name` exceeds
- * `PLAN_NAME_MAX_LENGTH` after trimming. `preferenceScores` is ALWAYS derived
- * server-side (never trusted from input) and the final result is re-validated
- * via `assertPlanSpecShape` as an integrity guard.
+ * `PLAN_NAME_MAX_LENGTH` after trimming, or `{ ok: false, code: 400, error:
+ * "invalid_branding" }` when a supplied `branding` fails `assertBranding`
+ * (15b-v2 S3 — e.g. a malformed `accentColor` or an over-60-char
+ * `trainerName`/`title`). `preferenceScores` is ALWAYS derived server-side
+ * (never trusted from input) and the final result is re-validated via
+ * `assertPlanSpecShape` as an integrity guard.
  */
 function buildConfirmedSpecFromInput(rawSpec: unknown): BuildConfirmedSpecResult {
   try {
@@ -491,7 +495,7 @@ function buildConfirmedSpecFromInput(rawSpec: unknown): BuildConfirmedSpecResult
   const inputSpec = rawSpec as Pick<
     PlanSpec,
     "goal" | "daysPerWeek" | "sessionDurationMinutes" | "location" | "equipment" | "limitations"
-  > & { name?: unknown };
+  > & { name?: unknown; branding?: unknown };
   const preferenceScores = derivePreferenceScores(inputSpec);
 
   // #93: preserve a wizard/trainer-captured plan name. Trim FIRST, then bound
@@ -504,6 +508,19 @@ function buildConfirmedSpecFromInput(rawSpec: unknown): BuildConfirmedSpecResult
   }
   const name = trimmedName !== "" ? trimmedName : null;
 
+  // 15b-v2 S3: optional trainer-authored branding. Validated BEFORE any
+  // quota consumption or write — an invalid `accentColor`/over-long
+  // trainerName/title is rejected as a clean 400, mirroring the
+  // plan_name_too_long 422 branch above. Absent branding is untouched
+  // (undefined is never attached to confirmedSpec, so a plan without
+  // branding persists/reads exactly as before this slice).
+  try {
+    assertBranding(inputSpec.branding);
+  } catch {
+    return { ok: false, code: 400, error: "invalid_branding" };
+  }
+  const branding = inputSpec.branding as PlanSpec["branding"] | undefined;
+
   const confirmedSpec: PlanSpec = {
     goal: inputSpec.goal,
     daysPerWeek: inputSpec.daysPerWeek,
@@ -514,6 +531,7 @@ function buildConfirmedSpecFromInput(rawSpec: unknown): BuildConfirmedSpecResult
     preferenceScores,
     confirmed: true,
     name,
+    ...(branding !== undefined ? { branding } : {}),
   };
 
   // Final integrity guard — confirmedSpec must now satisfy the full PlanSpec shape.

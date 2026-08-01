@@ -406,4 +406,117 @@ describe("POST /clients/:clientUserId/plan-specs (15a-v2-trainer-account-access,
     expect(billing.checkAndConsume).not.toHaveBeenCalled();
     expect(repo.promoteDraftToSpec).not.toHaveBeenCalled();
   });
+
+  // --- Branding authoring (15b-v2 S3) — trainer sets branding at plan-creation ---
+
+  it("persists trainer-authored branding on the confirmed spec", async () => {
+    const branding = { trainerName: "Coach Ana", title: "Summer Cut", accentColor: "#1E90FF" };
+    const repo = buildPlanRepo();
+    const generationService = buildGenerationService();
+    const billing = buildBilling(true);
+
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, TRAINER_ID, "trainer"),
+      repo,
+      generationService,
+      billing,
+      trainerAccess: {
+        assignmentRepo: buildAssignmentRepo(true),
+        entitlementReader: buildEntitlementReader("trainer"),
+      },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/clients/${CLIENT_ID}/plan-specs`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { ...validSpecInput, branding },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(repo.promoteDraftToSpec).toHaveBeenCalledWith(
+      TENANT_ID,
+      CLIENT_ID,
+      expect.objectContaining({ branding }),
+    );
+  });
+
+  it("returns 400 invalid_branding for an invalid accentColor, before any quota consumption or write", async () => {
+    const repo = buildPlanRepo();
+    const billing = buildBilling(true);
+
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, TRAINER_ID, "trainer"),
+      repo,
+      billing,
+      trainerAccess: {
+        assignmentRepo: buildAssignmentRepo(true),
+        entitlementReader: buildEntitlementReader("trainer"),
+      },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/clients/${CLIENT_ID}/plan-specs`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { ...validSpecInput, branding: { accentColor: "blue" } },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: "invalid_branding" });
+    expect(billing.checkAndConsume).not.toHaveBeenCalled();
+    expect(repo.promoteDraftToSpec).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 invalid_branding for a trainerName/title over 60 chars", async () => {
+    const repo = buildPlanRepo();
+
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, TRAINER_ID, "trainer"),
+      repo,
+      billing: buildBilling(true),
+      trainerAccess: {
+        assignmentRepo: buildAssignmentRepo(true),
+        entitlementReader: buildEntitlementReader("trainer"),
+      },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/clients/${CLIENT_ID}/plan-specs`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { ...validSpecInput, branding: { trainerName: "a".repeat(61) } },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: "invalid_branding" });
+    expect(repo.promoteDraftToSpec).not.toHaveBeenCalled();
+  });
+
+  it("creates a plan with no branding field when absent — base (unbranded) plan unaffected", async () => {
+    const repo = buildPlanRepo();
+    const generationService = buildGenerationService();
+
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, TRAINER_ID, "trainer"),
+      repo,
+      generationService,
+      billing: buildBilling(true),
+      trainerAccess: {
+        assignmentRepo: buildAssignmentRepo(true),
+        entitlementReader: buildEntitlementReader("trainer"),
+      },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/clients/${CLIENT_ID}/plan-specs`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: validSpecInput,
+    });
+
+    expect(res.statusCode).toBe(201);
+    const [, , persistedSpec] = repo.promoteDraftToSpec.mock.calls[0]!;
+    expect(persistedSpec).not.toHaveProperty("branding");
+  });
 });
