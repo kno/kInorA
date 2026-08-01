@@ -1,7 +1,17 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { renderToString } from "react-dom/server";
+import { NextIntlClientProvider } from "next-intl";
+import { catalogs } from "@kinora/i18n";
 import { usePathname } from "next/navigation";
 import AppLayout from "../layout";
+
+function renderToStringWithIntl(ui: Parameters<typeof renderToString>[0]) {
+  return renderToString(
+    <NextIntlClientProvider locale="en" messages={catalogs.en} timeZone="UTC">
+      {ui}
+    </NextIntlClientProvider>,
+  );
+}
 
 vi.mock("next/navigation", () => ({
   usePathname: vi.fn(() => "/dashboard"),
@@ -35,7 +45,7 @@ describe("AppLayout (app route group)", () => {
   });
 
   it("renders dashboard children inside the AppShell", async () => {
-    const html = renderToString(
+    const html = renderToStringWithIntl(
       await AppLayout({
         children: (
           <div data-testid="dashboard-content">
@@ -51,7 +61,7 @@ describe("AppLayout (app route group)", () => {
   });
 
   it("renders the AppShell with navigation around any child content", async () => {
-    const html = renderToString(
+    const html = renderToStringWithIntl(
       await AppLayout({
         children: <p>Page content here</p>,
       })
@@ -67,7 +77,7 @@ describe("AppLayout (app route group)", () => {
   });
 
   it("wires the translated memory navigation label through the app shell", async () => {
-    const html = renderToString(
+    const html = renderToStringWithIntl(
       await AppLayout({
         children: <p>Page content here</p>,
       })
@@ -77,7 +87,7 @@ describe("AppLayout (app route group)", () => {
   });
 
   it("wires the translated billing navigation label and /billing link through the app shell", async () => {
-    const html = renderToString(
+    const html = renderToStringWithIntl(
       await AppLayout({
         children: <p>Page content here</p>,
       })

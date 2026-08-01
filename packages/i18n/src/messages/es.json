@@ -16,6 +16,17 @@
     "menuLabel": "Abrir menú",
     "ariaLabel": "Principal"
   },
+  "appNav": {
+    "dashboard": "Panel",
+    "plan": "Plan",
+    "statistics": "Estadísticas",
+    "history": "Historial",
+    "createPlan": "Crear plan",
+    "exercises": "Ejercicios",
+    "profile": "Perfil",
+    "more": "Más",
+    "logout": "Cerrar sesión"
+  },
   "hero": {
     "eyebrow": "Entrenador con IA",
     "title": "Tu entrenador personal, ",

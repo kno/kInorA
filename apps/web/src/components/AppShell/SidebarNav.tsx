@@ -2,14 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, StatsIcon } from "@/components/icons";
 import { isActivePath } from "./nav-utils";
 import { logoutAction } from "@/app/(app)/dashboard/actions";
 import styles from "./SidebarNav.module.css";
 
-/** Navigation item descriptor: label, href, and icon name. */
+/** Navigation item descriptor: i18n label key (or a resolved label for
+ * props-supplied items like Memory/Billing), href, and icon name. */
 interface NavItem {
-  label: string;
+  labelKey?: string;
+  label?: string;
   href: string;
   icon: "home" | "plan" | "stats" | "history" | "create" | "exercises" | "memory" | "billing";
 }
@@ -29,12 +32,12 @@ const FALLBACK_USER: SidebarUser = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: "home" },
-  { label: "Plan", href: "/plan", icon: "plan" },
-  { label: "Statistics", href: "/stats", icon: "stats" },
-  { label: "History", href: "/history", icon: "history" },
-  { label: "Create Plan", href: "/create-plan", icon: "create" },
-  { label: "Exercises", href: "/exercises", icon: "exercises" },
+  { labelKey: "appNav.dashboard", href: "/dashboard", icon: "home" },
+  { labelKey: "appNav.plan", href: "/plan", icon: "plan" },
+  { labelKey: "appNav.statistics", href: "/stats", icon: "stats" },
+  { labelKey: "appNav.history", href: "/history", icon: "history" },
+  { labelKey: "appNav.createPlan", href: "/create-plan", icon: "create" },
+  { labelKey: "appNav.exercises", href: "/exercises", icon: "exercises" },
 ];
 
 /**
@@ -54,9 +57,10 @@ export function SidebarNav({
   memoryNavLabel?: string;
   billingNavLabel?: string;
 } = {}) {
+  const t = useTranslations();
   const pathname = usePathname();
   const identity = user ?? FALLBACK_USER;
-  const navItems = [
+  const navItems: NavItem[] = [
     ...NAV_ITEMS,
     ...(memoryNavLabel
       ? [{ label: memoryNavLabel, href: "/memory", icon: "memory" as const }]
@@ -86,7 +90,7 @@ export function SidebarNav({
               aria-current={isActive ? "page" : undefined}
             >
               <NavIcon name={item.icon} />
-              <span>{item.label}</span>
+              <span>{item.label ?? t(item.labelKey!)}</span>
             </Link>
           );
         })}
@@ -110,7 +114,7 @@ export function SidebarNav({
           </div>
         </Link>
         <form action={logoutAction} className={styles.logoutForm}>
-          <button type="submit" className={styles.logoutButton} aria-label="Log out">
+          <button type="submit" className={styles.logoutButton} aria-label={t("appNav.logout")}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true" focusable="false">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <polyline points="16 17 21 12 16 7" />

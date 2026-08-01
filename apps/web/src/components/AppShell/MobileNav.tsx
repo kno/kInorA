@@ -3,29 +3,31 @@
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, StatsIcon, UserIcon } from "@/components/icons";
 import { isActivePath } from "./nav-utils";
 import { logoutAction } from "@/app/(app)/dashboard/actions";
 import styles from "./MobileNav.module.css";
 
 interface TabItem {
-  label: string;
+  labelKey: string;
+  label?: string;
   href: string;
   icon: "home" | "plan" | "stats" | "history" | "exercises" | "profile" | "memory" | "billing";
 }
 
 // Primary destinations always visible in the bottom bar.
 const PRIMARY_TABS: TabItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: "home" },
-  { label: "Plan", href: "/plan", icon: "plan" },
-  { label: "History", href: "/history", icon: "history" },
+  { labelKey: "appNav.dashboard", href: "/dashboard", icon: "home" },
+  { labelKey: "appNav.plan", href: "/plan", icon: "plan" },
+  { labelKey: "appNav.history", href: "/history", icon: "history" },
 ];
 
 // Secondary destinations tucked behind the "More" overflow menu.
 const SECONDARY_TABS: TabItem[] = [
-  { label: "Statistics", href: "/stats", icon: "stats" },
-  { label: "Exercises", href: "/exercises", icon: "exercises" },
-  { label: "Profile", href: "/profile", icon: "profile" },
+  { labelKey: "appNav.statistics", href: "/stats", icon: "stats" },
+  { labelKey: "appNav.exercises", href: "/exercises", icon: "exercises" },
+  { labelKey: "appNav.profile", href: "/profile", icon: "profile" },
 ];
 
 /**
@@ -43,6 +45,7 @@ export function MobileNav({
   memoryNavLabel,
   billingNavLabel,
 }: { memoryNavLabel?: string; billingNavLabel?: string } = {}) {
+  const t = useTranslations();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId();
@@ -51,8 +54,12 @@ export function MobileNav({
 
   const secondaryTabs: TabItem[] = [
     ...SECONDARY_TABS,
-    ...(memoryNavLabel ? [{ label: memoryNavLabel, href: "/memory", icon: "memory" as const }] : []),
-    ...(billingNavLabel ? [{ label: billingNavLabel, href: "/billing", icon: "billing" as const }] : []),
+    ...(memoryNavLabel
+      ? [{ labelKey: "", label: memoryNavLabel, href: "/memory", icon: "memory" as const }]
+      : []),
+    ...(billingNavLabel
+      ? [{ labelKey: "", label: billingNavLabel, href: "/billing", icon: "billing" as const }]
+      : []),
   ];
 
   const isMoreActive = secondaryTabs.some((tab) => isActivePath(pathname, tab.href));
@@ -112,6 +119,7 @@ export function MobileNav({
           <MobileTab
             key={tab.href}
             tab={tab}
+            label={t(tab.labelKey)}
             isActive={isActivePath(pathname, tab.href)}
           />
         ))}
@@ -121,7 +129,7 @@ export function MobileNav({
           <Link
             href="/create-plan"
             className={styles.fab}
-            aria-label="Create Plan"
+            aria-label={t("appNav.createPlan")}
           >
             <CreateIcon className={styles.fabIcon} size={26} />
           </Link>
@@ -132,6 +140,7 @@ export function MobileNav({
           <MobileTab
             key={tab.href}
             tab={tab}
+            label={t(tab.labelKey)}
             isActive={isActivePath(pathname, tab.href)}
           />
         ))}
@@ -146,7 +155,7 @@ export function MobileNav({
           onClick={() => setMenuOpen((open) => !open)}
         >
           <MoreIcon className={styles.icon} />
-          <span>More</span>
+          <span>{t("appNav.more")}</span>
         </button>
       </nav>
 
@@ -170,7 +179,7 @@ export function MobileNav({
             onClick={closeMenu}
           >
             <TabIcon name={tab.icon} />
-            <span>{tab.label}</span>
+            <span>{tab.label ?? t(tab.labelKey)}</span>
           </Link>
         ))}
 
@@ -183,7 +192,7 @@ export function MobileNav({
               <polyline points="16 17 21 12 16 7" />
               <line x1="21" y1="12" x2="9" y2="12" />
             </svg>
-            <span>Log out</span>
+            <span>{t("appNav.logout")}</span>
           </button>
         </form>
       </div>
@@ -197,7 +206,7 @@ export default MobileNav;
 // Sub-component: individual tab item
 // ---------------------------------------------------------------------------
 
-function MobileTab({ tab, isActive }: { tab: TabItem; isActive: boolean }) {
+function MobileTab({ tab, label, isActive }: { tab: TabItem; label: string; isActive: boolean }) {
   return (
     <Link
       href={tab.href}
@@ -205,7 +214,7 @@ function MobileTab({ tab, isActive }: { tab: TabItem; isActive: boolean }) {
       aria-current={isActive ? "page" : undefined}
     >
       <TabIcon name={tab.icon} />
-      <span>{tab.label}</span>
+      <span>{label}</span>
     </Link>
   );
 }
