@@ -9,6 +9,7 @@ import type {
 import { requireRole, requireAuth } from "../auth/plugin.js";
 import { assertTrainerEntitled, resolveAuthorizedOwner, ForbiddenOwnerAccess } from "../trainer/owner-access.js";
 import type { ActorOwnerContext } from "../trainer/owner-access.js";
+import { resolveClientTrainerTenant } from "../trainer/client-access.js";
 import type { EntitlementReaderPort } from "../billing/entitlement.js";
 
 /**
@@ -78,6 +79,28 @@ interface TrainerRouteDashboardRepo {
 }
 
 /**
+ * Local structural port for the client-facing trainer-plan read
+ * (`WorkoutPlanRepository.findLatestReadyByOwner`, 15b-v2 Phase S2 — #283) —
+ * the route never imports the DB layer directly (architecture rule
+ * `routes-no-db-layer`).
+ */
+interface TrainerRoutePlanRepo {
+  findLatestReadyByOwner(
+    tenantId: string,
+    userId: string,
+  ): Promise<
+    | {
+        id: string;
+        status: string;
+        programJson?: unknown;
+        planSpecId: string;
+        name?: string | null;
+      }
+    | undefined
+  >;
+}
+
+/**
  * Local structural port for the membership repository (see
  * `TrainerRouteAssignmentRepo` doc comment for why this is local, not
  * imported).
@@ -118,6 +141,8 @@ export interface TrainerRoutesOptions {
   entitlementReader: Pick<EntitlementReaderPort, "loadContext">;
   /** Backs `GET /trainer/clients/:clientUserId/dashboard` (15b-v2, Phase S1). */
   dashboardRepo: TrainerRouteDashboardRepo;
+  /** Backs `GET /me/trainer-plan` (15b-v2, Phase S2 — #283). */
+  planRepo: TrainerRoutePlanRepo;
 }
 
 const inviteSchema = {
@@ -137,7 +162,7 @@ function toActorOwnerContext(request: FastifyRequest): ActorOwnerContext {
 }
 
 export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fastify, options) => {
-  const { assignmentRepo, membershipRepo, userRepo, entitlementReader, dashboardRepo } = options;
+  const { assignmentRepo, membershipRepo, userRepo, entitlementReader, dashboardRepo, planRepo } = options;
 
   // GET /trainer/clients/:clientUserId/dashboard (15b-v2-trainer-dashboard-
   // branding, Phase S1). `resolveAuthorizedOwner` is the SAME deny-by-default
@@ -170,6 +195,51 @@ export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fa
 
       const dashboard = await dashboardRepo.getClientDashboard(ctx.tenantId, ownerUserId);
       return reply.code(200).send(dashboard);
+    },
+  );
+
+  // GET /me/trainer-plan (15b-v2-trainer-dashboard-branding, Phase S2 — #283).
+  // `resolveClientTrainerTenant` is the DEDICATED deny-by-default client→
+  // trainer-tenant primitive (client-access.ts) — it is NOT
+  // `resolveAuthorizedOwner` (that resolver is not symmetric: it widens a
+  // TRAINER into a CLIENT's owner-id within the trainer's OWN tenant; here a
+  // CLIENT crosses INTO an assigned trainer's tenant, reading only rows keyed
+  // to their OWN userId). The resolved `trainerTenantId` is passed to
+  // `findLatestReadyByOwner` together with `ctx.actorUserId` — the userId
+  // filter is ALWAYS the caller's own id, never widened.
+  fastify.get(
+    "/me/trainer-plan",
+    { preHandler: requireAuth() },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { userId } = request.authContext!;
+
+      let trainerTenantId: string;
+      try {
+        trainerTenantId = await resolveClientTrainerTenant(
+          { actorUserId: userId },
+          { assignmentRepo },
+        );
+      } catch (err) {
+        if (err instanceof ForbiddenOwnerAccess) {
+          return reply.code(403).send({ error: "forbidden" });
+        }
+        throw err;
+      }
+
+      const plan = await planRepo.findLatestReadyByOwner(trainerTenantId, userId);
+      if (!plan) {
+        return reply.code(404).send({ error: "not_found" });
+      }
+
+      // Map to the client DTO (see GET /workout-plans/:id in plan.ts): client
+      // reads { id, status, program, specId, name } — not the raw DB row.
+      return reply.code(200).send({
+        id: plan.id,
+        status: plan.status,
+        program: plan.programJson ?? undefined,
+        specId: plan.planSpecId,
+        name: plan.name ?? undefined,
+      });
     },
   );
 
