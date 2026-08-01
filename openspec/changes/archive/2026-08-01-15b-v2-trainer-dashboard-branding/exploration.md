@@ -66,6 +66,8 @@ Requirement (1) — the trainer dashboard — has NO such dependency: it is a tr
 
 Split 15b per Approach C.1: ship trainer dashboard (req 1) + tenant-safety (req 3) as the primary slice — it has no unresolved dependency, reuses `resolveAuthorizedOwner` exactly as `plan.ts` already does, and only needs a contract/repo extension for completion-rate/recent-sessions/RPE-trend fields. Treat branded plans (req 2) as a SEPARATE follow-up change that first resolves the active-tenant/client-view question (#283) as its own explicit decision (login-time switcher vs. per-request tenant override) before building branding rendering on top of it.
 
+> Archive note: the user overrode this split recommendation and locked the FULL 3-requirement scope (including #283 resolution) for a single change — see `proposal.md`'s "Scope (locked by user)" and the design's chosen mechanism (dedicated `resolveClientTrainerTenant` primitive, not a login tenant-switch).
+
 ### Risks
 - `DashboardSummaryDTO` has no completion-rate-over-period or recent-sessions-list field today — req 1's stated scenario needs new fields/DTO, not pure reuse.
 - `computeRpeAdaptation`'s `RpeSnapshot` is a single 3-session window, not a trend series — "RPE trends" (plural, req 1) implies more than one data point; scope must be clarified.
