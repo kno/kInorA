@@ -129,7 +129,11 @@ describe("@kinora/i18n package assembly", () => {
         // 15a-v2-trainer-account-access Slice 5: the `clients.*` trainer
         // client-list/create-plan-for-client namespace has its own scoped
         // count test below, per the frozen-total convention.
-        !key.startsWith("clients."),
+        !key.startsWith("clients.") &&
+        // 15b-v2-trainer-dashboard-branding Slice S5: the `trainerPlan.*`
+        // client-facing branded-plan-view namespace has its own scoped count
+        // test below, per the frozen-total convention.
+        !key.startsWith("trainerPlan."),
     );
     // +1 `tracker.restartLabel` authored for #251 (restart-timer control on
     // the live tracker topbar; pause/restart now persist across navigation).
@@ -268,7 +272,8 @@ describe("@kinora/i18n package assembly", () => {
     // `adaptation.quotaExhausted`, so no planStatus key duplicates it.)
     // Post-review poll-loop fixes add 3: stalledTitle/Body + refresh (the
     // "taking longer than expected" terminal state after the poll-attempts cap).
-    // 15b branding adds 1: brandedBy (the "Plan by <trainer>" byline).
+    // +1 `planStatus.brandedBy` authored for 15b-v2 Slice S4 (mobile trainer
+    // branding byline shown below the branded plan title).
     expect(planStatusKeys).toHaveLength(15);
     expect(en["planStatus.readySessions"]).toContain("{count}");
     expect(es["planStatus.readySessions"]).toContain("{count}");
@@ -345,6 +350,21 @@ describe("@kinora/i18n package assembly", () => {
     expect(clientsKeys).toHaveLength(32);
     expect(flat["clients.pageTitle"]).toBe("My Clients");
     expect(flattenMessages(catalogs.es)["clients.pageTitle"]).toBe("Mis clientes");
+  });
+
+  it("the trainerPlan namespace is present with EN+ES parity (15b-v2-trainer-dashboard-branding Slice S5)", () => {
+    expect(catalogs.en.trainerPlan).toBeDefined();
+    expect(catalogs.es.trainerPlan).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+
+    const flat = flattenMessages(catalogs.en);
+    const trainerPlanKeys = Object.keys(flat).filter((key) => key.startsWith("trainerPlan."));
+    // navLabel (1) + denied.{title,desc} (2) + pending.{title,desc} (2) = 5.
+    expect(trainerPlanKeys).toHaveLength(5);
+    expect(flat["trainerPlan.navLabel"]).toBe("My trainer's plan");
+    expect(flattenMessages(catalogs.es)["trainerPlan.navLabel"]).toBe("Plan de mi entrenador");
   });
 
   it("flattenMessages + mergeWithBase compose over the full catalogs", () => {

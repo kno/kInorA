@@ -30,3 +30,16 @@ export const messages = defineMessages({
   /** Trainer byline shown below the branded title (15b-v2 S4). */
   brandedBy: { id: "planStatus.brandedBy" },
 });
+
+/**
+ * id-only descriptors for `TrainerPlanScreen` (15b-v2 Phase S5 — the mobile
+ * client-facing branded-plan view). No `defaultMessage` — the shared
+ * `@kinora/i18n` catalog's `trainerPlan.*` namespace is the single source of
+ * truth for copy (EN/ES parity enforced by the i18n parity test).
+ */
+export const trainerPlanMessages = defineMessages({
+  deniedTitle: { id: "trainerPlan.denied.title" },
+  deniedBody: { id: "trainerPlan.denied.desc" },
+  pendingTitle: { id: "trainerPlan.pending.title" },
+  pendingBody: { id: "trainerPlan.pending.desc" },
+});

@@ -749,6 +749,17 @@
     "refresh": "Refresh",
     "brandedBy": "By {trainerName}"
   },
+  "trainerPlan": {
+    "navLabel": "My trainer's plan",
+    "denied": {
+      "title": "No trainer plan yet",
+      "desc": "You don't have an active trainer assignment right now. Ask your trainer to invite you."
+    },
+    "pending": {
+      "title": "Your trainer is preparing your plan",
+      "desc": "Your trainer hasn't finished building your plan yet. Check back soon."
+    }
+  },
   "exercises": {
     "title": "Exercises",
     "description": "Browse and search the exercise library for your workouts.",

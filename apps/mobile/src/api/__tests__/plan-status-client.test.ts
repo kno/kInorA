@@ -5,6 +5,7 @@ import {
   fetchDashboardSummary,
   fetchLatestPlanForSpec,
   fetchPlanStatus,
+  fetchTrainerPlan,
   regeneratePlan,
   type FetchLike,
 } from "../plan-status-client";
@@ -169,6 +170,59 @@ describe("plan-status-client", () => {
     it("returns sessionExpired without fetching when no token is stored", async () => {
       const fetchImpl = vi.fn<FetchLike>();
       const res = await fetchLatestPlanForSpec("spec_1", {
+        getToken: async () => null,
+        fetchImpl,
+      });
+      expect(res).toEqual({
+        kind: "error",
+        message: "no_session",
+        sessionExpired: true,
+      });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+  });
+
+  // 15b-v2-trainer-dashboard-branding, Phase S5 — the mobile client-facing
+  // branded-plan view consumes `GET /me/trainer-plan` (the S2
+  // `resolveClientTrainerTenant` primitive's route).
+  describe("fetchTrainerPlan", () => {
+    it("GETs /me/trainer-plan and maps a 200 plan, including branding when present", async () => {
+      const brandedPlan = {
+        ...readyPlan,
+        branding: { trainerName: "Coach Ana", title: "Ana's Cut", accentColor: "#1E90FF" },
+      };
+      const fetchImpl = mockFetch(jsonResponse(brandedPlan));
+      const res = await fetchTrainerPlan({
+        getToken: token,
+        apiBaseUrl: "http://api.test",
+        fetchImpl,
+      });
+      expect(res).toEqual({ kind: "ok", plan: brandedPlan });
+      const { url, init } = firstCall(fetchImpl);
+      expect(url).toBe("http://api.test/me/trainer-plan");
+      expect(init.method).toBe("GET");
+      expect(init.headers.authorization).toBe("Bearer tok_123");
+    });
+
+    it("maps a 403 (no active trainer assignment) to a typed error carrying the status", async () => {
+      const res = await fetchTrainerPlan({
+        getToken: token,
+        fetchImpl: mockFetch(jsonResponse({ error: "forbidden" }, 403)),
+      });
+      expect(res).toEqual({ kind: "error", message: "forbidden", status: 403 });
+    });
+
+    it("maps a 404 (assignment exists, no ready plan yet) to a not-found error", async () => {
+      const res = await fetchTrainerPlan({
+        getToken: token,
+        fetchImpl: mockFetch(jsonResponse({ error: "not_found" }, 404)),
+      });
+      expect(res).toEqual({ kind: "error", message: "not_found", status: 404 });
+    });
+
+    it("returns sessionExpired without fetching when no token is stored", async () => {
+      const fetchImpl = vi.fn<FetchLike>();
+      const res = await fetchTrainerPlan({
         getToken: async () => null,
         fetchImpl,
       });
