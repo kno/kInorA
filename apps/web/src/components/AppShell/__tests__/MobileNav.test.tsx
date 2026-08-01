@@ -1,5 +1,7 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { usePathname } from "next/navigation";
 import { MobileNav } from "../MobileNav";
 
@@ -13,117 +15,178 @@ vi.mock("@/app/(app)/dashboard/actions", () => ({
 
 const mockedUsePathname = vi.mocked(usePathname);
 
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
 describe("MobileNav", () => {
   beforeEach(() => {
     mockedUsePathname.mockReturnValue("/dashboard");
   });
 
-  it("renders all 6 tab items", () => {
-    const html = renderToString(MobileNav());
-    const tabLabels = ["Dashboard", "Plan", "Statistics", "History", "Exercises", "Profile"];
-    for (const label of tabLabels) {
-      expect(html).toContain(label);
-    }
+  it("renders the primary bar tabs (Dashboard, Plan, History) + FAB + More", () => {
+    render(<MobileNav />);
+
+    expect(screen.getByRole("link", { name: /^Dashboard$/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /^Plan$/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /^History$/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Create Plan/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /More/i })).toBeTruthy();
+  });
+
+  it("does NOT render Statistics/Exercises/Profile/Memory/Billing as bar tabs by default", () => {
+    render(<MobileNav memoryNavLabel="Memory" billingNavLabel="Billing" />);
+
+    // The overflow menu is closed, so these must not be exposed in the
+    // accessibility tree as bar tabs (they live in the hidden panel).
+    expect(screen.queryByRole("link", { name: /^Statistics$/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Exercises$/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Profile$/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Memory$/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Billing$/i })).toBeNull();
   });
 
   it("renders a centered FAB linking to /create-plan", () => {
-    const html = renderToString(MobileNav());
+    render(<MobileNav />);
+    expect(screen.getByRole("link", { name: /Create Plan/i }).getAttribute("href")).toBe(
+      "/create-plan",
+    );
+  });
 
-    // The FAB link should point to create-plan
+  it("clicking More reveals the overflow menu with Statistics, Exercises, Profile and Log out", () => {
+    render(<MobileNav />);
+
+    const moreButton = screen.getByRole("button", { name: /More/i });
+    expect(moreButton.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(moreButton);
+
+    expect(moreButton.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("menuitem", { name: /Statistics/i })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /Exercises/i })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /Profile/i })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /Log out/i })).toBeTruthy();
+  });
+
+  it("shows Memory and Billing in the overflow menu when their labels are provided", () => {
+    render(<MobileNav memoryNavLabel="Memory" billingNavLabel="Billing" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /More/i }));
+
+    expect(screen.getByRole("menuitem", { name: /Memory/i })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /Billing/i })).toBeTruthy();
+  });
+
+  it("omits Memory/Billing from the overflow menu when their labels are not provided", () => {
+    render(<MobileNav />);
+
+    fireEvent.click(screen.getByRole("button", { name: /More/i }));
+
+    expect(screen.queryByRole("menuitem", { name: /Memory/i })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /Billing/i })).toBeNull();
+  });
+
+  it("closes the menu when selecting an overflow item", () => {
+    render(<MobileNav />);
+
+    const moreButton = screen.getByRole("button", { name: /More/i });
+    fireEvent.click(moreButton);
+    expect(moreButton.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Statistics/i }));
+
+    expect(moreButton.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("menuitem", { name: /Statistics/i })).toBeNull();
+  });
+
+  it("closes the menu on Escape", () => {
+    render(<MobileNav />);
+
+    const moreButton = screen.getByRole("button", { name: /More/i });
+    fireEvent.click(moreButton);
+    expect(moreButton.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(moreButton.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("closes the menu when clicking outside (the backdrop)", () => {
+    render(<MobileNav />);
+
+    const moreButton = screen.getByRole("button", { name: /More/i });
+    fireEvent.click(moreButton);
+    expect(moreButton.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.mouseDown(document.body);
+
+    expect(moreButton.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("the logout form is present in the overflow menu and submittable", () => {
+    render(<MobileNav />);
+    fireEvent.click(screen.getByRole("button", { name: /More/i }));
+
+    const logoutButton = screen.getByRole("menuitem", { name: /Log out/i });
+    const form = logoutButton.closest("form");
+    expect(form).toBeTruthy();
+    expect(() => fireEvent.submit(form as HTMLFormElement)).not.toThrow();
+  });
+
+  it("highlights the corresponding bar tab when pathname is a primary route", () => {
+    mockedUsePathname.mockReturnValue("/dashboard");
+    render(<MobileNav />);
+
+    expect(screen.getByRole("link", { name: /^Dashboard$/i }).getAttribute("aria-current")).toBe(
+      "page",
+    );
+    expect(screen.getByRole("button", { name: /More/i }).getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+  });
+
+  it("highlights the More button (not a bar tab) when pathname is a secondary route", () => {
+    mockedUsePathname.mockReturnValue("/stats");
+    render(<MobileNav />);
+
+    const moreButton = screen.getByRole("button", { name: /More/i });
+    // The active style class is applied to the More button.
+    expect(moreButton.className).toContain("tabActive");
+
+    // No bar tab (Dashboard/Plan/History) is active.
+    for (const name of [/^Dashboard$/i, /^Plan$/i, /^History$/i]) {
+      expect(screen.getByRole("link", { name }).getAttribute("aria-current")).toBeNull();
+    }
+  });
+
+  it("renders exactly one link for /create-plan (FAB only)", () => {
+    render(<MobileNav />);
+    const createLinks = screen.getAllByRole("link", { name: /Create Plan/i });
+    expect(createLinks.length).toBe(1);
+  });
+});
+
+describe("MobileNav (SSR/server-render smoke tests)", () => {
+  it("server-renders without the overflow menu content visually exposed by default (still SSR-safe)", () => {
+    mockedUsePathname.mockReturnValue("/dashboard");
+    const html = renderToString(<MobileNav />);
+
+    // Primary tabs + FAB present in the markup.
+    expect(html).toContain("Dashboard");
+    expect(html).toContain("Plan");
+    expect(html).toContain("History");
     expect(html).toContain('href="/create-plan"');
+    expect(html).toContain("More");
   });
 
-  it("renders exactly 6 nav items as links with correct hrefs", () => {
-    const html = renderToString(MobileNav());
-    const hrefs = ["/dashboard", "/plan", "/stats", "/history", "/exercises", "/profile"];
-    for (const href of hrefs) {
-      expect(html).toContain(`href="${href}"`);
-    }
-  });
-
-  it("uses shared icon accessibility defaults for tabs and the create action", () => {
-    const html = renderToString(MobileNav());
-
-    // 6 tabs + FAB + logout inline SVG = 8 focusable icons.
-    const iconCount = (html.match(/focusable="false"/g) || []).length;
-    expect(iconCount).toBe(8);
-  });
-
-  it("renders a Profile tab linking to /profile", () => {
-    const html = renderToString(MobileNav());
-
-    expect(html).toContain('href="/profile"');
-    expect(html).toContain("Profile");
-  });
-
-  it("renders a logout button with aria-label=\"Log out\"", () => {
-    const html = renderToString(MobileNav());
-    expect(html).toContain('aria-label="Log out"');
-    expect(html).toContain('<svg viewBox="0 0 24 24"');
-  });
-
-  it("marks the active tab with aria-current=\"page\"", () => {
-    const html = renderToString(MobileNav());
-
-    // Dashboard should be the active item
-    const activeCount = (html.match(/aria-current="page"/g) || []).length;
-    expect(activeCount).toBe(1);
-  });
-
-  it("highlights a different tab when pathname changes", () => {
-    mockedUsePathname.mockReturnValueOnce("/stats");
-
-    const html = renderToString(MobileNav());
-
-    // Only one active item
-    const activeCount = (html.match(/aria-current="page"/g) || []).length;
-    expect(activeCount).toBe(1);
-
-    // Stats should be active
-    expect(html).toContain('aria-current="page"');
-    expect(html).toContain('href="/stats"');
-
-    // Dashboard tab should exist but not be active
-    const dashboardHtml = html.match(/<a[^>]*href="\/dashboard"[^>]*>/g);
-    expect(dashboardHtml).toBeTruthy();
-    if (dashboardHtml) {
-      for (const link of dashboardHtml) {
-        expect(link).not.toContain('aria-current="page"');
-      }
-    }
-  });
-
-  it("renders a billing tab with the translated label and /billing link when billingNavLabel is provided", () => {
-    const html = renderToString(MobileNav({ billingNavLabel: "Billing" }));
-
-    expect(html).toContain('href="/billing"');
-    const billingLink = html.match(/<a[^>]*href="\/billing"[^>]*>[\s\S]*?<\/a>/);
-    expect(billingLink).toBeTruthy();
-    expect(billingLink![0]).toContain("Billing");
-  });
-
-  it("renders BOTH the memory and billing tabs when both labels are provided", () => {
-    // Regression guard: with 8 tabs the right-group slice must not drop the
-    // last trailing tab (billing sits at index 7).
+  it("includes memory/billing labels in the server-rendered markup (overflow panel content)", () => {
+    mockedUsePathname.mockReturnValue("/dashboard");
     const html = renderToString(
-      MobileNav({ memoryNavLabel: "Memory", billingNavLabel: "Billing" }),
+      <MobileNav memoryNavLabel="Memory" billingNavLabel="Billing" />,
     );
 
-    expect(html).toContain('href="/memory"');
-    expect(html).toContain('href="/billing"');
-  });
-
-  it("omits the billing tab when billingNavLabel is not provided", () => {
-    const html = renderToString(MobileNav());
-    expect(html).not.toContain('href="/billing"');
-  });
-
-  it("renders the FAB as a separate element from the tab bar", () => {
-    const html = renderToString(MobileNav());
-
-    // There should be two link elements with /create-plan
-    // One for the FAB and potentially one in tabs if Create Plan were there
-    const createLinks = html.match(/href="\/create-plan"/g) || [];
-    expect(createLinks.length).toBe(1);
+    expect(html).toContain("Memory");
+    expect(html).toContain("Billing");
   });
 });

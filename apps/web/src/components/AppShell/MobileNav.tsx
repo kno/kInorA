@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, StatsIcon, UserIcon } from "@/components/icons";
@@ -13,31 +14,92 @@ interface TabItem {
   icon: "home" | "plan" | "stats" | "history" | "exercises" | "profile" | "memory" | "billing";
 }
 
-const TABS: TabItem[] = [
+// Primary destinations always visible in the bottom bar.
+const PRIMARY_TABS: TabItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "home" },
   { label: "Plan", href: "/plan", icon: "plan" },
-  { label: "Statistics", href: "/stats", icon: "stats" },
   { label: "History", href: "/history", icon: "history" },
+];
+
+// Secondary destinations tucked behind the "More" overflow menu.
+const SECONDARY_TABS: TabItem[] = [
+  { label: "Statistics", href: "/stats", icon: "stats" },
   { label: "Exercises", href: "/exercises", icon: "exercises" },
   { label: "Profile", href: "/profile", icon: "profile" },
 ];
 
 /**
- * Mobile bottom navigation bar — tabs + centered FAB for Create Plan + logout.
+ * Mobile bottom navigation bar — a small fixed set of primary tabs +
+ * centered Create FAB + a "More" overflow menu holding the rest + logout.
  *
  * Fixed to the bottom of the viewport with safe-area padding for notched
  * devices. Tap targets are at least 44px. Active tab uses --accent color.
+ *
+ * A small, fixed-width bar can never overflow regardless of how many
+ * destinations the app grows to — anything beyond the primary set lives in
+ * the "More" menu instead of cramming into the bar (see GH #294).
  */
 export function MobileNav({
   memoryNavLabel,
   billingNavLabel,
 }: { memoryNavLabel?: string; billingNavLabel?: string } = {}) {
   const pathname = usePathname();
-  const tabs = [
-    ...TABS,
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuId = useId();
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const secondaryTabs: TabItem[] = [
+    ...SECONDARY_TABS,
     ...(memoryNavLabel ? [{ label: memoryNavLabel, href: "/memory", icon: "memory" as const }] : []),
     ...(billingNavLabel ? [{ label: billingNavLabel, href: "/billing", icon: "billing" as const }] : []),
   ];
+
+  const isMoreActive = secondaryTabs.some((tab) => isActivePath(pathname, tab.href));
+
+  const closeMenu = () => setMenuOpen(false);
+
+  // Close on outside click/tap.
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      const target = event.target as Node;
+      if (panelRef.current?.contains(target) || moreButtonRef.current?.contains(target)) {
+        return;
+      }
+      setMenuOpen(false);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+    };
+  }, [menuOpen]);
+
+  // Close on Escape, returning focus to the More button.
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        moreButtonRef.current?.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [menuOpen]);
+
+  // Focus the first menu item when the panel opens.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const firstItem = panelRef.current?.querySelector<HTMLElement>('[role="menuitem"]');
+    firstItem?.focus();
+  }, [menuOpen]);
 
   return (
     <>
@@ -45,8 +107,8 @@ export function MobileNav({
       <span className={styles.spacer} aria-hidden="true" />
 
       <nav className={styles.bar} aria-label="Mobile navigation">
-        {/* Left tabs: Dashboard, Plan, Statistics */}
-        {tabs.slice(0, 3).map((tab) => (
+        {/* Left tabs: Dashboard, Plan */}
+        {PRIMARY_TABS.slice(0, 2).map((tab) => (
           <MobileTab
             key={tab.href}
             tab={tab}
@@ -65,10 +127,8 @@ export function MobileNav({
           </Link>
         </div>
 
-        {/* Right tabs: History, Exercises, Profile, then any trailing
-            i18n-gated tabs (Memory, Billing). Use an open-ended slice so a
-            newly added trailing tab is never dropped. */}
-        {tabs.slice(3).map((tab) => (
+        {/* Right tabs: History, then the More overflow trigger */}
+        {PRIMARY_TABS.slice(2).map((tab) => (
           <MobileTab
             key={tab.href}
             tab={tab}
@@ -76,17 +136,57 @@ export function MobileNav({
           />
         ))}
 
-        {/* Logout icon — visible on mobile only */}
-        <form action={logoutAction} className={styles.logoutForm}>
-          <button type="submit" className={styles.logoutButton} aria-label="Log out">
+        <button
+          type="button"
+          ref={moreButtonRef}
+          className={`${styles.tab} ${styles.moreButton} ${isMoreActive ? styles.tabActive : ""}`}
+          aria-expanded={menuOpen}
+          aria-controls={menuId}
+          aria-haspopup="menu"
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          <MoreIcon className={styles.icon} />
+          <span>More</span>
+        </button>
+      </nav>
+
+      {menuOpen && <div className={styles.backdrop} onClick={closeMenu} aria-hidden="true" />}
+
+      <div
+        id={menuId}
+        ref={panelRef}
+        role="menu"
+        aria-label="More navigation"
+        className={styles.menuPanel}
+        hidden={!menuOpen}
+      >
+        {secondaryTabs.map((tab) => (
+          <Link
+            key={tab.href}
+            href={tab.href}
+            role="menuitem"
+            className={`${styles.menuItem} ${isActivePath(pathname, tab.href) ? styles.menuItemActive : ""}`}
+            aria-current={isActivePath(pathname, tab.href) ? "page" : undefined}
+            onClick={closeMenu}
+          >
+            <TabIcon name={tab.icon} />
+            <span>{tab.label}</span>
+          </Link>
+        ))}
+
+        <div className={styles.menuDivider} aria-hidden="true" />
+
+        <form action={logoutAction} className={styles.menuLogoutForm} onSubmit={closeMenu}>
+          <button type="submit" role="menuitem" className={styles.menuLogoutButton}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20" aria-hidden="true" focusable="false">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <polyline points="16 17 21 12 16 7" />
               <line x1="21" y1="12" x2="9" y2="12" />
             </svg>
+            <span>Log out</span>
           </button>
         </form>
-      </nav>
+      </div>
     </>
   );
 }
@@ -133,4 +233,22 @@ function TabIcon({ name }: { name: TabItem["icon"] }) {
     case "billing":
       return <StatsIcon className={styles.icon} size={22} />;
   }
+}
+
+function MoreIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      width="22"
+      height="22"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="5" cy="12" r="2" />
+      <circle cx="12" cy="12" r="2" />
+      <circle cx="19" cy="12" r="2" />
+    </svg>
+  );
 }
