@@ -41,9 +41,10 @@ vi.mock("../../auth/session-storage.js", () => ({
 
 const HomeScreen = (await import("../HomeScreen.js")).default;
 
-/** Build a minimal `DashboardSummaryDTO` ok result, optionally with `adaptation`. */
+/** Build a minimal `DashboardSummaryDTO` ok result, optionally with `adaptation`/`viewerIsTrainer`. */
 const dashboard = (
   adaptation?: AdaptationRecommendation,
+  viewerIsTrainer?: boolean,
 ): FetchDashboardResult => ({
   kind: "ok",
   summary: {
@@ -53,6 +54,7 @@ const dashboard = (
     weeklyPlanned: 0,
     weeklyRollup: [],
     ...(adaptation !== undefined ? { adaptation } : {}),
+    ...(viewerIsTrainer !== undefined ? { viewerIsTrainer } : {}),
   },
 });
 
@@ -253,19 +255,58 @@ describe("HomeScreen (C3 — dashboard fetch + plan-status nav entry)", () => {
     expect(logout.length).toBeGreaterThan(0);
   });
 
-  // 15b-v2-trainer-dashboard-branding Slice S5: always-shown entry point,
-  // mirroring the `ClientList` nav entry — `TrainerPlanScreen` itself gates
-  // on the API's 403 (no client-visible "has an active assignment" flag
-  // exists today).
-  it("always shows a trainer-plan nav entry that navigates to TrainerPlan", async () => {
-    const { renderer, navigation } = renderScreen();
+  // 15b/#294: the Clients/Trainer-plan nav entries are trainer-only, gated on
+  // the dashboard summary's `viewerIsTrainer` (attached by the API from the
+  // authenticated membership role — no extra request).
+  it("shows the Clients and Trainer-plan nav entries when the viewer is a trainer", async () => {
+    const client = makeClient({
+      fetchDashboardSummary: vi.fn(async () => dashboard(okWithPlan("spec_1"), true)),
+    });
+    const { renderer, navigation } = renderScreen({ client });
     await settle();
+
+    const clientsButton = renderer.root.find(
+      (n) => n.props.accessibilityLabel === "Clients",
+    );
+    clientsButton.props.onPress();
+    expect(navigation.navigate).toHaveBeenCalledWith("ClientList");
 
     const trainerPlanButton = renderer.root.find(
       (n) => n.props.accessibilityLabel === "My trainer's plan",
     );
     trainerPlanButton.props.onPress();
     expect(navigation.navigate).toHaveBeenCalledWith("TrainerPlan");
+  });
+
+  it("hides the Clients and Trainer-plan nav entries (but keeps Create-plan/History/Logout) when the viewer is not a trainer", async () => {
+    const client = makeClient({
+      fetchDashboardSummary: vi.fn(async () => dashboard(okWithPlan("spec_1"), false)),
+    });
+    const { renderer, navigation } = renderScreen({ client });
+    await settle();
+
+    expect(
+      renderer.root.findAll((n) => n.props.accessibilityLabel === "Clients"),
+    ).toHaveLength(0);
+    expect(
+      renderer.root.findAll((n) => n.props.accessibilityLabel === "My trainer's plan"),
+    ).toHaveLength(0);
+
+    const createPlanButton = renderer.root.find(
+      (n) => n.props.accessibilityLabel === "Create your plan by chatting",
+    );
+    expect(createPlanButton).toBeTruthy();
+
+    const historyButton = renderer.root.find(
+      (n) => n.props.accessibilityLabel === "History",
+    );
+    historyButton.props.onPress();
+    expect(navigation.navigate).toHaveBeenCalledWith("History");
+
+    const logoutButton = renderer.root.find(
+      (n) => n.props.accessibilityLabel === "Log out",
+    );
+    expect(logoutButton).toBeTruthy();
   });
 
   it("#294: renders the ready state in a ScrollView so the growing menu never overflows", async () => {

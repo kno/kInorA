@@ -1010,6 +1010,12 @@ export interface DashboardSummaryDTO {
    * `adaptation.level === "low"`. Attached by the read; consumes no quota.
    */
   adaptation?: AdaptationRecommendation;
+  /**
+   * True when the authenticated viewer's membership role is `trainer`
+   * (15b/#294) — drives trainer-only nav visibility. Optional/additive so
+   * existing consumers are unaffected.
+   */
+  viewerIsTrainer?: boolean;
 }
 
 /**
