@@ -19,9 +19,10 @@
  *
  * Exported as a named export so it can be unit-tested directly.
  */
+import type { CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 import { OrbitProgress } from "@/components/orbit";
-import type { WorkoutProgram } from "@kinora/contracts";
+import type { PlanBranding, WorkoutProgram } from "@kinora/contracts";
 import { cleanLimitationNotes } from "../limitation-notes";
 
 export interface PlanStatusViewProps {
@@ -31,6 +32,14 @@ export interface PlanStatusViewProps {
   specId?: string;
   onRegenerate?: () => void;
   onStartWorkout?: (day: number) => void;
+  /**
+   * Optional trainer-authored branding (15b-v2 S4). When present on the
+   * "ready" state, `title`/`trainerName` override the default heading + add
+   * a byline, and `accentColor` sets the `--plan-accent` CSS custom property
+   * on the `<main>` root. Absent branding renders exactly as before this
+   * slice (safe rollback).
+   */
+  branding?: PlanBranding;
 }
 
 export function PlanStatusView({
@@ -39,6 +48,7 @@ export function PlanStatusView({
   program,
   onRegenerate,
   onStartWorkout,
+  branding,
 }: PlanStatusViewProps) {
   const t = useTranslations();
 
@@ -94,10 +104,18 @@ export function PlanStatusView({
   }
 
   // status === "ready"
+  const accentStyle = branding?.accentColor
+    ? ({ "--plan-accent": branding.accentColor } as CSSProperties)
+    : undefined;
   return (
-    <main className="kin-page">
+    <main className="kin-page" style={accentStyle}>
       <header className="kin-card kin-card--header">
-        <h1 className="kin-title">{t("plan.ready.title")}</h1>
+        <h1 className="kin-title">{branding?.title ?? t("plan.ready.title")}</h1>
+        {branding?.trainerName && (
+          <p className="kin-text kin-muted">
+            {t("plan.branding.byTrainer", { trainerName: branding.trainerName })}
+          </p>
+        )}
         <a href="/dashboard" className="kin-link">
           {t("plan.backToDashboard")}
         </a>

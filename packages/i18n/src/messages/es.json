@@ -382,6 +382,9 @@
       "action2Sub": "+2,5 kg si sale limpio",
       "action2Note": "Progresión marcada: próxima banca sugerida en 85 kg si completas 4×6.",
       "appliedToast": "Sugerencia aplicada a tu plan."
+    },
+    "branding": {
+      "byTrainer": "De {trainerName}"
     }
   },
   "tracker": {
@@ -743,7 +746,8 @@
     "error": "Algo salió mal. Inténtalo de nuevo.",
     "stalledTitle": "Está tardando más de lo esperado",
     "stalledBody": "Tu plan todavía se está generando — esto está tardando un poco más de lo habitual. Puedes esperar o actualizar para volver a comprobarlo.",
-    "refresh": "Actualizar"
+    "refresh": "Actualizar",
+    "brandedBy": "De {trainerName}"
   },
   "exercises": {
     "title": "Ejercicios",

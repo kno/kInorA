@@ -367,11 +367,20 @@ export interface PlanSpec {
    * boundary, see `apps/api/src/plan/boundary.ts`); `trainerName`/`title` are
    * capped at 60 characters.
    */
-  branding?: {
-    trainerName?: string | null;
-    title?: string | null;
-    accentColor?: string | null;
-  };
+  branding?: PlanBranding;
+}
+
+/**
+ * Trainer-authored plan branding (15b-v2 S3/S4). Named export so both the
+ * web `--plan-accent` CSS-var renderer and the mobile accent-prop seam (S4)
+ * can reference the exact same client-safe shape as `PlanSpec.branding`,
+ * without redefining it locally in each app. Pure data — no rendering
+ * concerns live here.
+ */
+export interface PlanBranding {
+  trainerName?: string | null;
+  title?: string | null;
+  accentColor?: string | null;
 }
 
 // ---------------------------------------------------------------------------

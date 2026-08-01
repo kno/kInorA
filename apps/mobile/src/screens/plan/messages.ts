@@ -27,4 +27,6 @@ export const messages = defineMessages({
   stalledTitle: { id: "planStatus.stalledTitle" },
   stalledBody: { id: "planStatus.stalledBody" },
   refresh: { id: "planStatus.refresh" },
+  /** Trainer byline shown below the branded title (15b-v2 S4). */
+  brandedBy: { id: "planStatus.brandedBy" },
 });
