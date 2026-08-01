@@ -75,12 +75,10 @@ export default function HomeScreen({
   const historyLabel = intl.formatMessage({ id: "history.title" });
   const createPlanLabel = intl.formatMessage({ id: "chat.teaser.title" });
   const voiceLabel = intl.formatMessage({ id: "voice.screenTitle" });
-  // 15a-v2-trainer-account-access Slice 5: always shown — `ClientListScreen`
-  // itself gates on the API's 403 (no client-visible role/tier exists today).
+  // 15b/#294: trainer-only nav entry — gated below on `summary.viewerIsTrainer`
+  // (the dashboard read now carries a client-visible role signal).
   const clientsLabel = intl.formatMessage({ id: "clients.navLabel" });
-  // 15b-v2-trainer-dashboard-branding Slice S5: always shown, mirroring
-  // `clientsLabel` above — `TrainerPlanScreen` itself gates on the API's 403
-  // (no client-visible "has an active trainer assignment" flag exists today).
+  // 15b/#294: trainer-only nav entry, mirroring `clientsLabel` above.
   const trainerPlanLabel = intl.formatMessage({ id: "trainerPlan.navLabel" });
 
   const [phase, setPhase] = useState<Phase>("loading");
@@ -154,6 +152,10 @@ export default function HomeScreen({
   // so its presence is the "user has a plan" signal for the entry point.
   const planSpecId = summary?.adaptation?.planSpecId;
 
+  // 15b/#294 — Clients/Trainer-plan nav entries are trainer-only. The API
+  // attaches `viewerIsTrainer` to the same dashboard read (no extra request).
+  const isTrainer = summary?.viewerIsTrainer === true;
+
   const handleViewPlan = useCallback(() => {
     if (!planSpecId) return;
     navigationRef.current.navigate("PlanStatus", { planSpecId });
@@ -206,23 +208,27 @@ export default function HomeScreen({
         <Text style={styles.historyText}>{historyLabel}</Text>
       </Pressable>
 
-      <Pressable
-        style={({ pressed }) => [styles.historyButton, pressed && styles.historyButtonPressed]}
-        onPress={() => navigationRef.current.navigate("ClientList")}
-        accessibilityRole="button"
-        accessibilityLabel={clientsLabel}
-      >
-        <Text style={styles.historyText}>{clientsLabel}</Text>
-      </Pressable>
+      {isTrainer && (
+        <Pressable
+          style={({ pressed }) => [styles.historyButton, pressed && styles.historyButtonPressed]}
+          onPress={() => navigationRef.current.navigate("ClientList")}
+          accessibilityRole="button"
+          accessibilityLabel={clientsLabel}
+        >
+          <Text style={styles.historyText}>{clientsLabel}</Text>
+        </Pressable>
+      )}
 
-      <Pressable
-        style={({ pressed }) => [styles.historyButton, pressed && styles.historyButtonPressed]}
-        onPress={() => navigationRef.current.navigate("TrainerPlan")}
-        accessibilityRole="button"
-        accessibilityLabel={trainerPlanLabel}
-      >
-        <Text style={styles.historyText}>{trainerPlanLabel}</Text>
-      </Pressable>
+      {isTrainer && (
+        <Pressable
+          style={({ pressed }) => [styles.historyButton, pressed && styles.historyButtonPressed]}
+          onPress={() => navigationRef.current.navigate("TrainerPlan")}
+          accessibilityRole="button"
+          accessibilityLabel={trainerPlanLabel}
+        >
+          <Text style={styles.historyText}>{trainerPlanLabel}</Text>
+        </Pressable>
+      )}
 
       <Pressable
         style={styles.logoutButton}

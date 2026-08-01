@@ -51,9 +51,9 @@ export const progressRoutes: FastifyPluginAsync<ProgressRoutesOptions> = async (
     "/progress/dashboard",
     { preHandler: requireAuth() },
     async (request, reply) => {
-      const { tenantId, userId } = request.authContext!;
+      const { tenantId, userId, role } = request.authContext!;
       const summary = await repo.getDashboardSummary(tenantId, userId);
-      return reply.code(200).send(summary);
+      return reply.code(200).send({ ...summary, viewerIsTrainer: role === "trainer" });
     }
   );
 
