@@ -282,6 +282,33 @@ describe("ProcessStripeWebhook (orchestration)", () => {
     expect(store.applied).toHaveLength(0);
   });
 
+  // #290: a missing tenant (deleted after checkout, before Stripe delivered
+  // the subscription webhook) is a PERMANENT condition — the FK on
+  // `tenant_billing_states` would otherwise throw, propagate to a 5xx, and
+  // have Stripe retry forever (risking auto-disabling the webhook endpoint in
+  // live mode). Acknowledge (200) and skip the billing write instead, exactly
+  // like the existing no-tenant-in-payload "ignored" path.
+  it("acknowledges (200/ignored) when the store reports an unknown tenant, without throwing", async () => {
+    const store: StripeEventStorePort = {
+      recordEventAndApply: vi.fn(async (): Promise<RecordEventOutcome> => ({ outcome: "unknown_tenant" })),
+    };
+    const uc = new ProcessStripeWebhook(fakeGateway(event()), store);
+
+    const result = await uc.process(Buffer.from("raw"), "sig", NOW);
+
+    expect(result).toEqual({ status: "ok", outcome: "ignored" });
+  });
+
+  it("still verifies the signature and does not affect processed/duplicate/stale mapping", async () => {
+    const store = fakeStore();
+    const uc = new ProcessStripeWebhook(fakeGateway(event()), store.port);
+
+    const result = await uc.process(Buffer.from("raw"), "sig", NOW);
+
+    expect(result).toEqual({ status: "ok", outcome: "processed" });
+    expect(store.applied).toHaveLength(1);
+  });
+
   it("cancellation with cancel_at_period_end keeps Pro before period end", async () => {
     const store = fakeStore();
     const periodEnd = new Date("2026-08-01T00:00:00.000Z");

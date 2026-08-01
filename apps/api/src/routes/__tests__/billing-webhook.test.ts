@@ -119,6 +119,29 @@ describe("POST /billing/webhook — raw-body signature verification (hermetic)",
     await app.close();
   });
 
+  // #290: the store reporting an unknown tenant (deleted after checkout,
+  // before Stripe delivered the subscription event) must still ACK with 200,
+  // not 500 — a 5xx here would have Stripe retry forever on a permanent
+  // condition and risk auto-disabling the webhook endpoint in live mode.
+  it("acknowledges with 200 (not 500) when the store reports an unknown tenant", async () => {
+    const port: StripeEventStorePort = {
+      recordEventAndApply: vi.fn(async (): Promise<RecordEventOutcome> => ({ outcome: "unknown_tenant" })),
+    };
+    const app = await buildWebhookApp(port);
+
+    const payload = subscriptionEventPayload();
+    const response = await app.inject({
+      method: "POST",
+      url: "/billing/webhook",
+      headers: { "content-type": "application/json", "stripe-signature": sign(payload) },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    await app.close();
+  });
+
   it("maps an annual subscription to the annual cycle", async () => {
     const store = fakeStore();
     const app = await buildWebhookApp(store.port);
