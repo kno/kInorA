@@ -135,6 +135,63 @@ describe.skipIf(!hasDb)("StripeEventStoreRepository / ProcessStripeWebhook (real
     expect(row?.stripeEventTs?.toISOString()).toBe(newerTs.toISOString());
   });
 
+  // #290: a webhook event whose tenantId has NO row in `tenants` (e.g. a
+  // checkout whose tenant was later deleted) is a PERMANENT condition — the
+  // FK on `tenant_billing_states` would otherwise throw, propagate as a 5xx,
+  // and have Stripe retry forever. The store must instead record the
+  // idempotency row (so Stripe stops retrying) and skip the billing write
+  // entirely, without throwing.
+  it("#290: an unknown tenantId is recorded (idempotency) and skipped, no throw, no billing write", async () => {
+    const unknownTenantId = "00000000-0000-0000-0000-000000000099";
+    const evtId = `evt_int_unknown_tenant_${Date.now()}_${Math.random()}`;
+    const write = {
+      tenantId: unknownTenantId,
+      tier: "pro" as const,
+      status: "active" as const,
+      source: "stripe" as const,
+      stripeCustomerId: "cus_unknown_1",
+      stripeSubscriptionId: "sub_unknown_1",
+      stripeSubscriptionStatus: "active",
+      billingCycle: "monthly" as const,
+      currentPeriodEnd: new Date("2026-08-25T00:00:00.000Z"),
+      cancelAtPeriodEnd: false,
+    };
+    const eventTs = new Date("2026-07-25T10:00:00.000Z");
+
+    const result = await store.recordEventAndApply({
+      eventId: evtId,
+      type: "customer.subscription.updated",
+      eventTs,
+      write,
+    });
+    expect(result).toEqual({ outcome: "unknown_tenant" });
+
+    // Idempotency row IS written (so a retry safely no-ops).
+    const events = await db
+      .select()
+      .from(stripeProcessedEvents)
+      .where(eq(stripeProcessedEvents.eventId, evtId));
+    expect(events).toHaveLength(1);
+
+    // No billing-state row was written for the unknown tenant.
+    const rows = await db.select().from(tenantBillingStates).where(eq(tenantBillingStates.tenantId, unknownTenantId));
+    expect(rows).toHaveLength(0);
+
+    // A retry of the SAME event id is idempotent (duplicate), still no write.
+    const retry = await store.recordEventAndApply({
+      eventId: evtId,
+      type: "customer.subscription.updated",
+      eventTs,
+      write,
+    });
+    expect(retry).toEqual({ outcome: "duplicate" });
+    const rowsAfterRetry = await db
+      .select()
+      .from(tenantBillingStates)
+      .where(eq(tenantBillingStates.tenantId, unknownTenantId));
+    expect(rowsAfterRetry).toHaveLength(0);
+  });
+
   // FIX 1 (resilience, 4R follow-up): the OLD guard read the tenant's
   // high-water mark via `SELECT ... FOR UPDATE`, which locks NOTHING when the
   // tenant has no `tenant_billing_states` row yet. Two concurrent FIRST-time

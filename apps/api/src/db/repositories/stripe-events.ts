@@ -1,6 +1,6 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Database } from "../client.js";
-import { stripeProcessedEvents, tenantBillingStates } from "../schema.js";
+import { stripeProcessedEvents, tenantBillingStates, tenants } from "../schema.js";
 import type {
   RecordEventInput,
   RecordEventOutcome,
@@ -45,6 +45,19 @@ import type {
  *   - at an EQUAL timestamp (Stripe's `created` is second-granularity — two
  *     distinct events can share a second), reject ONLY a non-terminal
  *     (`active`) write over an existing terminal (`expired`) state
+ *
+ * #290 unknown-tenant step: BETWEEN the idempotency insert (step 1) and the
+ * billing-state upsert (step 2), the transaction checks whether `write.tenantId`
+ * still has a row in `tenants`. A subscription's tenant CAN be deleted after
+ * checkout but before Stripe delivers the event — that upsert would otherwise
+ * violate the `tenant_billing_states_tenant_id_tenants_id_fk` FK and throw,
+ * propagating to a 5xx that Stripe retries FOREVER (a missing tenant is a
+ * PERMANENT condition, not transient) and risking Stripe auto-disabling the
+ * webhook endpoint in live mode — which would silently break Pro activation
+ * for ALL customers. When the tenant is missing, the transaction returns
+ * `unknown_tenant` and COMMITS with only the idempotency row (step 1) — the
+ * event is recorded so Stripe stops retrying, and no billing write is
+ * attempted.
  */
 export class StripeEventStoreRepository implements StripeEventStorePort {
   constructor(private readonly db: Database) {}
@@ -63,6 +76,19 @@ export class StripeEventStoreRepository implements StripeEventStorePort {
         .returning({ eventId: stripeProcessedEvents.eventId });
       if (inserted.length === 0) {
         return { outcome: "duplicate" };
+      }
+
+      // 1b. #290: a missing tenant is PERMANENT (deleted after checkout,
+      // before Stripe delivered this event) — the upsert below would violate
+      // the `tenants` FK and throw, causing a 5xx Stripe retries forever. The
+      // idempotency row above already committed, so acknowledge and skip.
+      const tenantExists = await tx
+        .select({ id: tenants.id })
+        .from(tenants)
+        .where(eq(tenants.id, write.tenantId))
+        .limit(1);
+      if (tenantExists.length === 0) {
+        return { outcome: "unknown_tenant" };
       }
 
       // 2. Atomic upsert. `resolveEffectiveTier` stays the single source of
