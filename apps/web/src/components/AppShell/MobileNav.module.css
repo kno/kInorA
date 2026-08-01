@@ -155,7 +155,13 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.3);
-  z-index: 41; /* above the bar (40) */
+  /* BELOW the bar (40) so the bar — including the "More" toggle — stays
+   * tappable while the menu is open. If the backdrop sat above the bar it
+   * would intercept taps on "More" (the tap would land on the backdrop and
+   * only close the menu, never re-toggling it), which reads as "clicking the
+   * background". The backdrop still catches taps on the content area (which is
+   * below it) to close the menu; the panel (42) stays above it. */
+  z-index: 39;
 }
 
 /* The "More" overflow menu — a small bottom sheet anchored above the bar. */
