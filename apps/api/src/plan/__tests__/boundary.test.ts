@@ -334,6 +334,89 @@ describe("assertPlanSpecShape — updated for 07-v1-plan-wizard", () => {
     );
   });
 
+  // --- branding validation (15b-v2 S3) ---
+
+  it("accepts a PlanSpec with an absent branding (legacy/unbranded)", () => {
+    expect(() => assertPlanSpecShape(VALID_SPEC)).not.toThrow();
+  });
+
+  it("accepts a PlanSpec with a fully-populated valid branding object", () => {
+    const spec = {
+      ...VALID_SPEC,
+      branding: { trainerName: "Coach Ana", title: "Summer Cut", accentColor: "#1E90FF" },
+    };
+    expect(() => assertPlanSpecShape(spec)).not.toThrow();
+  });
+
+  it("accepts a PlanSpec with a partial branding object (only accentColor)", () => {
+    const spec = { ...VALID_SPEC, branding: { accentColor: "#1e90ff" } };
+    expect(() => assertPlanSpecShape(spec)).not.toThrow();
+  });
+
+  it("accepts a PlanSpec with an empty branding object", () => {
+    const spec = { ...VALID_SPEC, branding: {} };
+    expect(() => assertPlanSpecShape(spec)).not.toThrow();
+  });
+
+  it("rejects a PlanSpec with branding.accentColor not matching the hex pattern", () => {
+    const invalid = { ...VALID_SPEC, branding: { accentColor: "blue" } };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /branding\.accentColor/i
+    );
+  });
+
+  it("rejects a PlanSpec with branding.accentColor missing the leading #", () => {
+    const invalid = { ...VALID_SPEC, branding: { accentColor: "1E90FF" } };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /branding\.accentColor/i
+    );
+  });
+
+  it("rejects a PlanSpec with branding.accentColor of the wrong length", () => {
+    const invalid = { ...VALID_SPEC, branding: { accentColor: "#FFF" } };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /branding\.accentColor/i
+    );
+  });
+
+  it("rejects a PlanSpec with a non-object branding", () => {
+    const invalid = { ...VALID_SPEC, branding: "blue" };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /branding.*object/i
+    );
+  });
+
+  it("rejects a PlanSpec with branding.trainerName over 60 chars", () => {
+    const invalid = { ...VALID_SPEC, branding: { trainerName: "a".repeat(61) } };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /branding\.trainerName/i
+    );
+  });
+
+  it("rejects a PlanSpec with branding.title over 60 chars", () => {
+    const invalid = { ...VALID_SPEC, branding: { title: "a".repeat(61) } };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /branding\.title/i
+    );
+  });
+
+  it("accepts branding.trainerName/title at exactly 60 chars (boundary)", () => {
+    const spec = { ...VALID_SPEC, branding: { trainerName: "a".repeat(60), title: "b".repeat(60) } };
+    expect(() => assertPlanSpecShape(spec)).not.toThrow();
+  });
+
+  it("rejects a PlanSpec with a non-string branding.trainerName", () => {
+    const invalid = { ...VALID_SPEC, branding: { trainerName: 42 } };
+    expect(() => assertPlanSpecShape(invalid as unknown as PlanSpec)).toThrow(
+      /branding\.trainerName/i
+    );
+  });
+
+  it("accepts null trainerName/title/accentColor in branding", () => {
+    const spec = { ...VALID_SPEC, branding: { trainerName: null, title: null, accentColor: null } };
+    expect(() => assertPlanSpecShape(spec)).not.toThrow();
+  });
+
   // --- assertPlanSpecInput — input-only validator (no preferenceScores, no confirmed) ---
 
 describe("assertPlanSpecInput — wizard input validator", () => {

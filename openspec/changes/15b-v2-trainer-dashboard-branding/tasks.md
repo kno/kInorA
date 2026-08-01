@@ -58,11 +58,11 @@ Rationale: S1 independently shippable (no #283 dep). S2 is the highest-risk secu
 
 ## Phase S3: Branding Data Model + Authoring
 
-- [ ] 3.1 RED: `branding` accentColor regex rejection (400, no persist) + trainerName/title 60-char cap
-- [ ] 3.2 GREEN: add `branding?` to `PlanSpec` in `packages/contracts/src/index.ts`
-- [ ] 3.3 GREEN: validate `branding` in `apps/api/src/routes/plan.ts` client-plan-create
-- [ ] 3.4 RED: absent branding persists/reads as undefined (base plan)
-- [ ] 3.5 Run `pnpm architecture`
+- [x] 3.1 RED: `branding` accentColor regex rejection (400, no persist) + trainerName/title 60-char cap
+- [x] 3.2 GREEN: add `branding?` to `PlanSpec` in `packages/contracts/src/index.ts`
+- [x] 3.3 GREEN: validate `branding` in `apps/api/src/routes/plan.ts` client-plan-create
+- [x] 3.4 RED: absent branding persists/reads as undefined (base plan)
+- [x] 3.5 Run `pnpm architecture`
 
 ## Phase S4: Branding Rendering (Web + Mobile)
 

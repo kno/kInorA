@@ -55,6 +55,61 @@ function assertIntensityBias(intensityBias: unknown): void {
 }
 
 /**
+ * Maximum length of `branding.trainerName`/`branding.title` (15b-v2 S3), per
+ * the spec's 60-character cap.
+ */
+export const BRANDING_FIELD_MAX_LENGTH = 60;
+
+/**
+ * Hex color pattern for `branding.accentColor` (15b-v2 S3): a `#` followed by
+ * exactly 6 hex digits. Mirrors the spec's `^#[0-9a-fA-F]{6}$` requirement.
+ */
+const ACCENT_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+function assertBrandingTextField(value: unknown, fieldName: "trainerName" | "title"): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== "string") {
+    throw new Error(`PlanSpec.branding.${fieldName} must be a string or null when present`);
+  }
+  if (value.length > BRANDING_FIELD_MAX_LENGTH) {
+    throw new Error(
+      `PlanSpec.branding.${fieldName} must be at most ${BRANDING_FIELD_MAX_LENGTH} characters`
+    );
+  }
+}
+
+/**
+ * Validates the optional `branding` object (15b-v2 S3): when present it must
+ * be an object; `trainerName`/`title` are string-or-null capped at
+ * {@link BRANDING_FIELD_MAX_LENGTH}; `accentColor` must be a
+ * `^#[0-9a-fA-F]{6}$` hex string or null when present. Absent branding is
+ * valid — a plan without branding renders exactly as today (safe rollback).
+ */
+export function assertBranding(branding: unknown): void {
+  if (branding === undefined) {
+    return;
+  }
+  if (typeof branding !== "object" || branding === null) {
+    throw new Error("PlanSpec.branding must be an object when present");
+  }
+
+  const b = branding as Record<string, unknown>;
+
+  assertBrandingTextField(b.trainerName, "trainerName");
+  assertBrandingTextField(b.title, "title");
+
+  if (b.accentColor !== undefined && b.accentColor !== null) {
+    if (typeof b.accentColor !== "string" || !ACCENT_COLOR_PATTERN.test(b.accentColor)) {
+      throw new Error(
+        "PlanSpec.branding.accentColor must match ^#[0-9a-fA-F]{6}$ when present"
+      );
+    }
+  }
+}
+
+/**
  * Validates the wizard input fields common to both assertPlanSpecInput and
  * assertPlanSpecShape: goal, daysPerWeek, sessionDurationMinutes, location,
  * equipment (string[]), and limitations (PlanLimitation[]).
@@ -186,4 +241,8 @@ export function assertPlanSpecShape(input: unknown): asserts input is PlanSpec {
   // via assertPlanName: string|null type + VARCHAR(120) length bound. A blank
   // wizard submission is normalized to null on promote so the read-side default
   // stays dynamic; absent is valid (legacy specs).
+
+  // Optional trainer-authored branding (15b-v2 S3) — absent is valid (a plan
+  // without branding renders exactly as today).
+  assertBranding(obj.branding);
 }
