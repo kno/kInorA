@@ -30,7 +30,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, Pressable, ActivityIndicator, ScrollView } from "react-native";
 import { useIntl } from "react-intl";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { DashboardSummaryDTO } from "@kinora/contracts";
@@ -266,7 +266,15 @@ export default function HomeScreen({
   // reads the summary this screen already fetched (no second dashboard read).
 
   return (
-    <View style={styles.container} testID="home-ready">
+    // #294: a ScrollView (not a fixed centered View) so the growing secondary
+    // menu never overflows/overlaps on short screens. contentContainerStyle
+    // keeps the content vertically centered when it fits and scrolls when it
+    // doesn't.
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.scrollContent}
+      testID="home-ready"
+    >
       <Text style={styles.title}>{intl.formatMessage({ id: "home.title" })}</Text>
       <Text style={styles.subtitle}>{intl.formatMessage({ id: "home.subtitle" })}</Text>
 
@@ -302,6 +310,6 @@ export default function HomeScreen({
       )}
 
       {secondaryMenu}
-    </View>
+    </ScrollView>
   );
 }
