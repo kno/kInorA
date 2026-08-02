@@ -23,6 +23,8 @@ import { buildAdapters } from "./ai/adapter-factory.js";
 import { adminAiConfigRoutes } from "./routes/admin-ai-config.js";
 import { adminTierOverrideRoutes } from "./routes/admin-tier-override.js";
 import { TierOverrideAdminRepository } from "./db/repositories/tier-override-admin.js";
+import { adminTenantsRoutes } from "./routes/admin-tenants.js";
+import { AdminTenantsRepository } from "./db/repositories/admin-tenants.js";
 import { userProfileRoutes } from "./routes/user-profile.js";
 import { userMemoryRoutes } from "./routes/user-memories.js";
 import { userPreferencesRoutes } from "./routes/user-preferences.js";
@@ -509,6 +511,20 @@ export async function buildApp(
       loadActiveOverride: (tenantId, now) => tierOverrideAdminRepo.loadActiveOverride(tenantId, now),
       grantTierOverride: (input) => tierOverrideAdminRepo.grantTierOverride(input),
       revokeTierOverride: (input) => tierOverrideAdminRepo.revokeTierOverride(input),
+    },
+  });
+
+  // Read-only admin tenant directory routes — GET /admin/tenants (search) and
+  // GET /admin/tenants/:tenantId/tier-override (current provisioning state)
+  // (GH #307, superadmin-gated). Reuses the SAME adminUserRepo (findUserById)
+  // plus a dedicated read-only AdminTenantsRepository, keeping the route free
+  // of any DB-layer import.
+  const adminTenantsRepo = new AdminTenantsRepository(database);
+  await app.register(adminTenantsRoutes, {
+    repo: {
+      findUserById: (id) => adminUserRepo.findById(id),
+      searchTenants: (query) => adminTenantsRepo.searchTenants(query),
+      loadProvisioningState: (tenantId) => adminTenantsRepo.loadProvisioningState(tenantId),
     },
   });
 

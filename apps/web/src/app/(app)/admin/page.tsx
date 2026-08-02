@@ -40,7 +40,7 @@ export default async function AdminPage() {
     comingSoon?: boolean;
   }[] = [
     { key: "aiConfig", href: "/admin/ai-config" },
-    { key: "tenantProvisioning", comingSoon: true },
+    { key: "tenantProvisioning", href: "/admin/tenants" },
     { key: "platformStatistics", comingSoon: true },
     { key: "logs", comingSoon: true },
   ];

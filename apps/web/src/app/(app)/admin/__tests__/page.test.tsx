@@ -94,7 +94,7 @@ describe("AdminPage (server component)", () => {
     expect(redirect).toHaveBeenCalledWith("/");
   });
 
-  it("renders the admin section list for an admin user, including a live link to AI Config", async () => {
+  it("renders the admin section list for an admin user, including live links to AI Config and Tenant Provisioning", async () => {
     cookieGet.mockReturnValue({ value: "admin-token" });
     fetchProfile.mockResolvedValue({
       email: "root@example.com",
@@ -111,9 +111,13 @@ describe("AdminPage (server component)", () => {
 
     const aiConfigLink = findFirst(page, (el) => el.props?.href === "/admin/ai-config");
     expect(aiConfigLink).toBeDefined();
+
+    // GH #307: Tenant Provisioning is now live, linking to /admin/tenants.
+    const tenantsLink = findFirst(page, (el) => el.props?.href === "/admin/tenants");
+    expect(tenantsLink).toBeDefined();
   });
 
-  it("lists the coming-soon sections (Tenant Provisioning, Platform Statistics, Logs) without live links", async () => {
+  it("lists the remaining coming-soon sections (Platform Statistics, Logs) without live links", async () => {
     cookieGet.mockReturnValue({ value: "admin-token" });
     fetchProfile.mockResolvedValue({
       email: "root@example.com",
@@ -128,6 +132,7 @@ describe("AdminPage (server component)", () => {
     expect(text).toContain("Tenant Provisioning");
     expect(text).toContain("Platform Statistics");
     expect(text).toContain("Logs & Observability");
-    expect(text.match(/Coming soon/g)?.length).toBe(3);
+    // Tenant Provisioning went live (GH #307), leaving 2 coming-soon sections.
+    expect(text.match(/Coming soon/g)?.length).toBe(2);
   });
 });
