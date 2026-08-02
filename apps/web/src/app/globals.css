@@ -7,17 +7,26 @@
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap");
 
 :root {
-  /* Surfaces */
+  /* Surfaces
+   * 16a-v3-gym-white-label, Slice 5: the base tokens themselves wire the
+   * `--gym-*` fallback (`var(--gym-x, <literal-default>)`) so a logged-in
+   * gym member's palette (injected by the `(app)` root layout's inline
+   * `<style>`) reaches every module that already consumes `--surface`,
+   * `--fg`, `--accent`, etc. app-wide with NO per-module rewrite and NO JS
+   * branching. The fallback is a LITERAL value (never `var(--x)` again) to
+   * avoid a self-referential custom-property cycle. A member with no gym
+   * branding (no `--gym-*` set) renders byte-identical to before this
+   * slice. */
   --bg: oklch(5% 0.006 270);
-  --surface: oklch(11% 0.006 270);
-  --surface-2: oklch(15% 0.006 270);
+  --surface: var(--gym-surface, oklch(11% 0.006 270));
+  --surface-2: var(--gym-surface-2, oklch(15% 0.006 270));
   --border: oklch(24% 0.006 270);
-  --fg: oklch(96% 0.002 270);
-  --muted: oklch(66% 0.006 270);
+  --fg: var(--gym-fg, oklch(96% 0.002 270));
+  --muted: var(--gym-muted, oklch(66% 0.006 270));
 
   /* Brand accent (verde lima) */
-  --accent: oklch(89% 0.2 128);
-  --accent-fg: oklch(5% 0.006 270);
+  --accent: var(--gym-accent, oklch(89% 0.2 128));
+  --accent-fg: var(--gym-accent-fg, oklch(5% 0.006 270));
   --accent-dim: oklch(89% 0.20 128 / 0.12);
 
   /* States */

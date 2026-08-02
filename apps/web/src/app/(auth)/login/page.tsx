@@ -4,7 +4,7 @@ import { getFirstParam } from "@/i18n/request";
 import { loginAction } from "./actions";
 import { extractGymSlugFromHost } from "./gym-slug";
 import { fetchPublicBranding } from "./gym-branding-client";
-import { buildGymStyleBlock } from "./gym-style";
+import { buildGymStyleBlock } from "@/lib/gym-style";
 
 /**
  * Login page — email/password form + "Sign in with Google" link.
