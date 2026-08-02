@@ -147,6 +147,11 @@ export class AdminStatsRepository
               source: row.source!,
               trialStartedAt: row.trialStartedAt,
               trialEndsAt: row.trialEndsAt,
+              // Not selected above: this admin stats tally only calls
+              // resolveEffectiveTier (tier resolution), which never reads
+              // seatCount — it exists purely to satisfy EntitlementContext's
+              // shape (16c-v3 Slice D).
+              seatCount: null,
             }
           : null,
         activeOverrideTier,

@@ -141,7 +141,7 @@ describe("CheckEntitlement", () => {
   it("allows a non-premium-blocked feature on Free (plan_generation limit > 0)", async () => {
     const uc = new CheckEntitlement(reader(freeActive()));
     const decision = await uc.check(SCOPE, "plan_generation", NOW);
-    expect(decision).toEqual({ allowed: true, tier: "free", source: "backfill" });
+    expect(decision).toEqual({ allowed: true, tier: "free", source: "backfill", seatCount: null });
   });
 
   it("denies a premium feature on Free with premium_required (memory_retrieval limit 0)", async () => {
@@ -196,7 +196,12 @@ describe("CheckEntitlement", () => {
     const ctx: EntitlementContext = { ...freeActive(), activeOverrideTier: "pro" };
     const uc = new CheckEntitlement(reader(ctx));
     const decision = await uc.check(SCOPE, "memory_retrieval", NOW);
-    expect(decision).toEqual({ allowed: true, tier: "pro", source: "admin_override" });
+    expect(decision).toEqual({
+      allowed: true,
+      tier: "pro",
+      source: "admin_override",
+      seatCount: null,
+    });
   });
 
   it("denies a premium feature for a lapsed override (status='overridden', no active override) — no durable pro (#172)", async () => {
@@ -214,5 +219,40 @@ describe("CheckEntitlement", () => {
     const uc = new CheckEntitlement(reader(ctx));
     const decision = await uc.check(SCOPE, "memory_retrieval", NOW);
     expect(decision).toEqual({ allowed: false, reason: "premium_required" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 16c-v3 Slice D (design Q4) — CheckEntitlement.check threads seatCount into
+// its OWN resolveTenantFeatureLimit call (entitlement.ts:135), and surfaces
+// the seatCount it used on the allowed decision so downstream callers
+// (quota-consumption.ts) never need to re-resolve it.
+// ---------------------------------------------------------------------------
+function trainerActive(seatCount: number | null): EntitlementContext {
+  return {
+    membershipStatus: "active",
+    billing: {
+      tier: "trainer",
+      status: "active",
+      source: "backfill",
+      trialStartedAt: null,
+      trialEndsAt: null,
+      seatCount,
+    },
+    activeOverrideTier: null,
+  };
+}
+
+describe("CheckEntitlement — seat-scaled trainer threading (16c-v3 Slice D, Q4)", () => {
+  it("surfaces the raw seatCount from context on the allowed decision", async () => {
+    const uc = new CheckEntitlement(reader(trainerActive(5)));
+    const decision = await uc.check(SCOPE, "plan_generation", NOW);
+    expect(decision).toMatchObject({ allowed: true, tier: "trainer", seatCount: 5 });
+  });
+
+  it("a null seatCount on a trainer tenant surfaces seatCount: null (byte-identical to pre-Slice-D)", async () => {
+    const uc = new CheckEntitlement(reader(trainerActive(null)));
+    const decision = await uc.check(SCOPE, "plan_generation", NOW);
+    expect(decision).toMatchObject({ allowed: true, tier: "trainer", seatCount: null });
   });
 });

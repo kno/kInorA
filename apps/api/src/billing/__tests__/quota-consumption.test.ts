@@ -120,6 +120,19 @@ function allowEntitlement(tier: "free" | "pro" = "free") {
       allowed: true,
       tier,
       source: tier === "pro" ? "system" : "backfill",
+      seatCount: null,
+    })),
+  };
+}
+
+/** A `trainer`-tier entitlement carrying an explicit seatCount (16c-v3 Slice D). */
+function trainerEntitlement(seatCount: number | null) {
+  return {
+    check: vi.fn(async (): Promise<EntitlementDecision> => ({
+      allowed: true,
+      tier: "trainer",
+      source: "backfill",
+      seatCount,
     })),
   };
 }
@@ -332,6 +345,55 @@ describe("CheckAndConsumeQuota", () => {
       const correctPeriodRefund = await uc.refund(scope, "memory_write", "mw:boundary", PERIOD);
       expect(correctPeriodRefund).toEqual({ outcome: "refunded" });
       expect(ledger.tenantUsage("t", "memory_write", PERIOD)).toBe(0);
+    });
+  });
+
+  // 16c-v3 Slice D (design Q4): the metering path (quota-consumption.ts:90)
+  // must thread the entitlement's seatCount into resolveTenantFeatureLimit —
+  // a seat-scaled trainer tenant is metered against the SCALED cap, not the
+  // flat 2x-Pro table.
+  describe("seat-scaled trainer metering (16c-v3 Slice D, Q4)", () => {
+    it("meters a seat-scaled trainer tenant against seatCount * PRO_TIER_LIMITS, not the flat floor", async () => {
+      const ledger = new FakeLedger();
+      const seatCount = 10; // 10 * 500 = 5000, far above the flat 2x-Pro floor (1000)
+      const uc = new CheckAndConsumeQuota(trainerEntitlement(seatCount), ledger);
+
+      const decision = await uc.checkAndConsume(
+        { tenantId: "t", userId: "u" },
+        "plan_generation",
+        "op-1",
+        NOW,
+      );
+
+      expect(decision).toMatchObject({ allowed: true, tier: "trainer" });
+      expect(ledger.consumeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantLimit: 5000 }),
+      );
+    });
+
+    it("meters a null-seatCount trainer tenant against the flat 2x-Pro floor (byte-identical regression)", async () => {
+      const ledger = new FakeLedger();
+      const uc = new CheckAndConsumeQuota(trainerEntitlement(null), ledger);
+
+      await uc.checkAndConsume({ tenantId: "t", userId: "u" }, "plan_generation", "op-1", NOW);
+
+      // 2x the Pro plan_generation cap (500) = 1000 — unchanged from pre-Slice-D.
+      expect(ledger.consumeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantLimit: 1000 }),
+      );
+    });
+
+    it("floors a low-seat (0/1/2) trainer tenant at the flat cap, never worse off", async () => {
+      for (const seatCount of [0, 1, 2]) {
+        const ledger = new FakeLedger();
+        const uc = new CheckAndConsumeQuota(trainerEntitlement(seatCount), ledger);
+
+        await uc.checkAndConsume({ tenantId: "t", userId: "u" }, "plan_generation", "op-1", NOW);
+
+        expect(ledger.consumeSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ tenantLimit: 1000 }),
+        );
+      }
     });
   });
 

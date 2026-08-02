@@ -25,6 +25,12 @@ export interface TenantBillingSnapshot {
   source: BillingSource;
   trialStartedAt: Date | null;
   trialEndsAt: Date | null;
+  /**
+   * Seat count backing seat-scaled `trainer` limits (16c-v3 Slice D, design
+   * Q4). Not read by `resolveEffectiveTier` (used here for tier resolution
+   * only) — present purely to satisfy `EntitlementContext.billing`'s shape.
+   */
+  seatCount: number | null;
 }
 
 /** Active override detail for the provisioning-state read. */
