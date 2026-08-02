@@ -155,7 +155,8 @@
       "submit": "Log in",
       "google": "Sign in with Google",
       "switchPrompt": "Don't have an account?",
-      "switchLink": "Sign up"
+      "switchLink": "Sign up",
+      "gymLogoAlt": "Gym logo"
     },
     "signup": {
       "title": "Sign up",

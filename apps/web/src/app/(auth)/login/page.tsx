@@ -1,6 +1,10 @@
+import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { getFirstParam } from "@/i18n/request";
 import { loginAction } from "./actions";
+import { extractGymSlugFromHost } from "./gym-slug";
+import { fetchPublicBranding } from "./gym-branding-client";
+import { buildGymStyleBlock } from "./gym-style";
 
 /**
  * Login page — email/password form + "Sign in with Google" link.
@@ -15,6 +19,19 @@ import { loginAction } from "./actions";
  * copy comes from next-intl (see `@/i18n/request`), whose locale is
  * resolved from the `?lang=` query parameter (via the `x-kinora-lang`
  * header injected by `proxy.ts`) or the `Accept-Language` header.
+ *
+ * 16a-v3-gym-white-label, Slice 4: pre-auth gym white-label theming. The
+ * request `Host` header is resolved to a `subdomainSlug` server-side
+ * (`gym-slug.ts`, Node runtime — this Server Component never sends the
+ * host to the client), then the PUBLIC S3 read-by-slug endpoint is
+ * fetched (`gym-branding-client.ts`). When branding is found, its palette
+ * is injected as a server-rendered inline `<style>` block setting the
+ * `--gym-*` custom properties on `:root` (see `gym-style.ts` and
+ * `globals.css`'s `var(--gym-x, var(--default))` fallbacks — no JS
+ * branching, mirrors 15b's `--plan-accent` pattern) and its logo renders.
+ * No slug, an unknown slug (404), or a failed fetch all fall back to the
+ * unmodified default page — a normal (non-gym) visit renders byte-identical
+ * to before this slice.
  */
 export default async function LoginPage({
   searchParams,
@@ -25,9 +42,22 @@ export default async function LoginPage({
   const error = getFirstParam(params.error);
   const t = await getTranslations();
 
+  const requestHeaders = await headers();
+  const gymSlug = extractGymSlugFromHost(requestHeaders.get("host"));
+  const branding = gymSlug ? await fetchPublicBranding(gymSlug) : null;
+
   return (
     <main className="kin-page">
+      {branding ? <style>{buildGymStyleBlock(branding.palette)}</style> : null}
       <div className="kin-card">
+        {branding?.logoUrl ? (
+          <img
+            src={branding.logoUrl}
+            alt={t("auth.login.gymLogoAlt")}
+            className="kin-login-logo"
+          />
+        ) : null}
+
         <h1 className="kin-title kin-title--center">{t("auth.login.title")}</h1>
 
         {error ? (

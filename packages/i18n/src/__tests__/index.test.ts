@@ -151,7 +151,10 @@ describe("@kinora/i18n package assembly", () => {
     // shared key already counted).
     // + 1 `plan.branding.byTrainer` authored for 15b-v2 Slice S4 (web trainer
     // branding byline shown below the branded plan title).
-    expect(nonBillingKeys).toHaveLength(616);
+    // + 1 `auth.login.gymLogoAlt` authored for 16a-v3-gym-white-label Slice
+    // S4 (accessible alt text for the host-resolved gym logo on the login
+    // page).
+    expect(nonBillingKeys).toHaveLength(617);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {

@@ -75,7 +75,11 @@ body {
   margin: 0;
   min-height: 100vh;
   background-color: var(--bg);
-  color: var(--fg);
+  /* 16a-v3-gym-white-label, Slice 4: falls back to the default --fg when no
+     tenant `--gym-fg` custom property is set on :root (mirrors 15b's
+     --plan-accent pattern) — a request with no/unknown gym slug renders the
+     identical default value with NO JS branching. */
+  color: var(--gym-fg, var(--fg));
   font-family: var(--font-body);
   font-size: var(--fs-body);
   line-height: 1.5;
@@ -97,7 +101,8 @@ p {
 }
 
 a {
-  color: var(--accent);
+  /* 16a-v3-gym-white-label, Slice 4: --gym-accent fallback (see body above). */
+  color: var(--gym-accent, var(--accent));
   text-decoration: none;
 }
 
@@ -1035,8 +1040,9 @@ a {
 .kin-input {
   font-family: var(--font-body);
   font-size: var(--fs-body);
-  color: var(--fg);
-  background-color: var(--surface);
+  /* 16a-v3-gym-white-label, Slice 4: --gym-* fallbacks (see body above). */
+  color: var(--gym-fg, var(--fg));
+  background-color: var(--gym-surface, var(--surface));
   border: 1px solid var(--border);
   border-radius: var(--r-btn);
   padding: var(--sp-2) var(--sp-3);
@@ -1045,11 +1051,11 @@ a {
 }
 
 .kin-input::placeholder {
-  color: var(--muted);
+  color: var(--gym-muted, var(--muted));
 }
 
 .kin-input:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--gym-accent, var(--accent));
   outline-offset: 1px;
 }
 
@@ -1085,12 +1091,13 @@ a {
 }
 
 .kin-btn--accent {
-  background-color: var(--accent);
-  color: var(--accent-fg);
+  /* 16a-v3-gym-white-label, Slice 4: --gym-* fallbacks (see body above). */
+  background-color: var(--gym-accent, var(--accent));
+  color: var(--gym-accent-fg, var(--accent-fg));
 }
 
 .kin-btn--accent:hover {
-  background-color: color-mix(in oklch, var(--accent) 88%, white 12%);
+  background-color: color-mix(in oklch, var(--gym-accent, var(--accent)) 88%, white 12%);
 }
 
 .kin-btn--danger {
@@ -1099,13 +1106,13 @@ a {
 }
 
 .kin-btn--ghost {
-  background-color: var(--surface);
-  color: var(--fg);
+  background-color: var(--gym-surface, var(--surface));
+  color: var(--gym-fg, var(--fg));
   border-color: var(--border);
 }
 
 .kin-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--gym-accent, var(--accent));
   outline-offset: 2px;
 }
 
@@ -1129,7 +1136,8 @@ a {
 .kin-switch {
   text-align: center;
   font-size: var(--fs-sm);
-  color: var(--muted);
+  /* 16a-v3-gym-white-label, Slice 4: --gym-muted fallback (see body above). */
+  color: var(--gym-muted, var(--muted));
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1138,7 +1146,8 @@ a {
 }
 
 .kin-switch-link {
-  color: var(--accent);
+  /* 16a-v3-gym-white-label, Slice 4: --gym-accent fallback (see body above). */
+  color: var(--gym-accent, var(--accent));
   font-weight: 600;
   text-decoration: none;
   /* Tap target >= 44px (spec: all interactive elements reachable by touch). */
@@ -1146,6 +1155,21 @@ a {
   align-items: center;
   min-height: var(--tap);
   padding: 0 var(--sp-1);
+}
+
+/* -------------------------------------------------------------------------
+ * Gym logo (16a-v3-gym-white-label, Slice 4) — pre-auth login page, rendered
+ * only when the host resolves to a branded gym tenant (see (auth)/login).
+ * ------------------------------------------------------------------------- */
+
+.kin-login-logo {
+  display: block;
+  max-width: 160px;
+  max-height: 64px;
+  width: auto;
+  height: auto;
+  margin: 0 auto var(--sp-2);
+  object-fit: contain;
 }
 
 /* -------------------------------------------------------------------------
