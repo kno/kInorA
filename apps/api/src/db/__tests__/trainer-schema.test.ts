@@ -46,7 +46,9 @@ describe("trainer schema shape (15a-v2 Slice 1)", () => {
   });
 
   it("extends billing_tier with 'trainer' additively (existing values preserved)", () => {
-    expect(billingTierEnum.enumValues).toEqual(["free", "pro", "trainer"]);
+    // 16a-v3-gym-white-label, Slice 1 later appends 'gym' additively after
+    // 'trainer'; this assertion only proves 'trainer's own ordinal position.
+    expect(billingTierEnum.enumValues.slice(0, 3)).toEqual(["free", "pro", "trainer"]);
   });
 
   it("defines trainer_assignment_status as exactly {invited, active, revoked}", () => {

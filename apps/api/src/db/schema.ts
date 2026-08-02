@@ -103,8 +103,14 @@ export const membershipStatusEnum = pgEnum("membership_status", [
  * mirroring `membershipRoleEnum`. `resolveTenantFeatureLimit` (plan-limits.ts)
  * knows about it via `TRAINER_TIER_LIMITS`, but no route gates a capability on
  * it in this slice — see design.md's Slice Plan.
+ *
+ * `gym` (16a-v3-gym-white-label, Slice 1) is appended additively after
+ * `trainer` (same `ALTER TYPE ... ADD VALUE` pattern, existing ordinals
+ * preserved). It is dark in this slice: `resolveTenantFeatureLimit` knows
+ * about it, but no route grants or gates a capability on it yet — the
+ * `assertGymEntitled` authorization seam lands in Slice 3.
  */
-export const billingTierEnum = pgEnum("billing_tier", ["free", "pro", "trainer"]);
+export const billingTierEnum = pgEnum("billing_tier", ["free", "pro", "trainer", "gym"]);
 
 export const billingStatusEnum = pgEnum("billing_status", [
   "active",
@@ -1013,6 +1019,66 @@ export const trainerClientAssignments = pgTable(
     trainerIdx: index("trainer_client_assignments_trainer_idx").on(
       table.tenantId,
       table.trainerUserId,
+    ),
+  }),
+);
+
+/**
+ * Gym white-label branding (16a-v3-gym-white-label, Slice 1: dark, additive —
+ * no route wires this table yet, that lands in Slice 3). One row per tenant
+ * (PK on `tenant_id`), keyed for public lookup by a unique `subdomain_slug`.
+ * `logo_storage_key` is a `LocalStorageAdapter`/`ObjectStoragePort` key (S2),
+ * nullable until a logo is uploaded. The six palette columns are nullable hex
+ * strings validated at the DB layer by a `^#[0-9a-fA-F]{6}$` CHECK constraint
+ * (mirrored by the pure `apps/api/src/branding/palette.ts` validator used at
+ * the application layer before any write) so an absent value renders via the
+ * `var(--gym-x, var(--default))` CSS fallback (S4/S5) rather than an invalid
+ * color ever reaching the database.
+ */
+export const tenantBranding = pgTable(
+  "tenant_branding",
+  {
+    tenantId: uuid("tenant_id")
+      .primaryKey()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    subdomainSlug: text("subdomain_slug").notNull(),
+    logoStorageKey: text("logo_storage_key"),
+    accent: text("accent"),
+    accentFg: text("accent_fg"),
+    surface: text("surface"),
+    surface2: text("surface2"),
+    fg: text("fg"),
+    muted: text("muted"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    subdomainSlugUnique: uniqueIndex("tenant_branding_subdomain_slug_unique").on(
+      table.subdomainSlug,
+    ),
+    accentHexCheck: check(
+      "tenant_branding_accent_hex_chk",
+      sql`${table.accent} is null or ${table.accent} ~ '^#[0-9a-fA-F]{6}$'`,
+    ),
+    accentFgHexCheck: check(
+      "tenant_branding_accent_fg_hex_chk",
+      sql`${table.accentFg} is null or ${table.accentFg} ~ '^#[0-9a-fA-F]{6}$'`,
+    ),
+    surfaceHexCheck: check(
+      "tenant_branding_surface_hex_chk",
+      sql`${table.surface} is null or ${table.surface} ~ '^#[0-9a-fA-F]{6}$'`,
+    ),
+    surface2HexCheck: check(
+      "tenant_branding_surface2_hex_chk",
+      sql`${table.surface2} is null or ${table.surface2} ~ '^#[0-9a-fA-F]{6}$'`,
+    ),
+    fgHexCheck: check(
+      "tenant_branding_fg_hex_chk",
+      sql`${table.fg} is null or ${table.fg} ~ '^#[0-9a-fA-F]{6}$'`,
+    ),
+    mutedHexCheck: check(
+      "tenant_branding_muted_hex_chk",
+      sql`${table.muted} is null or ${table.muted} ~ '^#[0-9a-fA-F]{6}$'`,
     ),
   }),
 );

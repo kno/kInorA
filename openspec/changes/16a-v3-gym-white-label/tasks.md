@@ -55,35 +55,42 @@ page.
 
 ## Phase 1 (Slice S1): `tenant_branding` schema + `"gym"` tier + contracts
 
-- [ ] 1.1 RED: migration test asserting `"gym"` exists in the `billing_tier`
+- [x] 1.1 RED: migration test asserting `"gym"` exists in the `billing_tier`
       enum (mirrors `apps/api/src/db/__tests__/trainer-schema.test.ts`).
-- [ ] 1.2 GREEN: new migration file A — `ALTER TYPE "public"."billing_tier" ADD
+- [x] 1.2 GREEN: new migration file A — `ALTER TYPE "public"."billing_tier" ADD
       VALUE IF NOT EXISTS 'gym';` ONLY (own file, no other schema change in
       the same transaction — mirrors 15a's `0016_trainer_role_tier_enum.sql`
       same-transaction gotcha).
-- [ ] 1.3 RED: migration test asserting `tenant_branding` table exists with
+- [x] 1.3 RED: migration test asserting `tenant_branding` table exists with
       columns `tenantId` (FK), `subdomainSlug` (unique), `logoStorageKey`
       (nullable), six hex-color columns with CHECK `^#[0-9a-fA-F]{6}$`,
       `createdAt`/`updatedAt`.
-- [ ] 1.4 GREEN: new migration file B (separate from 1.2, since the new enum
+- [x] 1.4 GREEN: new migration file B (separate from 1.2, since the new enum
       value cannot be referenced in the same transaction it was added in) —
       `CREATE TABLE tenant_branding` + unique index on `subdomainSlug`, added
       to `apps/api/src/db/schema.ts`.
-- [ ] 1.5 GREEN: extend `BillingTier` union with `"gym"` in
+- [x] 1.5 GREEN: extend `BillingTier` union with `"gym"` in
       `packages/contracts/src/index.ts`; add `TenantBrandingDTO`,
       `BrandingPalette`, `LogoUploadResponseDTO` types.
-- [ ] 1.6 RED: unit test for hex-color validation helper (`^#[0-9a-fA-F]{6}$`
+- [x] 1.6 RED: unit test for hex-color validation helper (`^#[0-9a-fA-F]{6}$`
       per field) — valid/invalid cases, pure function.
-- [ ] 1.7 GREEN: implement the hex-validation helper (e.g.
+- [x] 1.7 GREEN: implement the hex-validation helper (e.g.
       `apps/api/src/branding/palette.ts`).
-- [ ] 1.8 Create `apps/api/src/db/repositories/tenant-branding.ts` with CRUD
+- [x] 1.8 Create `apps/api/src/db/repositories/tenant-branding.ts` with CRUD
       scaffolding (no route wiring yet) — same "inert repo first" pattern as
       15a S1's `trainer-assignment.ts`.
-- [ ] 1.9 Gate: run `pnpm architecture` — confirm no route file imports
+- [x] 1.9 Gate: run `pnpm architecture` — confirm no route file imports
       `db/repositories/*` directly (repo stays reachable only via injected
       structural interfaces); confirm clean.
-- [ ] 1.10 Gate: run full `apps/api` test suite green; confirm S1 is dark
+- [x] 1.10 Gate: run full `apps/api` test suite green; confirm S1 is dark
       (no behavior change) and independently mergeable.
+
+> **S1 note (beyond tasks.md's explicit list)**: additionally extended
+> `resolveTenantFeatureLimit` (`apps/api/src/billing/plan-limits.ts`) with a
+> `GYM_TIER_LIMITS` branch (mirrors `trainer`'s dark/additive entitlement
+> plumbing) per the orchestrator's Slice S1 scope note #5. Covered by a new
+> `resolveTenantFeatureLimit — gym tier` describe block in
+> `plan-limits.test.ts`. No route gates on it yet.
 
 ## Phase 2 (Slice S2): `ObjectStoragePort` + `LocalStorageAdapter` + upload/serve routes
 

@@ -35,7 +35,8 @@ const migrationJournal = JSON.parse(
 describe("billing schema shape", () => {
   it("defines the billing enums required by 11a", () => {
     // 15a-v2-trainer-account-access, Slice 1: 'trainer' appended additively.
-    expect(billingTierEnum.enumValues).toEqual(["free", "pro", "trainer"]);
+    // 16a-v3-gym-white-label, Slice 1: 'gym' appended additively after 'trainer'.
+    expect(billingTierEnum.enumValues).toEqual(["free", "pro", "trainer", "gym"]);
     expect(billingStatusEnum.enumValues).toEqual([
       "active",
       "trialing",

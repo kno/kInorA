@@ -127,6 +127,20 @@
       "when": 1785120060000,
       "tag": "0017_trainer_client_assignments",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785180000000,
+      "tag": "0018_gym_tier_enum",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785180060000,
+      "tag": "0019_tenant_branding",
+      "breakpoints": true
     }
   ]
 }
