@@ -25,7 +25,8 @@
     "exercises": "Ejercicios",
     "profile": "Perfil",
     "more": "Más",
-    "logout": "Cerrar sesión"
+    "logout": "Cerrar sesión",
+    "admin": "Administración"
   },
   "hero": {
     "eyebrow": "Entrenador con IA",
@@ -1229,6 +1230,29 @@
       "success": "Plan creado.",
       "errorGeneric": "No se pudo crear el plan. Inténtalo de nuevo.",
       "errorForbidden": "No tienes autorización para crear un plan para este cliente."
+    }
+  },
+  "admin": {
+    "pageTitle": "Administración",
+    "pageDescription": "Gestiona la configuración y las herramientas a nivel de plataforma.",
+    "comingSoon": "Próximamente",
+    "sections": {
+      "aiConfig": {
+        "title": "Configuración de IA",
+        "description": "Gestiona el proveedor y el modelo de IA activos para la generación de planes."
+      },
+      "tenantProvisioning": {
+        "title": "Aprovisionamiento de organizaciones",
+        "description": "Aprovisiona y gestiona organizaciones en toda la plataforma."
+      },
+      "platformStatistics": {
+        "title": "Estadísticas de la plataforma",
+        "description": "Consulta métricas de uso y estado en toda la plataforma."
+      },
+      "logs": {
+        "title": "Registros y observabilidad",
+        "description": "Inspecciona los registros de la aplicación y los datos de observabilidad."
+      }
     }
   }
 }

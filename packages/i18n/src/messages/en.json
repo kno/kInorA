@@ -25,7 +25,8 @@
     "exercises": "Exercises",
     "profile": "Profile",
     "more": "More",
-    "logout": "Log out"
+    "logout": "Log out",
+    "admin": "Admin"
   },
   "hero": {
     "eyebrow": "AI Coach",
@@ -1229,6 +1230,29 @@
       "success": "Plan created.",
       "errorGeneric": "We couldn't create the plan. Please try again.",
       "errorForbidden": "You are not authorized to create a plan for this client."
+    }
+  },
+  "admin": {
+    "pageTitle": "Admin",
+    "pageDescription": "Manage platform-wide settings and tools.",
+    "comingSoon": "Coming soon",
+    "sections": {
+      "aiConfig": {
+        "title": "AI Config",
+        "description": "Manage the active AI provider and model for plan generation."
+      },
+      "tenantProvisioning": {
+        "title": "Tenant Provisioning",
+        "description": "Provision and manage tenants across the platform."
+      },
+      "platformStatistics": {
+        "title": "Platform Statistics",
+        "description": "View usage and health metrics across the platform."
+      },
+      "logs": {
+        "title": "Logs & Observability",
+        "description": "Inspect application logs and observability data."
+      }
     }
   }
 }

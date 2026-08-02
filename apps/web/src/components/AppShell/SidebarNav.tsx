@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, StatsIcon } from "@/components/icons";
+import { CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, StatsIcon, UserIcon } from "@/components/icons";
 import { isActivePath } from "./nav-utils";
 import { logoutAction } from "@/app/(app)/dashboard/actions";
 import styles from "./SidebarNav.module.css";
@@ -14,7 +14,7 @@ interface NavItem {
   labelKey?: string;
   label?: string;
   href: string;
-  icon: "home" | "plan" | "stats" | "history" | "create" | "exercises" | "memory" | "billing";
+  icon: "home" | "plan" | "stats" | "history" | "create" | "exercises" | "memory" | "billing" | "admin";
 }
 
 /** Minimal identity shape for the sidebar user area. */
@@ -52,10 +52,12 @@ export function SidebarNav({
   user,
   memoryNavLabel,
   billingNavLabel,
+  isAdmin,
 }: {
   user?: SidebarUser;
   memoryNavLabel?: string;
   billingNavLabel?: string;
+  isAdmin?: boolean;
 } = {}) {
   const t = useTranslations();
   const pathname = usePathname();
@@ -67,6 +69,9 @@ export function SidebarNav({
       : []),
     ...(billingNavLabel
       ? [{ label: billingNavLabel, href: "/billing", icon: "billing" as const }]
+      : []),
+    ...(isAdmin === true
+      ? [{ labelKey: "appNav.admin", href: "/admin", icon: "admin" as const }]
       : []),
   ];
 
@@ -151,5 +156,7 @@ function NavIcon({ name }: { name: NavItem["icon"] }) {
       return <HistoryIcon className={styles.icon} size={20} />;
     case "billing":
       return <StatsIcon className={styles.icon} size={20} />;
+    case "admin":
+      return <UserIcon className={styles.icon} size={20} />;
   }
 }

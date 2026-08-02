@@ -98,6 +98,22 @@ describe("MobileNav", () => {
     expect(screen.queryByRole("menuitem", { name: /Billing/i })).toBeNull();
   });
 
+  it("shows Admin in the overflow menu when isAdmin is true (GH #306)", () => {
+    renderWithIntl(<MobileNav isAdmin />);
+
+    fireEvent.click(screen.getByRole("button", { name: /More/i }));
+
+    expect(screen.getByRole("menuitem", { name: /Admin/i })).toBeTruthy();
+  });
+
+  it("omits Admin from the overflow menu when isAdmin is false or not provided", () => {
+    renderWithIntl(<MobileNav />);
+
+    fireEvent.click(screen.getByRole("button", { name: /More/i }));
+
+    expect(screen.queryByRole("menuitem", { name: /Admin/i })).toBeNull();
+  });
+
   it("closes the menu when selecting an overflow item", () => {
     renderWithIntl(<MobileNav />);
 
