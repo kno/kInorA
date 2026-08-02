@@ -1257,7 +1257,7 @@
   },
   "tenantProvisioning": {
     "title": "Aprovisionamiento de organizaciones",
-    "description": "Busca una organización por nombre y concede o revoca su nivel trainer/gym.",
+    "description": "Busca una organización por nombre y asigna o quita su nivel Trainer/Gym.",
     "search": {
       "label": "Buscar organizaciones",
       "placeholder": "Nombre o ID de la organización",
@@ -1270,30 +1270,30 @@
       "effectiveTier": "Nivel efectivo",
       "billingStatus": "Estado de facturación",
       "none": "Ninguno",
-      "activeOverride": "Anulación activa",
-      "noOverride": "Sin anulación activa."
+      "activeOverride": "Nivel asignado",
+      "noOverride": "Sin nivel asignado (estándar)."
     },
     "grant": {
-      "title": "Conceder anulación de nivel",
+      "title": "Asignar nivel Trainer/Gym",
       "tierLabel": "Nivel",
       "tierTrainer": "Trainer",
       "tierGym": "Gym",
       "reasonLabel": "Motivo",
-      "reasonPlaceholder": "¿Por qué se concede esta anulación?",
+      "reasonPlaceholder": "¿Por qué se asigna este nivel?",
       "startsAtLabel": "Fecha de inicio (opcional)",
       "endsAtLabel": "Fecha de fin (opcional)",
-      "submit": "Conceder anulación",
-      "submitting": "Concediendo…",
-      "success": "Guardado correctamente."
+      "submit": "Activar nivel",
+      "submitting": "Activando…",
+      "success": "Nivel asignado."
     },
     "revoke": {
-      "button": "Revocar anulación",
-      "success": "Anulación revocada."
+      "button": "Quitar nivel asignado",
+      "success": "Nivel retirado."
     },
     "errors": {
       "forbidden": "Acceso denegado.",
       "notFound": "Organización no encontrada.",
-      "conflict": "Ya existe una anulación activa para esta organización.",
+      "conflict": "Esta organización ya tiene un nivel asignado.",
       "invalid": "Revisa el formulario e inténtalo de nuevo.",
       "generic": "Se produjo un error. Inténtalo de nuevo."
     }

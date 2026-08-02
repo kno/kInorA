@@ -166,6 +166,16 @@ a {
   overflow-x: hidden;
 }
 
+/* On mobile, AppShell's .main reserves clearance below for the fixed bottom
+ * nav bar (see AppShell.module.css). Shrink the centered shell by the same
+ * amount so short pages keep centering within the visible area above the
+ * bar instead of overflowing the viewport by the bar's height. */
+@media (max-width: 767px) {
+  .kin-page {
+    min-height: calc(100vh - 64px - env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* Constrained card container. */
 .kin-card {
   width: 100%;

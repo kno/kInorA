@@ -118,9 +118,6 @@ export function MobileNav({
 
   return (
     <>
-      {/* Spacer to prevent content from hiding behind the fixed bar */}
-      <span className={styles.spacer} aria-hidden="true" />
-
       <nav className={styles.bar} aria-label="Mobile navigation">
         {/* Left tabs: Dashboard, Plan */}
         {PRIMARY_TABS.slice(0, 2).map((tab) => (
