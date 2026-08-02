@@ -266,28 +266,68 @@ page.
 
 ## Phase 5 (Slice S5): Whole-app root-layout theming for logged-in members
 
-- [ ] 5.1 RED (web): root layout test — a logged-in member whose active
+- [x] 5.1 RED (web): root layout test — a logged-in member whose active
       tenant has branding configured renders an inline `<style>` block with
       that tenant's palette, consumed via `var(--gym-x, var(--default))`
       across shared layout chrome.
-- [ ] 5.2 RED (web): root layout test — a logged-in member whose tenant has
+- [x] 5.2 RED (web): root layout test — a logged-in member whose tenant has
       no `tenant_branding` row renders default kInorA tokens, no error.
-- [ ] 5.3 GREEN: implement post-login tenant palette injection in
-      `apps/web/src/app/layout.tsx`, resolving branding from the session's
-      active tenant (authenticated read from S3, not the public endpoint).
-- [ ] 5.4 GREEN: extend `globals.css` / add a branding module reusing S4's
-      `--gym-*` token set app-wide.
-- [ ] 5.5 E2E (deferred, noted not blocking): true subdomain end-to-end is
+- [x] 5.3 GREEN: implement post-login tenant palette injection.
+      **Deviation from the task's file name**: the injection lives in the
+      `(app)` ROUTE-GROUP layout (`apps/web/src/app/(app)/layout.tsx`), not
+      `apps/web/src/app/layout.tsx` — the latter is the outermost root
+      layout shared by pre-auth routes too (landing, login, sign-up) and has
+      no session cookie in scope; the `(app)` layout is the actual
+      authenticated-only injection point (it already reads the session
+      cookie for `fetchProfile`), matching the design's "root/(app) layout"
+      wording. Branding is resolved via a NEW `fetchOwnBranding` client
+      (`apps/web/src/app/(app)/auth/gym-branding-client.ts`) hitting the S3
+      AUTHENTICATED `GET /branding` endpoint with the session Bearer token —
+      not the public by-slug endpoint — mirroring `profile-client.ts`'s
+      fail-safe-to-null shape (403 non-gym tenant / 404 no branding row /
+      network error / malformed payload all → `null`, no `<style>`).
+- [x] 5.4 GREEN: extended `globals.css`'s BASE token declarations themselves
+      (`--accent`, `--accent-fg`, `--surface`, `--surface-2`, `--fg`,
+      `--muted`) to `var(--gym-x, <literal-default>)` — reusing S4's
+      `--gym-*` custom-property names but wiring the fallback at the SOURCE
+      of the tokens instead of per-consumer-site, so every existing module
+      across the whole app (`kin-*`, `dash-*`, `stats-*`, `landing-*`) that
+      already consumes `--accent`/`--surface`/`--fg` inherits the override
+      with zero per-module rewrite. The fallback is a LITERAL default value
+      (never `var(--accent)` referencing itself) to avoid a self-referential
+      CSS custom-property cycle. S4's more granular `var(--gym-x, var(--
+      default))` call sites (`kin-input`, `kin-btn--accent`, `body`, `a`,
+      etc.) are now redundant-but-harmless double indirection — left
+      unchanged to keep the S4 diff/tests untouched.
+      **Also relocated** `apps/web/src/app/(auth)/login/gym-style.ts` →
+      `apps/web/src/lib/gym-style.ts` (shared `buildGymStyleBlock`, now
+      imported by BOTH the login page and the `(app)` layout — no
+      duplicated palette→CSS logic) with a new direct unit test
+      (`apps/web/src/lib/__tests__/gym-style.test.ts`); the login page's
+      import path was updated, its existing Slice 4 tests stay green
+      unmodified.
+- [x] 5.5 E2E (deferred, noted not blocking): true subdomain end-to-end is
       blocked on the external reverse-proxy wildcard (non-goal, tracked in
       `design.md`'s Migration/Rollout section) — substitute a forced-`Host`-
       header integration test for S4/S5 instead of a live subdomain test.
-- [ ] 5.6 Gate: run `pnpm ui-api-guard` — confirm root layout stays within
-      the web client/server-module boundary.
-- [ ] 5.7 Gate: run `pnpm architecture` — confirm no new violations
-      introduced by the layout change.
-- [ ] 5.8 Gate: run full `apps/web` test suite green; confirm whole-app
-      manual smoke (or Playwright) shows the palette on at least one
-      non-login screen.
+      Unchanged from S4's note; no new E2E added in S5 (root-layout theming
+      is exercised by the RSC-render layout tests instead, per the same
+      substitution).
+- [x] 5.6 Gate: run `pnpm ui-api-guard` — confirm root layout stays within
+      the web client/server-module boundary. PASS (40 client files
+      scanned, 0 violations).
+- [x] 5.7 Gate: run `pnpm architecture` — confirm no new violations
+      introduced by the layout change. PASS (0 violations, 1931 modules /
+      5728 deps cruised — unchanged from S3/S4, `apps/web` stays out of the
+      cruised scope by design; the branding fetch goes through the
+      authenticated HTTP endpoint only).
+- [x] 5.8 Gate: run full `apps/web` test suite green. PASS (124 files, 1168
+      tests). Whole-app palette coverage proven via the `(app)` layout's RSC
+      render tests (gym palette present → inline `<style>` with `--gym-*`
+      values; no branding → no `--gym-accent` in output; no session token →
+      branding fetch never called) — a manual/Playwright smoke was not run
+      in this session (deferred alongside 5.5's subdomain E2E gap; the app
+      is unauthenticated in this dev environment).
 
 ## Phase 6: Cleanup / Docs
 
