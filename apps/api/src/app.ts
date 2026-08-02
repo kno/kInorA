@@ -21,6 +21,8 @@ import { warnIfAiConfigMissing } from "./ai/openrouter-generator.js";
 import { DynamicPlanGenerator } from "./ai/dynamic-generator.js";
 import { buildAdapters } from "./ai/adapter-factory.js";
 import { adminAiConfigRoutes } from "./routes/admin-ai-config.js";
+import { adminTierOverrideRoutes } from "./routes/admin-tier-override.js";
+import { TierOverrideAdminRepository } from "./db/repositories/tier-override-admin.js";
 import { userProfileRoutes } from "./routes/user-profile.js";
 import { userMemoryRoutes } from "./routes/user-memories.js";
 import { userPreferencesRoutes } from "./routes/user-preferences.js";
@@ -493,6 +495,22 @@ export async function buildApp(
     upsertConfig: (provider, model) => configRepo.upsert(provider, model),
   };
   await app.register(adminAiConfigRoutes, { repo: adminAiConfigRepo });
+
+  // Admin tier-override routes — POST /admin/tenants/:tenantId/tier-override
+  // (+ /revoke), superadmin-gated grant/revoke of the trainer/gym tier
+  // (16d-admin-tier-provisioning). Route port composes the SAME adminUserRepo
+  // (findUserById) with a dedicated TierOverrideAdminRepository so the route
+  // stays free of any DB-layer import.
+  const tierOverrideAdminRepo = new TierOverrideAdminRepository(database);
+  await app.register(adminTierOverrideRoutes, {
+    repo: {
+      findUserById: (id) => adminUserRepo.findById(id),
+      loadTenant: (tenantId) => tierOverrideAdminRepo.loadTenant(tenantId),
+      loadActiveOverride: (tenantId, now) => tierOverrideAdminRepo.loadActiveOverride(tenantId, now),
+      grantTierOverride: (input) => tierOverrideAdminRepo.grantTierOverride(input),
+      revokeTierOverride: (input) => tierOverrideAdminRepo.revokeTierOverride(input),
+    },
+  });
 
   // User profile + preferences routes (10a-user-memory-structured, Slice 2).
   // User-scoped tables (keyed by `userId`, no tenant column) — isolation is
