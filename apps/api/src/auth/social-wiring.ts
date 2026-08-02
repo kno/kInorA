@@ -6,6 +6,7 @@
  */
 import type { Database } from "../db/client.js";
 import { provisionTenantForUser, linkOauthToExistingUser } from "../tenant/provisioning.js";
+import type { ObservabilityLogger } from "../observability/event-logger.js";
 import { OauthAccountRepository } from "../db/repositories/oauth-accounts.js";
 import { SocialContextRepository } from "../db/repositories/social-context.js";
 import { SessionRepository } from "../db/repositories/session.js";
@@ -25,7 +26,9 @@ function deriveTenantName(email: string): string {
  */
 export function createSocialAuthService(
   db: Database,
-  registry: ProviderRegistry
+  registry: ProviderRegistry,
+  /** Optional observability seam (#310) — threaded into tenant provisioning. */
+  observability?: ObservabilityLogger
 ): SocialAuthService {
   const oauthRepo = new OauthAccountRepository(db);
   const contextRepo = new SocialContextRepository(db);
@@ -41,10 +44,14 @@ export function createSocialAuthService(
     findTenantById: (id) => contextRepo.findTenantById(id),
     provisionNewGoogleOnlyUser: async (providerId, providerAccountId, email) => {
       const tenantName = deriveTenantName(email);
-      const provisioned = await provisionTenantForUser(db, {
-        tenantName,
-        userEmail: email,
-      });
+      const provisioned = await provisionTenantForUser(
+        db,
+        {
+          tenantName,
+          userEmail: email,
+        },
+        observability
+      );
       await oauthRepo.create({
         providerId,
         providerAccountId,

@@ -1083,3 +1083,72 @@ export const tenantBranding = pgTable(
     ),
   }),
 );
+
+/**
+ * Observability event severity (#310, Slice 1). A curated, low-cardinality set
+ * mirroring the app logger levels: `info` (normal domain outcomes), `warn`
+ * (denied/degraded but expected), `error` (unhandled request/server failure).
+ */
+export const observabilityLevelEnum = pgEnum("observability_level", [
+  "info",
+  "warn",
+  "error",
+]);
+
+/**
+ * Observability events (#310, Slice 1) — a persisted, superadmin-queryable
+ * stream of curated STRUCTURED domain events that runs ALONGSIDE (never
+ * replaces) the pino/stdout logs. Every write also emits a matching pino line
+ * so `docker logs` stays authoritative; this table adds durable, filterable
+ * history for the (later) /admin/logs view.
+ *
+ * HARD PRIVACY INVARIANT (AGENTS.md:72): rows carry ONLY non-sensitive
+ * identifiers (tenantId, actorUserId, and ids inside `metadata` such as
+ * planId/planSpecId/overrideId/eventId), enums/outcomes, an error name/message
+ * (never arbitrary user content), and non-sensitive scalar metadata (tier,
+ * limit, feature, status, route, statusCode). NEVER persist secrets, tokens,
+ * credentials, health data, plan/exercise/program content, prompts, or PII.
+ *
+ * `tenantId` and `actorUserId` are BOTH nullable with NO foreign key: a
+ * system-level event (e.g. `request.error` with no auth context) or an event
+ * for a tenant/user later deleted must still be writable and retained — a
+ * failed observability write must never break the request path, and an FK
+ * cascade must never erase audit history.
+ */
+export const observabilityEvents = pgTable(
+  "observability_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id"),
+    actorUserId: uuid("actor_user_id"),
+    level: observabilityLevelEnum("level").notNull(),
+    event: text("event").notNull(),
+    outcome: text("outcome"),
+    metadata: jsonb("metadata")
+      .$type<Record<string, string | number | boolean | null>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    // Millisecond precision (#310 keyset-pagination fix): matches JS `Date`
+    // round-trip precision exactly. The paginated keyset cursor is encoded via
+    // `Date.toISOString()` (ms) and node-pg already returns `Date` at ms
+    // precision on read — storing at the default (microsecond) precision let a
+    // row's microsecond remainder differ from every cursor value derived from
+    // it, so `createdAt = cursor.createdAt` never matched and the `id`
+    // tiebreak was silently unreachable for same-millisecond rows. Truncating
+    // storage to ms makes the comparison lossless.
+    createdAt: timestamp("created_at", { withTimezone: true, precision: 3 })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    tenantCreatedIdx: index("observability_events_tenant_created_idx").on(
+      table.tenantId,
+      table.createdAt,
+    ),
+    createdIdx: index("observability_events_created_idx").on(table.createdAt),
+    levelCreatedIdx: index("observability_events_level_created_idx").on(
+      table.level,
+      table.createdAt,
+    ),
+  }),
+);

@@ -148,6 +148,13 @@
       "when": 1785180120000,
       "tag": "0020_billing_audit_actor_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785180180000,
+      "tag": "0021_observability_events",
+      "breakpoints": true
     }
   ]
 }
