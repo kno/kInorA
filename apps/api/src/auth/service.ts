@@ -1,5 +1,6 @@
 import type { Database } from "../db/client.js";
 import { provisionTenantForUser } from "../tenant/provisioning.js";
+import type { ObservabilityLogger } from "../observability/event-logger.js";
 import { CredentialsRepository } from "../db/repositories/credentials.js";
 import {
   UserRepository,
@@ -52,7 +53,11 @@ export class AuthService {
   private sessionRepo: SessionRepository;
   private userProfileRepo: UserProfileRepository;
 
-  constructor(private db: Database) {
+  constructor(
+    private db: Database,
+    /** Optional observability seam (#310) — threaded into tenant provisioning. */
+    private observability?: ObservabilityLogger
+  ) {
     this.credRepo = new CredentialsRepository(db);
     this.userRepo = new UserRepository(db);
     this.memberRepo = new MembershipRepository(db);
@@ -73,10 +78,14 @@ export class AuthService {
     const tenantName = deriveTenantName(input.email);
 
     // 3. Provision tenant + user + owner membership (transaction)
-    const provisioned = await provisionTenantForUser(this.db, {
-      tenantName,
-      userEmail: input.email,
-    });
+    const provisioned = await provisionTenantForUser(
+      this.db,
+      {
+        tenantName,
+        userEmail: input.email,
+      },
+      this.observability
+    );
 
     // 4. Hash password and create credentials
     const passwordHash = hashPassword(validPassword);

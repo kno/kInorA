@@ -1,6 +1,7 @@
 import type { Database } from "../db/client.js";
 import { tenants, users, memberships, oauth_accounts, tenantBillingStates, userProfiles } from "../db/schema.js";
 import { buildTrialBillingState } from "../db/repositories/billing-backfill.js";
+import type { ObservabilityLogger } from "../observability/event-logger.js";
 
 /**
  * Input for the tenant provisioning primitive.
@@ -48,9 +49,16 @@ export interface ProvisionTenantResult {
  */
 export async function provisionTenantForUser(
   db: Database,
-  input: ProvisionTenantInput
+  input: ProvisionTenantInput,
+  /**
+   * Optional observability seam (#310). Records a PII-free `tenant.provisioned`
+   * event (tenant + actor ids ONLY) AFTER the provisioning transaction commits,
+   * fire-and-forget — so a failed observability write can never roll back or
+   * block registration. This seam logs nothing today via any other channel.
+   */
+  observability?: ObservabilityLogger
 ): Promise<ProvisionTenantResult> {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     // Create tenant
     const tenantRows = await tx
       .insert(tenants)
@@ -113,6 +121,17 @@ export async function provisionTenantForUser(
       membershipId: membershipRow.id,
     };
   });
+
+  // Recorded AFTER commit so the observability write is never part of the
+  // provisioning transaction (fire-and-forget, ids only).
+  observability?.recordEvent({
+    tenantId: result.tenantId,
+    actorUserId: result.userId,
+    level: "info",
+    event: "tenant.provisioned",
+  });
+
+  return result;
 }
 
 /**

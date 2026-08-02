@@ -9,6 +9,7 @@ import type {
 } from "@kinora/contracts";
 import { requireRole, requireAuth } from "../auth/plugin.js";
 import { assertTrainerEntitled, resolveAuthorizedOwner, ForbiddenOwnerAccess } from "../trainer/owner-access.js";
+import type { ObservabilityLogger } from "../observability/event-logger.js";
 import type { ActorOwnerContext } from "../trainer/owner-access.js";
 import { resolveClientTrainerTenant } from "../trainer/client-access.js";
 import type { EntitlementReaderPort } from "../billing/entitlement.js";
@@ -167,6 +168,13 @@ export interface TrainerRoutesOptions {
    * plan shape exactly as before this slice.
    */
   specRepo?: TrainerRouteSpecRepo;
+  /**
+   * Optional observability seam (#310). Threaded into every
+   * `resolveAuthorizedOwner` / `assertTrainerEntitled` call so an
+   * `owner_access.denied` warn event is recorded on trainer-authorization
+   * denials. Optional so existing registrations/tests compile unchanged.
+   */
+  observability?: ObservabilityLogger;
 }
 
 const inviteSchema = {
@@ -186,8 +194,16 @@ function toActorOwnerContext(request: FastifyRequest): ActorOwnerContext {
 }
 
 export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fastify, options) => {
-  const { assignmentRepo, membershipRepo, userRepo, entitlementReader, dashboardRepo, planRepo, specRepo } =
-    options;
+  const {
+    assignmentRepo,
+    membershipRepo,
+    userRepo,
+    entitlementReader,
+    dashboardRepo,
+    planRepo,
+    specRepo,
+    observability,
+  } = options;
 
   // GET /trainer/clients/:clientUserId/dashboard (15b-v2-trainer-dashboard-
   // branding, Phase S1). `resolveAuthorizedOwner` is the SAME deny-by-default
@@ -208,7 +224,7 @@ export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fa
       try {
         ownerUserId = await resolveAuthorizedOwner(
           ctx,
-          { assignmentRepo, entitlementReader },
+          { assignmentRepo, entitlementReader, observability },
           clientUserId as UserId,
         );
       } catch (err) {
@@ -290,7 +306,7 @@ export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fa
       const body = request.body as InviteClientRequest;
 
       try {
-        await assertTrainerEntitled(ctx, { entitlementReader });
+        await assertTrainerEntitled(ctx, { entitlementReader, observability });
       } catch (err) {
         if (err instanceof ForbiddenOwnerAccess) {
           return reply.code(403).send({ error: "forbidden" });
@@ -360,7 +376,7 @@ export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fa
       const ctx = toActorOwnerContext(request);
 
       try {
-        await assertTrainerEntitled(ctx, { entitlementReader });
+        await assertTrainerEntitled(ctx, { entitlementReader, observability });
       } catch (err) {
         if (err instanceof ForbiddenOwnerAccess) {
           return reply.code(403).send({ error: "forbidden" });
