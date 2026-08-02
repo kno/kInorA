@@ -18,6 +18,7 @@ import {
   type StripePriceInterval,
   type StripeSubscriptionSnapshot,
   type StripeSubscriptionStatus,
+  type SubscriptionGateway,
   type StripeWebhookEvent,
 } from "../../billing/stripe-gateway.js";
 
@@ -43,7 +44,13 @@ const INVOICE_LIST_LIMIT = 24;
  * and no secret.
  */
 export class StripeApiGateway
-  implements StripeGateway, CheckoutGateway, PortalGateway, InvoiceGateway, PriceGateway
+  implements
+    StripeGateway,
+    CheckoutGateway,
+    PortalGateway,
+    InvoiceGateway,
+    PriceGateway,
+    SubscriptionGateway
 {
   private readonly stripe: Stripe;
 
@@ -197,6 +204,32 @@ export class StripeApiGateway
       currency: price.currency ?? "",
       interval: normalizePriceInterval(price.recurring?.interval),
     };
+  }
+
+  /**
+   * Set a subscription's seat quantity (16c v3 Slice A — pure Stripe infra;
+   * no seat-count source or persistence wired here, that's later slices). The
+   * Stripe SDK requires the SUBSCRIPTION ITEM id, not the subscription id, so
+   * this retrieves the subscription first to read `items.data[0].id` before
+   * updating. `proration_behavior: "create_prorations"` charges/credits the
+   * difference immediately (design Q3). The caller-supplied `idempotencyKey`
+   * makes a retried call safe; this method never generates its own.
+   */
+  async updateSubscriptionQuantity(
+    subscriptionId: string,
+    quantity: number,
+    idempotencyKey: string,
+  ): Promise<void> {
+    const subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
+    const item = subscription.items.data[0];
+    if (!item) {
+      throw new Error(`stripe subscription ${subscriptionId} has no items to update quantity on`);
+    }
+    await this.stripe.subscriptions.update(
+      subscriptionId,
+      { items: [{ id: item.id, quantity }], proration_behavior: "create_prorations" },
+      { idempotencyKey },
+    );
   }
 }
 
@@ -364,7 +397,19 @@ function normalizeSubscription(sub: Stripe.Subscription): StripeSubscriptionSnap
     cycle: normalizeCycle(sub),
     currentPeriodEnd: normalizePeriodEnd(sub),
     cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
+    seatQuantity: normalizeSeatQuantity(sub),
   };
+}
+
+/**
+ * Parse the first subscription item's quantity (16c v3 Slice A). `null` when
+ * there is no item or the quantity is not a finite number — the same
+ * defensive-optional convention `normalizeCycle`/`normalizePeriodEnd` follow
+ * for other item-derived fields on this snapshot.
+ */
+function normalizeSeatQuantity(sub: Stripe.Subscription): number | null {
+  const quantity = sub.items?.data?.[0]?.quantity;
+  return typeof quantity === "number" && Number.isFinite(quantity) ? quantity : null;
 }
 
 // Derived from the SAME canonical tuple `StripeSubscriptionStatus` is derived

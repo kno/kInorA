@@ -96,6 +96,7 @@ describe.skipIf(!hasDb)("StripeEventStoreRepository / ProcessStripeWebhook (real
       cycle: "monthly",
       currentPeriodEnd: new Date("2026-08-25T00:00:00.000Z"),
       cancelAtPeriodEnd: false,
+      seatQuantity: null,
       ...overrides,
     };
   }
