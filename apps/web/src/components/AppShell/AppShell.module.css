@@ -29,3 +29,12 @@
     padding-left: 248px;
   }
 }
+
+/* Reserve space for the fixed mobile bottom nav bar (64px + safe-area, see
+ * MobileNav.module.css .bar) so the bottom of any page is reachable instead
+ * of hiding behind it. */
+@media (max-width: 767px) {
+  .main {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+}
