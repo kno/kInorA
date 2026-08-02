@@ -175,6 +175,75 @@ describe("GrantTenantTierOverride", () => {
     expect(outcome).toEqual({ ok: false, reason: "invalid_reason" });
   });
 
+  it("threads an operationKey through to the port (#313 idempotency)", async () => {
+    const port = buildPort();
+    const useCase = new GrantTenantTierOverride(port);
+
+    await useCase.execute(
+      {
+        tenantId: TENANT_ID,
+        actorUserId: ACTOR_ID,
+        tier: "trainer",
+        reason: "retry-safe",
+        operationKey: "op-key-abc",
+      },
+      NOW,
+    );
+
+    expect(port.grantTierOverride).toHaveBeenCalledWith(
+      expect.objectContaining({ operationKey: "op-key-abc" }),
+    );
+  });
+
+  it("skips the fast-path active-override check when an operationKey is present (#313 replay)", async () => {
+    // The original grant of this key is STILL active; the fast-path check would
+    // otherwise 409. With a key, the adapter alone decides (it replays the
+    // original), so the use case must NOT short-circuit on loadActiveOverride.
+    const port = buildPort({
+      loadActiveOverride: vi.fn().mockResolvedValue({ id: "existing-override" }),
+      grantTierOverride: vi
+        .fn()
+        .mockResolvedValue({ id: "override-1", startsAt: NOW, endsAt: OPEN_ENDED_SENTINEL }),
+    });
+    const useCase = new GrantTenantTierOverride(port);
+
+    const outcome = await useCase.execute(
+      {
+        tenantId: TENANT_ID,
+        actorUserId: ACTOR_ID,
+        tier: "trainer",
+        reason: "retry-safe",
+        operationKey: "op-key-abc",
+      },
+      NOW,
+    );
+
+    expect(outcome.ok).toBe(true);
+    expect(port.loadActiveOverride).not.toHaveBeenCalled();
+    expect(port.grantTierOverride).toHaveBeenCalled();
+  });
+
+  it("maps a genuine different-key conflict (adapter returns null) to active_override_exists even with a key (#313)", async () => {
+    const port = buildPort({
+      loadActiveOverride: vi.fn().mockResolvedValue({ id: "existing-override" }),
+      grantTierOverride: vi.fn().mockResolvedValue(null),
+    });
+    const useCase = new GrantTenantTierOverride(port);
+
+    const outcome = await useCase.execute(
+      {
+        tenantId: TENANT_ID,
+        actorUserId: ACTOR_ID,
+        tier: "gym",
+        reason: "different key",
+        operationKey: "op-key-new",
+      },
+      NOW,
+    );
+
+    expect(outcome).toEqual({ ok: false, reason: "active_override_exists" });
+  });
+
   it("rejects endsAt <= startsAt", async () => {
     const port = buildPort();
     const useCase = new GrantTenantTierOverride(port);
