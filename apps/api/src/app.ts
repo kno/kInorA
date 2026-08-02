@@ -27,6 +27,7 @@ import { userPreferencesRoutes } from "./routes/user-preferences.js";
 import { trainerRoutes } from "./routes/trainer.js";
 import { TrainerAssignmentRepository } from "./db/repositories/trainer-assignment.js";
 import { brandingRoutes } from "./routes/branding.js";
+import { publicBrandingRoutes } from "./routes/public-branding.js";
 import { TenantBrandingRepository } from "./db/repositories/tenant-branding.js";
 import { LocalStorageAdapter } from "./storage/local-storage-adapter.js";
 import type { ObjectStoragePort } from "./storage/object-storage-port.js";
@@ -567,6 +568,13 @@ export async function buildApp(
     storage: resolvedObjectStorage,
     entitlementReader: billingStateReader,
   });
+
+  // Gym white-label PUBLIC branding read-by-slug (16a-v3-gym-white-label,
+  // Slice 3). Deliberately registered as a SEPARATE plugin from
+  // `brandingRoutes` above (no auth preHandler anywhere on its path) and
+  // reuses the SAME `TenantBrandingRepository` instance constructed above —
+  // no second repository instantiation needed.
+  await app.register(publicBrandingRoutes, { repo: tenantBrandingRepo });
 
   // 11a billing routes (Phase 3 quota administration + Phase 4 member
   // visibility). Owner-only endpoints set per-member allocations (audited)
