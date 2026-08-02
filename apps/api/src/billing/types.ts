@@ -17,7 +17,19 @@ export interface BillingScope {
  * feature at all (limit > 0). Quota consumption is a separate, later step.
  */
 export type EntitlementDecision =
-  | { allowed: true; tier: BillingTier; source: BillingSource }
+  | {
+      allowed: true;
+      tier: BillingTier;
+      source: BillingSource;
+      /**
+       * Seat count backing `tier`'s limit resolution (16c-v3 Slice D, design
+       * Q4) — null when the tenant has no seat-billing metadata (every
+       * non-`trainer` tier, and every trainer tenant before seat billing goes
+       * live). Threaded to `resolveTenantFeatureLimit` by every downstream
+       * consumer of this decision.
+       */
+      seatCount: number | null;
+    }
   | { allowed: false; reason: BillingDenialReason };
 
 /**

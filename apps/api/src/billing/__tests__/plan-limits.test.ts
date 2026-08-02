@@ -26,22 +26,22 @@ const FEATURES: BillingFeature[] = ["plan_generation", "plan_regeneration", "mem
 
 describe("resolveTenantFeatureLimit — real Pro caps (11b Slice 3)", () => {
   it("resolves Pro to the config-driven PRO_TIER_LIMITS, NOT the dropped 1_000_000 provisional", () => {
-    expect(resolveTenantFeatureLimit("pro", "plan_generation")).toBe(500);
-    expect(resolveTenantFeatureLimit("pro", "plan_regeneration")).toBe(1000);
-    expect(resolveTenantFeatureLimit("pro", "memory_write")).toBe(50000);
-    expect(resolveTenantFeatureLimit("pro", "memory_retrieval")).toBe(200000);
+    expect(resolveTenantFeatureLimit("pro", "plan_generation", null)).toBe(500);
+    expect(resolveTenantFeatureLimit("pro", "plan_regeneration", null)).toBe(1000);
+    expect(resolveTenantFeatureLimit("pro", "memory_write", null)).toBe(50000);
+    expect(resolveTenantFeatureLimit("pro", "memory_retrieval", null)).toBe(200000);
     // The provisional cap is gone entirely.
     for (const feature of FEATURES) {
-      expect(resolveTenantFeatureLimit("pro", feature)).not.toBe(1_000_000);
-      expect(resolveTenantFeatureLimit("pro", feature)).toBe(PRO_TIER_LIMITS[feature]);
+      expect(resolveTenantFeatureLimit("pro", feature, null)).not.toBe(1_000_000);
+      expect(resolveTenantFeatureLimit("pro", feature, null)).toBe(PRO_TIER_LIMITS[feature]);
     }
   });
 
   it("keeps the Free caps unchanged (1 / 1 / 0 / 0)", () => {
-    expect(resolveTenantFeatureLimit("free", "plan_generation")).toBe(1);
-    expect(resolveTenantFeatureLimit("free", "plan_regeneration")).toBe(1);
-    expect(resolveTenantFeatureLimit("free", "memory_write")).toBe(0);
-    expect(resolveTenantFeatureLimit("free", "memory_retrieval")).toBe(0);
+    expect(resolveTenantFeatureLimit("free", "plan_generation", null)).toBe(1);
+    expect(resolveTenantFeatureLimit("free", "plan_regeneration", null)).toBe(1);
+    expect(resolveTenantFeatureLimit("free", "memory_write", null)).toBe(0);
+    expect(resolveTenantFeatureLimit("free", "memory_retrieval", null)).toBe(0);
   });
 });
 
@@ -61,7 +61,7 @@ const FREE_TIER_LIMITS_FOR_TEST: Record<BillingFeature, number> = {
 describe("resolveTenantFeatureLimit — trainer tier (15a-v2 Slice 1)", () => {
   it("resolves 'trainer' to TRAINER_TIER_LIMITS, never silently falling back to Free", () => {
     for (const feature of FEATURES) {
-      expect(resolveTenantFeatureLimit("trainer", feature)).not.toBe(
+      expect(resolveTenantFeatureLimit("trainer", feature, null)).not.toBe(
         FREE_TIER_LIMITS_FOR_TEST[feature],
       );
     }
@@ -69,9 +69,70 @@ describe("resolveTenantFeatureLimit — trainer tier (15a-v2 Slice 1)", () => {
 
   it("resolves 'trainer' limits at-or-above the Pro caps for every feature", () => {
     for (const feature of FEATURES) {
-      expect(resolveTenantFeatureLimit("trainer", feature)).toBeGreaterThanOrEqual(
+      expect(resolveTenantFeatureLimit("trainer", feature, null)).toBeGreaterThanOrEqual(
         PRO_TIER_LIMITS[feature],
       );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 16c-v3 Slice D — seat-scaled trainer limits (design Decision Q4).
+// Formula: limit(feature) = max(TRAINER_TIER_LIMITS[feature], seatCount *
+// PRO_TIER_LIMITS[feature]). The flat 2x-Pro table is the FLOOR (0-2 seats),
+// and a null seatCount MUST fall back to the byte-identical flat table for
+// every tier — this is the regression guard against a live-traffic behavior
+// change once seat billing goes live.
+// ---------------------------------------------------------------------------
+describe("resolveTenantFeatureLimit — seat-scaled trainer limits (16c-v3 Slice D, Q4)", () => {
+  it("floors at the flat TRAINER_TIER_LIMITS for 0, 1, and 2 seats (never worse off)", () => {
+    for (const seatCount of [0, 1, 2]) {
+      for (const feature of FEATURES) {
+        expect(resolveTenantFeatureLimit("trainer", feature, seatCount)).toBe(
+          resolveTenantFeatureLimit("trainer", feature, null),
+        );
+      }
+    }
+  });
+
+  it("scales linearly above the floor for 5 and 10 seats: seatCount * PRO_TIER_LIMITS", () => {
+    for (const seatCount of [5, 10]) {
+      for (const feature of FEATURES) {
+        const expected = Math.max(
+          resolveTenantFeatureLimit("trainer", feature, null),
+          seatCount * PRO_TIER_LIMITS[feature],
+        );
+        expect(resolveTenantFeatureLimit("trainer", feature, seatCount)).toBe(expected);
+        // 5/10 seats is comfortably above the 2x-Pro floor for every feature,
+        // so the scaled value must be the one that actually wins the max().
+        expect(resolveTenantFeatureLimit("trainer", feature, seatCount)).toBe(
+          seatCount * PRO_TIER_LIMITS[feature],
+        );
+      }
+    }
+  });
+
+  it("a null seatCount is byte-identical to the pre-Slice-D flat trainer table", () => {
+    for (const feature of FEATURES) {
+      expect(resolveTenantFeatureLimit("trainer", feature, null)).toBe(
+        Math.max(PRO_TIER_LIMITS[feature] * 2, 0),
+      );
+    }
+  });
+
+  it("does NOT scale pro/free/gym regardless of seatCount", () => {
+    for (const seatCount of [0, 1, 2, 5, 10]) {
+      for (const feature of FEATURES) {
+        expect(resolveTenantFeatureLimit("pro", feature, seatCount)).toBe(
+          resolveTenantFeatureLimit("pro", feature, null),
+        );
+        expect(resolveTenantFeatureLimit("free", feature, seatCount)).toBe(
+          resolveTenantFeatureLimit("free", feature, null),
+        );
+        expect(resolveTenantFeatureLimit("gym", feature, seatCount)).toBe(
+          resolveTenantFeatureLimit("gym", feature, null),
+        );
+      }
     }
   });
 });
@@ -86,7 +147,7 @@ describe("resolveTenantFeatureLimit — trainer tier (15a-v2 Slice 1)", () => {
 describe("resolveTenantFeatureLimit — gym tier (16a-v3 Slice 1)", () => {
   it("resolves 'gym' to GYM_TIER_LIMITS, never silently falling back to Free", () => {
     for (const feature of FEATURES) {
-      expect(resolveTenantFeatureLimit("gym", feature)).not.toBe(
+      expect(resolveTenantFeatureLimit("gym", feature, null)).not.toBe(
         FREE_TIER_LIMITS_FOR_TEST[feature],
       );
     }
@@ -94,7 +155,7 @@ describe("resolveTenantFeatureLimit — gym tier (16a-v3 Slice 1)", () => {
 
   it("resolves 'gym' limits at-or-above the Pro caps for every feature", () => {
     for (const feature of FEATURES) {
-      expect(resolveTenantFeatureLimit("gym", feature)).toBeGreaterThanOrEqual(
+      expect(resolveTenantFeatureLimit("gym", feature, null)).toBeGreaterThanOrEqual(
         PRO_TIER_LIMITS[feature],
       );
     }
@@ -120,7 +181,14 @@ class FakeLedger implements QuotaLedgerPort {
 
 function proEntitlement() {
   return {
-    check: vi.fn(async (): Promise<EntitlementDecision> => ({ allowed: true, tier: "pro", source: "stripe" })),
+    check: vi.fn(
+      async (): Promise<EntitlementDecision> => ({
+        allowed: true,
+        tier: "pro",
+        source: "stripe",
+        seatCount: null,
+      }),
+    ),
   };
 }
 

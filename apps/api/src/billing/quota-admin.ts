@@ -49,8 +49,16 @@ export interface QuotaAdminPort {
     tenantId: string,
     subjectUserId: string,
   ): Promise<AdminMembershipView | null>;
-  /** Effective tenant tier used to bound allocations, or null when no billing state. */
-  loadTenantTier(tenantId: string, now: Date): Promise<BillingTier | null>;
+  /**
+   * Effective tenant tier + seat count used to bound allocations, or null
+   * when no billing state exists. `seatCount` backs the seat-scaled `trainer`
+   * cap (16c-v3 Slice D, design Q4) — null for every tenant without
+   * seat-billing metadata.
+   */
+  loadTenantTier(
+    tenantId: string,
+    now: Date,
+  ): Promise<{ tier: BillingTier; seatCount: number | null } | null>;
   /**
    * Atomic: upsert the `(tenantId, subjectUserId, feature, period)` allocation
    * AND write the `member_allocation_set` audit row in ONE transaction. The
@@ -145,12 +153,16 @@ export class SetMemberAllocation {
       return { ok: false, reason: "allocation_out_of_bounds" };
     }
 
-    const tier = await this.port.loadTenantTier(input.tenantId, now);
-    if (!tier) {
+    const tenantBilling = await this.port.loadTenantTier(input.tenantId, now);
+    if (!tenantBilling) {
       return { ok: false, reason: "billing_state_unavailable" };
     }
 
-    const cap = resolveTenantFeatureLimit(tier, input.feature);
+    const cap = resolveTenantFeatureLimit(
+      tenantBilling.tier,
+      input.feature,
+      tenantBilling.seatCount,
+    );
     if (input.limit > cap) {
       return { ok: false, reason: "allocation_out_of_bounds" };
     }

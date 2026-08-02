@@ -62,6 +62,7 @@ interface FakePortOptions {
   actor?: AdminMembershipView | null;
   subject?: AdminMembershipView | null;
   tenantTier?: "free" | "pro" | null;
+  tenantSeatCount?: number | null;
 }
 
 function buildFakePort(opts: FakePortOptions = {}) {
@@ -70,7 +71,11 @@ function buildFakePort(opts: FakePortOptions = {}) {
     loadSubjectMembership: vi.fn(async () =>
       opts.subject === undefined ? MEMBER_ACTIVE : opts.subject,
     ),
-    loadTenantTier: vi.fn(async () => opts.tenantTier ?? "pro"),
+    loadTenantTier: vi.fn(async () =>
+      opts.tenantTier === null
+        ? null
+        : { tier: opts.tenantTier ?? "pro", seatCount: opts.tenantSeatCount ?? null },
+    ),
     writeMemberAllocation: vi.fn(async () => {}),
     readTenantUsage: vi.fn(async () => TENANT_USAGE.map((r) => ({ ...r }))),
     readMemberUsage: vi.fn(async () => MEMBER_USAGE.map((r) => ({ ...r }))),

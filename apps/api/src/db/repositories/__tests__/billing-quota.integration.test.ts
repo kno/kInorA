@@ -93,7 +93,7 @@ describe.skipIf(!hasDb)("QuotaLedgerRepository (real Postgres)", () => {
     const { tenantId, userId } = await seedActiveTenant();
     const scope = { tenantId, userId };
     const feature = "plan_generation" as const;
-    const proCap = resolveTenantFeatureLimit("pro", feature);
+    const proCap = resolveTenantFeatureLimit("pro", feature, null);
     expect(proCap).toBe(500); // real config-driven cap, NOT the provisional 1_000_000
 
     // Seed the tenant aggregate counter one unit below the real cap.

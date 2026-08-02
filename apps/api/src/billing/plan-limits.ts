@@ -58,10 +58,34 @@ const GYM_TIER_LIMITS: Record<BillingFeature, number> = {
  * `trainer` (15a-v2, Slice 1) resolves to {@link TRAINER_TIER_LIMITS} so it
  * never silently falls back to Free — see that const's docstring. `gym`
  * (16a-v3, Slice 1) resolves to {@link GYM_TIER_LIMITS} for the same reason.
+ *
+ * **Seat-scaled `trainer` limits (16c-v3 Slice D, design Decision Q4):** when
+ * `seatCount` is a number, a `trainer`-tier limit is
+ * `max(TRAINER_TIER_LIMITS[feature], seatCount * PRO_TIER_LIMITS[feature])` —
+ * each active seat contributes one Pro allowance, and the existing flat
+ * `TRAINER_TIER_LIMITS` (2x Pro) is the FLOOR so a 0–2-seat trainer is never
+ * worse off. `gym` does NOT scale yet (its `SeatSource` is gated on 16b) — it
+ * always resolves to the flat {@link GYM_TIER_LIMITS} regardless of
+ * `seatCount`. `pro`/`free` are entirely unaffected by `seatCount`.
+ *
+ * `seatCount` is a REQUIRED parameter (not optional-defaulted) so the compiler
+ * surfaces every call site that must thread it (Judgment Day: the original
+ * plan named only 2 of the 4 real call sites). Pass `null` when the tenant has
+ * no seat-billing metadata (all tenants before seat billing goes live, and
+ * every non-`trainer` tier) — this is BYTE-IDENTICAL to the pre-Slice-D flat
+ * table for every tier.
  */
-export function resolveTenantFeatureLimit(tier: BillingTier, feature: BillingFeature): number {
+export function resolveTenantFeatureLimit(
+  tier: BillingTier,
+  feature: BillingFeature,
+  seatCount: number | null,
+): number {
   if (tier === "pro") return PRO_TIER_LIMITS[feature];
-  if (tier === "trainer") return TRAINER_TIER_LIMITS[feature];
+  if (tier === "trainer") {
+    const flat = TRAINER_TIER_LIMITS[feature];
+    if (seatCount === null || seatCount === undefined) return flat;
+    return Math.max(flat, seatCount * PRO_TIER_LIMITS[feature]);
+  }
   if (tier === "gym") return GYM_TIER_LIMITS[feature];
   return FREE_TIER_LIMITS[feature];
 }

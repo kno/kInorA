@@ -31,6 +31,12 @@ export interface BillingVisibilityContext {
     source: BillingSource;
     trialStartedAt: Date | null;
     trialEndsAt: Date | null;
+    /**
+     * Seat count backing the seat-scaled `trainer` premium-gate limit (16c-v3
+     * Slice D, design Q4) — null for every tenant without seat-billing
+     * metadata. Never read by `resolveEffectiveTier`.
+     */
+    seatCount: number | null;
     updatedAt: Date;
     /**
      * Stripe subscription DISPLAY metadata (11b) — surfaced to the UI Price /
@@ -102,7 +108,8 @@ export class GetBillingVisibility {
     // `CheckEntitlement` would produce for any premium AI action right now —
     // so the UI shows the SAME upgrade prompt without duplicating gate logic
     // per feature.
-    const premiumLimit = resolveTenantFeatureLimit(effective.tier, "memory_write");
+    const seatCount = ctx.billing?.seatCount ?? null;
+    const premiumLimit = resolveTenantFeatureLimit(effective.tier, "memory_write", seatCount);
     const denialReason: BillingDenialReason | undefined =
       premiumLimit <= 0 ? (effective.lapsedReason ?? "premium_required") : undefined;
 

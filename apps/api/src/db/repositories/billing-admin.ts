@@ -62,7 +62,10 @@ export class BillingAdminRepository implements QuotaAdminPort {
     return { role: row.role as AdminMembershipView["role"], status: row.status };
   }
 
-  async loadTenantTier(tenantId: string, now: Date): Promise<BillingTier | null> {
+  async loadTenantTier(
+    tenantId: string,
+    now: Date,
+  ): Promise<{ tier: BillingTier; seatCount: number | null } | null> {
     const [billingRow] = await this.db
       .select({
         tier: tenantBillingStates.tier,
@@ -70,6 +73,7 @@ export class BillingAdminRepository implements QuotaAdminPort {
         source: tenantBillingStates.source,
         trialStartedAt: tenantBillingStates.trialStartedAt,
         trialEndsAt: tenantBillingStates.trialEndsAt,
+        seatCount: tenantBillingStates.seatCount,
       })
       .from(tenantBillingStates)
       .where(eq(tenantBillingStates.tenantId, tenantId));
@@ -99,12 +103,20 @@ export class BillingAdminRepository implements QuotaAdminPort {
             source: billingRow.source,
             trialStartedAt: billingRow.trialStartedAt,
             trialEndsAt: billingRow.trialEndsAt,
+            seatCount: billingRow.seatCount ?? null,
           }
         : null,
       activeOverrideTier: overrideRow?.tier ?? null,
     };
 
-    return resolveEffectiveTier(ctx, now).tier;
+    return {
+      tier: resolveEffectiveTier(ctx, now).tier,
+      // Seat count is raw tenant-row metadata, independent of tier resolution
+      // (only meaningful when the effective tier is `trainer` — see
+      // `resolveTenantFeatureLimit`). Read directly off the row, never
+      // overridden.
+      seatCount: billingRow?.seatCount ?? null,
+    };
   }
 
   /**
