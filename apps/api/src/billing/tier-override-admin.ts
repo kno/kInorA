@@ -28,6 +28,14 @@ export interface GrantTierOverrideInput {
   reason: string;
   startsAt: Date;
   endsAt: Date;
+  /**
+   * Optional caller-supplied idempotency key (#313). When present and an
+   * override with this key already exists for the tenant, the adapter returns
+   * that original override (idempotent replay) instead of inserting a new row
+   * or reporting an `active_override_exists` conflict — so a grant retried
+   * after a network timeout resolves to the first attempt's result.
+   */
+  operationKey?: string;
 }
 
 export interface RevokeTierOverrideInput {
@@ -48,15 +56,25 @@ export interface TierOverrideAdminPort {
   loadActiveOverride(tenantId: string, now: Date): Promise<{ id: string } | null>;
   /**
    * Grants the override. The adapter runs this as ONE transaction that
-   * (1) takes a per-tenant Postgres advisory lock, (2) RE-CHECKS for an
-   * active override under that lock, and (3) inserts only if still clear —
-   * this serializes concurrent grants for the same tenant. Resolves `null`
+   * (1) takes a per-tenant Postgres advisory lock, (2) when an `operationKey`
+   * is supplied, returns any pre-existing override carrying that key
+   * (idempotent replay — #313), (3) otherwise RE-CHECKS for an active
+   * override under that lock, and (4) inserts only if still clear — this
+   * serializes concurrent grants for the same tenant. Resolves `null`
    * (instead of throwing) when the transactional re-check finds a
    * concurrently-committed active override, so the caller can map it to the
    * same `active_override_exists` conflict the fast-path check above
    * produces.
    */
   grantTierOverride(input: GrantTierOverrideInput): Promise<TenantBillingOverrideRow | null>;
+  /**
+   * Revokes the override. The adapter runs this as ONE transaction that takes
+   * a per-tenant advisory lock and guards the `endsAt = now` UPDATE with
+   * `ends_at > now`, so a SECOND concurrent revoke of the same override
+   * updates zero rows — no duplicate `admin_override_expired` audit row or
+   * observability event is written (#315). Always resolves the row's current
+   * `{ id, endsAt }` (idempotent success for an already-revoked override).
+   */
   revokeTierOverride(input: RevokeTierOverrideInput): Promise<{ id: string; endsAt: Date }>;
 }
 
@@ -68,6 +86,8 @@ export interface GrantTierOverrideRequest {
   reason: string;
   startsAt?: Date;
   endsAt?: Date;
+  /** Optional idempotency key (#313); see `GrantTierOverrideInput.operationKey`. */
+  operationKey?: string;
 }
 
 export interface RevokeTierOverrideRequest {
@@ -132,9 +152,18 @@ export class GrantTenantTierOverride {
       return { ok: false, reason: "unknown_tenant" };
     }
 
-    const activeOverride = await this.port.loadActiveOverride(input.tenantId, now);
-    if (activeOverride) {
-      return { ok: false, reason: "active_override_exists" };
+    // Fast-path overlap guard. SKIPPED when an `operationKey` is present (#313):
+    // a retried grant whose original is still active would otherwise be
+    // rejected here as `active_override_exists` before the adapter could
+    // recognise the key and replay the original. With a key, the adapter's
+    // locked transaction is the sole authority — it replays on a key match and
+    // still resolves `null` (mapped to 409 below) for a genuine different-key
+    // grant that collides with an active override.
+    if (!input.operationKey) {
+      const activeOverride = await this.port.loadActiveOverride(input.tenantId, now);
+      if (activeOverride) {
+        return { ok: false, reason: "active_override_exists" };
+      }
     }
 
     const created = await this.port.grantTierOverride({
@@ -144,6 +173,7 @@ export class GrantTenantTierOverride {
       reason: input.reason,
       startsAt,
       endsAt,
+      operationKey: input.operationKey,
     });
 
     if (!created) {

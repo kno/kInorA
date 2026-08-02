@@ -20,6 +20,10 @@ const grantBodySchema = z.object({
   reason: z.string().min(1),
   startsAt: z.coerce.date().optional(),
   endsAt: z.coerce.date().optional(),
+  // Optional client-supplied idempotency key (#313): a grant retried after a
+  // network timeout carries the same key so the server replays the original
+  // 201 instead of a spurious 409. Bounded length keeps it index-friendly.
+  operationKey: z.string().min(1).max(200).optional(),
 });
 
 /**
@@ -105,6 +109,7 @@ export const adminTierOverrideRoutes: FastifyPluginAsync<AdminTierOverrideRoutes
         reason: result.data.reason,
         startsAt: result.data.startsAt,
         endsAt: result.data.endsAt,
+        operationKey: result.data.operationKey,
       });
 
       if (!outcome.ok) {

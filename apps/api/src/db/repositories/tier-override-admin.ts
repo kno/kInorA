@@ -75,11 +75,34 @@ export class TierOverrideAdminRepository implements TierOverrideAdminPort {
    * map it to the existing `active_override_exists` 409 conflict.
    */
   async grantTierOverride(input: GrantTierOverrideInput): Promise<TenantBillingOverrideRow | null> {
-    const created = await this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       // Serializes concurrent grants for this tenant. `hashtext` collapses
       // the uuid to a single bigint lock key; the lock is transaction-scoped
       // and released automatically on commit/rollback.
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${input.tenantId}))`);
+
+      // Idempotency replay (#313): under the lock, an override already
+      // carrying this operation key is the committed result of a prior
+      // (possibly timed-out) attempt — return it verbatim. No new row, no
+      // audit row, no observability event.
+      if (input.operationKey) {
+        const [existingByKey] = await tx
+          .select({
+            id: tenantBillingOverrides.id,
+            startsAt: tenantBillingOverrides.startsAt,
+            endsAt: tenantBillingOverrides.endsAt,
+          })
+          .from(tenantBillingOverrides)
+          .where(
+            and(
+              eq(tenantBillingOverrides.tenantId, input.tenantId),
+              eq(tenantBillingOverrides.operationKey, input.operationKey),
+            ),
+          );
+        if (existingByKey) {
+          return { row: existingByKey, replayed: true };
+        }
+      }
 
       const [existingActive] = await tx
         .select({ id: tenantBillingOverrides.id })
@@ -106,6 +129,7 @@ export class TierOverrideAdminRepository implements TierOverrideAdminPort {
           endsAt: input.endsAt,
           createdByUserId: input.actorUserId,
           reason: input.reason,
+          operationKey: input.operationKey ?? null,
         })
         .returning({
           id: tenantBillingOverrides.id,
@@ -120,50 +144,76 @@ export class TierOverrideAdminRepository implements TierOverrideAdminPort {
         metadata: { tier: input.tier, reason: input.reason, overrideId: created!.id },
       });
 
-      return created!;
+      return { row: created!, replayed: false };
     });
 
-    // Post-commit, only for a successful grant (a null result = lost the
-    // advisory-lock race, no override written). Ids + tier only — never `reason`.
-    if (created) {
+    // Post-commit observability only for a freshly-inserted grant. A null
+    // result = lost the advisory-lock race (no override written); a replayed
+    // result already emitted its event on the original attempt. Ids + tier
+    // only — never `reason`.
+    if (result && !result.replayed) {
       this.observability?.recordEvent({
         tenantId: input.tenantId,
         actorUserId: input.actorUserId,
         level: "info",
         event: "tier_override.granted",
-        metadata: { tier: input.tier, overrideId: created.id },
+        metadata: { tier: input.tier, overrideId: result.row.id },
       });
     }
 
-    return created;
+    return result?.row ?? null;
   }
 
   async revokeTierOverride(input: RevokeTierOverrideInput): Promise<{ id: string; endsAt: Date }> {
-    const revoked = await this.db.transaction(async (tx) => {
-      const [row] = await tx
+    const result = await this.db.transaction(async (tx) => {
+      // Mirror the grant fix (#315): serialize concurrent revokes for this
+      // tenant with a per-tenant advisory lock, then guard the UPDATE with
+      // `ends_at > now` so a SECOND concurrent revoke of the same override
+      // matches zero rows.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${input.tenantId}))`);
+
+      const [updated] = await tx
         .update(tenantBillingOverrides)
         .set({ endsAt: input.now })
-        .where(eq(tenantBillingOverrides.id, input.overrideId))
+        .where(
+          and(
+            eq(tenantBillingOverrides.id, input.overrideId),
+            gt(tenantBillingOverrides.endsAt, input.now),
+          ),
+        )
         .returning({ id: tenantBillingOverrides.id, endsAt: tenantBillingOverrides.endsAt });
 
-      await tx.insert(billingAuditEvents).values({
+      if (updated) {
+        // Only the revoke that actually flipped the row writes the audit event.
+        await tx.insert(billingAuditEvents).values({
+          tenantId: input.tenantId,
+          actorUserId: input.actorUserId,
+          action: "admin_override_expired",
+          metadata: { overrideId: updated.id },
+        });
+        return { row: updated, revoked: true };
+      }
+
+      // Zero rows updated: a concurrent revoke already expired this override.
+      // Return its current (already-past) endsAt as an idempotent success —
+      // no duplicate audit row, no duplicate observability event.
+      const [existing] = await tx
+        .select({ id: tenantBillingOverrides.id, endsAt: tenantBillingOverrides.endsAt })
+        .from(tenantBillingOverrides)
+        .where(eq(tenantBillingOverrides.id, input.overrideId));
+      return { row: existing!, revoked: false };
+    });
+
+    if (result.revoked) {
+      this.observability?.recordEvent({
         tenantId: input.tenantId,
         actorUserId: input.actorUserId,
-        action: "admin_override_expired",
-        metadata: { overrideId: row!.id },
+        level: "info",
+        event: "tier_override.revoked",
+        metadata: { overrideId: result.row.id },
       });
+    }
 
-      return row!;
-    });
-
-    this.observability?.recordEvent({
-      tenantId: input.tenantId,
-      actorUserId: input.actorUserId,
-      level: "info",
-      event: "tier_override.revoked",
-      metadata: { overrideId: revoked.id },
-    });
-
-    return revoked;
+    return result.row;
   }
 }
