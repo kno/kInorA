@@ -183,6 +183,24 @@ describe("mapSubscriptionToWrite (pure mapping)", () => {
     const write = mapSubscriptionToWrite(ev, ev.subscription!, NOW);
     expect(write.status).toBe("expired");
   });
+
+  // 16c Slice B: the webhook persists the Stripe seat quantity as-is, but the
+  // design (Q5) confirms NO price→tier mapping — tier stays "pro" regardless
+  // of seatQuantity; the trainer/gym tier is granted ONLY by the 16d admin
+  // override (`resolveEffectiveTier` gives it unconditional precedence).
+  it("seatCount mirrors the snapshot's seatQuantity while tier stays pro (no price→tier mapping)", () => {
+    const ev = event({ subscription: snapshot({ seatQuantity: 5 }) });
+    const write = mapSubscriptionToWrite(ev, ev.subscription!, NOW);
+    expect(write.seatCount).toBe(5);
+    expect(write.tier).toBe("pro");
+  });
+
+  it("seatCount is null when the snapshot has no seatQuantity (non-seat subscription)", () => {
+    const ev = event({ subscription: snapshot({ seatQuantity: null }) });
+    const write = mapSubscriptionToWrite(ev, ev.subscription!, NOW);
+    expect(write.seatCount).toBeNull();
+    expect(write.tier).toBe("pro");
+  });
 });
 
 describe("ProcessStripeWebhook (orchestration)", () => {

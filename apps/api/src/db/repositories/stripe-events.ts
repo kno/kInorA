@@ -115,6 +115,10 @@ export class StripeEventStoreRepository implements StripeEventStorePort {
           billingCycle: write.billingCycle,
           currentPeriodEnd: write.currentPeriodEnd,
           cancelAtPeriodEnd: write.cancelAtPeriodEnd,
+          // 16c-v3-b2b-seat-billing Slice B: additive seat-count metadata,
+          // written alongside the other Stripe-derived columns under the
+          // same out-of-order/exactly-once guard.
+          seatCount: write.seatCount,
           stripeEventTs: eventTs,
           updatedAt: now,
         })
@@ -130,6 +134,7 @@ export class StripeEventStoreRepository implements StripeEventStorePort {
             billingCycle: write.billingCycle,
             currentPeriodEnd: write.currentPeriodEnd,
             cancelAtPeriodEnd: write.cancelAtPeriodEnd,
+            seatCount: write.seatCount,
             stripeEventTs: eventTs,
             updatedAt: now,
           },

@@ -352,6 +352,48 @@ describe.skipIf(!hasDb)("StripeEventStoreRepository / ProcessStripeWebhook (real
     expect(resolveEffectiveTier(freeCtx, new Date("2026-07-26T12:00:00.000Z")).tier).toBe("free");
   });
 
+  // 16c-v3-b2b-seat-billing Slice B: the webhook upsert persists `seatCount`
+  // alongside the other Stripe-derived columns, under the SAME exactly-once/
+  // out-of-order guard, and a later event updates the persisted value.
+  it("16c Slice B: persists seat_count on write, and updates it on a later event", async () => {
+    const { tenantId } = await seedTenantWithMember();
+
+    const firstEvent: StripeWebhookEvent = {
+      id: `evt_seat_first_${RUN}`,
+      type: "customer.subscription.updated",
+      eventTs: new Date("2026-07-25T09:00:00.000Z"),
+      subscription: snapshot(tenantId, { status: "active", seatQuantity: 3 }),
+    };
+    const uc = new ProcessStripeWebhook(fixedGateway(firstEvent), store);
+    const firstResult = await uc.process(Buffer.from("raw"), "sig");
+    expect(firstResult).toEqual({ status: "ok", outcome: "processed" });
+
+    const [afterFirst] = await db
+      .select()
+      .from(tenantBillingStates)
+      .where(eq(tenantBillingStates.tenantId, tenantId));
+    expect(afterFirst?.seatCount).toBe(3);
+    // No price→tier mapping — tier stays pro (Decision Q5).
+    expect(afterFirst?.tier).toBe("pro");
+
+    const laterEvent: StripeWebhookEvent = {
+      id: `evt_seat_later_${RUN}`,
+      type: "customer.subscription.updated",
+      eventTs: new Date("2026-07-26T09:00:00.000Z"),
+      subscription: snapshot(tenantId, { status: "active", seatQuantity: 7 }),
+    };
+    const laterUc = new ProcessStripeWebhook(fixedGateway(laterEvent), store);
+    const laterResult = await laterUc.process(Buffer.from("raw"), "sig");
+    expect(laterResult).toEqual({ status: "ok", outcome: "processed" });
+
+    const [afterLater] = await db
+      .select()
+      .from(tenantBillingStates)
+      .where(eq(tenantBillingStates.tenantId, tenantId));
+    expect(afterLater?.seatCount).toBe(7);
+    expect(afterLater?.tier).toBe("pro");
+  });
+
   it("#172: an active admin override still wins over a paid-subscription webhook write", async () => {
     const { tenantId, userId } = await seedTenantWithMember();
 
