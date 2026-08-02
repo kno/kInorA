@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { trainerClientAssignments } from "../schema.js";
 import type { Database } from "../client.js";
 import type { TrainerAssignmentStatus, TrainerClientAssignmentDTO } from "@kinora/contracts";
@@ -198,6 +198,29 @@ export class TrainerAssignmentRepository {
       clientUserId: row.clientUserId as TrainerClientAssignmentDTO["clientUserId"],
       status: row.status,
     }));
+  }
+
+  /**
+   * Count this tenant's ACTIVE trainer/client assignments — the seat-count
+   * source of truth for seat-based billing (16c-v3-b2b-seat-billing, Slice C;
+   * design Q2). One active assignment = one billed seat. `invited` and
+   * `revoked` rows are excluded: only `active` is a consumed seat (design Q3
+   * — the same active/revoked lifecycle the seat-sync trigger keys off). This
+   * is the ONLY count query on this table; it backs `TrainerSeatSource`
+   * (`billing/seat-sync.ts`) via a structural port so the pure use case never
+   * imports this repository.
+   */
+  async countActiveByTrainer(tenantId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(trainerClientAssignments)
+      .where(
+        and(
+          eq(trainerClientAssignments.tenantId, tenantId),
+          eq(trainerClientAssignments.status, "active"),
+        ),
+      );
+    return row?.count ?? 0;
   }
 
   /**

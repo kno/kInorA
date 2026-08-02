@@ -175,6 +175,24 @@ export interface TrainerRoutesOptions {
    * denials. Optional so existing registrations/tests compile unchanged.
    */
   observability?: ObservabilityLogger;
+  /**
+   * Seat-billing sync port (16c-v3-b2b-seat-billing, Slice C). Fired AFTER the
+   * assignment mutation commits on the transitions that change the ACTIVE seat
+   * set — accept (invited → active) and revoke (active → revoked). NEVER on
+   * invite/create (which yields `invited`, an uncounted seat — design Q3). The
+   * route depends only on this structural port; the concrete `SeatSyncService`
+   * (billing/seat-sync.ts) satisfies it, wired in app.ts. Optional so existing
+   * registrations/tests compile unchanged; absent ⇒ the trigger is a no-op.
+   */
+  seatSync?: SeatSyncTrigger;
+}
+
+/**
+ * Structural port for the seat-sync trigger — the route calls only
+ * `syncSeats`, so it never imports the billing use case's concrete class.
+ */
+interface SeatSyncTrigger {
+  syncSeats(tenantId: string): Promise<void>;
 }
 
 const inviteSchema = {
@@ -203,7 +221,27 @@ export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fa
     planRepo,
     specRepo,
     observability,
+    seatSync,
   } = options;
+
+  /**
+   * Fire seat-sync AFTER an active-set transition commits (16c Slice C).
+   * FIRE-AND-FORGET (Judgment Day fix, WARNING): the assignment mutation is
+   * already committed, so a slow/hanging outbound Stripe call must never add
+   * latency to this request's response — the trigger call is intentionally
+   * NOT awaited in the route handler. The floating promise's rejection is
+   * caught here so it can never surface as an unhandled rejection;
+   * `SeatSyncService` already swallows Stripe failures internally, so this
+   * `.catch` only guards against a lock/DB failure in the trigger path
+   * itself. The reconcile sweep heals any drift (design Q3 fail-safe).
+   */
+  const fireSeatSync = (tenantId: string): void => {
+    if (!seatSync) return;
+    seatSync.syncSeats(tenantId).catch(() => {
+      // Intentionally swallowed — see doc comment. Never awaited, so this is
+      // the only place a rejection can be observed.
+    });
+  };
 
   // GET /trainer/clients/:clientUserId/dashboard (15b-v2-trainer-dashboard-
   // branding, Phase S1). `resolveAuthorizedOwner` is the SAME deny-by-default
@@ -364,7 +402,62 @@ export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fa
       await assignmentRepo.updateStatus(assignment.tenantId, assignment.id, "active");
       await membershipRepo.updateStatusByTenantAndUser(assignment.tenantId, userId, "active");
 
+      // 16c Slice C: the invite is now an ACTIVE (counted) seat — resync the
+      // sponsor trainer tenant's Stripe quantity. Fired after the mutation
+      // commits; non-fatal AND non-blocking (design Q3 + Judgment Day fix) —
+      // never awaited, so a slow Stripe call never delays this response.
+      fireSeatSync(assignment.tenantId);
+
       return reply.code(200).send({ ...assignment, status: "active" });
+    },
+  );
+
+  // POST /trainer/clients/:clientUserId/revoke (16c-v3-b2b-seat-billing, Slice
+  // C). Trainer-initiated revoke of their OWN active assignment to a client —
+  // gated by `requireRole("trainer")` + `assertTrainerEntitled` (the same gate
+  // invite/list use). Transitions the assignment `active → revoked`, which
+  // removes a counted seat, then fires seat-sync to shrink the sponsor's Stripe
+  // quantity (design Q3 — the active-set-shrinking transition). The client keeps
+  // all existing data; future trainer-mediated generation is denied by
+  // `resolveAuthorizedOwner` (no active assignment) exactly as before.
+  fastify.post(
+    "/trainer/clients/:clientUserId/revoke",
+    { preHandler: requireRole("trainer") },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const ctx = toActorOwnerContext(request);
+      const { clientUserId } = request.params as { clientUserId: string };
+
+      try {
+        await assertTrainerEntitled(ctx, { entitlementReader, observability });
+      } catch (err) {
+        if (err instanceof ForbiddenOwnerAccess) {
+          return reply.code(403).send({ error: "forbidden" });
+        }
+        throw err;
+      }
+
+      // Only an ACTIVE assignment owned by THIS trainer in THIS tenant can be
+      // revoked — a missing/invited/revoked/cross-trainer row resolves to
+      // undefined and yields 404 (never touches another tenant's seat count).
+      const assignment = await assignmentRepo.findActiveAssignment(
+        ctx.tenantId,
+        ctx.actorUserId,
+        clientUserId as UserId,
+      );
+      if (!assignment) {
+        return reply.code(404).send({ error: "no_active_assignment" });
+      }
+
+      await assignmentRepo.updateStatus(assignment.tenantId, assignment.id, "revoked");
+
+      // The active seat is gone — resync the sponsor's Stripe quantity (floored
+      // to max(1, count); the last seat removed keeps quantity 1). Fired after
+      // the mutation commits; non-fatal AND non-blocking (design Q3 +
+      // Judgment Day fix) — never awaited, so a slow Stripe call never delays
+      // this response.
+      fireSeatSync(assignment.tenantId);
+
+      return reply.code(200).send({ ...assignment, status: "revoked" });
     },
   );
 
