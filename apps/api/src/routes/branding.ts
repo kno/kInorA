@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import fastifyMultipart from "@fastify/multipart";
-import type { LogoUploadResponseDTO, TenantBrandingDTO } from "@kinora/contracts";
+import type { LogoUploadResponseDTO, TenantBrandingDTO, UpdateBrandingRequest } from "@kinora/contracts";
 import { requireAuth } from "../auth/plugin.js";
 import { assertGymEntitled, ForbiddenGymAccess } from "../billing/gym-access.js";
 import type { EntitlementReaderPort } from "../billing/entitlement.js";
 import type { ObjectStoragePort } from "../storage/object-storage-port.js";
+import { validatePalette } from "../branding/palette.js";
 
 /**
  * Gym branding logo upload + serve routes (16a-v3-gym-white-label, Slice 2).
@@ -30,6 +31,16 @@ import type { ObjectStoragePort } from "../storage/object-storage-port.js";
  * responses are served with `Content-Disposition: attachment` so a browser
  * never renders an uploaded SVG inline as HTML/script context (stored-XSS
  * mitigation per design.md's threat matrix).
+ *
+ * `GET /branding` and `PUT /branding` (Slice 3) are the gym owner's OWN-
+ * tenant branding CRUD: both gated by `requireAuth()` + `assertGymEntitled`
+ * and scoped ONLY by `request.authContext.tenantId` — there is no request
+ * field through which a caller can target a different tenant, so cross-
+ * tenant read/write is structurally impossible, not merely denied by a
+ * runtime check. The PUBLIC, unauthenticated read-by-slug endpoint (`GET
+ * /public/branding/by-slug/:slug`) lives in a SEPARATE file,
+ * `routes/public-branding.ts`, so its "no auth, no PII" surface stays
+ * reviewable in isolation from this gated CRUD file.
  */
 
 /** Content-types accepted for a logo upload (design.md threat matrix allowlist). */
@@ -42,6 +53,29 @@ const ALLOWED_LOGO_TYPES = new Set<string>([
 
 /** Hard byte cap for a logo upload. */
 const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5 MB
+
+/**
+ * Deterministically derive the servable logo URL from a stored key, mirroring
+ * `LocalStorageAdapter.put`'s `{ url: "/media/branding/<key>" }` convention
+ * (16a-v3-gym-white-label, Slice 3). Reading back via `findByTenantId` only
+ * persists the raw `logoStorageKey`, not the URL, so the CRUD read routes
+ * reconstruct it here instead of calling `storage.get` (which would also
+ * require loading the full byte payload just to read the DTO).
+ */
+function logoStorageKeyToUrl(logoStorageKey: string | null): string | null {
+  return logoStorageKey ? `/media/branding/${logoStorageKey}` : null;
+}
+
+function toTenantBrandingDTO(
+  row: TenantBrandingDTO & { logoStorageKey: string | null },
+): TenantBrandingDTO {
+  return {
+    tenantId: row.tenantId,
+    subdomainSlug: row.subdomainSlug,
+    logoUrl: logoStorageKeyToUrl(row.logoStorageKey),
+    palette: row.palette,
+  };
+}
 
 /**
  * Local structural port for the branding repository (see
@@ -187,6 +221,102 @@ export const brandingRoutes: FastifyPluginAsync<BrandingRoutesOptions> = async (
       }
 
       return reply.code(200).type(object.contentType).send(object.bytes);
+    },
+  );
+
+  // GET /branding — authenticated, gym-gated, STRICTLY own-tenant-scoped read
+  // (16a-v3-gym-white-label, Slice 3). `tenantId` is read only from
+  // `request.authContext` (never from a request body/param/query), so this
+  // route can never be made to return another tenant's branding row.
+  fastify.get(
+    "/branding",
+    { preHandler: requireAuth() },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { tenantId, userId } = request.authContext!;
+
+      try {
+        await assertGymEntitled({ tenantId, actorUserId: userId }, { entitlementReader });
+      } catch (err) {
+        if (err instanceof ForbiddenGymAccess) {
+          return reply.code(403).send({ error: "forbidden" });
+        }
+        throw err;
+      }
+
+      const existing = await repo.findByTenantId(tenantId);
+      if (!existing) {
+        return reply.code(404).send({ error: "not_found" });
+      }
+
+      return reply.code(200).send(toTenantBrandingDTO(existing));
+    },
+  );
+
+  // PUT /branding — authenticated, gym-gated, STRICTLY own-tenant-scoped
+  // upsert (16a-v3-gym-white-label, Slice 3). Like the GET above, `tenantId`
+  // comes only from `request.authContext` — there is no request field a
+  // caller can use to target another tenant's row, so cross-tenant writes
+  // are structurally impossible, not merely checked. Palette hex fields are
+  // validated with the SAME `validatePalette` helper the DB CHECK constraint
+  // mirrors (Slice 1); a duplicate `subdomainSlug` (already taken by another
+  // tenant) is translated by the repository into a clean 409, never a 500.
+  fastify.put(
+    "/branding",
+    { preHandler: requireAuth() },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { tenantId, userId } = request.authContext!;
+
+      try {
+        await assertGymEntitled({ tenantId, actorUserId: userId }, { entitlementReader });
+      } catch (err) {
+        if (err instanceof ForbiddenGymAccess) {
+          return reply.code(403).send({ error: "forbidden" });
+        }
+        throw err;
+      }
+
+      const body = request.body as Partial<UpdateBrandingRequest> | undefined;
+      if (
+        !body ||
+        typeof body.subdomainSlug !== "string" ||
+        body.subdomainSlug.trim() === "" ||
+        !body.palette ||
+        typeof body.palette !== "object"
+      ) {
+        return reply.code(400).send({ error: "invalid_branding_request" });
+      }
+
+      const validation = validatePalette(body.palette);
+      if (!validation.valid) {
+        return reply.code(400).send({ error: "invalid_palette", field: validation.invalidField });
+      }
+
+      const existing = await repo.findByTenantId(tenantId);
+
+      let updated: TenantBrandingDTO & { logoStorageKey: string | null };
+      try {
+        updated = await repo.upsert(tenantId, {
+          subdomainSlug: body.subdomainSlug,
+          logoStorageKey: existing?.logoStorageKey ?? null,
+          accent: body.palette.accent,
+          accentFg: body.palette.accentFg,
+          surface: body.palette.surface,
+          surface2: body.palette.surface2,
+          fg: body.palette.fg,
+          muted: body.palette.muted,
+        });
+      } catch (err) {
+        // Structural check (by name, not `instanceof`) so this route never
+        // imports `TenantBrandingSlugConflictError` from `db/repositories`
+        // (architecture rule `routes-no-db-layer`), mirroring
+        // `trainer.ts`'s `TrainerAssignmentConflictError` handling.
+        if (err instanceof Error && err.name === "TenantBrandingSlugConflictError") {
+          return reply.code(409).send({ error: "slug_already_taken" });
+        }
+        throw err;
+      }
+
+      return reply.code(200).send(toTenantBrandingDTO(updated));
     },
   );
 };

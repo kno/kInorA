@@ -747,6 +747,28 @@ export interface LogoUploadResponseDTO {
 }
 
 /**
+ * Request body for `PUT /branding` (16a-v3-gym-white-label, Slice 3) — the
+ * gym owner's own-tenant branding upsert. `subdomainSlug` is required (the
+ * table column is `NOT NULL` + unique-indexed); `palette` is validated by
+ * `apps/api/src/branding/palette.ts` before any write.
+ */
+export interface UpdateBrandingRequest {
+  subdomainSlug: string;
+  palette: BrandingPalette;
+}
+
+/**
+ * Response payload for the PUBLIC, unauthenticated `GET
+ * /public/branding/by-slug/:slug` (16a-v3-gym-white-label, Slice 3).
+ * Deliberately excludes `tenantId` and `subdomainSlug` — only the fields a
+ * pre-auth login page needs to theme itself, no PII, no internal ids.
+ */
+export interface PublicBrandingDTO {
+  logoUrl: string | null;
+  palette: BrandingPalette;
+}
+
+/**
  * Email/password login request crossing the api boundary.
  */
 export interface LoginRequest {
