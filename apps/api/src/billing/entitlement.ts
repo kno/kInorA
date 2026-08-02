@@ -21,6 +21,12 @@ export interface EntitlementContext {
     source: BillingSource;
     trialStartedAt: Date | null;
     trialEndsAt: Date | null;
+    /**
+     * Seat count backing seat-scaled limits (16c-v3 Slice D, design Q4) — null
+     * for every tenant without seat-billing metadata. Never read by
+     * `resolveEffectiveTier`; only by `resolveTenantFeatureLimit`.
+     */
+    seatCount: number | null;
   } | null;
   /** Tier granted by an override whose `[startsAt, endsAt)` window contains now, else null. */
   activeOverrideTier: BillingTier | null;
@@ -132,7 +138,8 @@ export class CheckEntitlement {
     }
 
     const effective = resolveEffectiveTier(ctx, now);
-    const limit = resolveTenantFeatureLimit(effective.tier, feature);
+    const seatCount = ctx.billing?.seatCount ?? null;
+    const limit = resolveTenantFeatureLimit(effective.tier, feature, seatCount);
 
     if (limit <= 0) {
       // A lapsed premium entitlement reports its specific reason (trial vs
@@ -143,6 +150,6 @@ export class CheckEntitlement {
       };
     }
 
-    return { allowed: true, tier: effective.tier, source: effective.source };
+    return { allowed: true, tier: effective.tier, source: effective.source, seatCount };
   }
 }

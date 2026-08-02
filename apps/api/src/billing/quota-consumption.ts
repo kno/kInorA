@@ -87,7 +87,7 @@ export class CheckAndConsumeQuota {
     }
 
     const period = currentBillingPeriod(now);
-    const tenantLimit = resolveTenantFeatureLimit(entitlement.tier, feature);
+    const tenantLimit = resolveTenantFeatureLimit(entitlement.tier, feature, entitlement.seatCount);
 
     const result = await this.ledger.consume({
       scope,

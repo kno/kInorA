@@ -38,7 +38,10 @@ describe.skipIf(!hasDb)("BillingAdminRepository (real Postgres)", () => {
     await pool.end();
   });
 
-  async function seedTenant(tier: "free" | "pro"): Promise<{
+  async function seedTenant(
+    tier: "free" | "pro" | "trainer",
+    seatCount: number | null = null,
+  ): Promise<{
     tenantId: string;
     ownerId: string;
     memberId: string;
@@ -64,6 +67,7 @@ describe.skipIf(!hasDb)("BillingAdminRepository (real Postgres)", () => {
       tier,
       status: "active",
       source: "backfill",
+      seatCount,
     });
     return { tenantId: tenant!.id, ownerId: owner!.id, memberId: member!.id };
   }
@@ -189,8 +193,17 @@ describe.skipIf(!hasDb)("BillingAdminRepository (real Postgres)", () => {
 
   it("loadTenantTier resolves the effective tier from the tenant billing state", async () => {
     const { tenantId } = await seedTenant("free");
-    const tier = await repo.loadTenantTier(tenantId, new Date());
-    expect(tier).toBe("free");
+    const result = await repo.loadTenantTier(tenantId, new Date());
+    expect(result).toEqual({ tier: "free", seatCount: null });
+  });
+
+  // 16c-v3 Slice D (design Q4): `loadTenantTier` also surfaces the raw
+  // `seatCount` column so `SetMemberAllocation` can bound the per-member
+  // allocation against the SEAT-SCALED cap, not the flat 2x-Pro table.
+  it("loadTenantTier surfaces the persisted seatCount for a seat-scaled trainer tenant", async () => {
+    const { tenantId } = await seedTenant("trainer", 5);
+    const result = await repo.loadTenantTier(tenantId, new Date());
+    expect(result).toEqual({ tier: "trainer", seatCount: 5 });
   });
 });
 

@@ -52,6 +52,7 @@ export class BillingStateReaderRepository implements EntitlementReaderPort {
         source: tenantBillingStates.source,
         trialStartedAt: tenantBillingStates.trialStartedAt,
         trialEndsAt: tenantBillingStates.trialEndsAt,
+        seatCount: tenantBillingStates.seatCount,
       })
       .from(tenantBillingStates)
       .where(eq(tenantBillingStates.tenantId, scope.tenantId));
@@ -77,6 +78,7 @@ export class BillingStateReaderRepository implements EntitlementReaderPort {
             source: billingRow.source,
             trialStartedAt: billingRow.trialStartedAt,
             trialEndsAt: billingRow.trialEndsAt,
+            seatCount: billingRow.seatCount ?? null,
           }
         : null,
       activeOverrideTier: overrideRow?.tier ?? null,

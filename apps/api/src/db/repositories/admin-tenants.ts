@@ -64,6 +64,7 @@ export class AdminTenantsRepository
         source: tenantBillingStates.source,
         trialStartedAt: tenantBillingStates.trialStartedAt,
         trialEndsAt: tenantBillingStates.trialEndsAt,
+        seatCount: tenantBillingStates.seatCount,
       })
       .from(tenantBillingStates)
       .where(eq(tenantBillingStates.tenantId, tenantId));

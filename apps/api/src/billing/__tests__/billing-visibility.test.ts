@@ -4,6 +4,7 @@ import {
   type BillingVisibilityContext,
   type BillingVisibilityPort,
 } from "../billing-visibility.js";
+import * as planLimits from "../plan-limits.js";
 
 const SCOPE = { tenantId: "tenant-1", userId: "user-1" };
 const PERIOD = "2026-07";
@@ -26,6 +27,7 @@ function ctx(over: Partial<NonNullable<BillingVisibilityContext["billing"]>>): B
       source: "system",
       trialStartedAt: null,
       trialEndsAt: null,
+      seatCount: null,
       updatedAt: NOW,
       billingCycle: null,
       currentPeriodEnd: null,
@@ -58,6 +60,35 @@ describe("GetBillingVisibility — denialReason (#196)", () => {
       expect(out.visibility.billing.tier).toBe("free");
       expect(out.visibility.upgradePromptPath).toBe("/billing");
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 16c-v3 Slice D (design Q4): the dashboard premium-gate reason
+// (billing-visibility.ts:105) must thread seatCount so the displayed limit
+// matches actual consumption (Judgment Day CRITICAL — the original plan
+// missed this call site).
+// ---------------------------------------------------------------------------
+describe("GetBillingVisibility — seat-scaled trainer threading (16c-v3 Slice D, Q4)", () => {
+  it("passes the context's seatCount through to resolveTenantFeatureLimit for the premium gate", async () => {
+    const spy = vi.spyOn(planLimits, "resolveTenantFeatureLimit");
+    const uc = new GetBillingVisibility(
+      port(ctx({ tier: "trainer", status: "active", source: "backfill", seatCount: 10 })),
+    );
+    const out = await uc.execute(SCOPE, PERIOD, NOW);
+    expect(out.ok).toBe(true);
+    expect(spy).toHaveBeenCalledWith("trainer", "memory_write", 10);
+    spy.mockRestore();
+  });
+
+  it("passes null when the context has no seat-billing metadata (regression: byte-identical resolution)", async () => {
+    const spy = vi.spyOn(planLimits, "resolveTenantFeatureLimit");
+    const uc = new GetBillingVisibility(
+      port(ctx({ tier: "trainer", status: "active", source: "backfill", seatCount: null })),
+    );
+    await uc.execute(SCOPE, PERIOD, NOW);
+    expect(spy).toHaveBeenCalledWith("trainer", "memory_write", null);
+    spy.mockRestore();
   });
 });
 
