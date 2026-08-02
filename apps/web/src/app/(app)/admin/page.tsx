@@ -42,7 +42,7 @@ export default async function AdminPage() {
     { key: "aiConfig", href: "/admin/ai-config" },
     { key: "tenantProvisioning", href: "/admin/tenants" },
     { key: "platformStatistics", comingSoon: true },
-    { key: "logs", comingSoon: true },
+    { key: "logs", href: "/admin/logs" },
   ];
 
   return (
