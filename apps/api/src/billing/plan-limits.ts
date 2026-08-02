@@ -31,6 +31,22 @@ const TRAINER_TIER_LIMITS: Record<BillingFeature, number> = {
 };
 
 /**
+ * Gym tier limits (16a-v3-gym-white-label, Slice 1). Set at the Pro caps so a
+ * `gym`-tier tenant is never silently downgraded to Free limits once the
+ * `gym` BillingTier value exists. This slice is dark/additive: no route yet
+ * grants or checks the `gym` tier for a feature limit — the
+ * `assertGymEntitled` authorization seam lands in Slice 3. Mirrors the Pro
+ * caps exactly (unlike `trainer`, a gym tenant is not a multi-client
+ * aggregator, so no headroom multiplier is applied).
+ */
+const GYM_TIER_LIMITS: Record<BillingFeature, number> = {
+  plan_generation: PRO_TIER_LIMITS.plan_generation,
+  plan_regeneration: PRO_TIER_LIMITS.plan_regeneration,
+  memory_write: PRO_TIER_LIMITS.memory_write,
+  memory_retrieval: PRO_TIER_LIMITS.memory_retrieval,
+};
+
+/**
  * The tenant aggregate limit for a `(tier, feature)` pair (11b Slice 3). Free
  * uses the fixed monthly allowances; Pro uses the config-driven, per-feature
  * {@link PRO_TIER_LIMITS} from `pricing-config.ts`. This is the point Pro
@@ -40,11 +56,13 @@ const TRAINER_TIER_LIMITS: Record<BillingFeature, number> = {
  * (`resolveEffectiveTier`) is untouched; only the LIMIT resolution changed.
  *
  * `trainer` (15a-v2, Slice 1) resolves to {@link TRAINER_TIER_LIMITS} so it
- * never silently falls back to Free — see that const's docstring.
+ * never silently falls back to Free — see that const's docstring. `gym`
+ * (16a-v3, Slice 1) resolves to {@link GYM_TIER_LIMITS} for the same reason.
  */
 export function resolveTenantFeatureLimit(tier: BillingTier, feature: BillingFeature): number {
   if (tier === "pro") return PRO_TIER_LIMITS[feature];
   if (tier === "trainer") return TRAINER_TIER_LIMITS[feature];
+  if (tier === "gym") return GYM_TIER_LIMITS[feature];
   return FREE_TIER_LIMITS[feature];
 }
 

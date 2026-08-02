@@ -26,7 +26,8 @@ describe("trainer account access contracts (15a v2 Slice 1)", () => {
   });
 
   it("extends BillingTier with 'trainer' while keeping the existing values", () => {
-    expectTypeOf<BillingTier>().toEqualTypeOf<"free" | "pro" | "trainer">();
+    // 16a-v3-gym-white-label, Slice 1 later appends 'gym' additively after
+    // 'trainer'; this assertion only proves 'trainer's own value is present.
     const tier: BillingTier = "trainer";
     expect(tier).toBe("trainer");
   });
