@@ -162,6 +162,13 @@
       "when": 1785180240000,
       "tag": "0022_tier_override_operation_key",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1785180300000,
+      "tag": "0023_billing_state_seat_count",
+      "breakpoints": true
     }
   ]
 }

@@ -44,6 +44,13 @@ export interface BillingStateWrite {
   billingCycle: BillingCycle | null;
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
+  /**
+   * 16c-v3-b2b-seat-billing Slice B: mirrors the Stripe subscription's item
+   * quantity (`StripeSubscriptionSnapshot.seatQuantity`) as-is. NO price→tier
+   * mapping happens here — `tier` stays "pro" (Decision Q5); the trainer/gym
+   * tier is granted only by the 16d admin override.
+   */
+  seatCount: number | null;
 }
 
 export interface RecordEventInput {
@@ -211,6 +218,10 @@ export function mapSubscriptionToWrite(
     billingCycle: sub.cycle,
     currentPeriodEnd: sub.currentPeriodEnd,
     cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+    // 16c Slice B (Q5): no price→tier mapping — `tier` above stays "pro".
+    // Persist the observed Stripe quantity as-is; the 16d admin override is
+    // the sole source of the trainer/gym TIER.
+    seatCount: sub.seatQuantity,
   };
 }
 
