@@ -1257,7 +1257,7 @@
   },
   "tenantProvisioning": {
     "title": "Tenant Provisioning",
-    "description": "Search a tenant by name and grant or revoke its trainer/gym tier.",
+    "description": "Search an organization by name and assign or remove its Trainer/Gym tier.",
     "search": {
       "label": "Search tenants",
       "placeholder": "Tenant name or ID",
@@ -1270,30 +1270,30 @@
       "effectiveTier": "Effective tier",
       "billingStatus": "Billing status",
       "none": "None",
-      "activeOverride": "Active override",
-      "noOverride": "No active override."
+      "activeOverride": "Assigned tier",
+      "noOverride": "No tier assigned (standard)."
     },
     "grant": {
-      "title": "Grant tier override",
+      "title": "Assign Trainer/Gym tier",
       "tierLabel": "Tier",
       "tierTrainer": "Trainer",
       "tierGym": "Gym",
       "reasonLabel": "Reason",
-      "reasonPlaceholder": "Why is this override being granted?",
+      "reasonPlaceholder": "Why is this tier being assigned?",
       "startsAtLabel": "Starts at (optional)",
       "endsAtLabel": "Ends at (optional)",
-      "submit": "Grant override",
-      "submitting": "Granting…",
-      "success": "Saved successfully."
+      "submit": "Activate tier",
+      "submitting": "Activating…",
+      "success": "Tier assigned."
     },
     "revoke": {
-      "button": "Revoke override",
-      "success": "Override revoked."
+      "button": "Remove assigned tier",
+      "success": "Tier removed."
     },
     "errors": {
       "forbidden": "Access denied.",
       "notFound": "Tenant not found.",
-      "conflict": "An active override already exists for this tenant.",
+      "conflict": "This organization already has an assigned tier.",
       "invalid": "Please check the form and try again.",
       "generic": "An error occurred. Please try again."
     }
