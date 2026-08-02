@@ -7,6 +7,7 @@ import type {
   TenantBillingOverrideRow,
   TierOverrideAdminPort,
 } from "../../billing/tier-override-admin.js";
+import type { ObservabilityLogger } from "../../observability/event-logger.js";
 
 /**
  * Drizzle adapter for the tier-override-admin port. Lives under `db/` because
@@ -22,7 +23,18 @@ import type {
  * tenant they hold zero `memberships` rows for is a valid audit actor.
  */
 export class TierOverrideAdminRepository implements TierOverrideAdminPort {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    /**
+     * Optional observability seam (#310). Emits a PII-free
+     * `tier_override.granted` / `.revoked` event (ids + tier ONLY) AFTER the
+     * grant/revoke transaction commits — IN ADDITION to (never replacing) the
+     * existing `billing_audit_events` row written inside the transaction.
+     * Fire-and-forget; recorded post-commit so it is never coupled to the
+     * domain transaction.
+     */
+    private readonly observability?: ObservabilityLogger,
+  ) {}
 
   async loadTenant(tenantId: string): Promise<{ id: string } | null> {
     const [row] = await this.db.select({ id: tenants.id }).from(tenants).where(eq(tenants.id, tenantId));
@@ -63,7 +75,7 @@ export class TierOverrideAdminRepository implements TierOverrideAdminPort {
    * map it to the existing `active_override_exists` 409 conflict.
    */
   async grantTierOverride(input: GrantTierOverrideInput): Promise<TenantBillingOverrideRow | null> {
-    return this.db.transaction(async (tx) => {
+    const created = await this.db.transaction(async (tx) => {
       // Serializes concurrent grants for this tenant. `hashtext` collapses
       // the uuid to a single bigint lock key; the lock is transaction-scoped
       // and released automatically on commit/rollback.
@@ -110,11 +122,25 @@ export class TierOverrideAdminRepository implements TierOverrideAdminPort {
 
       return created!;
     });
+
+    // Post-commit, only for a successful grant (a null result = lost the
+    // advisory-lock race, no override written). Ids + tier only — never `reason`.
+    if (created) {
+      this.observability?.recordEvent({
+        tenantId: input.tenantId,
+        actorUserId: input.actorUserId,
+        level: "info",
+        event: "tier_override.granted",
+        metadata: { tier: input.tier, overrideId: created.id },
+      });
+    }
+
+    return created;
   }
 
   async revokeTierOverride(input: RevokeTierOverrideInput): Promise<{ id: string; endsAt: Date }> {
-    return this.db.transaction(async (tx) => {
-      const [revoked] = await tx
+    const revoked = await this.db.transaction(async (tx) => {
+      const [row] = await tx
         .update(tenantBillingOverrides)
         .set({ endsAt: input.now })
         .where(eq(tenantBillingOverrides.id, input.overrideId))
@@ -124,10 +150,20 @@ export class TierOverrideAdminRepository implements TierOverrideAdminPort {
         tenantId: input.tenantId,
         actorUserId: input.actorUserId,
         action: "admin_override_expired",
-        metadata: { overrideId: revoked!.id },
+        metadata: { overrideId: row!.id },
       });
 
-      return revoked!;
+      return row!;
     });
+
+    this.observability?.recordEvent({
+      tenantId: input.tenantId,
+      actorUserId: input.actorUserId,
+      level: "info",
+      event: "tier_override.revoked",
+      metadata: { overrideId: revoked.id },
+    });
+
+    return revoked;
   }
 }

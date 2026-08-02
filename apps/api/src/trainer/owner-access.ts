@@ -2,6 +2,7 @@ import type { MembershipRole, TenantId, UserId } from "@kinora/contracts";
 import type { EntitlementReaderPort } from "../billing/entitlement.js";
 import { resolveEffectiveTier } from "../billing/entitlement.js";
 import type { TrainerAssignmentRepository } from "../db/repositories/trainer-assignment.js";
+import type { ObservabilityLogger } from "../observability/event-logger.js";
 
 /**
  * Actor identity + role for a single authorization decision, scoped to the
@@ -39,6 +40,34 @@ export class ForbiddenOwnerAccess extends Error {
 export interface OwnerAccessDeps {
   entitlementReader: Pick<EntitlementReaderPort, "loadContext">;
   assignmentRepo: Pick<TrainerAssignmentRepository, "findActiveAssignment">;
+  /**
+   * Optional observability seam (#310). On EVERY `ForbiddenOwnerAccess` denial
+   * (wrong role, missing entitlement, or missing/revoked assignment) a PII-free
+   * `owner_access.denied` warn event is recorded (tenantId + actorUserId ONLY —
+   * never which specific check failed, mirroring the flat-403 boundary). Absent
+   * in unit tests that don't assert it.
+   */
+  observability?: ObservabilityLogger;
+}
+
+/**
+ * Record a PII-free `owner_access.denied` warn event, then throw the flat
+ * `ForbiddenOwnerAccess`. Centralized so every denial path is observed
+ * identically and no branch can throw without being surfaced. `never`-typed so
+ * call sites can `throw denyOwnerAccess(...)` / `return denyOwnerAccess(...)`
+ * for exhaustiveness.
+ */
+function denyOwnerAccess(
+  ctx: Pick<ActorOwnerContext, "tenantId" | "actorUserId">,
+  observability?: ObservabilityLogger,
+): never {
+  observability?.recordEvent({
+    tenantId: ctx.tenantId,
+    actorUserId: ctx.actorUserId,
+    level: "warn",
+    event: "owner_access.denied",
+  });
+  throw new ForbiddenOwnerAccess();
 }
 
 /**
@@ -89,7 +118,7 @@ export async function resolveAuthorizedOwner(
     requestedOwnerUserId,
   );
   if (!assignment) {
-    throw new ForbiddenOwnerAccess();
+    denyOwnerAccess(ctx, deps.observability);
   }
 
   return requestedOwnerUserId;
@@ -112,10 +141,10 @@ export async function resolveAuthorizedOwner(
  */
 export async function assertTrainerEntitled(
   ctx: ActorOwnerContext,
-  deps: Pick<OwnerAccessDeps, "entitlementReader">,
+  deps: Pick<OwnerAccessDeps, "entitlementReader" | "observability">,
 ): Promise<void> {
   if (ctx.role !== "trainer") {
-    throw new ForbiddenOwnerAccess();
+    denyOwnerAccess(ctx, deps.observability);
   }
 
   const entitlementCtx = await deps.entitlementReader.loadContext({
@@ -124,6 +153,6 @@ export async function assertTrainerEntitled(
   });
   const effective = resolveEffectiveTier(entitlementCtx, new Date());
   if (effective.tier !== "trainer") {
-    throw new ForbiddenOwnerAccess();
+    denyOwnerAccess(ctx, deps.observability);
   }
 }

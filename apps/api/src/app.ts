@@ -25,6 +25,12 @@ import { adminTierOverrideRoutes } from "./routes/admin-tier-override.js";
 import { TierOverrideAdminRepository } from "./db/repositories/tier-override-admin.js";
 import { adminTenantsRoutes } from "./routes/admin-tenants.js";
 import { AdminTenantsRepository } from "./db/repositories/admin-tenants.js";
+import { adminLogsRoutes } from "./routes/admin-logs.js";
+import { ObservabilityEventsRepository } from "./db/repositories/observability-events.js";
+import {
+  DefaultObservabilityLogger,
+  type ObservabilityLogger,
+} from "./observability/event-logger.js";
 import { userProfileRoutes } from "./routes/user-profile.js";
 import { userMemoryRoutes } from "./routes/user-memories.js";
 import { userPreferencesRoutes } from "./routes/user-preferences.js";
@@ -191,6 +197,13 @@ export interface BuildAppOptions {
    * double to avoid real filesystem writes.
    */
   objectStorage?: ObjectStoragePort;
+  /**
+   * Injectable observability logger for tests (#310). Defaults to the
+   * DB-backed `DefaultObservabilityLogger` (persists to `observability_events`
+   * AND emits a pino line) in production. Tests pass a spy/fake to assert
+   * curated events without a real Postgres.
+   */
+  observabilityLogger?: ObservabilityLogger;
 }
 
 /**
@@ -227,6 +240,7 @@ export async function buildApp(
   let billingCustomerReader: BillingCustomerReaderPort | undefined;
   let priceGateway: PriceGateway | undefined;
   let objectStorage: ObjectStoragePort | undefined;
+  let observabilityLoggerOverride: ObservabilityLogger | undefined;
 
   // Discriminate between the options-bag form (BuildAppOptions) and the legacy
   // 2-argument form (Database, SocialAuthService?).
@@ -261,6 +275,7 @@ export async function buildApp(
     billingCustomerReader = opts.billingCustomerReader;
     priceGateway = opts.priceGateway;
     objectStorage = opts.objectStorage;
+    observabilityLoggerOverride = opts.observabilityLogger;
   } else {
     // Legacy 2-argument form: (db?, socialAuthService?)
     database = (dbOrOptions as Database | undefined) ?? createDbClient().db;
@@ -279,10 +294,19 @@ export async function buildApp(
         : { level: process.env.API_LOG_LEVEL ?? "info" },
   });
 
+  // Observability logging (#310, Slice 1). The DB-backed default persists to
+  // `observability_events` AND emits a matching pino line via `app.log` (the
+  // hybrid — persistence never replaces stdout logs). Every recordEvent is
+  // fire-and-forget + fail-safe, so a failed observability write can never break
+  // a request. Tests inject a spy via BuildAppOptions.observabilityLogger.
+  const observabilityRepo = new ObservabilityEventsRepository(database);
+  const observabilityLogger: ObservabilityLogger =
+    observabilityLoggerOverride ?? new DefaultObservabilityLogger(observabilityRepo, app.log);
+
   // Validation errors → 422, Auth errors → 401, social auth errors → 400,
   // everything else → 500. Must be set before registering route plugins so
   // child scopes inherit.
-  app.setErrorHandler((error: unknown, _request, reply) => {
+  app.setErrorHandler((error: unknown, request, reply) => {
     if (
       typeof error === "object" &&
       error !== null &&
@@ -295,6 +319,19 @@ export async function buildApp(
       return reply.code(401).send({ error: error.message });
     }
     app.log.error(error as Error);
+    // #310: record the unhandled failure with request/tenant context — ids +
+    // route + error NAME ONLY, never the message/stack or any body content.
+    observabilityLogger.recordEvent({
+      tenantId: request.authContext?.tenantId ?? null,
+      actorUserId: request.authContext?.userId ?? null,
+      level: "error",
+      event: "request.error",
+      metadata: {
+        route: resolveErrorRoute(request.routeOptions?.url, request.url),
+        statusCode: 500,
+        errName: error instanceof Error ? error.name : "UnknownError",
+      },
+    });
     return reply.code(500).send({ error: "Internal Server Error" });
   });
 
@@ -312,7 +349,9 @@ export async function buildApp(
   await app.register(healthRoute);
 
   // Auth routes (register + login + logout + profile)
-  await app.register(authRoutes, { authService: new AuthService(database) });
+  await app.register(authRoutes, {
+    authService: new AuthService(database, observabilityLogger),
+  });
 
   // Social login routes (OIDC provider abstraction + Google)
   if (socialAuthService) {
@@ -359,7 +398,8 @@ export async function buildApp(
     workoutPlanRepo,
     registry,
     vectorMemoryRetriever,
-    memoryEntitlement
+    memoryEntitlement,
+    observabilityLogger
   );
   const userMemoryService = new UserMemoryLifecycleService(
     vectorMemoryRepo,
@@ -472,6 +512,7 @@ export async function buildApp(
     trainerAccess: {
       assignmentRepo: trainerAssignmentRepo,
       entitlementReader: billingStateReader,
+      observability: observabilityLogger,
     },
   });
 
@@ -503,7 +544,7 @@ export async function buildApp(
   // (16d-admin-tier-provisioning). Route port composes the SAME adminUserRepo
   // (findUserById) with a dedicated TierOverrideAdminRepository so the route
   // stays free of any DB-layer import.
-  const tierOverrideAdminRepo = new TierOverrideAdminRepository(database);
+  const tierOverrideAdminRepo = new TierOverrideAdminRepository(database, observabilityLogger);
   await app.register(adminTierOverrideRoutes, {
     repo: {
       findUserById: (id) => adminUserRepo.findById(id),
@@ -525,6 +566,18 @@ export async function buildApp(
       findUserById: (id) => adminUserRepo.findById(id),
       searchTenants: (query) => adminTenantsRepo.searchTenants(query),
       loadProvisioningState: (tenantId) => adminTenantsRepo.loadProvisioningState(tenantId),
+    },
+  });
+
+  // Superadmin observability log query API — GET /admin/logs (#310, Slice 1,
+  // requireAuth() + requireAdmin). Reuses the SAME adminUserRepo (findUserById)
+  // for the admin gate plus the read side of the observability repository
+  // constructed above (same instance the DEFAULT logger writes through), so the
+  // route stays free of any DB-layer import.
+  await app.register(adminLogsRoutes, {
+    repo: {
+      findUserById: (id) => adminUserRepo.findById(id),
+      queryEvents: (filters) => observabilityRepo.queryEvents(filters),
     },
   });
 
@@ -586,6 +639,8 @@ export async function buildApp(
     // the `GET /me/trainer-plan` response. Reuses the SAME
     // `PlanSpecRepository` instance every other confirmed-spec read uses.
     specRepo: planSpecRepo,
+    // #310 — records `owner_access.denied` on trainer-authorization denials.
+    observability: observabilityLogger,
   });
 
   // Gym white-label branding — logo upload + serve routes
@@ -699,7 +754,11 @@ export async function buildApp(
   const resolvedStripeGateway: StripeGateway =
     stripeGateway ?? realStripeGateway ?? new UnconfiguredStripeGateway();
   const stripeEventStore = new StripeEventStoreRepository(database);
-  const processStripeWebhook = new ProcessStripeWebhook(resolvedStripeGateway, stripeEventStore);
+  const processStripeWebhook = new ProcessStripeWebhook(
+    resolvedStripeGateway,
+    stripeEventStore,
+    observabilityLogger,
+  );
   await app.register(stripeWebhookRoutes, { processWebhook: processStripeWebhook });
   // Public reachability (prod): the web reverse-proxy only forwards `/api/:path*`
   // to the api (apps/web/next.config.ts rewrite), while the api mounts every
@@ -756,6 +815,18 @@ export async function buildApp(
  * back to empty strings so the app still boots (checkout then fails closed once
  * the gateway rejects the empty price). Prices are config, never hardcoded.
  */
+/**
+ * Resolve the route label recorded on `request.error` observability events
+ * (global error handler). Prefers the matched route PATTERN
+ * (`request.routeOptions.url`, e.g. `/plans/:id`) which never carries a query
+ * string. Falls back to the raw request URL only when no route matched
+ * (`routeOptions` undefined) — in that case the query string is stripped so a
+ * token/id passed via `?...` is never persisted in `observability_events`.
+ */
+export function resolveErrorRoute(routeOptionsUrl: string | undefined, requestUrl: string): string {
+  return routeOptionsUrl ?? requestUrl.split("?")[0]!;
+}
+
 export function resolveCheckoutPricing(
   env: NodeJS.ProcessEnv = process.env
 ): CheckoutPriceConfig {
