@@ -434,8 +434,12 @@ export type MembershipStatus = "invited" | "active" | "suspended";
  * `trainer` (15a-v2-trainer-account-access, Slice 1) is additive: entitlement
  * plumbing (`resolveTenantFeatureLimit`) knows about it, but no route gates a
  * capability on it yet — that lands with the authorization seam in Slice 2.
+ *
+ * `gym` (16a-v3-gym-white-label, Slice 1) is additive: entitlement plumbing
+ * knows about it, but no route grants or gates a capability on it yet — the
+ * `assertGymEntitled` authorization seam lands in Slice 3.
  */
-export type BillingTier = "free" | "pro" | "trainer";
+export type BillingTier = "free" | "pro" | "trainer" | "gym";
 
 export type BillingStatus = "active" | "trialing" | "expired" | "overridden";
 
@@ -702,6 +706,44 @@ export interface ClientSummaryDTO {
   clientUserId: UserId;
   email: string;
   status: TrainerAssignmentStatus;
+}
+
+/**
+ * Gym white-label branding palette (16a-v3-gym-white-label, Slice 1). Each
+ * token is either a `^#[0-9a-fA-F]{6}$` hex string or `null` when the tenant
+ * has not configured that field — themed surfaces fall back to
+ * `var(--gym-x, var(--default))` for any `null` token (S4/S5). Validated at
+ * the application layer by `apps/api/src/branding/palette.ts` before any
+ * write and mirrored by a DB CHECK constraint on `tenant_branding`.
+ */
+export interface BrandingPalette {
+  accent: string | null;
+  accentFg: string | null;
+  surface: string | null;
+  surface2: string | null;
+  fg: string | null;
+  muted: string | null;
+}
+
+/**
+ * A tenant's branding configuration (16a-v3-gym-white-label, Slice 1). Type-
+ * only scaffolding in Slice 1 — no route reads or writes this shape yet; the
+ * gated CRUD route lands in Slice 3, and `logoUrl` is populated once the
+ * Slice 2 `ObjectStoragePort` upload route exists.
+ */
+export interface TenantBrandingDTO {
+  tenantId: TenantId;
+  subdomainSlug: string;
+  logoUrl: string | null;
+  palette: BrandingPalette;
+}
+
+/**
+ * Response payload for a successful logo upload (16a-v3-gym-white-label,
+ * Slice 2's `POST /branding/logo`). Type-only scaffolding in Slice 1.
+ */
+export interface LogoUploadResponseDTO {
+  logoUrl: string;
 }
 
 /**

@@ -76,6 +76,31 @@ describe("resolveTenantFeatureLimit — trainer tier (15a-v2 Slice 1)", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// 16a-v3-gym-white-label, Slice 1 — dark/additive entitlement plumbing. The
+// `gym` BillingTier must NOT silently fall back to the Free caps once it
+// exists in the enum. No route grants or gates a capability on `gym` yet
+// (`assertGymEntitled` lands in Slice 3); this only proves the limit resolver
+// knows about the tier.
+// ---------------------------------------------------------------------------
+describe("resolveTenantFeatureLimit — gym tier (16a-v3 Slice 1)", () => {
+  it("resolves 'gym' to GYM_TIER_LIMITS, never silently falling back to Free", () => {
+    for (const feature of FEATURES) {
+      expect(resolveTenantFeatureLimit("gym", feature)).not.toBe(
+        FREE_TIER_LIMITS_FOR_TEST[feature],
+      );
+    }
+  });
+
+  it("resolves 'gym' limits at-or-above the Pro caps for every feature", () => {
+    for (const feature of FEATURES) {
+      expect(resolveTenantFeatureLimit("gym", feature)).toBeGreaterThanOrEqual(
+        PRO_TIER_LIMITS[feature],
+      );
+    }
+  });
+});
+
 // A faithful in-memory ledger: denies once `used >= tenantLimit`, mirroring the
 // real atomic conditional UPDATE ... WHERE used < limit (same shape as the
 // quota-consumption unit suite).
