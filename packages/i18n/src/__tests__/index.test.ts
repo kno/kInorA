@@ -145,7 +145,11 @@ describe("@kinora/i18n package assembly", () => {
         !key.startsWith("tenantProvisioning.") &&
         // GH #310: the `logs.*` /admin/logs observability namespace has its own
         // scoped count test below, per the frozen-total convention.
-        !key.startsWith("logs."),
+        !key.startsWith("logs.") &&
+        // GH #309: the `platformStats.*` /admin/stats platform-statistics
+        // namespace has its own scoped count test below, per the frozen-total
+        // convention. (Distinct from the existing progress-dashboard `stats.*`.)
+        !key.startsWith("platformStats."),
     );
     // +1 `tracker.restartLabel` authored for #251 (restart-timer control on
     // the live tracker topbar; pause/restart now persist across navigation).
@@ -460,6 +464,26 @@ describe("@kinora/i18n package assembly", () => {
     expect(flattenMessages(catalogs.es)["logs.title"]).toBeTruthy();
     expect(flat["logs.columns.metadata"]).toBeTruthy();
     expect(flat["logs.errors.forbidden"]).toBeTruthy();
+  });
+
+  it("the platformStats namespace is present with EN+ES parity (GH #309 — admin platform statistics view)", () => {
+    expect(catalogs.en.platformStats).toBeDefined();
+    expect(catalogs.es.platformStats).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+
+    const flat = flattenMessages(catalogs.en);
+    const keys = Object.keys(flat).filter((key) => key.startsWith("platformStats."));
+    // title, description, error (3) + sections x6 + metrics x3 + roles x3 +
+    // tiers x4 + billing x4 + usage x5 + observability x2 = 30 keys for the
+    // /admin/stats platform-statistics panel.
+    expect(keys).toHaveLength(30);
+    expect(flat["platformStats.title"]).toBeTruthy();
+    expect(flattenMessages(catalogs.es)["platformStats.title"]).toBeTruthy();
+    expect(flat["platformStats.billing.effectiveTier"]).toBeTruthy();
+    expect(flat["platformStats.observability.errors24h"]).toBeTruthy();
   });
 
   it("flattenMessages + mergeWithBase compose over the full catalogs", () => {

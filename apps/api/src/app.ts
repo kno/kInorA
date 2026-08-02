@@ -25,7 +25,9 @@ import { adminTierOverrideRoutes } from "./routes/admin-tier-override.js";
 import { TierOverrideAdminRepository } from "./db/repositories/tier-override-admin.js";
 import { adminTenantsRoutes } from "./routes/admin-tenants.js";
 import { AdminTenantsRepository } from "./db/repositories/admin-tenants.js";
+import { AdminStatsRepository } from "./db/repositories/admin-stats.js";
 import { adminLogsRoutes } from "./routes/admin-logs.js";
+import { adminStatsRoutes } from "./routes/admin-stats.js";
 import { ObservabilityEventsRepository } from "./db/repositories/observability-events.js";
 import {
   DefaultObservabilityLogger,
@@ -578,6 +580,20 @@ export async function buildApp(
     repo: {
       findUserById: (id) => adminUserRepo.findById(id),
       queryEvents: (filters) => observabilityRepo.queryEvents(filters),
+    },
+  });
+
+  // Superadmin platform-statistics API — GET /admin/stats (#309, read-only,
+  // requireAuth() + requireAdmin). Reuses the SAME adminUserRepo (findUserById)
+  // for the admin gate plus a dedicated read-only AdminStatsRepository that
+  // computes cross-tenant AGGREGATES ONLY (scalar counts / enum-keyed tallies —
+  // never a per-tenant/per-user record), keeping the route free of any DB-layer
+  // import.
+  const adminStatsRepo = new AdminStatsRepository(database);
+  await app.register(adminStatsRoutes, {
+    repo: {
+      findUserById: (id) => adminUserRepo.findById(id),
+      getPlatformStats: () => adminStatsRepo.getPlatformStats(),
     },
   });
 
