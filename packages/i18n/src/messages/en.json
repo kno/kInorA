@@ -1297,5 +1297,43 @@
       "invalid": "Please check the form and try again.",
       "generic": "An error occurred. Please try again."
     }
+  },
+  "logs": {
+    "title": "Logs & Observability",
+    "description": "Inspect platform audit and application log events across tenants.",
+    "filters": {
+      "level": "Level",
+      "levelAll": "All levels",
+      "event": "Event",
+      "eventPlaceholder": "e.g. plan.generated",
+      "tenantId": "Tenant ID",
+      "tenantIdPlaceholder": "Filter by tenant UUID",
+      "from": "From",
+      "to": "To",
+      "apply": "Apply filters",
+      "applying": "Loading…"
+    },
+    "level": {
+      "info": "Info",
+      "warn": "Warning",
+      "error": "Error"
+    },
+    "columns": {
+      "time": "Time",
+      "level": "Level",
+      "event": "Event",
+      "tenant": "Tenant",
+      "actor": "Actor",
+      "outcome": "Outcome",
+      "metadata": "Metadata"
+    },
+    "loadMore": "Load more",
+    "loadingMore": "Loading…",
+    "empty": "No log events match your filters.",
+    "errors": {
+      "forbidden": "Access denied.",
+      "invalid": "Please check the filters and try again.",
+      "generic": "An error occurred. Please try again."
+    }
   }
 }

@@ -117,7 +117,7 @@ describe("AdminPage (server component)", () => {
     expect(tenantsLink).toBeDefined();
   });
 
-  it("lists the remaining coming-soon sections (Platform Statistics, Logs) without live links", async () => {
+  it("lists Logs & Observability as a live link and Platform Statistics as coming-soon", async () => {
     cookieGet.mockReturnValue({ value: "admin-token" });
     fetchProfile.mockResolvedValue({
       email: "root@example.com",
@@ -132,7 +132,13 @@ describe("AdminPage (server component)", () => {
     expect(text).toContain("Tenant Provisioning");
     expect(text).toContain("Platform Statistics");
     expect(text).toContain("Logs & Observability");
-    // Tenant Provisioning went live (GH #307), leaving 2 coming-soon sections.
-    expect(text.match(/Coming soon/g)?.length).toBe(2);
+
+    // GH #310: Logs & Observability went live, linking to /admin/logs.
+    const logsLink = findFirst(page, (el) => el.props?.href === "/admin/logs");
+    expect(logsLink).toBeDefined();
+
+    // Tenant Provisioning (#307) and Logs (#310) are now live, leaving only
+    // Platform Statistics as a coming-soon section.
+    expect(text.match(/Coming soon/g)?.length).toBe(1);
   });
 });
