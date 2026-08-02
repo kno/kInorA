@@ -100,7 +100,10 @@ import type {
   PortalGateway,
   PriceGateway,
   StripeGateway,
+  SubscriptionGateway,
 } from "./billing/stripe-gateway.js";
+import { SeatSyncService, TrainerSeatSource } from "./billing/seat-sync.js";
+import { SeatSyncStore } from "./db/repositories/seat-sync-store.js";
 import { CreateCheckout, type CheckoutPriceConfig } from "./billing/create-checkout.js";
 import { ResolveBillingPricing } from "./billing/billing-pricing.js";
 import {
@@ -636,6 +639,38 @@ export async function buildApp(
   // `BillingStateReaderRepository` instance every other billing decision in
   // this file uses — one entitlement reader, no duplicated wiring.
   const trainerMembershipRepo = new MembershipRepository(database);
+
+  // 16c-v3-b2b-seat-billing Slice C — seat-sync wiring. The trigger fires on
+  // the accept/revoke transitions in `trainerRoutes` below, so the service is
+  // constructed here (ahead of that registration). `realStripeGateway` is the
+  // single SDK adapter built once from env (reused by the checkout/portal/
+  // webhook wiring further down); when Stripe env is unset it is null and a
+  // fail-closed subscription gateway is used — never actually reached, because
+  // no tenant holds a `stripe_subscription_id` on an unconfigured deploy, so
+  // `syncSeats` short-circuits to a no-op before any outbound call.
+  const realStripeGateway = createStripeGatewayFromEnv();
+  const seatSyncSubscriptionGateway: SubscriptionGateway = realStripeGateway ?? {
+    async updateSubscriptionQuantity() {
+      throw new Error("stripe unconfigured — seat sync unavailable");
+    },
+  };
+  // Migration/Rollout gate (design.md, Judgment Day fix): the outbound Stripe
+  // quantity mutation is feature-flagged OFF by default until the per-seat
+  // Stripe product (Slice E) ships — parsed the SAME way as the existing
+  // `VOICE_USE_MOCK` boolean env flag (`=== "1"`, default off).
+  const seatBillingEnabled = process.env["SEAT_BILLING_ENABLED"] === "1";
+  const seatSyncService = new SeatSyncService(
+    new TrainerSeatSource(trainerAssignmentRepo),
+    new SeatSyncStore(database),
+    seatSyncSubscriptionGateway,
+    (tenantId, error) =>
+      app.log.warn(
+        { tenantId, err: error instanceof Error ? error.message : String(error) },
+        "seat-sync outbound Stripe update failed; drift will be healed by the reconcile sweep",
+      ),
+    seatBillingEnabled,
+  );
+
   // `trainerAssignmentRepo` is constructed above (reused by `planRoutes`'
   // `trainerAccess` option) — do not re-instantiate.
   await app.register(trainerRoutes, {
@@ -643,6 +678,9 @@ export async function buildApp(
     membershipRepo: trainerMembershipRepo,
     userRepo: adminUserRepo,
     entitlementReader: billingStateReader,
+    // 16c Slice C — fire seat-sync on accept (invited→active) + revoke
+    // (active→revoked), never on invite/create.
+    seatSync: seatSyncService,
     // 15b-v2-trainer-dashboard-branding, Phase S1 — enables
     // `GET /trainer/clients/:clientUserId/dashboard`. Reuses the SAME
     // `WorkoutSessionRepository` instance every other progress read uses.
@@ -696,7 +734,8 @@ export async function buildApp(
   // implements BOTH the webhook and checkout ports; reuse it for both routes.
   // When Stripe env is unset it is null → checkout fails closed (5xx) via the
   // UnconfiguredCheckoutGateway. Tests inject a fake gateway + Price config.
-  const realStripeGateway = createStripeGatewayFromEnv();
+  // `realStripeGateway` is constructed once above (seat-sync wiring) and reused
+  // here — the single SDK adapter implements every Stripe port.
   const resolvedCheckoutGateway: CheckoutGateway =
     checkoutGateway ?? realStripeGateway ?? new UnconfiguredCheckoutGateway();
   const resolvedCheckoutPricing: CheckoutPriceConfig =

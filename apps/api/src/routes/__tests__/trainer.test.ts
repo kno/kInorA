@@ -62,6 +62,7 @@ function buildRepos(
     dashboardRepo: Record<string, unknown>;
     planRepo: Record<string, unknown>;
     specRepo: Record<string, unknown>;
+    seatSync: Record<string, unknown>;
   }> = {},
 ) {
   return {
@@ -107,6 +108,10 @@ function buildRepos(
     specRepo: {
       findConfirmedById: vi.fn().mockResolvedValue(undefined),
       ...overrides.specRepo,
+    },
+    seatSync: {
+      syncSeats: vi.fn().mockResolvedValue(undefined),
+      ...overrides.seatSync,
     },
   };
 }
@@ -619,5 +624,169 @@ describe("GET /trainer/clients", () => {
       { clientUserId: CLIENT_ID, email: "client@example.com", status: "active" },
     ]);
     expect(repos.assignmentRepo.listByTrainer).toHaveBeenCalledWith(TENANT_ID, TRAINER_ID);
+  });
+});
+
+// 16c-v3-b2b-seat-billing Slice C: seat-sync fires on the assignment
+// transitions that change the ACTIVE set (accept → active, revoke → revoked),
+// NEVER on invite/create (which yields `invited`, an uncounted seat — design
+// Q3 / Judgment Day fix).
+describe("seat-sync trigger (16c Slice C)", () => {
+  let app: FastifyInstance;
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("accept fires syncSeats for the trainer's tenant (invited → active)", async () => {
+    const repos = buildRepos({
+      assignmentRepo: {
+        findByClientUserId: vi.fn().mockResolvedValue({
+          id: "assignment-1",
+          tenantId: TENANT_ID,
+          trainerUserId: TRAINER_ID,
+          clientUserId: CLIENT_ID,
+          status: "invited",
+        }),
+        updateStatus: vi.fn().mockResolvedValue(1),
+      },
+    });
+    app = await buildTestApp(repos, "member", CLIENT_ID);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/trainer/clients/accept",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(repos.seatSync.syncSeats).toHaveBeenCalledWith(TENANT_ID);
+  });
+
+  it("invite/create does NOT fire syncSeats (the new assignment is `invited`, uncounted)", async () => {
+    const repos = buildRepos();
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/trainer/clients/invite",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { email: "client@example.com" },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(repos.seatSync.syncSeats).not.toHaveBeenCalled();
+  });
+
+  it("revoke fires syncSeats for the trainer's tenant (active → revoked)", async () => {
+    const repos = buildRepos();
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/trainer/clients/${CLIENT_ID}/revoke`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(repos.assignmentRepo.updateStatus).toHaveBeenCalledWith(TENANT_ID, "assignment-1", "revoked");
+    expect(repos.seatSync.syncSeats).toHaveBeenCalledWith(TENANT_ID);
+  });
+
+  it("revoke returns 404 when the trainer has no active assignment to the client (no sync)", async () => {
+    const repos = buildRepos({
+      assignmentRepo: { findActiveAssignment: vi.fn().mockResolvedValue(undefined) },
+    });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/trainer/clients/${CLIENT_ID}/revoke`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(repos.seatSync.syncSeats).not.toHaveBeenCalled();
+  });
+
+  it("a seat-sync failure is non-fatal — accept still succeeds", async () => {
+    const repos = buildRepos({
+      assignmentRepo: {
+        findByClientUserId: vi.fn().mockResolvedValue({
+          id: "assignment-1",
+          tenantId: TENANT_ID,
+          trainerUserId: TRAINER_ID,
+          clientUserId: CLIENT_ID,
+          status: "invited",
+        }),
+      },
+      seatSync: { syncSeats: vi.fn().mockRejectedValue(new Error("lock timeout")) },
+    });
+    app = await buildTestApp(repos, "member", CLIENT_ID);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/trainer/clients/accept",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(repos.seatSync.syncSeats).toHaveBeenCalledWith(TENANT_ID);
+  });
+
+  it("accept replies WITHOUT awaiting seat-sync — a never-resolving syncSeats does not block the response (Judgment Day fix)", async () => {
+    let seatSyncResolved = false;
+    const syncSeats = vi.fn(
+      () =>
+        new Promise<void>(() => {
+          // Deliberately never resolves — proves the route does not await it.
+        }).then(() => {
+          seatSyncResolved = true;
+        }),
+    );
+    const repos = buildRepos({
+      assignmentRepo: {
+        findByClientUserId: vi.fn().mockResolvedValue({
+          id: "assignment-1",
+          tenantId: TENANT_ID,
+          trainerUserId: TRAINER_ID,
+          clientUserId: CLIENT_ID,
+          status: "invited",
+        }),
+      },
+      seatSync: { syncSeats },
+    });
+    app = await buildTestApp(repos, "member", CLIENT_ID);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/trainer/clients/accept",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    // If the route awaited `syncSeats`, this `inject` call would hang forever
+    // (the promise never resolves) and the test would time out. It doesn't:
+    // the response returns immediately, before the sync promise ever settles.
+    expect(res.statusCode).toBe(200);
+    expect(syncSeats).toHaveBeenCalledWith(TENANT_ID);
+    expect(seatSyncResolved).toBe(false);
+  });
+
+  it("revoke replies WITHOUT awaiting seat-sync — a rejecting syncSeats does not fail the request or crash", async () => {
+    const syncSeats = vi.fn().mockRejectedValue(new Error("stripe timeout"));
+    const repos = buildRepos({ seatSync: { syncSeats } });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/trainer/clients/${CLIENT_ID}/revoke`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(syncSeats).toHaveBeenCalledWith(TENANT_ID);
+    // Let the rejected floating promise's microtask settle within this test
+    // so a missing `.catch` would surface here (as an unhandled rejection)
+    // rather than leaking into a later test.
+    await new Promise((r) => setTimeout(r, 0));
   });
 });
