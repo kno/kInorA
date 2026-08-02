@@ -445,7 +445,13 @@ export const billingAuditEvents = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: uuid("tenant_id").notNull(),
-    actorUserId: uuid("actor_user_id").notNull(),
+    // Plain FK to `users.id` (16d-admin-tier-provisioning) — NOT a tenant-scoped
+    // composite FK. A global superadmin (`users.is_admin`) may act on a tenant
+    // they hold zero `memberships` rows for (e.g. granting a tier override), so
+    // the audit actor must be recordable independent of tenant membership.
+    actorUserId: uuid("actor_user_id")
+      .notNull()
+      .references(() => users.id),
     subjectUserId: uuid("subject_user_id").references(() => users.id),
     action: billingAuditActionEnum("action").notNull(),
     feature: billingFeatureEnum("feature"),
@@ -454,11 +460,6 @@ export const billingAuditEvents = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    actorMembershipFk: foreignKey({
-      name: "billing_audit_events_tenant_actor_memberships_fk",
-      columns: [table.tenantId, table.actorUserId],
-      foreignColumns: [memberships.tenantId, memberships.userId],
-    }).onDelete("cascade"),
     tenantCreatedIdx: index("billing_audit_events_tenant_created_idx").on(
       table.tenantId,
       table.createdAt,
