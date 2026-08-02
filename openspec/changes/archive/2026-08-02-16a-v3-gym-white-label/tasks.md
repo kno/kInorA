@@ -331,9 +331,12 @@ page.
 
 ## Phase 6: Cleanup / Docs
 
-- [ ] 6.1 Update `openspec/specs/{16a,11a}/spec.md` once archived, merging
+- [x] 6.1 Update `openspec/specs/{16a,11a}/spec.md` once archived, merging
       the deltas already drafted in `specs/` (mirrors 15a's Phase 6.1).
-- [ ] 6.2 Confirm both open design questions remain explicitly tracked
+      DONE at archive time (this cycle) — see archive-report.md.
+- [x] 6.2 Confirm both open design questions remain explicitly tracked
       post-archive: (a) prod `STORAGE_LOCAL_DIR` mount path — ops follow-up;
       (b) admin UI vs. API-only tier/slug assignment — no admin UI built
       this change, file a follow-up issue if one is wanted.
+      DONE at archive time — both recorded prominently in archive-report.md
+      as OPEN OPS PREREQUISITES / DEFERRED items.
