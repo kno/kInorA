@@ -106,6 +106,24 @@ describe("GrantTenantTierOverride", () => {
     expect(port.grantTierOverride).not.toHaveBeenCalled();
   });
 
+  it("rejects with active_override_exists when the adapter's transactional re-check finds a concurrent grant (race)", async () => {
+    // The fast-path `loadActiveOverride` check above sees nothing, but the
+    // adapter's own transaction (advisory-lock + re-check + insert) discovers
+    // a concurrently-committed override and signals the conflict by
+    // resolving `null` instead of throwing.
+    const port = buildPort({
+      grantTierOverride: vi.fn().mockResolvedValue(null),
+    });
+    const useCase = new GrantTenantTierOverride(port);
+
+    const outcome = await useCase.execute(
+      { tenantId: TENANT_ID, actorUserId: ACTOR_ID, tier: "gym", reason: "x" },
+      NOW,
+    );
+
+    expect(outcome).toEqual({ ok: false, reason: "active_override_exists" });
+  });
+
   it("rejects tier 'pro' as invalid", async () => {
     const port = buildPort();
     const useCase = new GrantTenantTierOverride(port);

@@ -1,4 +1,4 @@
-import { and, eq, gt, lte } from "drizzle-orm";
+import { and, eq, gt, lte, sql } from "drizzle-orm";
 import type { Database } from "../client.js";
 import { billingAuditEvents, tenantBillingOverrides, tenants } from "../schema.js";
 import type {
@@ -44,8 +44,47 @@ export class TierOverrideAdminRepository implements TierOverrideAdminPort {
     return row ?? null;
   }
 
-  async grantTierOverride(input: GrantTierOverrideInput): Promise<TenantBillingOverrideRow> {
+  /**
+   * `loadActiveOverride` + `grantTierOverride` are called as two SEPARATE
+   * round-trips by `GrantTenantTierOverride.execute` (a check-then-act
+   * pattern) — that fast-path check alone cannot prevent two concurrent
+   * grants for the same tenant both observing "no active override" and both
+   * inserting. A DB-level partial-unique index cannot enforce this either,
+   * because "active" is a time WINDOW (`startsAt<=now<endsAt`), not an
+   * immutable status column.
+   *
+   * Instead, this method serializes concurrent grants per tenant with a
+   * transaction-scoped Postgres advisory lock (`pg_advisory_xact_lock`,
+   * auto-released at commit/rollback): the lock is taken FIRST, the active
+   * override is RE-CHECKED under the lock, and only then is the row
+   * inserted. A second concurrent caller blocks on the lock until the first
+   * commits, then observes the first's committed row and backs off — it
+   * resolves `null` (does not insert, does not throw) so the use case can
+   * map it to the existing `active_override_exists` 409 conflict.
+   */
+  async grantTierOverride(input: GrantTierOverrideInput): Promise<TenantBillingOverrideRow | null> {
     return this.db.transaction(async (tx) => {
+      // Serializes concurrent grants for this tenant. `hashtext` collapses
+      // the uuid to a single bigint lock key; the lock is transaction-scoped
+      // and released automatically on commit/rollback.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${input.tenantId}))`);
+
+      const [existingActive] = await tx
+        .select({ id: tenantBillingOverrides.id })
+        .from(tenantBillingOverrides)
+        .where(
+          and(
+            eq(tenantBillingOverrides.tenantId, input.tenantId),
+            lte(tenantBillingOverrides.startsAt, input.startsAt),
+            gt(tenantBillingOverrides.endsAt, input.startsAt),
+          ),
+        )
+        .orderBy(tenantBillingOverrides.endsAt);
+
+      if (existingActive) {
+        return null;
+      }
+
       const [created] = await tx
         .insert(tenantBillingOverrides)
         .values({

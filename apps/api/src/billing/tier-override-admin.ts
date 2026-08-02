@@ -46,7 +46,17 @@ export interface RevokeTierOverrideInput {
 export interface TierOverrideAdminPort {
   loadTenant(tenantId: string): Promise<{ id: string } | null>;
   loadActiveOverride(tenantId: string, now: Date): Promise<{ id: string } | null>;
-  grantTierOverride(input: GrantTierOverrideInput): Promise<TenantBillingOverrideRow>;
+  /**
+   * Grants the override. The adapter runs this as ONE transaction that
+   * (1) takes a per-tenant Postgres advisory lock, (2) RE-CHECKS for an
+   * active override under that lock, and (3) inserts only if still clear —
+   * this serializes concurrent grants for the same tenant. Resolves `null`
+   * (instead of throwing) when the transactional re-check finds a
+   * concurrently-committed active override, so the caller can map it to the
+   * same `active_override_exists` conflict the fast-path check above
+   * produces.
+   */
+  grantTierOverride(input: GrantTierOverrideInput): Promise<TenantBillingOverrideRow | null>;
   revokeTierOverride(input: RevokeTierOverrideInput): Promise<{ id: string; endsAt: Date }>;
 }
 
@@ -135,6 +145,12 @@ export class GrantTenantTierOverride {
       startsAt,
       endsAt,
     });
+
+    if (!created) {
+      // Lost the race: the adapter's own transaction (advisory-lock +
+      // re-check) found a concurrently-committed active override.
+      return { ok: false, reason: "active_override_exists" };
+    }
 
     return {
       ok: true,

@@ -23,6 +23,23 @@ const grantBodySchema = z.object({
 });
 
 /**
+ * `tenantId` path-param schema. A malformed value (e.g. `not-a-uuid`) would
+ * otherwise reach Postgres as an invalid `uuid` literal and throw, falling
+ * through to the generic 500 error handler — reject it up front as a 422
+ * instead, mirroring the body-validation branch below.
+ *
+ * Uses a plain 8-4-4-4-12 hex shape check (matching Postgres's own `uuid`
+ * column format) rather than `z.string().uuid()`'s strict RFC 4122
+ * version/variant nibble check — test fixtures throughout this codebase use
+ * non-RFC-compliant UUID literals (e.g. `bbbbbbbb-0000-0000-...`) as tenant
+ * IDs, which Postgres itself accepts as valid `uuid` values.
+ */
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const tenantIdParamsSchema = z.object({
+  tenantId: z.string().regex(UUID_SHAPE),
+});
+
+/**
  * Route port for the admin tier-override endpoints. Mirrors
  * `AdminAiConfigRouteRepo`: `findUserById` feeds `buildRequireAdmin`; the
  * remaining methods satisfy `TierOverrideAdminPort` so the SAME port object
@@ -70,7 +87,12 @@ export const adminTierOverrideRoutes: FastifyPluginAsync<AdminTierOverrideRoutes
     "/admin/tenants/:tenantId/tier-override",
     { preHandler: [requireAuth(), requireAdmin] },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { tenantId } = request.params as { tenantId: string };
+      const paramsResult = tenantIdParamsSchema.safeParse(request.params);
+      if (!paramsResult.success) {
+        return reply.code(422).send({ error: "Validation Error" });
+      }
+      const { tenantId } = paramsResult.data;
+
       const result = grantBodySchema.safeParse(request.body);
       if (!result.success) {
         return reply.code(422).send({ error: "Validation Error" });
@@ -105,7 +127,11 @@ export const adminTierOverrideRoutes: FastifyPluginAsync<AdminTierOverrideRoutes
     "/admin/tenants/:tenantId/tier-override/revoke",
     { preHandler: [requireAuth(), requireAdmin] },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { tenantId } = request.params as { tenantId: string };
+      const paramsResult = tenantIdParamsSchema.safeParse(request.params);
+      if (!paramsResult.success) {
+        return reply.code(422).send({ error: "Validation Error" });
+      }
+      const { tenantId } = paramsResult.data;
 
       const outcome = await revokeTierOverride.execute({
         tenantId,

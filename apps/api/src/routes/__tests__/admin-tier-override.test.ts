@@ -169,6 +169,19 @@ describe("POST /admin/tenants/:tenantId/tier-override", () => {
 
     expect(res.statusCode).toBe(422);
   });
+
+  it("returns 422 (not 500) for a malformed tenantId path param", async () => {
+    app = await buildTestApp(ADMIN_USER_ROW);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/admin/tenants/not-a-uuid/tier-override`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { tier: "trainer", reason: "pilot" },
+    });
+
+    expect(res.statusCode).toBe(422);
+  });
 });
 
 describe("POST /admin/tenants/:tenantId/tier-override/revoke", () => {
@@ -219,5 +232,17 @@ describe("POST /admin/tenants/:tenantId/tier-override/revoke", () => {
     });
 
     expect(res.statusCode).toBe(409);
+  });
+
+  it("returns 422 (not 500) for a malformed tenantId path param", async () => {
+    app = await buildTestApp(ADMIN_USER_ROW);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/admin/tenants/not-a-uuid/tier-override/revoke`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(422);
   });
 });

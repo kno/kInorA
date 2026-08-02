@@ -15,7 +15,14 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { createDbClient } from "../../client.js";
-import { billingAuditEvents, memberQuotaAllocations, memberships, tenants, users } from "../../schema.js";
+import {
+  billingAuditEvents,
+  memberQuotaAllocations,
+  memberships,
+  tenantBillingOverrides,
+  tenants,
+  users,
+} from "../../schema.js";
 import { BillingAdminRepository } from "../billing-admin.js";
 import { TierOverrideAdminRepository } from "../tier-override-admin.js";
 
@@ -130,6 +137,37 @@ describe.skipIf(!hasDb)("TierOverrideAdminRepository (real Postgres)", () => {
       actorUserId: superadminId,
       metadata: { overrideId: created.id },
     });
+  });
+
+  it("serializes two concurrent grants for the same tenant: exactly one succeeds, exactly one active override row exists", async () => {
+    const { tenantId, superadminId } = await seedTenantAndSuperadmin();
+
+    const grantInput = {
+      tenantId,
+      actorUserId: superadminId,
+      reason: "concurrent grant race",
+      startsAt: NOW,
+      endsAt: OPEN_ENDED,
+    };
+
+    const [first, second] = await Promise.all([
+      repo.grantTierOverride({ ...grantInput, tier: "trainer" }),
+      repo.grantTierOverride({ ...grantInput, tier: "gym" }),
+    ]);
+
+    const results = [first, second];
+    const succeeded = results.filter((r) => r !== null);
+    const conflicted = results.filter((r) => r === null);
+
+    expect(succeeded).toHaveLength(1);
+    expect(conflicted).toHaveLength(1);
+
+    const activeRows = await db
+      .select({ id: tenantBillingOverrides.id })
+      .from(tenantBillingOverrides)
+      .where(and(eq(tenantBillingOverrides.tenantId, tenantId), eq(tenantBillingOverrides.endsAt, OPEN_ENDED)));
+
+    expect(activeRows).toHaveLength(1);
   });
 
   it("regression: writeMemberAllocation audit insert is unaffected by the relaxed FK (actor IS a tenant member)", async () => {
