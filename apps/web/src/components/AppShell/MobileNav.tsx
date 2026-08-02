@@ -13,7 +13,7 @@ interface TabItem {
   labelKey: string;
   label?: string;
   href: string;
-  icon: "home" | "plan" | "stats" | "history" | "exercises" | "profile" | "memory" | "billing";
+  icon: "home" | "plan" | "stats" | "history" | "exercises" | "profile" | "memory" | "billing" | "admin";
 }
 
 // Primary destinations always visible in the bottom bar.
@@ -44,7 +44,12 @@ const SECONDARY_TABS: TabItem[] = [
 export function MobileNav({
   memoryNavLabel,
   billingNavLabel,
-}: { memoryNavLabel?: string; billingNavLabel?: string } = {}) {
+  isAdmin,
+}: {
+  memoryNavLabel?: string;
+  billingNavLabel?: string;
+  isAdmin?: boolean;
+} = {}) {
   const t = useTranslations();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -59,6 +64,9 @@ export function MobileNav({
       : []),
     ...(billingNavLabel
       ? [{ labelKey: "", label: billingNavLabel, href: "/billing", icon: "billing" as const }]
+      : []),
+    ...(isAdmin === true
+      ? [{ labelKey: "appNav.admin", href: "/admin", icon: "admin" as const }]
       : []),
   ];
 
@@ -241,6 +249,8 @@ function TabIcon({ name }: { name: TabItem["icon"] }) {
       return <HistoryIcon className={styles.icon} size={22} />;
     case "billing":
       return <StatsIcon className={styles.icon} size={22} />;
+    case "admin":
+      return <UserIcon className={styles.icon} size={22} />;
   }
 }
 

@@ -5,6 +5,7 @@ export interface SidebarProfile {
   email: string;
   initials: string;
   tenantName: string;
+  isAdmin?: boolean;
 }
 
 /**
@@ -33,5 +34,6 @@ export async function fetchProfile(token: string): Promise<SidebarProfile | null
     email: payload.email,
     initials: payload.initials,
     tenantName: payload.tenantName ?? "",
+    isAdmin: payload.isAdmin === true,
   };
 }

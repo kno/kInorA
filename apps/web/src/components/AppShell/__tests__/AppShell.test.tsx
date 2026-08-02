@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { catalogs } from "@kinora/i18n";
 import { usePathname } from "next/navigation";
@@ -66,6 +66,31 @@ describe("AppShell", () => {
     );
 
     expect(html).toContain("Memory");
+  });
+
+  it("forwards isAdmin to the mobile nav so Admin appears in its overflow menu (GH #306)", () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+
+    renderWithIntl(
+      <AppShell isAdmin>
+        <p>content</p>
+      </AppShell>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /More/i }));
+    expect(screen.getByRole("menuitem", { name: /Admin/i })).toBeTruthy();
   });
 
   it("renders the desktop sidebar (and not the mobile nav) at >=768px", () => {

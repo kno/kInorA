@@ -308,7 +308,9 @@ describe("AuthService.getProfile", () => {
     const db = {
       select: vi
         .fn()
-        .mockReturnValueOnce(selectChain([{ id: "user-1", email: "alex@example.com" }]))
+        .mockReturnValueOnce(
+          selectChain([{ id: "user-1", email: "alex@example.com", isAdmin: false }]),
+        )
         .mockReturnValueOnce(selectChain([{ userId: "user-1", name: "Alex Rivera" }])),
     } as unknown as Database;
     const service = new AuthService(db);
@@ -319,6 +321,7 @@ describe("AuthService.getProfile", () => {
       email: "alex@example.com",
       initials: "A",
       name: "Alex Rivera",
+      isAdmin: false,
     });
   });
 
@@ -326,7 +329,9 @@ describe("AuthService.getProfile", () => {
     const db = {
       select: vi
         .fn()
-        .mockReturnValueOnce(selectChain([{ id: "user-1", email: "bianca@example.com" }]))
+        .mockReturnValueOnce(
+          selectChain([{ id: "user-1", email: "bianca@example.com", isAdmin: false }]),
+        )
         .mockReturnValueOnce(selectChain([])),
     } as unknown as Database;
     const service = new AuthService(db);
@@ -337,6 +342,28 @@ describe("AuthService.getProfile", () => {
       email: "bianca@example.com",
       initials: "B",
       name: "bianca@example.com",
+      isAdmin: false,
+    });
+  });
+
+  it("returns isAdmin: true for an admin user (foundation for the admin backoffice access point, GH #306)", async () => {
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(
+          selectChain([{ id: "user-admin", email: "root@example.com", isAdmin: true }]),
+        )
+        .mockReturnValueOnce(selectChain([])),
+    } as unknown as Database;
+    const service = new AuthService(db);
+
+    const result = await service.getProfile("user-admin");
+
+    expect(result).toEqual({
+      email: "root@example.com",
+      initials: "R",
+      name: "root@example.com",
+      isAdmin: true,
     });
   });
 });
