@@ -244,3 +244,115 @@ describe("UnconfiguredPriceGateway (#195)", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// 16c v3 B2B seat-based billing, Slice A — pure Stripe infra (gateway method +
+// snapshot quantity parsing). NO seat-count source, persistence, or limit
+// scaling in this slice; those are later slices (B-D). A fake Stripe client is
+// injected so these stay hermetic (no live Stripe call).
+// ---------------------------------------------------------------------------
+
+function fakeSubscriptionStripeClient(
+  subscription: Partial<Stripe.Subscription>,
+): { client: Stripe; retrieve: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> } {
+  const retrieve = vi.fn(async () => subscription as Stripe.Subscription);
+  const update = vi.fn(async () => subscription as Stripe.Subscription);
+  return {
+    client: { subscriptions: { retrieve, update } } as unknown as Stripe,
+    retrieve,
+    update,
+  };
+}
+
+describe("StripeApiGateway.updateSubscriptionQuantity (16c v3 Slice A)", () => {
+  it("retrieves the subscription's first item id and updates quantity with create_prorations + the idempotency key", async () => {
+    const { client, retrieve, update } = fakeSubscriptionStripeClient({
+      id: "sub_seat_1",
+      items: { object: "list", data: [{ id: "si_seat_1" }] } as unknown as Stripe.Subscription["items"],
+    });
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client);
+
+    await gateway.updateSubscriptionQuantity("sub_seat_1", 3, "seat-sync:tenant_1:3");
+
+    expect(retrieve).toHaveBeenCalledWith("sub_seat_1");
+    expect(update).toHaveBeenCalledWith(
+      "sub_seat_1",
+      { items: [{ id: "si_seat_1", quantity: 3 }], proration_behavior: "create_prorations" },
+      { idempotencyKey: "seat-sync:tenant_1:3" },
+    );
+  });
+
+  it("throws when the subscription has no items to update quantity on", async () => {
+    const { client } = fakeSubscriptionStripeClient({
+      id: "sub_no_items",
+      items: { object: "list", data: [] } as unknown as Stripe.Subscription["items"],
+    });
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client);
+
+    await expect(
+      gateway.updateSubscriptionQuantity("sub_no_items", 2, "seat-sync:tenant_2:2"),
+    ).rejects.toThrow(/no items/);
+  });
+});
+
+describe("StripeApiGateway normalizeSubscription — seatQuantity parsing (16c v3 Slice A)", () => {
+  function fakeConstructEventClient(sub: Partial<Stripe.Subscription>): Stripe {
+    const event = {
+      id: "evt_seat_1",
+      type: "customer.subscription.updated",
+      created: 1_700_000_000,
+      data: { object: sub },
+    } as unknown as Stripe.Event;
+    return {
+      webhooks: { constructEvent: vi.fn(() => event) },
+    } as unknown as Stripe;
+  }
+
+  function subscriptionWithQuantity(quantity: unknown): Partial<Stripe.Subscription> {
+    return {
+      id: "sub_seat_2",
+      status: "active",
+      customer: "cus_seat_2",
+      cancel_at_period_end: false,
+      metadata: {},
+      items: {
+        object: "list",
+        data: [{ price: { recurring: { interval: "month" } }, quantity }],
+      } as unknown as Stripe.Subscription["items"],
+    };
+  }
+
+  it("parses seatQuantity from the first subscription item's quantity", () => {
+    const client = fakeConstructEventClient(subscriptionWithQuantity(4));
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client);
+
+    const parsed = gateway.verifyAndParseEvent("raw-body", "sig");
+
+    expect(parsed.subscription?.seatQuantity).toBe(4);
+  });
+
+  it("maps a missing/non-numeric quantity to null", () => {
+    const client = fakeConstructEventClient(subscriptionWithQuantity(undefined));
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client);
+
+    const parsed = gateway.verifyAndParseEvent("raw-body", "sig");
+
+    expect(parsed.subscription?.seatQuantity).toBeNull();
+  });
+
+  it("maps a subscription with no items at all to a null seatQuantity, without throwing", () => {
+    const client = fakeConstructEventClient({
+      id: "sub_seat_3",
+      status: "active",
+      customer: "cus_seat_3",
+      cancel_at_period_end: false,
+      metadata: {},
+      items: { object: "list", data: [] } as unknown as Stripe.Subscription["items"],
+    });
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client);
+
+    const parsed = gateway.verifyAndParseEvent("raw-body", "sig");
+
+    expect(parsed.subscription?.seatQuantity).toBeNull();
+  });
+});

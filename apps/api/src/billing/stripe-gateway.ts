@@ -52,6 +52,15 @@ export interface StripeSubscriptionSnapshot {
   cycle: BillingCycle | null;
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
+  /**
+   * The Stripe subscription item quantity (16c v3 Slice A — seat-based
+   * billing). `null` when the subscription carries no readable quantity
+   * (e.g. no items, or a non-numeric quantity on the SDK shape). NOT yet
+   * persisted anywhere — Slice B wires this into `tenant_billing_states.
+   * seat_count` via the webhook write path. Never read by
+   * `resolveEffectiveTier`.
+   */
+  seatQuantity: number | null;
 }
 
 /**
@@ -267,4 +276,30 @@ export interface StripePrice {
 /** The Price-lookup port the pure `ResolveBillingPricing` use case depends on. */
 export interface PriceGateway {
   retrievePrice(priceId: string): Promise<StripePrice>;
+}
+
+// ---------------------------------------------------------------------------
+// Subscription-quantity port (16c v3 B2B seat-based billing, Slice A).
+//
+// Pure Stripe infra ONLY in this slice: no seat-count source, no persistence,
+// no limit-scaling — those land in later slices (B–D). This port exists so a
+// future seat-sync use case can depend on ONLY `updateSubscriptionQuantity`,
+// interface-segregated like every other gateway port here. The single SDK
+// adapter (`db/repositories/stripe-gateway.ts`) implements it.
+// ---------------------------------------------------------------------------
+
+/**
+ * The seat-quantity port a future seat-sync use case depends on.
+ * `updateSubscriptionQuantity` sets the Stripe subscription's (first) item
+ * quantity with `proration_behavior: "create_prorations"` — an immediate
+ * pro-rated charge/credit on add/remove (design Q3). `idempotencyKey` MUST be
+ * supplied by the caller so a retried outbound call is safe; this port does
+ * not generate one itself.
+ */
+export interface SubscriptionGateway {
+  updateSubscriptionQuantity(
+    subscriptionId: string,
+    quantity: number,
+    idempotencyKey: string,
+  ): Promise<void>;
 }
