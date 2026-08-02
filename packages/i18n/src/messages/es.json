@@ -155,7 +155,8 @@
       "submit": "Iniciar sesión",
       "google": "Iniciar sesión con Google",
       "switchPrompt": "¿No tienes una cuenta?",
-      "switchLink": "Crear cuenta"
+      "switchLink": "Crear cuenta",
+      "gymLogoAlt": "Logotipo del gimnasio"
     },
     "signup": {
       "title": "Crear cuenta",
