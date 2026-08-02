@@ -1297,5 +1297,43 @@
       "invalid": "Revisa el formulario e inténtalo de nuevo.",
       "generic": "Se produjo un error. Inténtalo de nuevo."
     }
+  },
+  "logs": {
+    "title": "Registros y observabilidad",
+    "description": "Inspecciona los eventos de auditoría y de registro de la plataforma entre organizaciones.",
+    "filters": {
+      "level": "Nivel",
+      "levelAll": "Todos los niveles",
+      "event": "Evento",
+      "eventPlaceholder": "p. ej. plan.generated",
+      "tenantId": "ID de organización",
+      "tenantIdPlaceholder": "Filtrar por UUID de organización",
+      "from": "Desde",
+      "to": "Hasta",
+      "apply": "Aplicar filtros",
+      "applying": "Cargando…"
+    },
+    "level": {
+      "info": "Información",
+      "warn": "Advertencia",
+      "error": "Error"
+    },
+    "columns": {
+      "time": "Hora",
+      "level": "Nivel",
+      "event": "Evento",
+      "tenant": "Organización",
+      "actor": "Actor",
+      "outcome": "Resultado",
+      "metadata": "Metadatos"
+    },
+    "loadMore": "Cargar más",
+    "loadingMore": "Cargando…",
+    "empty": "Ningún evento de registro coincide con los filtros.",
+    "errors": {
+      "forbidden": "Acceso denegado.",
+      "invalid": "Revisa los filtros e inténtalo de nuevo.",
+      "generic": "Se produjo un error. Inténtalo de nuevo."
+    }
   }
 }

@@ -142,7 +142,10 @@ describe("@kinora/i18n package assembly", () => {
         !key.startsWith("admin.") &&
         // GH #307: the `tenantProvisioning.*` /admin/tenants namespace has its
         // own scoped count test below, per the frozen-total convention.
-        !key.startsWith("tenantProvisioning."),
+        !key.startsWith("tenantProvisioning.") &&
+        // GH #310: the `logs.*` /admin/logs observability namespace has its own
+        // scoped count test below, per the frozen-total convention.
+        !key.startsWith("logs."),
     );
     // +1 `tracker.restartLabel` authored for #251 (restart-timer control on
     // the live tracker topbar; pause/restart now persist across navigation).
@@ -437,6 +440,26 @@ describe("@kinora/i18n package assembly", () => {
     expect(flattenMessages(catalogs.es)["tenantProvisioning.title"]).toBeTruthy();
     expect(flat["tenantProvisioning.grant.submit"]).toBeTruthy();
     expect(flat["tenantProvisioning.errors.conflict"]).toBeTruthy();
+  });
+
+  it("the logs namespace is present with EN+ES parity (GH #310 — admin logs/observability view)", () => {
+    expect(catalogs.en.logs).toBeDefined();
+    expect(catalogs.es.logs).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+
+    const flat = flattenMessages(catalogs.en);
+    const keys = Object.keys(flat).filter((key) => key.startsWith("logs."));
+    // title, description (2) + filters x10 + level x3 + columns x7 +
+    // loadMore, loadingMore (2) + empty (1) + errors x3 = 28 keys for the
+    // /admin/logs observability panel.
+    expect(keys).toHaveLength(28);
+    expect(flat["logs.title"]).toBeTruthy();
+    expect(flattenMessages(catalogs.es)["logs.title"]).toBeTruthy();
+    expect(flat["logs.columns.metadata"]).toBeTruthy();
+    expect(flat["logs.errors.forbidden"]).toBeTruthy();
   });
 
   it("flattenMessages + mergeWithBase compose over the full catalogs", () => {
