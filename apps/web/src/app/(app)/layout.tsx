@@ -43,6 +43,7 @@ export default async function AppLayout({
 
   let user: SidebarUser | undefined;
   let brandingStyle: string | null = null;
+  let isAdmin = false;
   if (token) {
     const [profile, branding] = await Promise.all([
       fetchProfile(token),
@@ -54,6 +55,7 @@ export default async function AppLayout({
         name: profile.email,
         plan: "Free",
       };
+      isAdmin = profile.isAdmin === true;
     }
     if (branding) {
       brandingStyle = buildGymStyleBlock(branding.palette);
@@ -67,6 +69,7 @@ export default async function AppLayout({
         user={user}
         memoryNavLabel={t("memory.navLabel")}
         billingNavLabel={t("billing.navLabel")}
+        isAdmin={isAdmin}
       >
         {children}
       </AppShell>

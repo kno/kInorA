@@ -187,7 +187,7 @@ export class AuthService {
    */
   async getProfile(
     userId: string,
-  ): Promise<{ email: string; initials: string; name: string } | null> {
+  ): Promise<{ email: string; initials: string; name: string; isAdmin: boolean } | null> {
     const user = await this.userRepo.findById(userId);
     if (!user) return null;
 
@@ -198,6 +198,7 @@ export class AuthService {
       email: user.email,
       initials,
       name: profile?.name ?? user.email,
+      isAdmin: Boolean(user.isAdmin),
     };
   }
 }

@@ -136,7 +136,10 @@ describe("@kinora/i18n package assembly", () => {
         !key.startsWith("trainerPlan.") &&
         // GH #294: the `appNav.*` web app-shell nav-label namespace has its
         // own scoped count test below, per the frozen-total convention.
-        !key.startsWith("appNav."),
+        !key.startsWith("appNav.") &&
+        // GH #306: the `admin.*` /admin landing-page namespace has its own
+        // scoped count test below, per the frozen-total convention.
+        !key.startsWith("admin."),
     );
     // +1 `tracker.restartLabel` authored for #251 (restart-timer control on
     // the live tracker topbar; pause/restart now persist across navigation).
@@ -384,9 +387,34 @@ describe("@kinora/i18n package assembly", () => {
     const appNavKeys = Object.keys(flat).filter((key) => key.startsWith("appNav."));
     // dashboard, plan, statistics, history, createPlan, exercises, profile,
     // more, logout = 9 web app-shell nav-label keys (MobileNav + SidebarNav).
-    expect(appNavKeys).toHaveLength(9);
+    // + 1 `appNav.admin` authored for GH #306 (admin backoffice access point:
+    // conditional Admin nav entry in SidebarNav + MobileNav's overflow menu).
+    expect(appNavKeys).toHaveLength(10);
     expect(flat["appNav.dashboard"]).toBe("Dashboard");
     expect(flattenMessages(catalogs.es)["appNav.dashboard"]).toBe("Panel");
+    expect(flat["appNav.admin"]).toBeTruthy();
+    expect(flattenMessages(catalogs.es)["appNav.admin"]).toBeTruthy();
+  });
+
+  it("the admin namespace is present with EN+ES parity (GH #306 — admin backoffice access point)", () => {
+    expect(catalogs.en.admin).toBeDefined();
+    expect(catalogs.es.admin).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+
+    const flat = flattenMessages(catalogs.en);
+    const adminKeys = Object.keys(flat).filter((key) => key.startsWith("admin."));
+    // pageTitle, pageDescription, comingSoon (3) + 4 sections x {title,
+    // description} (8) = 11 keys for the /admin landing page.
+    expect(adminKeys).toHaveLength(11);
+    expect(flat["admin.pageTitle"]).toBeTruthy();
+    expect(flattenMessages(catalogs.es)["admin.pageTitle"]).toBeTruthy();
+    expect(flat["admin.sections.aiConfig.title"]).toBeTruthy();
+    expect(flat["admin.sections.tenantProvisioning.title"]).toBeTruthy();
+    expect(flat["admin.sections.platformStatistics.title"]).toBeTruthy();
+    expect(flat["admin.sections.logs.title"]).toBeTruthy();
   });
 
   it("flattenMessages + mergeWithBase compose over the full catalogs", () => {

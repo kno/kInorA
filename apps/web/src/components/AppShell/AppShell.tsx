@@ -21,11 +21,13 @@ export function AppShell({
   user,
   memoryNavLabel,
   billingNavLabel,
+  isAdmin,
 }: {
   children: React.ReactNode;
   user?: SidebarUser;
   memoryNavLabel?: string;
   billingNavLabel?: string;
+  isAdmin?: boolean;
 }) {
   const [isDesktop, setIsDesktop] = useState(false);
 
@@ -41,10 +43,21 @@ export function AppShell({
   return (
     <div className={styles.shell}>
       {isDesktop ? (
-        <SidebarNav user={user} memoryNavLabel={memoryNavLabel} billingNavLabel={billingNavLabel} />
+        <SidebarNav
+          user={user}
+          memoryNavLabel={memoryNavLabel}
+          billingNavLabel={billingNavLabel}
+          isAdmin={isAdmin}
+        />
       ) : null}
       <main className={styles.main}>{children}</main>
-      {!isDesktop ? <MobileNav memoryNavLabel={memoryNavLabel} billingNavLabel={billingNavLabel} /> : null}
+      {!isDesktop ? (
+        <MobileNav
+          memoryNavLabel={memoryNavLabel}
+          billingNavLabel={billingNavLabel}
+          isAdmin={isAdmin}
+        />
+      ) : null}
     </div>
   );
 }

@@ -315,4 +315,73 @@ describe("Auth routes integration", () => {
       expect(response.statusCode).toBe(401);
     });
   });
+
+  describe("GET /auth/profile — isAdmin passthrough (foundation for the admin backoffice access point, GH #306)", () => {
+    /**
+     * requireAuth() resolves the session (2 selects: session lookup + active
+     * membership check) before the handler calls authService.getProfile
+     * (2 more selects: user lookup + user_profiles lookup) — 4 selects total.
+     */
+    function buildProfileDb(opts: { isAdmin: boolean }) {
+      const rawToken = "a".repeat(64);
+      return {
+        select: vi
+          .fn()
+          .mockReturnValueOnce(
+            selectChain([
+              {
+                tokenHash: computeTokenHash(rawToken),
+                userId: "user-uuid-1",
+                tenantId: "tenant-uuid-1",
+                createdAt: new Date(),
+                expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+              },
+            ]),
+          )
+          .mockReturnValueOnce(
+            selectChain([
+              {
+                id: "m-1",
+                tenantId: "tenant-uuid-1",
+                userId: "user-uuid-1",
+                role: "owner",
+                status: "active",
+              },
+            ]),
+          )
+          .mockReturnValueOnce(
+            selectChain([{ id: "user-uuid-1", email: "user@example.com", isAdmin: opts.isAdmin }]),
+          )
+          .mockReturnValueOnce(selectChain([])),
+      } as unknown as Database;
+    }
+
+    it("returns isAdmin: true for an admin user", async () => {
+      const db = buildProfileDb({ isAdmin: true });
+      app = await buildTestApp(db);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/auth/profile",
+        headers: { authorization: `Bearer ${"a".repeat(64)}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().isAdmin).toBe(true);
+    });
+
+    it("returns isAdmin: false for a normal (non-admin) user", async () => {
+      const db = buildProfileDb({ isAdmin: false });
+      app = await buildTestApp(db);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/auth/profile",
+        headers: { authorization: `Bearer ${"a".repeat(64)}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().isAdmin).toBe(false);
+    });
+  });
 });
