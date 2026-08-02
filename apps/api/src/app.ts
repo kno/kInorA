@@ -26,6 +26,10 @@ import { userMemoryRoutes } from "./routes/user-memories.js";
 import { userPreferencesRoutes } from "./routes/user-preferences.js";
 import { trainerRoutes } from "./routes/trainer.js";
 import { TrainerAssignmentRepository } from "./db/repositories/trainer-assignment.js";
+import { brandingRoutes } from "./routes/branding.js";
+import { TenantBrandingRepository } from "./db/repositories/tenant-branding.js";
+import { LocalStorageAdapter } from "./storage/local-storage-adapter.js";
+import type { ObjectStoragePort } from "./storage/object-storage-port.js";
 import {
   DEFAULT_EMBEDDING_RUNTIME_CONFIG,
   createOpenAIEmbeddingGenerator,
@@ -175,6 +179,13 @@ export interface BuildAppOptions {
    * pricing use case falls back to the config/env display amounts. Tests pass a fake.
    */
   priceGateway?: PriceGateway;
+  /**
+   * Injectable `ObjectStoragePort` for tests (16a-v3-gym-white-label, Slice
+   * 2). Defaults to the real disk-backed `LocalStorageAdapter` (base path
+   * from `STORAGE_LOCAL_DIR` env) in production. Tests pass a fake storage
+   * double to avoid real filesystem writes.
+   */
+  objectStorage?: ObjectStoragePort;
 }
 
 /**
@@ -210,6 +221,7 @@ export async function buildApp(
   let invoiceGateway: InvoiceGateway | undefined;
   let billingCustomerReader: BillingCustomerReaderPort | undefined;
   let priceGateway: PriceGateway | undefined;
+  let objectStorage: ObjectStoragePort | undefined;
 
   // Discriminate between the options-bag form (BuildAppOptions) and the legacy
   // 2-argument form (Database, SocialAuthService?).
@@ -243,6 +255,7 @@ export async function buildApp(
     invoiceGateway = opts.invoiceGateway;
     billingCustomerReader = opts.billingCustomerReader;
     priceGateway = opts.priceGateway;
+    objectStorage = opts.objectStorage;
   } else {
     // Legacy 2-argument form: (db?, socialAuthService?)
     database = (dbOrOptions as Database | undefined) ?? createDbClient().db;
@@ -538,6 +551,21 @@ export async function buildApp(
     // the `GET /me/trainer-plan` response. Reuses the SAME
     // `PlanSpecRepository` instance every other confirmed-spec read uses.
     specRepo: planSpecRepo,
+  });
+
+  // Gym white-label branding — logo upload + serve routes
+  // (16a-v3-gym-white-label, Slice 2). `POST /branding/logo` is gated by
+  // `requireAuth()` + `assertGymEntitled`, reusing the SAME
+  // `billingStateReader` instance every other billing decision in this file
+  // uses. `LocalStorageAdapter` is the production `ObjectStoragePort`
+  // implementation (disk-backed, base path from `STORAGE_LOCAL_DIR` env);
+  // tests inject a fake via the `objectStorage` BuildAppOptions override.
+  const resolvedObjectStorage: ObjectStoragePort = objectStorage ?? new LocalStorageAdapter();
+  const tenantBrandingRepo = new TenantBrandingRepository(database);
+  await app.register(brandingRoutes, {
+    repo: tenantBrandingRepo,
+    storage: resolvedObjectStorage,
+    entitlementReader: billingStateReader,
   });
 
   // 11a billing routes (Phase 3 quota administration + Phase 4 member
