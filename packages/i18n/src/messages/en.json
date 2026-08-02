@@ -1254,5 +1254,48 @@
         "description": "Inspect application logs and observability data."
       }
     }
+  },
+  "tenantProvisioning": {
+    "title": "Tenant Provisioning",
+    "description": "Search a tenant by name and grant or revoke its trainer/gym tier.",
+    "search": {
+      "label": "Search tenants",
+      "placeholder": "Tenant name or ID",
+      "button": "Search",
+      "searching": "Searching…",
+      "tooShort": "Enter a tenant name or ID to search.",
+      "noResults": "No tenants match your search."
+    },
+    "state": {
+      "effectiveTier": "Effective tier",
+      "billingStatus": "Billing status",
+      "none": "None",
+      "activeOverride": "Active override",
+      "noOverride": "No active override."
+    },
+    "grant": {
+      "title": "Grant tier override",
+      "tierLabel": "Tier",
+      "tierTrainer": "Trainer",
+      "tierGym": "Gym",
+      "reasonLabel": "Reason",
+      "reasonPlaceholder": "Why is this override being granted?",
+      "startsAtLabel": "Starts at (optional)",
+      "endsAtLabel": "Ends at (optional)",
+      "submit": "Grant override",
+      "submitting": "Granting…",
+      "success": "Saved successfully."
+    },
+    "revoke": {
+      "button": "Revoke override",
+      "success": "Override revoked."
+    },
+    "errors": {
+      "forbidden": "Access denied.",
+      "notFound": "Tenant not found.",
+      "conflict": "An active override already exists for this tenant.",
+      "invalid": "Please check the form and try again.",
+      "generic": "An error occurred. Please try again."
+    }
   }
 }

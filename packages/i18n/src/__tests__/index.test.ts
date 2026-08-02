@@ -139,7 +139,10 @@ describe("@kinora/i18n package assembly", () => {
         !key.startsWith("appNav.") &&
         // GH #306: the `admin.*` /admin landing-page namespace has its own
         // scoped count test below, per the frozen-total convention.
-        !key.startsWith("admin."),
+        !key.startsWith("admin.") &&
+        // GH #307: the `tenantProvisioning.*` /admin/tenants namespace has its
+        // own scoped count test below, per the frozen-total convention.
+        !key.startsWith("tenantProvisioning."),
     );
     // +1 `tracker.restartLabel` authored for #251 (restart-timer control on
     // the live tracker topbar; pause/restart now persist across navigation).
@@ -415,6 +418,25 @@ describe("@kinora/i18n package assembly", () => {
     expect(flat["admin.sections.tenantProvisioning.title"]).toBeTruthy();
     expect(flat["admin.sections.platformStatistics.title"]).toBeTruthy();
     expect(flat["admin.sections.logs.title"]).toBeTruthy();
+  });
+
+  it("the tenantProvisioning namespace is present with EN+ES parity (GH #307 — tenant tier-provisioning admin UI)", () => {
+    expect(catalogs.en.tenantProvisioning).toBeDefined();
+    expect(catalogs.es.tenantProvisioning).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+
+    const flat = flattenMessages(catalogs.en);
+    const keys = Object.keys(flat).filter((key) => key.startsWith("tenantProvisioning."));
+    // title, description (2) + search x6 + state x5 + grant x11 + revoke x2 +
+    // errors x5 = 31 keys for the /admin/tenants provisioning panel.
+    expect(keys).toHaveLength(31);
+    expect(flat["tenantProvisioning.title"]).toBeTruthy();
+    expect(flattenMessages(catalogs.es)["tenantProvisioning.title"]).toBeTruthy();
+    expect(flat["tenantProvisioning.grant.submit"]).toBeTruthy();
+    expect(flat["tenantProvisioning.errors.conflict"]).toBeTruthy();
   });
 
   it("flattenMessages + mergeWithBase compose over the full catalogs", () => {
