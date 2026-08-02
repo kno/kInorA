@@ -4,6 +4,7 @@ import type { PlanSpecRepository } from "../db/repositories/plan-spec.js";
 import type { VectorMemoryRecord } from "../db/repositories/vector-memory.js";
 import type { MemoryRetrievalEntitlementPort } from "./memory-retriever.js";
 import type { WsRegistry } from "../ws/registry.js";
+import type { ObservabilityLogger } from "../observability/event-logger.js";
 import { mask } from "./mask.js";
 import { assertPlanSpecShape } from "../plan/boundary.js";
 import {
@@ -82,7 +83,16 @@ export class PlanGenerationService {
      * the entitlement is denied, retrieval is SKIPPED before any embedding or
      * vector search — a denial is never used as a technical fail-open fallback.
      */
-    private memoryEntitlement?: MemoryRetrievalEntitlementPort
+    private memoryEntitlement?: MemoryRetrievalEntitlementPort,
+    /**
+     * Optional observability seam (#310). Records `generation.started` /
+     * `.ready` / `.failed` alongside the existing console.* lines, carrying ONLY
+     * ids (planId, planSpecId) and — on failure — the error NAME (never the
+     * message, spec, or program content). Fire-and-forget; never blocks the
+     * pipeline. The console.* lines are retained unchanged so existing tests and
+     * log aggregators keep working.
+     */
+    private observability?: ObservabilityLogger
   ) {}
 
   /**
@@ -120,9 +130,17 @@ export class PlanGenerationService {
       spec.name ?? null
     );
 
+    // #310: curated started event (ids only) alongside the console.info below.
+    this.observability?.recordEvent({
+      tenantId,
+      level: "info",
+      event: "generation.started",
+      metadata: { planId, planSpecId },
+    });
+
     // Step 4: Fire-and-forget background task.
     // Promise rejection is caught inside the task — no unhandledRejection.
-    void this.runGenerationTask(tenantId, userId, planId, spec, locale);
+    void this.runGenerationTask(tenantId, userId, planId, planSpecId, spec, locale);
 
     return { planId, status: "generating" };
   }
@@ -179,6 +197,7 @@ export class PlanGenerationService {
     tenantId: string,
     userId: string,
     planId: string,
+    planSpecId: string,
     spec: import("@kinora/contracts").PlanSpec,
     locale: WarningLocale
   ): Promise<void> {
@@ -211,6 +230,18 @@ export class PlanGenerationService {
         console.warn(
           `[generation-service] markReady returned undefined for planId=${planId} tenantId=${tenantId} — plan may be stuck in generating`
         );
+        // #310: this edge case (tenant mismatch or race) must still leave an
+        // observability trail — it neither reaches the success recordEvent
+        // below nor the catch's generation.failed, so without this it would
+        // silently record nothing. ids only (planId/planSpecId) — no spec or
+        // program content.
+        this.observability?.recordEvent({
+          tenantId,
+          level: "warn",
+          event: "generation.ready",
+          outcome: "stale_no_rows",
+          metadata: { planId, planSpecId },
+        });
         // Do NOT notify "ready" — the DB was not updated, so the plan is still
         // in "generating" state. Emitting a false-ready would contradict the DB.
         // The client stays in "generating" until the user triggers regenerate.
@@ -220,6 +251,12 @@ export class PlanGenerationService {
       // Signal: generation pipeline completed successfully.
       // Log ONLY ids — never log the program or any health/plan content.
       console.info("[generation-service] generation ready", { planId, tenantId });
+      this.observability?.recordEvent({
+        tenantId,
+        level: "info",
+        event: "generation.ready",
+        metadata: { planId, planSpecId },
+      });
 
       // Notify the user via WebSocket — fire-and-forget-safe.
       // Payload: ONLY { planId, status } — no program content, no health data.
@@ -236,6 +273,14 @@ export class PlanGenerationService {
       const message = error instanceof Error ? error.message : String(error);
       const stack = error instanceof Error ? error.stack : undefined;
       console.error("[generation-service] generation failed", { planId, tenantId, name, message, stack });
+      // #310: record the failure carrying ONLY ids + the error NAME — never the
+      // message, stack, spec, or program content (hard privacy invariant).
+      this.observability?.recordEvent({
+        tenantId,
+        level: "error",
+        event: "generation.failed",
+        metadata: { planId, planSpecId, errorName: name },
+      });
 
       // markFailed errors are swallowed — the plan row is already persisted as "generating"
       // and the user can still trigger regenerate via POST /plan-specs/:id/regenerate.

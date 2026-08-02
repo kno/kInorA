@@ -6,6 +6,7 @@ import {
   type StripeSubscriptionStatus,
   type StripeWebhookEvent,
 } from "./stripe-gateway.js";
+import type { ObservabilityLogger } from "../observability/event-logger.js";
 
 /**
  * Pure webhook use case (11b-v1-billing-stripe-integration, Slice 2).
@@ -217,6 +218,14 @@ export class ProcessStripeWebhook {
   constructor(
     private readonly gateway: StripeGateway,
     private readonly store: StripeEventStorePort,
+    /**
+     * Optional observability seam (#310). Records a PII-free `billing.webhook`
+     * event (ids + outcome + event type ONLY) for EVERY resolved outcome —
+     * previously only `unknown_tenant` was surfaced (via the console warn
+     * above). Fire-and-forget: `recordEvent` never throws or blocks, so it can
+     * never break webhook processing. Absent in unit tests that don't assert it.
+     */
+    private readonly observability?: ObservabilityLogger,
   ) {}
 
   /**
@@ -245,6 +254,7 @@ export class ProcessStripeWebhook {
     if (!sub || !sub.tenantId) {
       // No actionable subscription/tenant in the signed payload — acknowledge
       // with no billing write. A retry safely re-evaluates to the same no-op.
+      this.recordWebhookEvent(null, "ignored", event, "info");
       return { status: "ok", outcome: "ignored" };
     }
 
@@ -260,8 +270,31 @@ export class ProcessStripeWebhook {
       // arriving for a tenant that no longer exists is worth surfacing even
       // though it's a permanent, non-retryable condition (#290).
       logUnknownTenant(write.tenantId, event.type, event.id);
+      this.recordWebhookEvent(write.tenantId, "unknown_tenant", event, "warn");
       return { status: "ok", outcome: "ignored" };
     }
+    // processed / duplicate / stale — all previously unlogged.
+    this.recordWebhookEvent(write.tenantId, result.outcome, event, "info");
     return { status: "ok", outcome: result.outcome };
+  }
+
+  /**
+   * Emit a curated, PII-free `billing.webhook` observability event. Carries ONLY
+   * the tenant id, the resolved outcome, and the Stripe event id/type — never
+   * any payload, customer detail, or secret. Fire-and-forget via the logger.
+   */
+  private recordWebhookEvent(
+    tenantId: string | null,
+    outcome: "processed" | "duplicate" | "stale" | "ignored" | "unknown_tenant",
+    event: StripeWebhookEvent,
+    level: "info" | "warn",
+  ): void {
+    this.observability?.recordEvent({
+      tenantId,
+      level,
+      event: "billing.webhook",
+      outcome,
+      metadata: { eventId: event.id, eventType: event.type },
+    });
   }
 }
