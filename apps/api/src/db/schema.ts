@@ -233,6 +233,11 @@ export const tenantBillingStates = pgTable(
     // delivery can never overwrite newer state. Additive + nullable (null until
     // the first Stripe event is applied); never read by `resolveEffectiveTier`.
     stripeEventTs: timestamp("stripe_event_ts", { withTimezone: true }),
+    // 16c-v3-b2b-seat-billing Slice B: nullable seat count; null for
+    // non-seat tiers. Written ONLY by the `customer.subscription.updated`
+    // webhook (Stripe quantity is authoritative). Never read by
+    // `resolveEffectiveTier` — only by `resolveTenantFeatureLimit` (Slice D).
+    seatCount: integer("seat_count"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
