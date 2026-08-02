@@ -41,7 +41,7 @@ export default async function AdminPage() {
   }[] = [
     { key: "aiConfig", href: "/admin/ai-config" },
     { key: "tenantProvisioning", href: "/admin/tenants" },
-    { key: "platformStatistics", comingSoon: true },
+    { key: "platformStatistics", href: "/admin/stats" },
     { key: "logs", href: "/admin/logs" },
   ];
 

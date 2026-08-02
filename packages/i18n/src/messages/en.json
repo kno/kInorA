@@ -1335,5 +1335,51 @@
       "invalid": "Please check the filters and try again.",
       "generic": "An error occurred. Please try again."
     }
+  },
+  "platformStats": {
+    "title": "Platform Statistics",
+    "description": "Cross-tenant aggregate usage and health metrics across the platform.",
+    "error": "Unable to load platform statistics. Please try again.",
+    "sections": {
+      "tenants": "Tenants",
+      "users": "Users",
+      "memberships": "Active memberships",
+      "billing": "Billing",
+      "usage": "Usage this period",
+      "observability": "Observability (last 24 hours)"
+    },
+    "metrics": {
+      "total": "Total",
+      "last7d": "Last 7 days",
+      "last30d": "Last 30 days"
+    },
+    "roles": {
+      "owner": "Owners",
+      "member": "Members",
+      "trainer": "Trainers"
+    },
+    "tiers": {
+      "free": "Free",
+      "pro": "Pro",
+      "trainer": "Trainer",
+      "gym": "Gym"
+    },
+    "billing": {
+      "effectiveTier": "Tenants by effective tier",
+      "activeStripeSubscriptions": "Active Stripe subscriptions",
+      "trials": "Trials",
+      "activeOverrides": "Active overrides by tier"
+    },
+    "usage": {
+      "period": "Period",
+      "planGeneration": "Plan generation",
+      "planRegeneration": "Plan regeneration",
+      "memoryWrite": "Memory writes",
+      "memoryRetrieval": "Memory retrievals"
+    },
+    "observability": {
+      "errors24h": "Errors (24h)",
+      "events24h": "Events (24h)"
+    }
   }
 }

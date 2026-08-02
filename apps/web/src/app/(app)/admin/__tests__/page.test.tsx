@@ -117,7 +117,7 @@ describe("AdminPage (server component)", () => {
     expect(tenantsLink).toBeDefined();
   });
 
-  it("lists Logs & Observability as a live link and Platform Statistics as coming-soon", async () => {
+  it("lists Logs & Observability and Platform Statistics as live links with no coming-soon sections", async () => {
     cookieGet.mockReturnValue({ value: "admin-token" });
     fetchProfile.mockResolvedValue({
       email: "root@example.com",
@@ -137,8 +137,11 @@ describe("AdminPage (server component)", () => {
     const logsLink = findFirst(page, (el) => el.props?.href === "/admin/logs");
     expect(logsLink).toBeDefined();
 
-    // Tenant Provisioning (#307) and Logs (#310) are now live, leaving only
-    // Platform Statistics as a coming-soon section.
-    expect(text.match(/Coming soon/g)?.length).toBe(1);
+    // GH #309: Platform Statistics went live, linking to /admin/stats.
+    const statsLink = findFirst(page, (el) => el.props?.href === "/admin/stats");
+    expect(statsLink).toBeDefined();
+
+    // Every admin section is now live — no coming-soon cards remain.
+    expect(text.match(/Coming soon/g)?.length ?? 0).toBe(0);
   });
 });
