@@ -403,3 +403,310 @@ describe("GET /media/branding/:key", () => {
     expect(res.headers["content-disposition"]).toBeUndefined();
   });
 });
+
+// --- Gym branding CRUD (16a-v3-gym-white-label, Slice 3) --------------------
+
+const VALID_PALETTE = {
+  accent: "#112233",
+  accentFg: "#ffffff",
+  surface: "#000000",
+  surface2: "#111111",
+  fg: "#eeeeee",
+  muted: "#999999",
+};
+
+describe("GET /branding (own-tenant, gym-gated)", () => {
+  let app: FastifyInstance | undefined;
+
+  afterEach(async () => {
+    if (app) {
+      await app.close();
+      app = undefined;
+    }
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    app = await buildTestApp({
+      db: { select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) }) } as unknown as Database,
+      repo: fakeRepo(),
+      storage: fakeStorage(),
+      entitlementReader: entitlementReader("gym"),
+    });
+
+    const res = await app.inject({ method: "GET", url: "/branding" });
+
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("returns 403 for a non-gym tenant, no repo call", async () => {
+    const repo = fakeRepo();
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      storage: fakeStorage(),
+      entitlementReader: entitlementReader("pro"),
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/branding",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repo.findByTenantId).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the tenant has no branding row yet", async () => {
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo: fakeRepo(),
+      storage: fakeStorage(),
+      entitlementReader: entitlementReader("gym"),
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/branding",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns only the caller's own tenant branding, scoped by authContext.tenantId", async () => {
+    const repo = fakeRepo({
+      findByTenantId: vi.fn(async (tenantId: string) =>
+        tenantId === TENANT_ID
+          ? {
+              tenantId: TENANT_ID,
+              subdomainSlug: "gym-a",
+              logoUrl: null,
+              logoStorageKey: "logo-key-a",
+              palette: VALID_PALETTE,
+            }
+          : undefined,
+      ),
+    });
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      storage: fakeStorage(),
+      entitlementReader: entitlementReader("gym"),
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/branding",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(repo.findByTenantId).toHaveBeenCalledWith(TENANT_ID);
+    const body = res.json() as { tenantId: string; subdomainSlug: string; logoUrl: string | null };
+    expect(body.tenantId).toBe(TENANT_ID);
+    expect(body.subdomainSlug).toBe("gym-a");
+    expect(body.logoUrl).toBe("/media/branding/logo-key-a");
+  });
+
+  it("gym A member requesting branding never sees gym B's row (tenant isolation, task 3.7)", async () => {
+    const repo = fakeRepo({
+      findByTenantId: vi.fn(async (tenantId: string) =>
+        tenantId === OTHER_TENANT_ID
+          ? {
+              tenantId: OTHER_TENANT_ID,
+              subdomainSlug: "gym-b",
+              logoUrl: null,
+              logoStorageKey: null,
+              palette: VALID_PALETTE,
+            }
+          : undefined,
+      ),
+    });
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, USER_ID),
+      repo,
+      storage: fakeStorage(),
+      entitlementReader: entitlementReader("gym"),
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/branding",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    // The session is scoped to TENANT_ID; only OTHER_TENANT_ID has a row.
+    // A gym A member must never see gym B's branding.
+    expect(res.statusCode).toBe(404);
+    expect(repo.findByTenantId).toHaveBeenCalledWith(TENANT_ID);
+  });
+});
+
+describe("PUT /branding (own-tenant, gym-gated)", () => {
+  let app: FastifyInstance | undefined;
+
+  afterEach(async () => {
+    if (app) {
+      await app.close();
+      app = undefined;
+    }
+  });
+
+  it("returns 401 when unauthenticated, no write", async () => {
+    const repo = fakeRepo();
+    app = await buildTestApp({
+      db: { select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) }) } as unknown as Database,
+      repo,
+      storage: fakeStorage(),
+      entitlementReader: entitlementReader("gym"),
+    });
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/branding",
+      headers: { "content-type": "application/json" },
+      payload: JSON.stringify({ subdomainSlug: "gym-a", palette: VALID_PALETTE }),
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(repo.upsert).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 for a non-gym tenant, no write (task 3.3)", async () => {
+    const repo = fakeRepo();
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      storage: fakeStorage(),
+      entitlementReader: entitlementReader("pro"),
+    });
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/branding",
+      headers: { authorization: `Bearer ${VALID_TOKEN}`, "content-type": "application/json" },
+      payload: JSON.stringify({ subdomainSlug: "gym-a", palette: VALID_PALETTE }),
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repo.upsert).not.toHaveBeenCalled();
+  });
+
+  it("gym-tier owner submits a full valid palette + slug; row created/updated, response echoes new values (task 3.4)", async () => {
+    const repo = fakeRepo();
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      storage: fakeStorage(),
+      entitlementReader: entitlementReader("gym"),
+    });
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/branding",
+      headers: { authorization: `Bearer ${VALID_TOKEN}`, "content-type": "application/json" },
+      payload: JSON.stringify({ subdomainSlug: "gym-a", palette: VALID_PALETTE }),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(repo.upsert).toHaveBeenCalledWith(
+      TENANT_ID,
+      expect.objectContaining({ subdomainSlug: "gym-a", accent: VALID_PALETTE.accent }),
+    );
+    const body = res.json() as { subdomainSlug: string; palette: typeof VALID_PALETTE };
+    expect(body.subdomainSlug).toBe("gym-a");
+    expect(body.palette.accent).toBe(VALID_PALETTE.accent);
+  });
+
+  it("rejects a palette field not matching the hex pattern with HTTP 400, no persistence (task 3.5)", async () => {
+    const repo = fakeRepo();
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      storage: fakeStorage(),
+      entitlementReader: entitlementReader("gym"),
+    });
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/branding",
+      headers: { authorization: `Bearer ${VALID_TOKEN}`, "content-type": "application/json" },
+      payload: JSON.stringify({
+        subdomainSlug: "gym-a",
+        palette: { ...VALID_PALETTE, accent: "not-a-hex-color" },
+      }),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(repo.upsert).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing/malformed subdomainSlug with a 4xx, no persistence", async () => {
+    const repo = fakeRepo();
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      storage: fakeStorage(),
+      entitlementReader: entitlementReader("gym"),
+    });
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/branding",
+      headers: { authorization: `Bearer ${VALID_TOKEN}`, "content-type": "application/json" },
+      payload: JSON.stringify({ subdomainSlug: "", palette: VALID_PALETTE }),
+    });
+
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    expect(res.statusCode).toBeLessThan(500);
+    expect(repo.upsert).not.toHaveBeenCalled();
+  });
+
+  it("gym A owner attempting to write branding can only ever affect gym A's own row (tenant isolation, task 3.6)", async () => {
+    const repo = fakeRepo();
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, USER_ID), // session bound to TENANT_ID (gym A)
+      repo,
+      storage: fakeStorage(),
+      entitlementReader: entitlementReader("gym"),
+    });
+
+    await app.inject({
+      method: "PUT",
+      url: "/branding",
+      headers: { authorization: `Bearer ${VALID_TOKEN}`, "content-type": "application/json" },
+      payload: JSON.stringify({ subdomainSlug: "gym-a", palette: VALID_PALETTE }),
+    });
+
+    // The route reads tenantId ONLY from the session's authContext; there is
+    // no body/param field that could target OTHER_TENANT_ID (gym B) instead.
+    expect(repo.upsert).toHaveBeenCalledWith(TENANT_ID, expect.anything());
+    expect(repo.upsert).not.toHaveBeenCalledWith(OTHER_TENANT_ID, expect.anything());
+  });
+
+  it("returns a clean 409 (not 500) when the subdomainSlug is already taken by another tenant", async () => {
+    const repo = fakeRepo({
+      upsert: vi.fn().mockRejectedValue(
+        Object.assign(new Error("tenant_branding_slug_conflict"), {
+          name: "TenantBrandingSlugConflictError",
+        }),
+      ),
+    });
+    app = await buildTestApp({
+      db: buildSessionDb(),
+      repo,
+      storage: fakeStorage(),
+      entitlementReader: entitlementReader("gym"),
+    });
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/branding",
+      headers: { authorization: `Bearer ${VALID_TOKEN}`, "content-type": "application/json" },
+      payload: JSON.stringify({ subdomainSlug: "already-taken", palette: VALID_PALETTE }),
+    });
+
+    expect(res.statusCode).toBe(409);
+  });
+});

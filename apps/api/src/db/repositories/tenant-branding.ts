@@ -49,6 +49,43 @@ function toDTO(row: BrandingRow): TenantBrandingDTO & { logoStorageKey: string |
   };
 }
 
+/**
+ * Thrown by `TenantBrandingRepository.upsert` when the insert/update violates
+ * the unique `subdomain_slug` index (16a-v3-gym-white-label, Slice 3, task
+ * 3.4-ish — duplicate slug across tenants). Translates the raw Postgres
+ * unique-violation (error code `23505`) into a typed, DB-agnostic error so
+ * route code never needs to know a Postgres error code — it maps this to a
+ * clean 409, never a 500 (mirrors `TrainerAssignmentConflictError`).
+ */
+export class TenantBrandingSlugConflictError extends Error {
+  constructor(message = "tenant_branding_slug_conflict") {
+    super(message);
+    this.name = "TenantBrandingSlugConflictError";
+  }
+}
+
+/** True when a value's `code` property is the Postgres unique-violation code. */
+function hasUniqueViolationCode(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    (value as { code: unknown }).code === "23505"
+  );
+}
+
+/**
+ * True when `err` looks like a Postgres unique-violation error (code
+ * `23505`). Drizzle wraps the raw `pg` driver error in a `DrizzleQueryError`
+ * whose OWN `.code` is `undefined` — the Postgres code lives on `.cause`
+ * instead — so this checks both the top-level error and its `cause`.
+ */
+function isUniqueViolation(err: unknown): boolean {
+  if (hasUniqueViolationCode(err)) return true;
+  const cause = err instanceof Error ? err.cause : undefined;
+  return hasUniqueViolationCode(cause);
+}
+
 export interface UpsertTenantBrandingInput {
   subdomainSlug: string;
   logoStorageKey: string | null;
@@ -100,14 +137,22 @@ export class TenantBrandingRepository {
     tenantId: string,
     input: UpsertTenantBrandingInput,
   ): Promise<TenantBrandingDTO & { logoStorageKey: string | null }> {
-    const rows = await this.db
-      .insert(tenantBranding)
-      .values({ tenantId, ...input })
-      .onConflictDoUpdate({
-        target: tenantBranding.tenantId,
-        set: { ...input, updatedAt: new Date() },
-      })
-      .returning();
+    let rows: unknown[];
+    try {
+      rows = await this.db
+        .insert(tenantBranding)
+        .values({ tenantId, ...input })
+        .onConflictDoUpdate({
+          target: tenantBranding.tenantId,
+          set: { ...input, updatedAt: new Date() },
+        })
+        .returning();
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new TenantBrandingSlugConflictError();
+      }
+      throw err;
+    }
     const row = rows[0] as BrandingRow;
     return toDTO(row);
   }

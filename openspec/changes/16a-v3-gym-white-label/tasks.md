@@ -159,45 +159,67 @@ page.
 
 ## Phase 3 (Slice S3): Gym branding CRUD + public read-by-slug (isolation + gating)
 
-- [ ] 3.1 RED: `assertGymEntitled` unit test — tier `!== "gym"` throws
+- [x] 3.1 RED: `assertGymEntitled` unit test — tier `!== "gym"` throws
       `ForbiddenOwnerAccess`; tier `=== "gym"` passes (mirrors
       `assertTrainerEntitled` shape in `apps/api/src/trainer/owner-access.ts`).
-- [ ] 3.2 GREEN: implement `assertGymEntitled` in
+      **Already done in Slice 2** (`apps/api/src/billing/__tests__/gym-access.test.ts`)
+      — pulled forward for merge-safety; reused unchanged here. Throws
+      `ForbiddenGymAccess` (tier-only), not `ForbiddenOwnerAccess` (no
+      `"gym"` role exists) — see the S2 apply-progress note.
+- [x] 3.2 GREEN: implement `assertGymEntitled` in
       `apps/api/src/billing/*` or `owner-access.ts` (per design's file map).
-- [ ] 3.3 RED: route test — non-gym tenant calling branding CRUD or
+      **Already done in Slice 2** (`apps/api/src/billing/gym-access.ts`) —
+      no re-implementation needed; this task is a reference/reuse step only.
+- [x] 3.3 RED: route test — non-gym tenant calling branding CRUD or
       `POST /branding/logo` → flat 403, no write (wires 2.5-2.8's upload
       route through the real gate for the first time).
-- [ ] 3.4 RED: route test — gym-tier owner submits a full valid palette + logo
+- [x] 3.4 RED: route test — gym-tier owner submits a full valid palette + logo
       via CRUD → branding row created/updated, response echoes new values.
-- [ ] 3.5 RED: route test — palette field not matching
+- [x] 3.5 RED: route test — palette field not matching
       `^#[0-9a-fA-F]{6}$` → HTTP 400, no row persisted or updated (uses
       1.6/1.7's validator).
-- [ ] 3.6 RED: integration test — gym A owner attempts to write branding using
+- [x] 3.6 RED: integration test — gym A owner attempts to write branding using
       gym B's `tenantId` → rejected, gym B's row unchanged (tenant isolation,
       2 seeded gym tenants, fake `ObjectStoragePort`).
-- [ ] 3.7 RED: integration test — gym A member requests branding through the
+- [x] 3.7 RED: integration test — gym A member requests branding through the
       authenticated route → only gym A's branding returned, gym B's data
       never appears.
-- [ ] 3.8 GREEN: implement gym branding CRUD routes in
+- [x] 3.8 GREEN: implement gym branding CRUD routes in
       `apps/api/src/routes/branding.ts`, gated by `assertGymEntitled`,
       scoped by `tenantId` on every read/write, `subdomainSlug` set
       unique-indexed on first upsert.
-- [ ] 3.9 RED: route test — `GET /public/branding/by-slug/:slug` for a known
+- [x] 3.9 RED: route test — `GET /public/branding/by-slug/:slug` for a known
       slug returns only `logoUrl` + `palette`, no PII, no cross-tenant leak.
-- [ ] 3.10 RED: route test — `GET /public/branding/by-slug/:slug` for an
+- [x] 3.10 RED: route test — `GET /public/branding/by-slug/:slug` for an
       unknown slug → 404 (not an error page), no server error.
-- [ ] 3.11 GREEN: implement `GET /public/branding/by-slug/:slug` in
+- [x] 3.11 GREEN: implement `GET /public/branding/by-slug/:slug` in
       `apps/api/src/routes/public-branding.ts` — unauthenticated, read-only,
       tenant-scoped by slug lookup only (host header never trusted for
       authz, per the threat matrix).
-- [ ] 3.12 Gate: extend the trainer-style regression guard (or add an
+- [x] 3.12 Gate: extend the trainer-style regression guard (or add an
       equivalent `branding-route-authz-guard` test) enumerating the
       gym-scoped routes, proving deny-before-any-repo-call for non-gym
       tenants on every CRUD/upload route.
-- [ ] 3.13 Gate: run `pnpm architecture` — confirm `routes/branding.ts` and
+- [x] 3.13 Gate: run `pnpm architecture` — confirm `routes/branding.ts` and
       `routes/public-branding.ts` depend only on injected structural
-      interfaces, never `db/repositories/*` directly.
-- [ ] 3.14 Gate: run full `apps/api` test suite green.
+      interfaces, never `db/repositories/*` directly. PASS (0 violations,
+      1931 modules / 5728 deps cruised).
+- [x] 3.14 Gate: run full `apps/api` test suite green. PASS (128 files, 1656
+      tests, 12 skipped).
+
+> **S3 note (implementation detail beyond tasks.md's explicit list)**: the
+> Postgres unique-`subdomain_slug`-violation path required fixing
+> `TenantBrandingRepository.upsert`'s error-translation helper —
+> drizzle-orm wraps the raw `pg` driver error in a `DrizzleQueryError` whose
+> OWN `.code` is `undefined`; the Postgres error code lives on `.cause.code`
+> instead. `isUniqueViolation` now checks both the top-level error and its
+> `.cause` before throwing `TenantBrandingSlugConflictError` (mapped by the
+> route to a clean 409, proven by a real-Postgres integration test, not just
+> a mocked-repo unit test). Also added `UpdateBrandingRequest` and
+> `PublicBrandingDTO` to `packages/contracts/src/index.ts` (not explicitly
+> named in tasks.md/design.md's interface list, but required for a typed
+> `PUT /branding` body and a typed public-response shape that excludes
+> `tenantId`/`subdomainSlug`).
 
 ## Phase 4 (Slice S4): Login page host-resolved theming
 

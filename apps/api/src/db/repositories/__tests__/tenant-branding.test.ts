@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { TenantBrandingRepository } from "../tenant-branding.js";
+import { TenantBrandingRepository, TenantBrandingSlugConflictError } from "../tenant-branding.js";
 
 const TENANT_A = "aaaaaaaa-0000-0000-0000-000000000001";
 const TENANT_B = "bbbbbbbb-0000-0000-0000-000000000001";
@@ -110,6 +110,29 @@ describe("TenantBrandingRepository (16a-v3-gym-white-label Slice 1 — dark, no 
       );
       expect(onConflictDoUpdate).toHaveBeenCalled();
       expect(result.palette).toEqual(expect.objectContaining({ accent: "#ffffff" }));
+    });
+
+    it("translates a Postgres unique-violation (23505) into TenantBrandingSlugConflictError (Slice 3, duplicate slug → 409 not 500)", async () => {
+      const uniqueViolation = Object.assign(new Error("duplicate key value"), { code: "23505" });
+      const onConflictDoUpdate = vi.fn().mockReturnValue({
+        returning: vi.fn().mockRejectedValue(uniqueViolation),
+      });
+      const values = vi.fn().mockReturnValue({ onConflictDoUpdate });
+      const insert = vi.fn().mockReturnValue({ values });
+      const repo = new TenantBrandingRepository({ insert } as never);
+
+      await expect(
+        repo.upsert(TENANT_A, {
+          subdomainSlug: "already-taken",
+          logoStorageKey: null,
+          accent: null,
+          accentFg: null,
+          surface: null,
+          surface2: null,
+          fg: null,
+          muted: null,
+        }),
+      ).rejects.toThrow(TenantBrandingSlugConflictError);
     });
   });
 });
