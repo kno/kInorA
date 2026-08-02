@@ -53,6 +53,8 @@
 ### Recommendation
 Ship 16a as: a new `tenant_branding` table (tenantId, logoUrl, accentColor, subdomainSlug unique) + gym-owner CRUD + a public unauthenticated read endpoint scoped by subdomain; resolve the gym server-side in the login page via `headers().get("host")` (not touching `proxy.ts` initially); inject `--gym-accent` reusing 15b's `var(--gym-accent, var(--accent))` fallback pattern + a conditional logo `<img>`; subdomain-only, URL-only logo, no custom domains, no upload. Smallest slice satisfying all three roadmap requirements (config, default fallback via CSS `var()`, isolation via scoped reads), deferring infra unknowns (reverse-proxy wildcard, upload) to explicit follow-ups.
 
+**Note (post-design revision)**: the accepted proposal/design LOCKED IN scope beyond this exploration's initial recommendation — full palette (not one accent) and real file upload (not URL-only) were both explicitly requested by the user and delivered. See proposal.md's "Locked scope" and design.md's storage-port decision.
+
 ### Risks
 - **Reverse-proxy/DNS wildcard subdomain routing is outside this repo** — whether `*.kinora.aitsai.com` currently routes to the web container is unverified and may block end-to-end testing regardless of app-code correctness.
 - **Edge runtime constraints** if resolution is later centralized in `proxy.ts` (Edge default) — DB access restrictions force an HTTP round-trip; not present in the recommended login-page (Node) approach.
