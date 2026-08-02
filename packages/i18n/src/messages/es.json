@@ -1335,5 +1335,51 @@
       "invalid": "Revisa los filtros e inténtalo de nuevo.",
       "generic": "Se produjo un error. Inténtalo de nuevo."
     }
+  },
+  "platformStats": {
+    "title": "Estadísticas de la plataforma",
+    "description": "Métricas agregadas de uso y estado en todas las organizaciones de la plataforma.",
+    "error": "No se pudieron cargar las estadísticas de la plataforma. Inténtalo de nuevo.",
+    "sections": {
+      "tenants": "Organizaciones",
+      "users": "Usuarios",
+      "memberships": "Membresías activas",
+      "billing": "Facturación",
+      "usage": "Uso del periodo actual",
+      "observability": "Observabilidad (últimas 24 horas)"
+    },
+    "metrics": {
+      "total": "Total",
+      "last7d": "Últimos 7 días",
+      "last30d": "Últimos 30 días"
+    },
+    "roles": {
+      "owner": "Propietarios",
+      "member": "Miembros",
+      "trainer": "Entrenadores"
+    },
+    "tiers": {
+      "free": "Gratis",
+      "pro": "Pro",
+      "trainer": "Entrenador",
+      "gym": "Gimnasio"
+    },
+    "billing": {
+      "effectiveTier": "Organizaciones por nivel efectivo",
+      "activeStripeSubscriptions": "Suscripciones de Stripe activas",
+      "trials": "Pruebas",
+      "activeOverrides": "Asignaciones activas por nivel"
+    },
+    "usage": {
+      "period": "Periodo",
+      "planGeneration": "Generación de planes",
+      "planRegeneration": "Regeneración de planes",
+      "memoryWrite": "Escrituras de memoria",
+      "memoryRetrieval": "Recuperaciones de memoria"
+    },
+    "observability": {
+      "errors24h": "Errores (24 h)",
+      "events24h": "Eventos (24 h)"
+    }
   }
 }
