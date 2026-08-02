@@ -12,7 +12,26 @@ Define launch billing tiers, 30-day Pro trial behavior, hybrid tenant/member quo
 
 ### Requirement: Plan Tiers
 
-The system MUST maintain one authoritative tenant-owned billing state for personal and trainer-managed tenants with tier `free`, `pro`, or `trainer`, status `active`, `trialing`, `expired`, or `overridden`, and source `system`, `backfill`, `admin_override`, or `stripe`. Free MUST allow each tenant 1 plan generation per calendar month, 1 regeneration per calendar month, and 0 premium vector-memory AI writes/retrievals. Pro MUST be gated by finite, high, per-feature monthly metered caps (replacing the provisional `1_000_000` placeholder); the confirmable initial Pro caps are `plan_generation` 500, `plan_regeneration` 1000, `memory_write` 50000, `memory_retrieval` 200000 per calendar month. The `trainer` tier MUST be gated by its own explicit metered caps (`TRAINER_TIER_LIMITS`, at least as high as Pro's) so a `trainer`-tier tenant is never silently treated as Free. `resolveEffectiveTier` remains the source of truth for tier resolution and MUST NOT read Stripe metadata columns. Pro- and trainer-over-cap requests MUST be denied with the same hybrid tenant/member gating and denial reasons as Free-over-limit.
+The system MUST maintain one authoritative tenant-owned billing state for
+personal and trainer-managed tenants with tier `free`, `pro`, `trainer`, or
+`gym`, status `active`, `trialing`, `expired`, or `overridden`, and source
+`system`, `backfill`, `admin_override`, or `stripe`. Free MUST allow each
+tenant 1 plan generation per calendar month, 1 regeneration per calendar
+month, and 0 premium vector-memory AI writes/retrievals. Pro MUST be gated by
+finite, high, per-feature monthly metered caps (replacing the provisional
+`1_000_000` placeholder); the confirmable initial Pro caps are
+`plan_generation` 500, `plan_regeneration` 1000, `memory_write` 50000,
+`memory_retrieval` 200000 per calendar month. The `trainer` tier MUST be
+gated by its own explicit metered caps (`TRAINER_TIER_LIMITS`, at least as
+high as Pro's) so a `trainer`-tier tenant is never silently treated as Free.
+The `gym` tier is additive and gates gym white-label branding management
+(configuration CRUD and logo upload) via `assertGymEntitled`, mirroring the
+`trainer`-tier gating pattern; `gym`-tier tenants MUST use the same metered
+AI caps as `pro` unless a distinct cap is configured. `resolveEffectiveTier`
+remains the source of truth for tier resolution and MUST NOT read Stripe
+metadata columns. Pro-, trainer-, and gym-over-cap requests MUST be denied
+with the same hybrid tenant/member gating and denial reasons as
+Free-over-limit.
 
 #### Scenario: Free tier access
 
@@ -62,7 +81,19 @@ The system MUST maintain one authoritative tenant-owned billing state for person
 - WHEN another request for that feature is made
 - THEN it is denied with reason `tenant_quota_exhausted` and no AI work starts
 
-**Note**: This `trainer` BillingTier value gates the 15a trainer ROLE capability (who may act on client rows). It is distinct from 11a's pre-existing "trainer-managed tenant" concept, where the tenant `owner` administers member quotas — that owner-as-administrator model is unchanged and requires neither the `trainer` role nor the `trainer` tier.
+#### Scenario: Gym tier gates branding management
+
+- GIVEN a tenant's billing state resolves to tier `gym`
+- WHEN a gym branding CRUD or logo-upload route is called
+- THEN `assertGymEntitled` allows the request; a non-`gym` tenant calling the same route is denied with a flat 403
+
+**Note**: This `trainer` BillingTier value gates the 15a trainer ROLE
+capability (who may act on client rows). It is distinct from 11a's
+pre-existing "trainer-managed tenant" concept, where the tenant `owner`
+administers member quotas — that owner-as-administrator model is unchanged
+and requires neither the `trainer` role nor the `trainer` tier. The `gym`
+tier is a separate additive value gating only the 16a branding-management
+capability; it does not alter the `trainer`-tier role gating.
 
 ### Requirement: Trial Period
 

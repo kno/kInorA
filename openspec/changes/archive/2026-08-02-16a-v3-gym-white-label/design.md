@@ -123,13 +123,13 @@ unit/integration correctness does NOT depend on it.
 
 ## Slice Plan (chained PRs)
 
-- **S1**: `tenant_branding` schema + `"gym"` tier + contracts (`BillingTier`, DTOs).
-- **S2**: `ObjectStoragePort` + `LocalStorageAdapter` + upload/serve routes.
-- **S3**: Gym branding CRUD + public read-by-slug (isolation + gating).
-- **S4**: Login page host-resolved theming (inline `<style>` + logo).
-- **S5**: Whole-app root-layout theming for logged-in members.
+- **S1**: `tenant_branding` schema + `"gym"` tier + contracts (`BillingTier`, DTOs). Shipped as PR #300.
+- **S2**: `ObjectStoragePort` + `LocalStorageAdapter` + upload/serve routes. Shipped as PR #301.
+- **S3**: Gym branding CRUD + public read-by-slug (isolation + gating). Shipped as PR #302.
+- **S4**: Login page host-resolved theming (inline `<style>` + logo). Shipped as PR #303.
+- **S5**: Whole-app root-layout theming for logged-in members. Shipped as PR #304.
 
 ## Open Questions
 
-- [ ] Confirm prod `STORAGE_LOCAL_DIR` mount path on the VPS deploy volume.
-- [ ] Admin UI vs. API-only for assigning `"gym"` tier + slug (S1 uses API/provisioning).
+- [x] Confirm prod `STORAGE_LOCAL_DIR` mount path on the VPS deploy volume — REMAINS an open ops prerequisite at archive time; see archive-report.md.
+- [x] Admin UI vs. API-only for assigning `"gym"` tier + slug — resolved as API/provisioning-only for this change (deferred admin UI, tracked as a follow-up).

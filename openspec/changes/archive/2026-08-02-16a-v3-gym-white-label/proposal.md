@@ -83,8 +83,8 @@ branding fetch is non-breaking. Upload endpoint/storage removed independently.
 
 ## Success Criteria
 
-- [ ] Visiting `gymname.kinora.aitsai.com` shows that gym's logo + palette on the login page pre-auth.
-- [ ] After login, the whole app renders in the member's tenant branding.
-- [ ] Unknown/absent host falls back cleanly to default kInorA tokens.
-- [ ] Branding CRUD + logo upload restricted to `"gym"`-tier owners; reads tenant-isolated.
-- [ ] A gym cannot read or write another tenant's branding.
+- [x] Visiting `gymname.kinora.aitsai.com` shows that gym's logo + palette on the login page pre-auth (S4; true subdomain E2E deferred, see archive report).
+- [x] After login, the whole app renders in the member's tenant branding (S5).
+- [x] Unknown/absent host falls back cleanly to default kInorA tokens (S4/S5).
+- [x] Branding CRUD + logo upload restricted to `"gym"`-tier owners; reads tenant-isolated (S2/S3).
+- [x] A gym cannot read or write another tenant's branding (S3).
