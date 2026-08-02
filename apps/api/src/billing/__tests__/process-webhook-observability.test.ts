@@ -14,6 +14,7 @@ function buildSubscription(): StripeSubscriptionSnapshot {
     cycle: "monthly",
     currentPeriodEnd: new Date("2026-09-01T00:00:00Z"),
     cancelAtPeriodEnd: false,
+    seatQuantity: null,
   };
 }
 
