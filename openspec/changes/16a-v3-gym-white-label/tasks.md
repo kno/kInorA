@@ -94,44 +94,68 @@ page.
 
 ## Phase 2 (Slice S2): `ObjectStoragePort` + `LocalStorageAdapter` + upload/serve routes
 
-- [ ] 2.1 RED: `LocalStorageAdapter.put` unit test — writes bytes to a temp
+- [x] 2.1 RED: `LocalStorageAdapter.put` unit test — writes bytes to a temp
       dir under a server-generated UUID key (no path traversal from caller
       input), returns `{ url }`.
-- [ ] 2.2 RED: `LocalStorageAdapter.get` unit test — returns `{ bytes,
+- [x] 2.2 RED: `LocalStorageAdapter.get` unit test — returns `{ bytes,
       contentType }` for an existing key, `null` for an unknown key.
-- [ ] 2.3 RED: `LocalStorageAdapter.delete` unit test — removes the file;
+- [x] 2.3 RED: `LocalStorageAdapter.delete` unit test — removes the file;
       idempotent on a missing key.
-- [ ] 2.4 GREEN: implement `ObjectStoragePort` interface (boundary) in
+- [x] 2.4 GREEN: implement `ObjectStoragePort` interface (boundary) in
       `apps/api/src/storage/object-storage-port.ts` and
       `LocalStorageAdapter` (infra) in
       `apps/api/src/storage/local-storage-adapter.ts`, base path from
       `STORAGE_LOCAL_DIR` env (configurable, defaulting to a documented local
       path).
-- [ ] 2.5 RED: fake `ObjectStoragePort` test double + route test —
+- [x] 2.5 RED: fake `ObjectStoragePort` test double + route test —
       `POST /branding/logo` rejects a disallowed content-type (outside
       `png|jpeg|svg|webp`), writes no storage key.
-- [ ] 2.6 RED: route test — `POST /branding/logo` rejects a file exceeding the
+- [x] 2.6 RED: route test — `POST /branding/logo` rejects a file exceeding the
       configured size cap, writes no storage key.
-- [ ] 2.7 RED: route test — `POST /branding/logo` accepts a valid `png` under
+- [x] 2.7 RED: route test — `POST /branding/logo` accepts a valid `png` under
       the cap, persists via the port, and the response includes the new
-      logo URL (branding-row update itself is stubbed/deferred to S3; assert
-      only the storage+response contract here).
-- [ ] 2.8 GREEN: implement `POST /branding/logo` in
+      logo URL. **Deviation from the original task wording**: the
+      branding-row persistence is NOT stubbed/deferred here — the
+      orchestrator's Slice S2 scope required real gating + persistence from
+      the start (merge safety). The route calls `repo.upsert` when a
+      branding row already exists for the tenant (updating only
+      `logoStorageKey`, preserving the existing palette/slug); when no row
+      exists yet, the upload still succeeds (bytes stored, URL returned) but
+      no row is created — row creation (which sets the unique
+      `subdomainSlug`) stays Slice 3's responsibility, so this route never
+      risks inventing a colliding slug.
+- [x] 2.8 GREEN: implement `POST /branding/logo` in
       `apps/api/src/routes/branding.ts` (allowlist + size-cap validation,
       calls `ObjectStoragePort.put`), injected via a structural interface
-      (not a direct repo import) to satisfy `pnpm architecture`.
-- [ ] 2.9 RED: route test — `GET /media/branding/:key` streams bytes +
+      (not a direct repo import) to satisfy `pnpm architecture`. Gated by
+      `requireAuth()` + `assertGymEntitled` (pulled forward from task 3.1/3.2
+      below — see note after this phase).
+- [x] 2.9 RED: route test — `GET /media/branding/:key` streams bytes +
       stored content-type for an existing key; unknown key → 404.
-- [ ] 2.10 RED: route test — `GET /media/branding/:key` serving an SVG sets
+- [x] 2.10 RED: route test — `GET /media/branding/:key` serving an SVG sets
       `Content-Disposition: attachment` (stored-XSS mitigation per the
       threat matrix), never inline-rendered as HTML/script context.
-- [ ] 2.11 GREEN: implement `GET /media/branding/:key` in
+- [x] 2.11 GREEN: implement `GET /media/branding/:key` in
       `apps/api/src/routes/branding.ts`.
-- [ ] 2.12 Gate: run `pnpm architecture` — confirm `LocalStorageAdapter`
+- [x] 2.12 Gate: run `pnpm architecture` — confirm `LocalStorageAdapter`
       stays infra-layer-only and `branding.ts` route depends on the
       `ObjectStoragePort` boundary interface, not the concrete adapter or
-      raw `fs` calls, and not `db/repositories/*` directly.
-- [ ] 2.13 Gate: run full `apps/api` test suite green.
+      raw `fs` calls, and not `db/repositories/*` directly. PASS (0
+      violations, 1927 modules / 5706 deps cruised).
+- [x] 2.13 Gate: run full `apps/api` test suite green. PASS (125 files, 1628
+      tests, 11 skipped).
+
+> **S2 note (deviation from tasks.md's phase split)**: the session prompt's
+> merge-safety requirement ("do NOT ship an ungated upload endpoint to
+> main") required real gym-tier gating in THIS slice, not deferred to S3.
+> Implemented `assertGymEntitled` + `ForbiddenGymAccess` in
+> `apps/api/src/billing/gym-access.ts` now (pulling forward task 3.1/3.2's
+> intent). Unlike `assertTrainerEntitled`, this gate is TIER-ONLY — there is
+> no `"gym"` value in `MembershipRole`, so gating never checks role, only the
+> resolved billing tier via the same `resolveEffectiveTier`. Slice 3 reuses
+> this SAME helper unchanged for the branding CRUD routes and tenant-
+> isolation tests; tasks 3.1/3.2 become a no-op / reference-only when S3
+> lands (the helper + its unit tests already exist).
 
 ## Phase 3 (Slice S3): Gym branding CRUD + public read-by-slug (isolation + gating)
 
