@@ -274,6 +274,13 @@ export const tenantBillingOverrides = pgTable(
       .notNull()
       .references(() => users.id),
     reason: text("reason").notNull(),
+    /**
+     * Optional caller-supplied idempotency key (#313). A grant retry after a
+     * network timeout carries the same key so the server returns the original
+     * override instead of a spurious `active_override_exists` 409. Enforced by
+     * the partial unique index below (scoped per tenant, NULLs unconstrained).
+     */
+    operationKey: text("operation_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
@@ -286,6 +293,9 @@ export const tenantBillingOverrides = pgTable(
       "tenant_billing_overrides_active_window_chk",
       sql`${table.endsAt} > ${table.startsAt}`,
     ),
+    operationKeyUnique: uniqueIndex("tenant_billing_overrides_operation_key_uq")
+      .on(table.tenantId, table.operationKey)
+      .where(sql`${table.operationKey} IS NOT NULL`),
   }),
 );
 

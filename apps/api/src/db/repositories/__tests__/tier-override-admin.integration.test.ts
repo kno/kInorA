@@ -170,6 +170,197 @@ describe.skipIf(!hasDb)("TierOverrideAdminRepository (real Postgres)", () => {
     expect(activeRows).toHaveLength(1);
   });
 
+  it("grant → revoke → grant again for the same tenant: the second grant succeeds and the revoked row persists (#314)", async () => {
+    const { tenantId, superadminId } = await seedTenantAndSuperadmin();
+
+    const first = await repo.grantTierOverride({
+      tenantId,
+      actorUserId: superadminId,
+      tier: "trainer",
+      reason: "first grant",
+      startsAt: NOW,
+      endsAt: OPEN_ENDED,
+    });
+
+    const revokeTime = new Date("2026-08-02T13:00:00Z");
+    await repo.revokeTierOverride({
+      tenantId,
+      overrideId: first.id,
+      actorUserId: superadminId,
+      now: revokeTime,
+    });
+
+    // Second grant starts strictly AFTER the revoke instant, so the adapter's
+    // transactional active-window re-check sees no overlap and inserts.
+    const secondStartsAt = new Date(revokeTime.getTime() + 60_000);
+    const second = await repo.grantTierOverride({
+      tenantId,
+      actorUserId: superadminId,
+      tier: "gym",
+      reason: "second grant",
+      startsAt: secondStartsAt,
+      endsAt: OPEN_ENDED,
+    });
+
+    // The second grant succeeded and is the active override now.
+    expect(second).not.toBeNull();
+    expect(second.id).not.toBe(first.id);
+    const active = await repo.loadActiveOverride(tenantId, new Date(secondStartsAt.getTime() + 1000));
+    expect(active?.id).toBe(second.id);
+
+    // The revoked row PERSISTS with ends_at in the past (never deleted).
+    const allRows = await db
+      .select({ id: tenantBillingOverrides.id, endsAt: tenantBillingOverrides.endsAt })
+      .from(tenantBillingOverrides)
+      .where(eq(tenantBillingOverrides.tenantId, tenantId));
+    expect(allRows).toHaveLength(2);
+    const revokedRow = allRows.find((r) => r.id === first.id);
+    expect(revokedRow?.endsAt.getTime()).toBe(revokeTime.getTime());
+
+    // Two creations + one expiry recorded.
+    const createdAudits = await db
+      .select()
+      .from(billingAuditEvents)
+      .where(
+        and(
+          eq(billingAuditEvents.tenantId, tenantId),
+          eq(billingAuditEvents.action, "admin_override_created"),
+        ),
+      );
+    expect(createdAudits).toHaveLength(2);
+    const expiredAudits = await db
+      .select()
+      .from(billingAuditEvents)
+      .where(
+        and(
+          eq(billingAuditEvents.tenantId, tenantId),
+          eq(billingAuditEvents.action, "admin_override_expired"),
+        ),
+      );
+    expect(expiredAudits).toHaveLength(1);
+  });
+
+  it("serializes two concurrent revokes of the same override: exactly ONE admin_override_expired audit row (#315)", async () => {
+    const { tenantId, superadminId } = await seedTenantAndSuperadmin();
+    const created = await repo.grantTierOverride({
+      tenantId,
+      actorUserId: superadminId,
+      tier: "trainer",
+      reason: "concurrent revoke race",
+      startsAt: NOW,
+      endsAt: OPEN_ENDED,
+    });
+
+    // Same `now` for both so the second revoke's `ends_at > now` guard matches
+    // zero rows once the first has set ends_at = now.
+    const revokeTime = new Date("2026-08-02T13:00:00Z");
+    const revokeInput = {
+      tenantId,
+      overrideId: created.id,
+      actorUserId: superadminId,
+      now: revokeTime,
+    };
+
+    const [a, b] = await Promise.all([
+      repo.revokeTierOverride(revokeInput),
+      repo.revokeTierOverride(revokeInput),
+    ]);
+
+    // Both resolve to the same already-revoked endsAt (idempotent success).
+    expect(a.endsAt.getTime()).toBe(revokeTime.getTime());
+    expect(b.endsAt.getTime()).toBe(revokeTime.getTime());
+
+    const expiredAudits = await db
+      .select()
+      .from(billingAuditEvents)
+      .where(
+        and(
+          eq(billingAuditEvents.tenantId, tenantId),
+          eq(billingAuditEvents.action, "admin_override_expired"),
+        ),
+      );
+    expect(expiredAudits).toHaveLength(1);
+  });
+
+  it("replays the original override for a repeated operationKey without a duplicate row or audit (#313)", async () => {
+    const { tenantId, superadminId } = await seedTenantAndSuperadmin();
+    const operationKey = `op-${Date.now()}-${Math.random()}`;
+
+    const first = await repo.grantTierOverride({
+      tenantId,
+      actorUserId: superadminId,
+      tier: "trainer",
+      reason: "idempotent grant",
+      startsAt: NOW,
+      endsAt: OPEN_ENDED,
+      operationKey,
+    });
+
+    // Same key, even with different tier/reason — the replay returns the
+    // ORIGINAL row and writes nothing new.
+    const replay = await repo.grantTierOverride({
+      tenantId,
+      actorUserId: superadminId,
+      tier: "gym",
+      reason: "retry after timeout",
+      startsAt: NOW,
+      endsAt: OPEN_ENDED,
+      operationKey,
+    });
+
+    expect(replay).not.toBeNull();
+    expect(replay.id).toBe(first.id);
+
+    const rows = await db
+      .select({ id: tenantBillingOverrides.id })
+      .from(tenantBillingOverrides)
+      .where(eq(tenantBillingOverrides.tenantId, tenantId));
+    expect(rows).toHaveLength(1);
+
+    const createdAudits = await db
+      .select()
+      .from(billingAuditEvents)
+      .where(
+        and(
+          eq(billingAuditEvents.tenantId, tenantId),
+          eq(billingAuditEvents.action, "admin_override_created"),
+        ),
+      );
+    expect(createdAudits).toHaveLength(1);
+  });
+
+  it("returns null (409) for a genuine DIFFERENT operationKey while an override is active (#313)", async () => {
+    const { tenantId, superadminId } = await seedTenantAndSuperadmin();
+
+    await repo.grantTierOverride({
+      tenantId,
+      actorUserId: superadminId,
+      tier: "trainer",
+      reason: "active grant",
+      startsAt: NOW,
+      endsAt: OPEN_ENDED,
+      operationKey: `op-first-${Date.now()}`,
+    });
+
+    const conflict = await repo.grantTierOverride({
+      tenantId,
+      actorUserId: superadminId,
+      tier: "gym",
+      reason: "different key while active",
+      startsAt: NOW,
+      endsAt: OPEN_ENDED,
+      operationKey: `op-second-${Date.now()}`,
+    });
+
+    expect(conflict).toBeNull();
+
+    const rows = await db
+      .select({ id: tenantBillingOverrides.id })
+      .from(tenantBillingOverrides)
+      .where(eq(tenantBillingOverrides.tenantId, tenantId));
+    expect(rows).toHaveLength(1);
+  });
+
   it("regression: writeMemberAllocation audit insert is unaffected by the relaxed FK (actor IS a tenant member)", async () => {
     const [tenant] = await db.insert(tenants).values({ name: "regression-tenant" }).returning({ id: tenants.id });
     const [owner] = await db

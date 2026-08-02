@@ -111,6 +111,19 @@ describe("grantTierOverride", () => {
     expect(parsed).toEqual({ tier: "gym", reason: "pilot" });
   });
 
+  it("includes the operationKey in the POST body when provided (#313)", async () => {
+    const fetchMock = buildFetch(201, { id: "o1" });
+    await grantTierOverride(
+      "tok",
+      TENANT_ID,
+      { tier: "trainer", reason: "pilot", operationKey: "op-key-123" },
+      { apiBaseUrl: "http://api", fetchImpl: fetchMock as never },
+    );
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const parsed = JSON.parse(init.body as string) as { operationKey?: string };
+    expect(parsed.operationKey).toBe("op-key-123");
+  });
+
   it("maps 409 to conflict and 404 to not_found", async () => {
     expect(
       (

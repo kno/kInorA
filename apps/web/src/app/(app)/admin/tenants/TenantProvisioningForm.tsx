@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   GRANTABLE_TIERS,
@@ -42,6 +42,17 @@ export function TenantProvisioningForm() {
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [feedback, setFeedback] = useState<Feedback>({ kind: "idle" });
+
+  /**
+   * Idempotency key for the in-flight grant submit (#313). Held in a ref (not
+   * state — it must not trigger re-renders and must survive between a failed
+   * attempt and its retry). Generated lazily on the first submit of an attempt
+   * and reused if that same submit is retried after an error/timeout, so the
+   * API replays the original 201 instead of returning a spurious 409. Cleared
+   * on success and whenever a different tenant is selected, so the next grant
+   * gets a fresh key.
+   */
+  const grantKeyRef = useRef<string | null>(null);
 
   function errorMessage(kind: string): string {
     switch (kind) {
@@ -85,6 +96,7 @@ export function TenantProvisioningForm() {
       setStartsAt("");
       setEndsAt("");
       setTier("trainer");
+      grantKeyRef.current = null;
       setFeedback({ kind: "idle" });
     } else {
       setFeedback({ kind: "error", message: errorMessage(result.kind) });
@@ -105,16 +117,24 @@ export function TenantProvisioningForm() {
       return;
     }
     setFeedback({ kind: "loading" });
+    // Generate the key lazily; a retry after an error keeps the same key.
+    if (grantKeyRef.current === null) {
+      grantKeyRef.current = crypto.randomUUID();
+    }
     const result = await grantAction(selected.tenant.id, {
       tier,
       reason: reason.trim(),
       startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
       endsAt: endsAt ? new Date(endsAt).toISOString() : undefined,
+      operationKey: grantKeyRef.current,
     });
     if (result.kind === "ok") {
+      // Fresh key for the next distinct grant.
+      grantKeyRef.current = null;
       setFeedback({ kind: "saved", action: "grant" });
       await refreshSelected();
     } else {
+      // Keep the key so an immediate retry is treated as the SAME operation.
       setFeedback({ kind: "error", message: errorMessage(result.kind) });
     }
   }

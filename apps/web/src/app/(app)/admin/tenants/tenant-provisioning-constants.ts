@@ -35,6 +35,13 @@ export interface GrantOverrideRequest {
   reason: string;
   startsAt?: string;
   endsAt?: string;
+  /**
+   * Optional idempotency key (#313). The form generates a fresh UUID per grant
+   * submit and reuses it across a retried submit, so a retry after a network
+   * timeout carries the same key and the API replays the original 201 instead
+   * of a spurious 409 conflict.
+   */
+  operationKey?: string;
 }
 
 /**
