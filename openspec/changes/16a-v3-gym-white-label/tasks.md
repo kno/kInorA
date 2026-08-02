@@ -223,29 +223,46 @@ page.
 
 ## Phase 4 (Slice S4): Login page host-resolved theming
 
-- [ ] 4.1 RED (web): login page Server Component test — a request with a
+- [x] 4.1 RED (web): login page Server Component test — a request with a
       `Host` header matching a configured gym's `subdomainSlug` fetches that
       tenant's branding from the public endpoint and renders an inline
       `<style>:root{--gym-accent:<hex>;...}</style>` block + logo `<img>`.
-- [ ] 4.2 RED (web): login page test — a `Host` header resolving to no known
+- [x] 4.2 RED (web): login page test — a `Host` header resolving to no known
       slug renders with default kInorA tokens, no server error, no inline
       gym `<style>` override values.
-- [ ] 4.3 RED (web): login page test — the public branding fetch failing
+- [x] 4.3 RED (web): login page test — the public branding fetch failing
       (e.g. network/5xx) still renders the page with default tokens (fails
       safe, no unhandled rejection surfaced to the user).
-- [ ] 4.4 GREEN: implement host→slug resolution
+- [x] 4.4 GREEN: implement host→slug resolution
       (`headers().get("host")` server-side, Node runtime) + inline `<style>`
       + logo rendering in `apps/web/src/app/(auth)/login/page.tsx`.
-- [ ] 4.5 GREEN: add `--gym-*` CSS custom properties with
+- [x] 4.5 GREEN: add `--gym-*` CSS custom properties with
       `var(--gym-x, var(--default))` fallback to `globals.css` (mirrors
       15b's pattern) so untouched tokens degrade safely.
-- [ ] 4.6 Gate: run `pnpm ui-api-guard` — confirm the login page (a web
+- [x] 4.6 Gate: run `pnpm ui-api-guard` — confirm the login page (a web
       client/server component) does not import server-only modules
-      improperly across the boundary.
-- [ ] 4.7 Gate: run `pnpm architecture` — no `apps/web` route imports
+      improperly across the boundary. PASS (40 client files scanned, 0
+      violations).
+- [x] 4.7 Gate: run `pnpm architecture` — no `apps/web` route imports
       `db/repositories/*` or the storage adapter directly; branding fetch
-      goes through the public HTTP endpoint only.
-- [ ] 4.8 Gate: run full `apps/web` test suite green.
+      goes through the public HTTP endpoint only. PASS (0 violations, 1931
+      modules / 5728 deps cruised — unchanged from S3, `apps/web` is out of
+      the cruised scope by design; the public HTTP fetch is the only path
+      used).
+- [x] 4.8 Gate: run full `apps/web` test suite green. PASS (122 files, 1158
+      tests).
+
+> **S4 note (beyond tasks.md's explicit list)**: the slug parser
+> (`gym-slug.ts`) and the inline-`<style>` builder (`gym-style.ts`) were
+> extracted into their own small, independently unit-tested pure functions
+> (not explicitly named as separate files in design.md, which only lists
+> `page.tsx` as the modified file) — this keeps the Server Component itself
+> thin and keeps the parsing/CSS-string logic testable without mocking
+> `next/headers`. `gym-branding-client.ts` mirrors the existing
+> `(app)/auth/profile-client.ts` fail-safe-to-null fetch pattern exactly.
+> Also added one i18n key (`auth.login.gymLogoAlt`, en+es) for the logo's
+> accessible alt text — bumped the `@kinora/i18n` frozen non-billing-key
+> count test from 616 to 617.
 
 ## Phase 5 (Slice S5): Whole-app root-layout theming for logged-in members
 

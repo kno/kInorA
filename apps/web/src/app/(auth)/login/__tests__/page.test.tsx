@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import LoginPage from "../page";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
@@ -22,8 +22,31 @@ vi.mock("../actions.js", () => ({
   loginAction: vi.fn(),
 }));
 
+// 16a-v3-gym-white-label, Slice 4 — the login page is a Node-runtime Server
+// Component that reads `headers().get("host")`. `next/headers` is mocked the
+// same way the other server-component page tests mock it (see
+// `(app)/clients/__tests__/page.test.tsx`).
+const headersGet = vi.fn((_name: string) => null as string | null);
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => ({ get: headersGet })),
+}));
+
+const fetchPublicBranding = vi.fn(async (_slug: string) => null as unknown);
+vi.mock("../gym-branding-client", () => ({
+  fetchPublicBranding: (...args: [string]) => fetchPublicBranding(...args),
+}));
+
 import { getTranslations } from "next-intl/server";
 import { createServerTranslator } from "@/test-utils/server-translator";
+
+const GYM_PALETTE = {
+  accent: "#112233",
+  accentFg: "#ffffff",
+  surface: "#000000",
+  surface2: "#111111",
+  fg: "#eeeeee",
+  muted: "#999999",
+};
 
 describe("LoginPage", () => {
   it("renders an email/password form and a Google sign-in link", async () => {
@@ -93,6 +116,58 @@ describe("LoginPage", () => {
   });
 });
 
+// 16a-v3-gym-white-label, Slice 4 — host-resolved gym branding (tasks 4.1-4.3).
+describe("LoginPage — gym branding", () => {
+  afterEach(() => {
+    headersGet.mockReset().mockReturnValue(null);
+    fetchPublicBranding.mockReset().mockResolvedValue(null);
+  });
+
+  it("renders a gym's inline <style> palette + logo when the host resolves to a known slug", async () => {
+    headersGet.mockReturnValue("gymname.kinora.aitsai.com");
+    fetchPublicBranding.mockResolvedValue({
+      logoUrl: "/media/branding/abc",
+      palette: GYM_PALETTE,
+    });
+
+    const page = await LoginPage({ searchParams: Promise.resolve({}) });
+
+    expect(fetchPublicBranding).toHaveBeenCalledWith("gymname");
+
+    const style = findByType(page, "style");
+    expect(style).toBeDefined();
+    const css = textOf(style);
+    expect(css).toContain("--gym-accent:#112233");
+    expect(css).toContain("--gym-surface:#000000");
+
+    const logo = findByType(page, "img");
+    expect(logo).toBeDefined();
+    expect(logo?.props.src).toBe("/media/branding/abc");
+  });
+
+  it("renders default tokens with no gym <style>/logo when the host resolves to no known slug", async () => {
+    headersGet.mockReturnValue("kinora.aitsai.com");
+    fetchPublicBranding.mockResolvedValue(null);
+
+    const page = await LoginPage({ searchParams: Promise.resolve({}) });
+
+    expect(fetchPublicBranding).not.toHaveBeenCalled();
+    expect(findByType(page, "style")).toBeUndefined();
+    expect(findByType(page, "img")).toBeUndefined();
+  });
+
+  it("fails safe to default tokens when the public branding fetch errors", async () => {
+    headersGet.mockReturnValue("gymname.kinora.aitsai.com");
+    fetchPublicBranding.mockResolvedValue(null);
+
+    const page = await LoginPage({ searchParams: Promise.resolve({}) });
+
+    expect(fetchPublicBranding).toHaveBeenCalledWith("gymname");
+    expect(findByType(page, "style")).toBeUndefined();
+    expect(findByType(page, "img")).toBeUndefined();
+  });
+});
+
 // --- React tree inspection helpers (match the existing page.test.tsx style) ---
 
 function findInputByName(
@@ -130,4 +205,8 @@ function textOf(node: ReactNode): string {
 
 function isReactElement(node: ReactNode): node is AnyElement {
   return typeof node === "object" && node !== null && "props" in node;
+}
+
+function findByType(node: ReactNode, type: string): AnyElement | undefined {
+  return findFirst(node, (el) => el.type === type);
 }
