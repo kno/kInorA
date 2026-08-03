@@ -20,7 +20,6 @@ import { notFound } from "next/navigation";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { fetchPlanStatus } from "@/app/(app)/create-plan/plan-draft-client";
 import { PlanStatusClient } from "./PlanStatusClient";
-import type { WorkoutProgram } from "@kinora/contracts";
 
 interface PlanPageProps {
   params: Promise<{ id: string }>;
@@ -51,9 +50,6 @@ export default async function PlanStatusPage({ params }: PlanPageProps) {
       specId={plan.specId}
       planName={"name" in plan ? plan.name : undefined}
       initialStatus={plan.status}
-      initialProgram={
-        plan.status === "ready" ? (plan.program as WorkoutProgram) : undefined
-      }
     />
   );
 }

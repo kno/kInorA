@@ -1,7 +1,23 @@
 // @vitest-environment jsdom
+/**
+ * Tests for PlanStatusClient's tracker + redirect behavior on /plan/[id].
+ *
+ * A ready plan now redirects to the canonical `/plan` page (PlanWeekView owns
+ * the ready rendering AND the workout-start path), so the legacy in-page
+ * "start workout" entry is gone. What remains on /plan/[id] is the
+ * active-session takeover: if a workout session is already active when this
+ * screen mounts, the live TrackerPanel renders and we do NOT redirect (never
+ * yank the user out of a live workout).
+ *
+ * The full start→record→complete lifecycle of the shared `useWorkoutSession`
+ * hook is covered on the canonical side (PlanTrackerClient.test.tsx) and in
+ * TrackerPanel.test.tsx / use-workout-session.offline.test.ts; here we inject
+ * the hook state to cover this component's active-session branch, its
+ * TrackerPanel wiring, and the conflict banner.
+ */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import type { WorkoutProgram, WorkoutSessionRecord } from "@kinora/contracts";
+import type { WorkoutSessionRecord } from "@kinora/contracts";
 import { renderWithIntl } from "@/test-utils/render-with-intl";
 import { PlanStatusClient } from "../PlanStatusClient";
 
@@ -12,45 +28,37 @@ vi.mock("../TrackerPanel.module.css", () => ({
 }));
 
 const usePlanWs = vi.fn();
-const getPlanStatusAction = vi.fn();
 const regeneratePlanAction = vi.fn();
-const startWorkoutSessionAction = vi.fn();
-const recordWorkoutSetAction = vi.fn();
-const completeWorkoutSessionAction = vi.fn();
+const routerReplace = vi.fn();
 
 vi.mock("@/hooks/use-plan-ws", () => ({
   usePlanWs: (...args: unknown[]) => usePlanWs(...args),
 }));
 
+// PlanStatusClient redirects to the canonical /plan page on ready via
+// `router.replace` — mock next/navigation so the App Router hook resolves.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: routerReplace }),
+}));
+
 vi.mock("../actions", () => ({
-  getPlanStatusAction: (...args: unknown[]) => getPlanStatusAction(...args),
-  startWorkoutSessionAction: (...args: unknown[]) => startWorkoutSessionAction(...args),
-  recordWorkoutSetAction: (...args: unknown[]) => recordWorkoutSetAction(...args),
-  completeWorkoutSessionAction: (...args: unknown[]) => completeWorkoutSessionAction(...args),
+  getPlanStatusAction: vi.fn(),
 }));
 
 vi.mock("@/app/(app)/create-plan/actions", () => ({
   regeneratePlanAction: (...args: unknown[]) => regeneratePlanAction(...args),
 }));
 
-const sampleProgram: WorkoutProgram = {
-  weeklySessions: [
-    {
-      day: 1,
-      title: "Day 1 · Strength",
-      exercises: [
-        {
-          name: "Barbell Squat",
-          sets: 4,
-          reps: "8",
-          restSeconds: 120,
-          notes: "Brace before each rep",
-        },
-      ],
-    },
-  ],
-  limitationWarnings: [],
-};
+// Pass-through mock (real implementation) so each test can `vi.spyOn` the hook
+// to inject the active-session / conflict state this component reacts to.
+vi.mock("@/app/(app)/plan/use-workout-session", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/app/(app)/plan/use-workout-session")
+  >("@/app/(app)/plan/use-workout-session");
+  return { ...actual };
+});
+
+import * as useWorkoutSessionModule from "@/app/(app)/plan/use-workout-session";
 
 const activeSession: WorkoutSessionRecord = {
   id: "session-1",
@@ -79,189 +87,95 @@ const activeSession: WorkoutSessionRecord = {
   ],
 };
 
-afterEach(() => {
-  vi.clearAllMocks();
-});
+type HookReturn = ReturnType<typeof useWorkoutSessionModule.useWorkoutSession>;
 
-function renderClient() {
-  usePlanWs.mockReturnValue({ status: "ready" });
-  regeneratePlanAction.mockResolvedValue({ planId: "plan-1", status: "generating" });
-
-  return renderWithIntl(
-    <PlanStatusClient
-      planId="plan-1"
-      specId="spec-1"
-      initialStatus="ready"
-      initialProgram={sampleProgram}
-    />,
-  );
+function mockSession(overrides: Partial<HookReturn>) {
+  return vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+    activeSession: undefined,
+    activeDay: undefined,
+    conflict: undefined,
+    error: undefined,
+    syncNotice: undefined,
+    handleStartWorkout: vi.fn(),
+    handleRecordSet: vi.fn().mockResolvedValue(undefined),
+    handleCompleteWorkout: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  } as HookReturn);
 }
 
-describe("PlanStatusClient tracker flow", () => {
-  it("starts or resumes a workout from the ready plan and renders the live tracker", async () => {
-    startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: activeSession });
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.restoreAllMocks();
+});
 
-    renderClient();
+describe("PlanStatusClient — active-session takeover on /plan/[id]", () => {
+  it("renders the live tracker and does NOT redirect when a session is active", () => {
+    usePlanWs.mockReturnValue({ status: "ready" });
+    mockSession({ activeSession, activeDay: 1 });
 
-    fireEvent.click(screen.getByRole("button", { name: /start workout/i }));
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="ready" />,
+    );
 
-    await waitFor(() => {
-      expect(startWorkoutSessionAction).toHaveBeenCalledWith("plan-1", 1);
-    });
-
-    // The tracker region takes over; the current exercise is the topbar heading.
-    expect(await screen.findByRole("region", { name: /live workout/i })).toBeTruthy();
-    expect(screen.getAllByText(/barbell squat/i).length).toBeGreaterThanOrEqual(2);
-    // Real, computed progress replaces the old "next action" hint.
-    expect(screen.getByText(/exercise 1 of 1/i)).toBeTruthy();
-    expect(screen.queryByText(/analytics/i)).toBeNull();
-    expect(screen.queryByText(/offline/i)).toBeNull();
+    // The tracker region takes over; a ready plan does NOT redirect while a
+    // session is active — that would yank the user out of the live workout.
+    expect(screen.getByRole("region", { name: /live workout/i })).toBeTruthy();
+    expect(screen.getAllByText(/barbell squat/i).length).toBeGreaterThanOrEqual(1);
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 
-  it("records a set through steppers and completes the workout via server actions", async () => {
-    startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: activeSession });
-    recordWorkoutSetAction.mockResolvedValue({
-      ...activeSession,
-      exercises: [
-        {
-          ...activeSession.exercises[0]!,
-          setRecords: [
-            {
-              ...activeSession.exercises[0]!.setRecords[0]!,
-              actualReps: 9,
-              weightKg: 47.5,
-              rpe: 8,
-              notes: "Strong set",
-              completed: true,
-            },
-          ],
-        },
-      ],
-    });
-    completeWorkoutSessionAction.mockResolvedValue({
-      ...activeSession,
-      status: "completed",
-      completedAt: "2026-07-06T10:00:00.000Z",
-    });
+  it("wires the TrackerPanel record + complete controls to the shared session handlers", async () => {
+    usePlanWs.mockReturnValue({ status: "ready" });
+    const handleRecordSet = vi.fn().mockResolvedValue(undefined);
+    const handleCompleteWorkout = vi.fn().mockResolvedValue(undefined);
+    mockSession({ activeSession, activeDay: 1, handleRecordSet, handleCompleteWorkout });
 
-    renderClient();
-
-    fireEvent.click(screen.getByRole("button", { name: /start workout/i }));
-    await screen.findByRole("region", { name: /live workout/i });
-
-    // #266 flake fix: `handleCompleteSet` is a useCallback closing over
-    // weight/reps/rpeInput/note. Under contended parallel coverage, firing all
-    // the steps synchronously can let the "complete set" click read a STALE
-    // closure before the earlier state updates commit. `@testing-library/user-event`
-    // is not a dependency in this workspace, so instead we settle each step:
-    // `await waitFor` on the VISIBLE value flushes act + microtasks, proving the
-    // state committed (and the button re-rendered with a fresh closure) before
-    // the next interaction — deterministic without weakening any assertion.
-
-    // The stepper value span sits in the wrap immediately before its +/- button
-    // (see Stepper.tsx); reading that sibling avoids brittle class/i18n queries.
-    const increaseLoad = screen.getByRole("button", { name: /increase load/i });
-    const increaseReps = screen.getByRole("button", { name: /increase reps/i });
-
-    // Steppers seed from the set (weight 45, reps from targetReps "8"). Nudge both.
-    fireEvent.click(increaseLoad);
-    await waitFor(() => {
-      expect(increaseLoad.previousElementSibling?.textContent).toContain("47.5");
-    });
-
-    fireEvent.click(increaseReps);
-    await waitFor(() => {
-      expect(increaseReps.previousElementSibling?.textContent).toContain("9");
-    });
-
-    const rpe = screen.getByLabelText(/^rpe$/i) as HTMLInputElement;
-    fireEvent.change(rpe, { target: { value: "8" } });
-    await waitFor(() => expect(rpe.value).toBe("8"));
-
-    fireEvent.click(screen.getByRole("button", { name: /add note/i }));
-    const notes = (await screen.findByLabelText(/notes/i)) as HTMLTextAreaElement;
-    fireEvent.change(notes, { target: { value: "Strong set" } });
-    await waitFor(() => expect(notes.value).toBe("Strong set"));
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="ready" />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /complete set/i }));
-
     await waitFor(() => {
-      expect(recordWorkoutSetAction).toHaveBeenCalledWith(
-        "session-1",
-        "set-1",
-        expect.objectContaining({
-          actualReps: 9,
-          weightKg: 47.5,
-          rpe: 8,
-          completed: true,
-          notes: "Strong set",
-        }),
-      );
+      expect(handleRecordSet).toHaveBeenCalled();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /complete workout/i }));
-
     await waitFor(() => {
-      expect(completeWorkoutSessionAction).toHaveBeenCalledWith("session-1");
+      expect(handleCompleteWorkout).toHaveBeenCalledWith("session-1");
     });
-
-    // BLOCKER fix (#93): after a successful complete the tracker is dismissed
-    // and the plan view returns (no navigation dead-end).
-    await waitFor(() => {
-      expect(screen.queryByRole("region", { name: /live workout/i })).toBeNull();
-    });
-    expect(screen.getByRole("button", { name: /start workout/i })).toBeTruthy();
   });
 
-  it("renders a conflict notice WITHOUT crashing when start returns a 409 conflict (F1/F3)", async () => {
-    startWorkoutSessionAction.mockResolvedValue({
-      kind: "conflict",
-      activePlanName: "Summer Cut",
-      activeDay: 3,
-    });
+  it("shows the plan name + active-day identity header above the tracker", () => {
+    usePlanWs.mockReturnValue({ status: "ready" });
+    mockSession({ activeSession, activeDay: 1 });
 
-    renderClient();
+    renderWithIntl(
+      <PlanStatusClient
+        planId="plan-1"
+        planName="Summer Cut"
+        specId="spec-1"
+        initialStatus="ready"
+      />,
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: /start workout/i }));
+    const header = screen.getByTestId("tracker-identity");
+    expect(header.textContent).toContain("Summer Cut");
+    expect(routerReplace).not.toHaveBeenCalled();
+  });
+});
 
-    await waitFor(() => {
-      expect(startWorkoutSessionAction).toHaveBeenCalledWith("plan-1", 1);
-    });
+describe("PlanStatusClient — conflict banner (non-active branch)", () => {
+  it("renders a localized active-session conflict banner and does not redirect while generating", () => {
+    usePlanWs.mockReturnValue({ status: "generating" });
+    mockSession({ conflict: { activePlanName: "Summer Cut", activeDay: 3 } });
 
-    const alert = await screen.findByTestId("start-conflict");
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="generating" />,
+    );
+
+    const alert = screen.getByTestId("start-conflict");
     expect(alert.textContent).toContain("Summer Cut");
-    expect(alert.textContent).toContain("Day 3");
-    expect(screen.queryByRole("region", { name: /live workout/i })).toBeNull();
-  });
-
-  it("after a conflict, a subsequent successful start clears the banner and shows the tracker (retry)", async () => {
-    startWorkoutSessionAction
-      .mockResolvedValueOnce({
-        kind: "conflict",
-        activePlanName: "Summer Cut",
-        activeDay: 3,
-      })
-      .mockResolvedValueOnce({ kind: "ok", session: activeSession });
-
-    renderClient();
-
-    fireEvent.click(screen.getByRole("button", { name: /start workout/i }));
-    await screen.findByTestId("start-conflict");
-
-    fireEvent.click(screen.getByRole("button", { name: /start workout/i }));
-
-    expect(await screen.findByRole("region", { name: /live workout/i })).toBeTruthy();
-    expect(screen.queryByTestId("start-conflict")).toBeNull();
-  });
-
-  it("constrains RPE entry to whole values accepted by the API", async () => {
-    startWorkoutSessionAction.mockResolvedValue({ kind: "ok", session: activeSession });
-
-    renderClient();
-
-    fireEvent.click(screen.getByRole("button", { name: /start workout/i }));
-    await screen.findByRole("region", { name: /live workout/i });
-
-    expect(screen.getByLabelText(/^rpe$/i).getAttribute("step")).toBe("1");
+    expect(alert.textContent).toContain("3"); // Day 3
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 });

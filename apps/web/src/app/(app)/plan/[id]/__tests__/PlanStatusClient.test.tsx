@@ -21,9 +21,17 @@ import { PlanStatusClient } from "../PlanStatusClient";
 const usePlanWs = vi.fn();
 const getPlanStatusAction = vi.fn();
 const regeneratePlanAction = vi.fn();
+const routerReplace = vi.fn();
 
 vi.mock("@/hooks/use-plan-ws", () => ({
   usePlanWs: (...args: unknown[]) => usePlanWs(...args),
+}));
+
+// PlanStatusClient redirects to the canonical `/plan` page on ready via
+// `router.replace` (post-generation navigation). Mock next/navigation so the
+// App Router hook resolves without a mounted router in jsdom.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: routerReplace }),
 }));
 
 vi.mock("../actions", () => ({
@@ -33,6 +41,13 @@ vi.mock("../actions", () => ({
 // regeneratePlanAction lives in create-plan/actions
 vi.mock("@/app/(app)/create-plan/actions", () => ({
   regeneratePlanAction: (...args: unknown[]) => regeneratePlanAction(...args),
+}));
+
+// TrackerPanel is exercised in depth elsewhere (TrackerPanel.test.tsx and
+// tracker.test.tsx). Stub it here so the active-session branch renders without
+// a real session shape — these tests only assert redirect behavior.
+vi.mock("../TrackerPanel", () => ({
+  TrackerPanel: () => <div data-testid="tracker-panel" />,
 }));
 
 // PlanStatusView is a presentational component — stub it to simplify assertions
@@ -178,6 +193,59 @@ describe("PlanStatusClient — no session token exposed to client JS (Fix #42)",
     );
     const options = usePlanWs.mock.calls[0]![1] as Record<string, unknown>;
     expect(options.token).toBeUndefined();
+  });
+});
+
+describe("PlanStatusClient — post-generation redirect to canonical /plan", () => {
+  it("redirects to /plan?planId=<id> (replace) on a generating → ready WS transition with no active session", async () => {
+    // SSR rendered while still "generating"; the WS then pushes "ready". The
+    // resolved status drives the effect, which hands off to the canonical
+    // page. `replace` (not `push`) keeps the intermediate /plan/[id] screen out
+    // of the Back-button history.
+    defaultWsReturn("ready");
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="generating" />,
+    );
+
+    await waitFor(() => {
+      expect(routerReplace).toHaveBeenCalledWith("/plan?planId=plan-1");
+    });
+  });
+
+  it("does NOT redirect while the plan is still generating", () => {
+    defaultWsReturn("generating");
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="generating" />,
+    );
+    expect(routerReplace).not.toHaveBeenCalled();
+  });
+
+  it("does NOT redirect when there is an active workout session (never yank the tracker)", () => {
+    // A ready plan with an active session must stay on the tracker, not redirect.
+    defaultWsReturn("ready");
+    const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+      activeSession: {
+        id: "session-1",
+        workoutPlanId: "plan-1",
+        status: "active",
+        startedAt: "2026-07-06T09:00:00.000Z",
+        exercises: [],
+      },
+      activeDay: 1,
+      conflict: undefined,
+      error: undefined,
+      syncNotice: undefined,
+      handleStartWorkout: vi.fn(),
+      handleRecordSet: vi.fn(),
+      handleCompleteWorkout: vi.fn(),
+    });
+
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="ready" />,
+    );
+
+    expect(routerReplace).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });
 

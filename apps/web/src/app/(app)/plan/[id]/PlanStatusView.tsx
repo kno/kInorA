@@ -3,13 +3,17 @@
 /**
  * PlanStatusView — presentational component for plan status rendering.
  *
- * Renders four states driven by the `status` prop:
+ * Renders the transient/terminal states driven by the `status` prop:
  *   - "generating" → OrbitProgress (indeterminate) + generating message
- *   - "ready"      → workout program detail (sessions + exercises)
  *   - "failed"     → error message + Regenerate CTA button
  *   - "error"      → connection-error message + Retry CTA (issue #42): the
  *     realtime channel could neither connect nor poll, so we fail LOUD instead
  *     of leaving the user on an eternal spinner.
+ *
+ * There is intentionally NO "ready" rendering here: once a plan becomes ready,
+ * PlanStatusClient redirects the browser to the canonical `/plan` page (which
+ * renders the polished PlanWeekView + the workout-start path). This component
+ * therefore renders `null` for the "ready" status — the redirect takes over.
  *
  * All data is received as props; the client state management (WS
  * subscription, local status update) lives in PlanStatusClient which wraps
@@ -19,36 +23,19 @@
  *
  * Exported as a named export so it can be unit-tested directly.
  */
-import type { CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 import { OrbitProgress } from "@/components/orbit";
-import type { PlanBranding, WorkoutProgram } from "@kinora/contracts";
-import { cleanLimitationNotes } from "../limitation-notes";
 
 export interface PlanStatusViewProps {
   planId: string;
   status: string;
-  program?: WorkoutProgram;
   specId?: string;
   onRegenerate?: () => void;
-  onStartWorkout?: (day: number) => void;
-  /**
-   * Optional trainer-authored branding (15b-v2 S4). When present on the
-   * "ready" state, `title`/`trainerName` override the default heading + add
-   * a byline, and `accentColor` sets the `--plan-accent` CSS custom property
-   * on the `<main>` root. Absent branding renders exactly as before this
-   * slice (safe rollback).
-   */
-  branding?: PlanBranding;
 }
 
 export function PlanStatusView({
-  planId: _planId,
   status,
-  program,
   onRegenerate,
-  onStartWorkout,
-  branding,
 }: PlanStatusViewProps) {
   const t = useTranslations();
 
@@ -103,75 +90,9 @@ export function PlanStatusView({
     );
   }
 
-  // status === "ready"
-  const accentStyle = branding?.accentColor
-    ? ({ "--plan-accent": branding.accentColor } as CSSProperties)
-    : undefined;
-  return (
-    <main className="kin-page" style={accentStyle}>
-      <header className="kin-card kin-card--header">
-        <h1 className="kin-title">{branding?.title ?? t("plan.ready.title")}</h1>
-        {branding?.trainerName && (
-          <p className="kin-text kin-muted">
-            {t("plan.branding.byTrainer", { trainerName: branding.trainerName })}
-          </p>
-        )}
-        <a href="/dashboard" className="kin-link">
-          {t("plan.backToDashboard")}
-        </a>
-      </header>
-      {program?.weeklySessions.map((session) => (
-        <section key={session.day} className="kin-card">
-          <h2 className="kin-subtitle">
-            {t("plan.session.day")} {session.day} — {session.title}
-          </h2>
-          <ul>
-            {session.exercises.map((exercise, idx) => (
-              <li key={`${session.day}-${idx}`}>
-                <strong>{exercise.name}</strong>
-                {" — "}
-                {exercise.sets} {t("plan.sets.label")} ×{" "}
-                {exercise.reps} {t("plan.reps.label")}
-                {exercise.restSeconds != null && (
-                  <span>
-                    {" ("}
-                    {exercise.restSeconds}s {t("plan.rest.label")}
-                    {")"}
-                  </span>
-                )}
-                {exercise.substitutionNote && (
-                  <em> — {exercise.substitutionNote}</em>
-                )}
-              </li>
-            ))}
-          </ul>
-          {onStartWorkout && (
-            <button
-              type="button"
-              className="kin-btn kin-btn--primary"
-              onClick={() => onStartWorkout(session.day)}
-            >
-              {t("tracker.start.cta")}
-            </button>
-          )}
-        </section>
-      ))}
-      {program?.limitationWarnings && program.limitationWarnings.length > 0 && (
-        // Presentation-only fix (issue #250): the generator emits one fully
-        // localized advisory string per user-declared limitation, repeating the
-        // identical advisory tail on every entry. `cleanLimitationNotes` strips
-        // that tail + the "Limitation:" prefix and dedupes, so we render each
-        // limitation TEXT as a bullet and the advisory ONCE below the list.
-        <section className="kin-card kin-card--warning" role="note">
-          <h3 className="kin-subtitle">{t("plan.limitation.warningLabel")}</h3>
-          <ul>
-            {cleanLimitationNotes(program.limitationWarnings).map((note) => (
-              <li key={note}>{note}</li>
-            ))}
-          </ul>
-          <p className="kin-text kin-muted">{t("plan.limitation.advisory")}</p>
-        </section>
-      )}
-    </main>
-  );
+  // status === "ready": nothing to render — PlanStatusClient redirects to the
+  // canonical `/plan` page (PlanWeekView), which owns the ready rendering and
+  // the workout-start path. Rendering null avoids a flash of the legacy list
+  // during the redirect tick.
+  return null;
 }
