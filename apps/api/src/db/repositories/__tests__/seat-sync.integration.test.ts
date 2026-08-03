@@ -104,6 +104,7 @@ describe.skipIf(!hasDb)("seat-sync (real Postgres, 16c Slice C)", () => {
       "sub_sync",
       3,
       `seat-sync:${tenantId}:3`,
+      [],
     );
   });
 

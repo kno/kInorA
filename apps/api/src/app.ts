@@ -662,6 +662,21 @@ export async function buildApp(
   // Stripe product (Slice E) ships — parsed the SAME way as the existing
   // `VOICE_USE_MOCK` boolean env flag (`=== "1"`, default off).
   const seatBillingEnabled = process.env["SEAT_BILLING_ENABLED"] === "1";
+  // SEAT-PRICE GUARD (fix/seat-sync-price-guard): the configured Trainer Seat
+  // Stripe Price ids (monthly + annual), filtered to only the ones actually
+  // set. `SEAT_BILLING_ENABLED` alone never proves a sponsor's subscription
+  // IS a per-seat one — the trainer/gym tier is granted by an independent
+  // admin override, so a tenant can hold a flat Pro subscription AND a
+  // trainer override at once. The gateway skips the outbound mutation
+  // entirely unless the sponsor's subscription price is one of these ids.
+  // When the env is unset, this list is empty, so the guard skips every
+  // call — the correct fail-closed default (no seat prices configured = never
+  // mutate).
+  const trainerSeatPriceIds = resolveTrainerSeatPriceIds(process.env);
+  const seatPriceIds: readonly string[] = [
+    trainerSeatPriceIds.trainerSeatMonthly,
+    trainerSeatPriceIds.trainerSeatAnnual,
+  ].filter((id): id is string => id !== undefined);
   const seatSyncService = new SeatSyncService(
     new TrainerSeatSource(trainerAssignmentRepo),
     new SeatSyncStore(database),
@@ -672,6 +687,7 @@ export async function buildApp(
         "seat-sync outbound Stripe update failed; drift will be healed by the reconcile sweep",
       ),
     seatBillingEnabled,
+    seatPriceIds,
   );
 
   // `trainerAssignmentRepo` is constructed above (reused by `planRoutes`'

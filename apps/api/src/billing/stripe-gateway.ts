@@ -301,11 +301,25 @@ export interface PriceGateway {
  * pro-rated charge/credit on add/remove (design Q3). `idempotencyKey` MUST be
  * supplied by the caller so a retried outbound call is safe; this port does
  * not generate one itself.
+ *
+ * SEAT-PRICE GUARD (fix/seat-sync-price-guard): `seatPriceIds` is the caller's
+ * configured Trainer Seat Stripe Price ids. `SEAT_BILLING_ENABLED` only defers
+ * the outbound call, it never proves the subscription IS a per-seat one — the
+ * trainer/gym tier is granted by an independent admin override, so a tenant
+ * can hold a flat Pro subscription AND a trainer override at the same time.
+ * Without this guard, enabling seat billing would mutate that Pro
+ * subscription's quantity (unwanted proration on a real customer) on the
+ * first client accept/revoke. The adapter MUST read the retrieved
+ * subscription's first item price id and skip the update entirely — no
+ * `stripe.subscriptions.update` call at all — unless that price id is a
+ * member of `seatPriceIds`. An empty `seatPriceIds` (no seat price configured)
+ * means EVERY call is a no-op, which is the correct fail-closed default.
  */
 export interface SubscriptionGateway {
   updateSubscriptionQuantity(
     subscriptionId: string,
     quantity: number,
     idempotencyKey: string,
+    seatPriceIds: readonly string[],
   ): Promise<void>;
 }
