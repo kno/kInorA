@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, StatsIcon, UserIcon } from "@/components/icons";
+import { BrandingIcon, CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, StatsIcon, UserIcon } from "@/components/icons";
 import { isActivePath } from "./nav-utils";
 import { logoutAction } from "@/app/(app)/dashboard/actions";
 import styles from "./MobileNav.module.css";
@@ -13,7 +13,7 @@ interface TabItem {
   labelKey: string;
   label?: string;
   href: string;
-  icon: "home" | "plan" | "stats" | "history" | "exercises" | "profile" | "memory" | "billing" | "admin";
+  icon: "home" | "plan" | "stats" | "history" | "exercises" | "profile" | "memory" | "billing" | "admin" | "branding";
 }
 
 // Primary destinations always visible in the bottom bar.
@@ -45,10 +45,12 @@ export function MobileNav({
   memoryNavLabel,
   billingNavLabel,
   isAdmin,
+  isGym,
 }: {
   memoryNavLabel?: string;
   billingNavLabel?: string;
   isAdmin?: boolean;
+  isGym?: boolean;
 } = {}) {
   const t = useTranslations();
   const pathname = usePathname();
@@ -67,6 +69,9 @@ export function MobileNav({
       : []),
     ...(isAdmin === true
       ? [{ labelKey: "appNav.admin", href: "/admin", icon: "admin" as const }]
+      : []),
+    ...(isGym === true
+      ? [{ labelKey: "appNav.branding", href: "/branding", icon: "branding" as const }]
       : []),
   ];
 
@@ -248,6 +253,8 @@ function TabIcon({ name }: { name: TabItem["icon"] }) {
       return <StatsIcon className={styles.icon} size={22} />;
     case "admin":
       return <UserIcon className={styles.icon} size={22} />;
+    case "branding":
+      return <BrandingIcon className={styles.icon} size={22} />;
   }
 }
 

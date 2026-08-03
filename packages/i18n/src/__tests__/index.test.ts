@@ -403,11 +403,15 @@ describe("@kinora/i18n package assembly", () => {
     // more, logout = 9 web app-shell nav-label keys (MobileNav + SidebarNav).
     // + 1 `appNav.admin` authored for GH #306 (admin backoffice access point:
     // conditional Admin nav entry in SidebarNav + MobileNav's overflow menu).
-    expect(appNavKeys).toHaveLength(10);
+    // + 1 `appNav.branding` authored for the gym Branding Studio nav entry
+    // (conditional entry visible only to gym-tier tenants, mirroring admin).
+    expect(appNavKeys).toHaveLength(11);
     expect(flat["appNav.dashboard"]).toBe("Dashboard");
     expect(flattenMessages(catalogs.es)["appNav.dashboard"]).toBe("Panel");
     expect(flat["appNav.admin"]).toBeTruthy();
     expect(flattenMessages(catalogs.es)["appNav.admin"]).toBeTruthy();
+    expect(flat["appNav.branding"]).toBeTruthy();
+    expect(flattenMessages(catalogs.es)["appNav.branding"]).toBeTruthy();
   });
 
   it("the admin namespace is present with EN+ES parity (GH #306 — admin backoffice access point)", () => {

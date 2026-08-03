@@ -114,6 +114,28 @@ describe("MobileNav", () => {
     expect(screen.queryByRole("menuitem", { name: /Admin/i })).toBeNull();
   });
 
+  it("shows Branding in the overflow menu when isGym is true (GH #322)", () => {
+    renderWithIntl(<MobileNav isGym />);
+
+    fireEvent.click(screen.getByRole("button", { name: /More/i }));
+
+    expect(screen.getByRole("menuitem", { name: /Branding/i })).toBeTruthy();
+  });
+
+  it("omits Branding from the overflow menu when isGym is false or not provided", () => {
+    renderWithIntl(<MobileNav />);
+
+    fireEvent.click(screen.getByRole("button", { name: /More/i }));
+
+    expect(screen.queryByRole("menuitem", { name: /Branding/i })).toBeNull();
+  });
+
+  it("does NOT render Branding as a primary bar tab even when isGym is true", () => {
+    renderWithIntl(<MobileNav isGym />);
+
+    expect(screen.queryByRole("link", { name: /^Branding$/i })).toBeNull();
+  });
+
   it("closes the menu when selecting an overflow item", () => {
     renderWithIntl(<MobileNav />);
 

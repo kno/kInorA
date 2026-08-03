@@ -44,6 +44,7 @@ export default async function AppLayout({
   let user: SidebarUser | undefined;
   let brandingStyle: string | null = null;
   let isAdmin = false;
+  let isGym = false;
   if (token) {
     const [profile, branding] = await Promise.all([
       fetchProfile(token),
@@ -57,9 +58,13 @@ export default async function AppLayout({
       };
       isAdmin = profile.isAdmin === true;
     }
-    if (branding) {
-      brandingStyle = buildGymStyleBlock(branding.palette);
+    if (branding.kind === "ok") {
+      brandingStyle = buildGymStyleBlock(branding.data.palette);
     }
+    // GH #322: derived from the SAME branding fetch above — no new
+    // endpoint. "forbidden" (403) is the only non-gym outcome; "ok" and
+    // "not_found" (404, gym tenant with no branding row yet) are both gym.
+    isGym = branding.kind === "ok" || branding.kind === "not_found";
   }
 
   return (
@@ -70,6 +75,7 @@ export default async function AppLayout({
         memoryNavLabel={t("memory.navLabel")}
         billingNavLabel={t("billing.navLabel")}
         isAdmin={isAdmin}
+        isGym={isGym}
       >
         {children}
       </AppShell>
