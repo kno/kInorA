@@ -9,9 +9,12 @@
  *      the WS upgrade — NO session token is passed to client JS or placed in
  *      the WS URL (issue #42). The server (routes/ws.ts) reads the cookie.
  *   2. Merges WS-pushed status with the server-fetched initial status.
- *   3. When WS pushes "ready" but the initial render had no program (was still
- *      "generating" at SSR), calls getPlanStatusAction (a server action) to
- *      fetch the program server-side. The browser never calls the API directly.
+ *   3. When the plan resolves to "ready" and there is NO active workout
+ *      session, redirects the browser to the canonical `/plan?planId=<id>`
+ *      page (PlanWeekView) via `router.replace`. The legacy in-page program
+ *      list is gone — the canonical page owns the ready rendering and the
+ *      workout-start path. `replace` (not `push`) keeps the intermediate
+ *      `/plan/[id]` screen out of the Back-button history.
  *   4. Handles the "Regenerate" button via regeneratePlanAction (a server
  *      action in create-plan/actions.ts) — the browser never fetches the API.
  *
@@ -22,14 +25,13 @@
  * tradeoff. Prod proxies the API same-origin so the cookie path works.
  */
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { usePlanWs } from "@/hooks/use-plan-ws";
-import { getPlanStatusAction } from "./actions";
 import { regeneratePlanAction } from "@/app/(app)/create-plan/actions";
 import { PlanStatusView } from "./PlanStatusView";
 import { TrackerPanel } from "./TrackerPanel";
 import { useWorkoutSession } from "@/app/(app)/plan/use-workout-session";
-import type { WorkoutProgram } from "@kinora/contracts";
 
 export interface PlanStatusClientProps {
   planId: string;
@@ -37,7 +39,6 @@ export interface PlanStatusClientProps {
   /** Resolved plan label — shown in the identity header while a session is active. */
   planName?: string;
   initialStatus: string;
-  initialProgram?: WorkoutProgram;
 }
 
 /**
@@ -63,11 +64,7 @@ export function PlanStatusClient({
   specId,
   planName,
   initialStatus,
-  initialProgram,
 }: PlanStatusClientProps) {
-  const [program, setProgram] = useState<WorkoutProgram | undefined>(
-    initialProgram,
-  );
   const [regenerating, setRegenerating] = useState(false);
   // #93 Slice 3: the start/record/complete lifecycle (including the 409-conflict
   // branch, the completion-return-to-plan fix, the throw guard, and the day
@@ -79,11 +76,11 @@ export function PlanStatusClient({
     conflict,
     error,
     syncNotice,
-    handleStartWorkout: startWorkout,
     handleRecordSet,
     handleCompleteWorkout,
   } = useWorkoutSession();
 
+  const router = useRouter();
   const t = useTranslations();
   const errorKey = error ? ERROR_KEYS[error] ?? GENERIC_ERROR_KEY : undefined;
   // Phase 4 web offline: surface a notice regardless of which view is
@@ -115,21 +112,21 @@ export function PlanStatusClient({
     initialStatus,
   });
 
-  // When WS pushes "ready" but we have no program content (the page was
-  // server-rendered while still "generating"), fetch the program via a server
-  // action. The server action calls the API server-to-server (internal
-  // API_BASE_URL) — the browser never touches the API directly.
+  // Post-generation navigation: once the plan is "ready", hand off to the
+  // canonical `/plan` page (PlanWeekView), which renders the polished week
+  // view AND owns the workout-start path. We use `router.replace` (not
+  // `push`) so the Back button does not return to this intermediate
+  // `/plan/[id]` screen.
+  //
+  // Guard: never redirect while a workout session is active — that would yank
+  // the user out of the live tracker. No redirect loop is possible: the
+  // canonical `/plan` page renders a `ready` plan inline and only redirects a
+  // `generating` plan back to `/plan/[id]`, so a `ready` → `/plan` hop settles.
   useEffect(() => {
-    if (status === "ready" && !program) {
-      void getPlanStatusAction(planId).then((result) => {
-        if (result.kind === "ok" && result.plan.program) {
-          setProgram(result.plan.program as WorkoutProgram);
-        }
-      });
+    if (status === "ready" && !activeSession) {
+      router.replace(`/plan?planId=${planId}`);
     }
-    // Only trigger when status changes to "ready" — program is stable once set.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [status, activeSession, planId, router]);
 
   const handleRegenerate = useCallback(async () => {
     if (!specId) return;
@@ -139,20 +136,13 @@ export function PlanStatusClient({
       // regeneratePlanAction reads the session cookie server-side and calls
       // POST /plan-specs/:specId/regenerate via the internal API_BASE_URL.
       await regeneratePlanAction(specId);
-      // Status will be pushed via WS; clear the stale program
-      setProgram(undefined);
+      // Status will be pushed via WS; the ready redirect then takes over.
     } catch {
       // Network error — user can try again
     } finally {
       setRegenerating(false);
     }
   }, [specId]);
-
-  // Bind the shared start handler to this plan's id (the hook is plan-agnostic).
-  const handleStartWorkout = useCallback(
-    (day: number) => startWorkout(planId, day),
-    [startWorkout, planId],
-  );
 
   if (activeSession) {
     // The tracker takes over the whole view. Re-supply the plan name + day
@@ -210,10 +200,8 @@ export function PlanStatusClient({
       <PlanStatusView
         planId={planId}
         status={regenerating ? "generating" : status}
-        program={program}
         specId={specId}
         onRegenerate={handleRegenerate}
-        onStartWorkout={handleStartWorkout}
       />
     </>
   );
