@@ -100,10 +100,8 @@ import type {
   PortalGateway,
   PriceGateway,
   StripeGateway,
-  SubscriptionGateway,
 } from "./billing/stripe-gateway.js";
-import { SeatSyncService, TrainerSeatSource } from "./billing/seat-sync.js";
-import { SeatSyncStore } from "./db/repositories/seat-sync-store.js";
+import { buildSeatSyncService } from "./billing/seat-sync-factory.js";
 import { CreateCheckout, type CheckoutPriceConfig } from "./billing/create-checkout.js";
 import { ResolveBillingPricing } from "./billing/billing-pricing.js";
 import {
@@ -647,48 +645,28 @@ export async function buildApp(
   // the accept/revoke transitions in `trainerRoutes` below, so the service is
   // constructed here (ahead of that registration). `realStripeGateway` is the
   // single SDK adapter built once from env (reused by the checkout/portal/
-  // webhook wiring further down); when Stripe env is unset it is null and a
-  // fail-closed subscription gateway is used — never actually reached, because
-  // no tenant holds a `stripe_subscription_id` on an unconfigured deploy, so
-  // `syncSeats` short-circuits to a no-op before any outbound call.
+  // webhook wiring further down); when Stripe env is unset it is null and the
+  // factory's fail-closed fallback gateway is used — never actually reached,
+  // because no tenant holds a `stripe_subscription_id` on an unconfigured
+  // deploy, so `syncSeats` short-circuits to a no-op before any outbound call.
+  //
+  // Built via the SAME `buildSeatSyncService` factory the standalone cron
+  // entrypoint (`scripts/reconcile-seats.mjs`) uses, so the running server and
+  // the scheduled reconcile sweep can never drift from each other's wiring
+  // (flag read, seat-price guard, fail-closed fallback). `trainerAssignmentRepo`
+  // and `realStripeGateway` are reused (both constructed once, elsewhere in
+  // this file, for other routes) rather than rebuilt.
   const realStripeGateway = createStripeGatewayFromEnv();
-  const seatSyncSubscriptionGateway: SubscriptionGateway = realStripeGateway ?? {
-    async updateSubscriptionQuantity() {
-      throw new Error("stripe unconfigured — seat sync unavailable");
-    },
-  };
-  // Migration/Rollout gate (design.md, Judgment Day fix): the outbound Stripe
-  // quantity mutation is feature-flagged OFF by default until the per-seat
-  // Stripe product (Slice E) ships — parsed the SAME way as the existing
-  // `VOICE_USE_MOCK` boolean env flag (`=== "1"`, default off).
-  const seatBillingEnabled = process.env["SEAT_BILLING_ENABLED"] === "1";
-  // SEAT-PRICE GUARD (fix/seat-sync-price-guard): the configured Trainer Seat
-  // Stripe Price ids (monthly + annual), filtered to only the ones actually
-  // set. `SEAT_BILLING_ENABLED` alone never proves a sponsor's subscription
-  // IS a per-seat one — the trainer/gym tier is granted by an independent
-  // admin override, so a tenant can hold a flat Pro subscription AND a
-  // trainer override at once. The gateway skips the outbound mutation
-  // entirely unless the sponsor's subscription price is one of these ids.
-  // When the env is unset, this list is empty, so the guard skips every
-  // call — the correct fail-closed default (no seat prices configured = never
-  // mutate).
-  const trainerSeatPriceIds = resolveTrainerSeatPriceIds(process.env);
-  const seatPriceIds: readonly string[] = [
-    trainerSeatPriceIds.trainerSeatMonthly,
-    trainerSeatPriceIds.trainerSeatAnnual,
-  ].filter((id): id is string => id !== undefined);
-  const seatSyncService = new SeatSyncService(
-    new TrainerSeatSource(trainerAssignmentRepo),
-    new SeatSyncStore(database),
-    seatSyncSubscriptionGateway,
-    (tenantId, error) =>
+  const seatSyncService = buildSeatSyncService({
+    database,
+    trainerAssignmentRepo,
+    stripeGateway: realStripeGateway ?? undefined,
+    onError: (tenantId, error) =>
       app.log.warn(
         { tenantId, err: error instanceof Error ? error.message : String(error) },
         "seat-sync outbound Stripe update failed; drift will be healed by the reconcile sweep",
       ),
-    seatBillingEnabled,
-    seatPriceIds,
-  );
+  });
 
   // `trainerAssignmentRepo` is constructed above (reused by `planRoutes`'
   // `trainerAccess` option) — do not re-instantiate.
