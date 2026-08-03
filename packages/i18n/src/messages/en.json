@@ -1298,6 +1298,86 @@
       "generic": "An error occurred. Please try again."
     }
   },
+  "brandingStudio": {
+    "eyebrow": "White-label",
+    "title": "Branding Studio",
+    "description": "Craft your gym's identity and watch it come to life in the live preview.",
+    "subdomain": {
+      "label": "Subdomain",
+      "placeholder": "your-gym",
+      "hint": "Lowercase letters, numbers and hyphens. This is your members' sign-in address.",
+      "invalid": "Use 1–32 lowercase letters, numbers or hyphens (no leading or trailing hyphen).",
+      "urlPreviewLabel": "Sign-in address preview"
+    },
+    "logo": {
+      "label": "Logo",
+      "dropHint": "Drag & drop or click to upload",
+      "browse": "Browse files",
+      "formats": "PNG, JPEG, SVG or WebP · up to 5 MB",
+      "uploading": "Uploading…",
+      "uploadError": "Couldn't upload that logo. Please try again.",
+      "unsupported": "That file type isn't supported. Use PNG, JPEG, SVG or WebP.",
+      "tooLarge": "That logo is too large. The limit is 5 MB.",
+      "remove": "Remove logo",
+      "alt": "Gym logo",
+      "empty": "No logo yet"
+    },
+    "palette": {
+      "label": "Palette",
+      "hint": "Set any token you like — anything you leave untouched falls back to the kInorA defaults."
+    },
+    "groups": {
+      "brand": "Brand",
+      "surfaces": "Surfaces",
+      "text": "Text"
+    },
+    "tokens": {
+      "accent": "Accent",
+      "accentFg": "Accent text",
+      "surface": "Surface",
+      "surface2": "Raised surface",
+      "fg": "Foreground",
+      "muted": "Muted text"
+    },
+    "presets": {
+      "label": "Presets",
+      "lime": "Lime",
+      "ember": "Ember",
+      "ocean": "Ocean",
+      "reset": "Reset to defaults"
+    },
+    "contrast": {
+      "label": "Contrast check",
+      "accentPair": "Accent vs. accent text",
+      "textPair": "Text vs. surface",
+      "pass": "Good contrast",
+      "warn": "Low contrast"
+    },
+    "preview": {
+      "label": "Live preview",
+      "navDashboard": "Dashboard",
+      "navPlan": "My plan",
+      "navProgress": "Progress",
+      "headerTitle": "Today",
+      "cardTitle": "Upper body strength",
+      "cardBody": "Four exercises · about 45 minutes. Your coach adjusted the load for today.",
+      "primaryCta": "Start session",
+      "secondaryCta": "View plan",
+      "mutedNote": "Last trained 2 days ago",
+      "badge": "Pro",
+      "logoFallback": "Your logo"
+    },
+    "save": {
+      "button": "Save branding",
+      "saving": "Saving…",
+      "saved": "Branding saved."
+    },
+    "errors": {
+      "conflict": "This subdomain is already taken.",
+      "invalid": "Please check the colors and try again.",
+      "generic": "Something went wrong. Please try again."
+    }
+  },
   "logs": {
     "title": "Logs & Observability",
     "description": "Inspect platform audit and application log events across tenants.",

@@ -149,7 +149,11 @@ describe("@kinora/i18n package assembly", () => {
         // GH #309: the `platformStats.*` /admin/stats platform-statistics
         // namespace has its own scoped count test below, per the frozen-total
         // convention. (Distinct from the existing progress-dashboard `stats.*`.)
-        !key.startsWith("platformStats."),
+        !key.startsWith("platformStats.") &&
+        // 16a-v3-gym-white-label: the `brandingStudio.*` /branding white-label
+        // studio namespace has its own scoped count test below, per the
+        // frozen-total convention.
+        !key.startsWith("brandingStudio."),
     );
     // +1 `tracker.restartLabel` authored for #251 (restart-timer control on
     // the live tracker topbar; pause/restart now persist across navigation).
@@ -484,6 +488,26 @@ describe("@kinora/i18n package assembly", () => {
     expect(flattenMessages(catalogs.es)["platformStats.title"]).toBeTruthy();
     expect(flat["platformStats.billing.effectiveTier"]).toBeTruthy();
     expect(flat["platformStats.observability.errors24h"]).toBeTruthy();
+  });
+
+  it("the brandingStudio namespace is present with EN+ES parity (16a-v3-gym-white-label — Branding Studio)", () => {
+    expect(catalogs.en.brandingStudio).toBeDefined();
+    expect(catalogs.es.brandingStudio).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+
+    const flat = flattenMessages(catalogs.en);
+    const keys = Object.keys(flat).filter((key) => key.startsWith("brandingStudio."));
+    // eyebrow/title/description (3) + subdomain x5 + logo x11 + palette x2 +
+    // groups x3 + tokens x6 + presets x5 + contrast x5 + preview x13 +
+    // save x3 + errors x3 = 58 keys for the /branding white-label studio.
+    expect(keys).toHaveLength(58);
+    expect(flat["brandingStudio.title"]).toBeTruthy();
+    expect(flattenMessages(catalogs.es)["brandingStudio.title"]).toBeTruthy();
+    expect(flat["brandingStudio.errors.conflict"]).toContain("already taken");
+    expect(flat["brandingStudio.tokens.accent"]).toBeTruthy();
   });
 
   it("flattenMessages + mergeWithBase compose over the full catalogs", () => {
