@@ -23,9 +23,16 @@ vi.mock("next/navigation", () => ({
 // branding tests below can simulate a present session token for a single
 // describe block while the pre-existing tests keep the "no token" default.
 const jarGet = vi.fn((_name: string) => undefined as { value: string } | undefined);
+// `headersGet` mirrors `jarGet`: a controllable `vi.fn` backing the mocked
+// `headers()` request accessor so the host-based theming tests can simulate
+// the request `Host` header (apex vs. gym subdomain) per test.
+const headersGet = vi.fn((_name: string) => undefined as string | undefined);
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({
     get: (...args: [string]) => jarGet(...args),
+  })),
+  headers: vi.fn(async () => ({
+    get: (...args: [string]) => headersGet(...args),
   })),
 }));
 
@@ -50,6 +57,24 @@ vi.mock("../auth/profile-client", () => ({
 const fetchOwnBranding = vi.fn(async (_token: string) => ({ kind: "forbidden" }) as unknown);
 vi.mock("../auth/gym-branding-client", () => ({
   fetchOwnBranding: (...args: [string]) => fetchOwnBranding(...args),
+}));
+
+// GH white-label bleed fix — app-shell theming is now HOST-based, mirroring
+// the public pages (`page.tsx`, `(auth)/login/page.tsx`): the request `Host`
+// header is resolved to a gym slug (`@/lib/gym-slug`) and, when present, the
+// PUBLIC read-by-slug endpoint (`@/lib/gym-branding-client`) drives the
+// `<style>` injection. `fetchOwnBranding` still runs but ONLY to derive the
+// gym-tier `isGym` nav gate — never the theme. Both helpers are mocked so the
+// host/slug and public-branding outcomes are controllable per test.
+const extractGymSlugFromHost = vi.fn((_host: string | null | undefined) => null as string | null);
+vi.mock("@/lib/gym-slug", () => ({
+  extractGymSlugFromHost: (...args: [string | null | undefined]) =>
+    extractGymSlugFromHost(...args),
+}));
+
+const fetchPublicBranding = vi.fn(async (_slug: string) => null as unknown);
+vi.mock("@/lib/gym-branding-client", () => ({
+  fetchPublicBranding: (...args: [string]) => fetchPublicBranding(...args),
 }));
 
 vi.mocked(usePathname);
@@ -114,55 +139,84 @@ describe("AppLayout (app route group)", () => {
   });
 });
 
-// 16a-v3-gym-white-label, Slice 5 — whole-app root-layout theming for
-// logged-in members (tasks 5.1-5.2). Reuses S4's `buildGymStyleBlock` (moved
-// to `@/lib/gym-style` in this slice) so both the login page and this layout
-// share ONE implementation.
-describe("AppLayout — gym branding", () => {
+// White-label bleed fix — whole-app root-layout theming is HOST-based, not
+// tenant-based. The gym palette is resolved from the request `Host` header via
+// the PUBLIC read-by-slug endpoint (mirroring the public `page.tsx` and login
+// page), so on the apex a logged-in gym owner sees the DEFAULT kInorA theme,
+// while on a gym subdomain EVERYONE (owner and clients) gets the gym palette.
+// Reuses S4's `buildGymStyleBlock` (in `@/lib/gym-style`) so the public pages
+// and this layout share ONE implementation.
+const GYM_PALETTE = {
+  accent: "#112233",
+  accentFg: "#ffffff",
+  surface: "#000000",
+  surface2: "#111111",
+  fg: "#eeeeee",
+  muted: "#999999",
+};
+
+describe("AppLayout — gym branding (host-based theming)", () => {
   afterEach(() => {
     jarGet.mockReset().mockReturnValue(undefined);
+    headersGet.mockReset().mockReturnValue(undefined);
     fetchOwnBranding.mockReset().mockResolvedValue({ kind: "forbidden" });
+    extractGymSlugFromHost.mockReset().mockReturnValue(null);
+    fetchPublicBranding.mockReset().mockResolvedValue(null);
   });
 
-  it("injects an inline <style> with the member's own-tenant --gym-* palette when a session token resolves branding", async () => {
+  it("injects an inline <style> with the host gym's --gym-* palette on a gym subdomain", async () => {
     jarGet.mockReturnValue({ value: "session-token-123" });
-    fetchOwnBranding.mockResolvedValue({
-      kind: "ok",
-      data: {
-        logoUrl: "/media/branding/abc",
-        palette: {
-          accent: "#112233",
-          accentFg: "#ffffff",
-          surface: "#000000",
-          surface2: "#111111",
-          fg: "#eeeeee",
-          muted: "#999999",
-        },
-      },
+    headersGet.mockReturnValue("gymx.kinora.aitsai.com");
+    extractGymSlugFromHost.mockReturnValue("gymx");
+    fetchPublicBranding.mockResolvedValue({
+      logoUrl: "/media/branding/abc",
+      palette: GYM_PALETTE,
     });
 
     const html = renderToStringWithIntl(
       await AppLayout({ children: <p>Page content here</p> })
     );
 
-    expect(fetchOwnBranding).toHaveBeenCalledWith("session-token-123");
+    expect(extractGymSlugFromHost).toHaveBeenCalledWith("gymx.kinora.aitsai.com");
+    expect(fetchPublicBranding).toHaveBeenCalledWith("gymx");
     expect(html).toContain("--gym-accent:#112233");
     expect(html).toContain("--gym-surface:#000000");
   });
 
-  it("renders no gym <style> (default kInorA tokens) when the member's tenant has no branding", async () => {
+  // Regression guard for the reported bleed: a gym OWNER (own-tenant branding
+  // resolves "ok") browsing the APEX (no slug) must NOT get their gym theme —
+  // the apex renders the default kInorA theme for everyone.
+  it("renders no gym <style> on the apex even for a gym-owner session (regression guard)", async () => {
     jarGet.mockReturnValue({ value: "session-token-123" });
-    fetchOwnBranding.mockResolvedValue({ kind: "not_found" });
+    headersGet.mockReturnValue("kinora.aitsai.com");
+    extractGymSlugFromHost.mockReturnValue(null);
+    fetchOwnBranding.mockResolvedValue({ kind: "ok", data: { logoUrl: null, palette: GYM_PALETTE } });
 
     const html = renderToStringWithIntl(
       await AppLayout({ children: <p>Page content here</p> })
     );
 
-    expect(fetchOwnBranding).toHaveBeenCalledWith("session-token-123");
+    // No slug ⇒ the public branding fetch is skipped and no theme is injected,
+    // regardless of the owner's own-tenant branding.
+    expect(fetchPublicBranding).not.toHaveBeenCalled();
     expect(html).not.toContain("--gym-accent");
   });
 
-  it("skips the branding fetch entirely when there is no session token", async () => {
+  it("renders no gym <style> when the host slug has no public branding row", async () => {
+    jarGet.mockReturnValue({ value: "session-token-123" });
+    headersGet.mockReturnValue("gymx.kinora.aitsai.com");
+    extractGymSlugFromHost.mockReturnValue("gymx");
+    fetchPublicBranding.mockResolvedValue(null);
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    expect(fetchPublicBranding).toHaveBeenCalledWith("gymx");
+    expect(html).not.toContain("--gym-accent");
+  });
+
+  it("skips both branding fetches entirely when there is no session token", async () => {
     jarGet.mockReturnValue(undefined);
 
     const html = renderToStringWithIntl(
@@ -170,6 +224,7 @@ describe("AppLayout — gym branding", () => {
     );
 
     expect(fetchOwnBranding).not.toHaveBeenCalled();
+    expect(fetchPublicBranding).not.toHaveBeenCalled();
     expect(html).not.toContain("--gym-accent");
   });
 });
@@ -182,7 +237,10 @@ describe("AppLayout — gym branding", () => {
 describe("AppLayout — isGym derivation for the Branding nav entry (GH #322)", () => {
   afterEach(() => {
     jarGet.mockReset().mockReturnValue(undefined);
+    headersGet.mockReset().mockReturnValue(undefined);
     fetchOwnBranding.mockReset().mockResolvedValue({ kind: "forbidden" });
+    extractGymSlugFromHost.mockReset().mockReturnValue(null);
+    fetchPublicBranding.mockReset().mockResolvedValue(null);
   });
 
   it("wires isGym=true through to the AppShell when the branding fetch resolves ok", async () => {
@@ -239,5 +297,23 @@ describe("AppLayout — isGym derivation for the Branding nav entry (GH #322)", 
     );
 
     expect(html).not.toContain('href="/branding"');
+  });
+
+  // isGym gating is driven by `fetchOwnBranding` (the tenant's gym-tier
+  // entitlement), NOT by the request host. A gym owner on the APEX (no slug,
+  // default theme) must still see the "Marca"/branding nav entry.
+  it("keeps isGym=true on the apex (no slug, default theme) for a gym-owner session", async () => {
+    jarGet.mockReturnValue({ value: "session-token-123" });
+    headersGet.mockReturnValue("kinora.aitsai.com");
+    extractGymSlugFromHost.mockReturnValue(null);
+    fetchOwnBranding.mockResolvedValue({ kind: "not_found" });
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    // Nav entry present (gym-tier) even though NO gym theme is injected.
+    expect(html).toContain('href="/branding"');
+    expect(html).not.toContain("--gym-accent");
   });
 });
