@@ -18,8 +18,9 @@
  * default `vitest run` stays hermetic.
  */
 import { afterAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { createDbClient } from "../../client.js";
-import { tenants, users } from "../../schema.js";
+import { tenants, users, planSpecs, workoutPlans } from "../../schema.js";
 import { TrainerAssignmentRepository } from "../trainer-assignment.js";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -87,6 +88,43 @@ describe.skipIf(!hasDb)("TrainerAssignmentRepository (real Postgres, 15a-v2 Slic
 
     const found = await repo.findActiveAssignment(tenantId, trainerUserId, clientUserId);
     expect(found).toBeUndefined();
+  });
+
+  // 16c-v3-b2b-seat-billing Slice F (design "Downgrade / lapse behavior"):
+  // "Client keeps ALL existing generated plans/data (untouched)" — revoking
+  // the assignment must never cascade-delete or otherwise touch the client's
+  // own plan_specs/workout_plans rows.
+  it("16c Slice F: revoking an assignment retains the client's plan_specs and workout_plans untouched", async () => {
+    const tenantId = await seedTenant();
+    const trainerUserId = await seedUser();
+    const clientUserId = await seedUser();
+
+    const assignment = await repo.create(tenantId, trainerUserId, clientUserId, "active");
+
+    const [spec] = await db
+      .insert(planSpecs)
+      .values({ tenantId, userId: clientUserId, specJson: { goal: "strength" } })
+      .returning({ id: planSpecs.id });
+    await db.insert(workoutPlans).values({
+      tenantId,
+      userId: clientUserId,
+      planSpecId: spec!.id,
+      status: "ready",
+      programJson: { weeks: [] },
+    });
+
+    await repo.updateStatus(tenantId, assignment.id, "revoked");
+
+    // The client-visible data is completely untouched by the revoke.
+    const specs = await db.select().from(planSpecs).where(eq(planSpecs.userId, clientUserId));
+    expect(specs).toHaveLength(1);
+    const plans = await db.select().from(workoutPlans).where(eq(workoutPlans.userId, clientUserId));
+    expect(plans).toHaveLength(1);
+    expect(plans[0]?.status).toBe("ready");
+
+    // ...and future trainer-mediated generation for the client is denied.
+    const active = await repo.findActiveAssignment(tenantId, trainerUserId, clientUserId);
+    expect(active).toBeUndefined();
   });
 
   it("enforces one-active-trainer-per-client via the partial unique index", async () => {

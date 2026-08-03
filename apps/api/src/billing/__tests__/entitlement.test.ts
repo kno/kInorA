@@ -107,6 +107,53 @@ describe("resolveEffectiveTier", () => {
     expect(eff).toEqual({ tier: "free", source: "stripe", lapsedReason: "subscription_ended" });
   });
 
+  // 16c-v3-b2b-seat-billing Slice F (design "Downgrade / lapse behavior"): the
+  // trainer/gym tier is granted ONLY by the 16d admin override — the webhook
+  // NEVER writes tier="trainer" (it always writes "pro", Q5). So a lapsed
+  // seat subscription (status='expired', source='stripe', seatCount zeroed by
+  // this slice) on its own can NEVER have been the source of a "trainer" tier
+  // to begin with; it resolves to Free like any other canceled paid sub.
+  it("a lapsed seat subscription with NO active override resolves to free (never 'trainer') — trainer-mediated generation would be blocked", () => {
+    const lapsedSponsor: EntitlementContext = {
+      membershipStatus: "active",
+      billing: {
+        tier: "pro",
+        status: "expired",
+        source: "stripe",
+        trialStartedAt: null,
+        trialEndsAt: null,
+        seatCount: null, // zeroed by the Slice F webhook write on cancel/expiry.
+      },
+      activeOverrideTier: null,
+    };
+    const eff = resolveEffectiveTier(lapsedSponsor, NOW);
+    expect(eff).toEqual({ tier: "free", source: "stripe", lapsedReason: "subscription_ended" });
+  });
+
+  // The precedence check in `resolveEffectiveTier` is unconditional: it reads
+  // `ctx.activeOverrideTier` FIRST and returns immediately, before ever
+  // inspecting `ctx.billing`. So a sponsor's own seat subscription lapsing has
+  // NO EFFECT on the tier as long as an admin override window (16d) is still
+  // active — the trainer tier PERSISTS. This is the documented, intended
+  // interaction: seat-subscription lapse and admin-override expiry are two
+  // fully independent gates, and either one alone can grant "trainer".
+  it("an active admin override still grants 'trainer' even though the sponsor's seat subscription has lapsed (documented interaction)", () => {
+    const lapsedSponsorWithOverride: EntitlementContext = {
+      membershipStatus: "active",
+      billing: {
+        tier: "pro",
+        status: "expired",
+        source: "stripe",
+        trialStartedAt: null,
+        trialEndsAt: null,
+        seatCount: null,
+      },
+      activeOverrideTier: "trainer",
+    };
+    const eff = resolveEffectiveTier(lapsedSponsorWithOverride, NOW);
+    expect(eff).toEqual({ tier: "trainer", source: "admin_override", lapsedReason: null });
+  });
+
   it("lets an active override win over the underlying state with admin_override source", () => {
     const ctx: EntitlementContext = { ...freeActive(), activeOverrideTier: "pro" };
     expect(resolveEffectiveTier(ctx, NOW)).toEqual({
