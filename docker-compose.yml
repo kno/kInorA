@@ -92,6 +92,13 @@ services:
       STRIPE_PRICE_MONTHLY_AMOUNT: ${STRIPE_PRICE_MONTHLY_AMOUNT}
       STRIPE_PRICE_ANNUAL_AMOUNT: ${STRIPE_PRICE_ANNUAL_AMOUNT}
       STRIPE_PRICE_CURRENCY: ${STRIPE_PRICE_CURRENCY}
+      # 16c seat billing — per-seat Trainer Seat prices + the enable flag. Must be
+      # forwarded here or the container never sees them (same class of bug as the
+      # STRIPE_*/VOICE_* omissions above). SEAT_BILLING_ENABLED defaults off; set
+      # it to 1 in the VPS .env to activate the outbound Stripe seat-quantity sync.
+      STRIPE_PRICE_TRAINER_SEAT_MONTHLY: ${STRIPE_PRICE_TRAINER_SEAT_MONTHLY}
+      STRIPE_PRICE_TRAINER_SEAT_ANNUAL: ${STRIPE_PRICE_TRAINER_SEAT_ANNUAL}
+      SEAT_BILLING_ENABLED: ${SEAT_BILLING_ENABLED:-0}
     # No ports — web proxies /api/* through internal network
     command: ["pnpm", "--filter", "api", "start"]
     healthcheck:
