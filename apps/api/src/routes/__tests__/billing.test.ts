@@ -164,7 +164,12 @@ interface CheckoutFake {
   useCase: CreateCheckout;
 }
 
-const CHECKOUT_PRICING = { priceMonthly: "price_monthly_cfg", priceAnnual: "price_annual_cfg" };
+const CHECKOUT_PRICING = {
+  priceMonthly: "price_monthly_cfg",
+  priceAnnual: "price_annual_cfg",
+  trainerSeatMonthly: "price_seat_monthly_cfg",
+  trainerSeatAnnual: "price_seat_annual_cfg",
+};
 
 function buildCheckout(
   validation: PromotionCodeValidation = { valid: true, promotionCodeId: "promo_ok" },
@@ -978,6 +983,90 @@ describe("POST /billing/checkout — Stripe checkout (11b Slice 3)", () => {
     const serialized = JSON.stringify(appLogCalls);
     expect(serialized).not.toContain("SECRET-COUPON-XYZ");
     expect(serialized).not.toContain(VALID_TOKEN);
+  });
+
+  it("REGRESSION: an existing Pro checkout request with no product field behaves exactly as today", async () => {
+    const checkout = buildCheckout();
+    app = await buildTestApp(buildFakePort(), undefined, undefined, checkout.useCase);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers: auth,
+      payload: { cycle: "monthly" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const passed = checkout.createSpy.mock.calls[0]![0] as CreateCheckoutSessionInput;
+    expect(passed).toEqual(
+      expect.objectContaining({ priceId: "price_monthly_cfg", promotionCodeId: null }),
+    );
+    expect(passed.quantity).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scenario: POST /billing/checkout — trainer seat product (16c v3 Slice E)
+// ---------------------------------------------------------------------------
+
+describe("POST /billing/checkout — trainer seat product (16c v3 Slice E)", () => {
+  let app: FastifyInstance;
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it('product: "trainer" selects the seat price by cycle and floors quantity to initialSeatCount', async () => {
+    const checkout = buildCheckout();
+    app = await buildTestApp(buildFakePort(), undefined, undefined, checkout.useCase);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers: auth,
+      payload: { cycle: "monthly", product: "trainer", initialSeatCount: 4 },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(checkout.createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ priceId: "price_seat_monthly_cfg", quantity: 4 }),
+    );
+  });
+
+  it('product: "trainer" with a zero/omitted initialSeatCount floors quantity to 1', async () => {
+    const checkout = buildCheckout();
+    app = await buildTestApp(buildFakePort(), undefined, undefined, checkout.useCase);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers: auth,
+      payload: { cycle: "annual", product: "trainer" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(checkout.createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ priceId: "price_seat_annual_cfg", quantity: 1 }),
+    );
+  });
+
+  it('product: "trainer" with an unconfigured seat price → 422 clear error, no session created', async () => {
+    const checkout = buildCheckout();
+    checkout.useCase = new CreateCheckout(checkout.gateway, {
+      priceMonthly: "price_monthly_cfg",
+      priceAnnual: "price_annual_cfg",
+    });
+    app = await buildTestApp(buildFakePort(), undefined, undefined, checkout.useCase);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/billing/checkout",
+      headers: auth,
+      payload: { cycle: "monthly", product: "trainer", initialSeatCount: 2 },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toEqual({ error: "trainer_seat_price_not_configured" });
+    expect(checkout.createSpy).not.toHaveBeenCalled();
   });
 });
 
