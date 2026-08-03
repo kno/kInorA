@@ -111,6 +111,18 @@ export class SeatSyncService {
    *   `gateway.updateSubscriptionQuantity` is NEVER called — a complete no-op
    *   on the Stripe side. Existing tests that assert the Stripe call happens
    *   must pass `true` explicitly.
+   * @param seatPriceIds SEAT-PRICE GUARD (fix/seat-sync-price-guard): the
+   *   configured Trainer Seat Stripe Price ids, forwarded to
+   *   `gateway.updateSubscriptionQuantity` on every call. The gateway skips
+   *   the outbound mutation entirely unless the sponsor's subscription price
+   *   is one of these — `seatSyncEnabled` alone does NOT prove the sponsor's
+   *   subscription is a per-seat one (the trainer/gym tier comes from an
+   *   independent admin override, so a tenant can hold a flat Pro
+   *   subscription AND a trainer override). Config-injected here (not read
+   *   from env) so this pure service stays deterministic/testable; the
+   *   composition root (`app.ts`) builds it from
+   *   `resolveTrainerSeatPriceIds`. An empty array (no seat price configured)
+   *   means every call is a no-op, the correct fail-closed default.
    */
   constructor(
     private readonly seatSource: SeatSource,
@@ -118,6 +130,7 @@ export class SeatSyncService {
     private readonly gateway: SubscriptionGateway,
     private readonly onError?: SeatSyncErrorSink,
     private readonly seatSyncEnabled: boolean = false,
+    private readonly seatPriceIds: readonly string[] = [],
   ) {}
 
   /**
@@ -182,7 +195,12 @@ export class SeatSyncService {
       const idempotencyKey = `seat-sync:${tenantId}:${quantity}`;
 
       try {
-        await this.gateway.updateSubscriptionQuantity(stripeSubscriptionId, quantity, idempotencyKey);
+        await this.gateway.updateSubscriptionQuantity(
+          stripeSubscriptionId,
+          quantity,
+          idempotencyKey,
+          this.seatPriceIds,
+        );
       } catch (error) {
         // Fail-safe: swallow so the (already-committed) assignment is never
         // rolled back and the caller never fails. Drift is healed by the

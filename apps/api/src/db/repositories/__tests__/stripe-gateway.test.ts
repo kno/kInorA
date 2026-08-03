@@ -265,14 +265,20 @@ function fakeSubscriptionStripeClient(
 }
 
 describe("StripeApiGateway.updateSubscriptionQuantity (16c v3 Slice A)", () => {
-  it("retrieves the subscription's first item id and updates quantity with create_prorations + the idempotency key", async () => {
+  it("retrieves the subscription's first item id and updates quantity with create_prorations + the idempotency key when the price IS a configured seat price", async () => {
     const { client, retrieve, update } = fakeSubscriptionStripeClient({
       id: "sub_seat_1",
-      items: { object: "list", data: [{ id: "si_seat_1" }] } as unknown as Stripe.Subscription["items"],
+      items: {
+        object: "list",
+        data: [{ id: "si_seat_1", price: { id: "price_seat_monthly" } }],
+      } as unknown as Stripe.Subscription["items"],
     });
     const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client);
 
-    await gateway.updateSubscriptionQuantity("sub_seat_1", 3, "seat-sync:tenant_1:3");
+    await gateway.updateSubscriptionQuantity("sub_seat_1", 3, "seat-sync:tenant_1:3", [
+      "price_seat_monthly",
+      "price_seat_annual",
+    ]);
 
     expect(retrieve).toHaveBeenCalledWith("sub_seat_1");
     expect(update).toHaveBeenCalledWith(
@@ -290,8 +296,75 @@ describe("StripeApiGateway.updateSubscriptionQuantity (16c v3 Slice A)", () => {
     const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client);
 
     await expect(
-      gateway.updateSubscriptionQuantity("sub_no_items", 2, "seat-sync:tenant_2:2"),
+      gateway.updateSubscriptionQuantity("sub_no_items", 2, "seat-sync:tenant_2:2", ["price_seat_monthly"]),
     ).rejects.toThrow(/no items/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SEAT-PRICE GUARD (fix/seat-sync-price-guard) — the confirmed bug: a tenant
+// can hold a flat Pro subscription AND an independent trainer/gym admin
+// override at the same time. `SEAT_BILLING_ENABLED` alone never proves the
+// sponsor's subscription IS a per-seat Trainer Seat one, so the gateway MUST
+// verify the retrieved subscription's first item price id against the
+// caller-supplied `seatPriceIds` and skip the update ENTIRELY (never call
+// `stripe.subscriptions.update`) when it does not match.
+// ---------------------------------------------------------------------------
+describe("StripeApiGateway.updateSubscriptionQuantity — SEAT-PRICE GUARD (fix/seat-sync-price-guard)", () => {
+  it("does NOT call stripe.subscriptions.update when the subscription's price is NOT a configured seat price (e.g. a flat Pro subscription)", async () => {
+    const { client, retrieve, update } = fakeSubscriptionStripeClient({
+      id: "sub_pro_1",
+      items: {
+        object: "list",
+        data: [{ id: "si_pro_1", price: { id: "price_pro_monthly" } }],
+      } as unknown as Stripe.Subscription["items"],
+    });
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client);
+
+    await gateway.updateSubscriptionQuantity("sub_pro_1", 5, "seat-sync:tenant_pro:5", [
+      "price_seat_monthly",
+      "price_seat_annual",
+    ]);
+
+    expect(retrieve).toHaveBeenCalledWith("sub_pro_1");
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("does NOT call stripe.subscriptions.update when seatPriceIds is empty (no seat price configured yet)", async () => {
+    const { client, update } = fakeSubscriptionStripeClient({
+      id: "sub_pro_2",
+      items: {
+        object: "list",
+        data: [{ id: "si_pro_2", price: { id: "price_pro_annual" } }],
+      } as unknown as Stripe.Subscription["items"],
+    });
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client);
+
+    await gateway.updateSubscriptionQuantity("sub_pro_2", 2, "seat-sync:tenant_pro_2:2", []);
+
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("DOES call stripe.subscriptions.update when the price matches one of the configured seat prices", async () => {
+    const { client, update } = fakeSubscriptionStripeClient({
+      id: "sub_seat_2",
+      items: {
+        object: "list",
+        data: [{ id: "si_seat_2", price: { id: "price_seat_annual" } }],
+      } as unknown as Stripe.Subscription["items"],
+    });
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client);
+
+    await gateway.updateSubscriptionQuantity("sub_seat_2", 4, "seat-sync:tenant_seat:4", [
+      "price_seat_monthly",
+      "price_seat_annual",
+    ]);
+
+    expect(update).toHaveBeenCalledWith(
+      "sub_seat_2",
+      { items: [{ id: "si_seat_2", quantity: 4 }], proration_behavior: "create_prorations" },
+      { idempotencyKey: "seat-sync:tenant_seat:4" },
+    );
   });
 });
 

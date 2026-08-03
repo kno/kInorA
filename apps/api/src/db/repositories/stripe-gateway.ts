@@ -214,16 +214,35 @@ export class StripeApiGateway
    * updating. `proration_behavior: "create_prorations"` charges/credits the
    * difference immediately (design Q3). The caller-supplied `idempotencyKey`
    * makes a retried call safe; this method never generates its own.
+   *
+   * SEAT-PRICE GUARD (fix/seat-sync-price-guard): before touching ANYTHING,
+   * this checks the retrieved subscription's first item price id against the
+   * caller-supplied `seatPriceIds`. `SEAT_BILLING_ENABLED` only defers this
+   * call — it never proves the subscription IS a per-seat Trainer Seat
+   * subscription. The trainer/gym tier is granted by an INDEPENDENT admin
+   * override, so a tenant can hold a flat Pro subscription and a trainer
+   * override at once; without this guard the first client accept/revoke would
+   * mutate that unrelated Pro subscription's quantity (unwanted proration on
+   * a real customer). When the item's price id is not a configured seat
+   * price (or `seatPriceIds` is empty), this returns WITHOUT calling
+   * `stripe.subscriptions.update` at all — a complete no-op on the Stripe
+   * side, never just a skipped mutation after already touching the API.
    */
   async updateSubscriptionQuantity(
     subscriptionId: string,
     quantity: number,
     idempotencyKey: string,
+    seatPriceIds: readonly string[],
   ): Promise<void> {
     const subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
     const item = subscription.items.data[0];
     if (!item) {
       throw new Error(`stripe subscription ${subscriptionId} has no items to update quantity on`);
+    }
+    const priceId = item.price?.id;
+    if (!priceId || !seatPriceIds.includes(priceId)) {
+      // Not a configured Trainer Seat subscription — never mutate it.
+      return;
     }
     await this.stripe.subscriptions.update(
       subscriptionId,
