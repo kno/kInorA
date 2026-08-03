@@ -46,6 +46,37 @@ export function loadStripeConfig(
 }
 
 /**
+ * Optional per-cycle "Trainer Seat" Stripe Price ids (16c v3 Slice E — per-seat
+ * checkout). Read from `STRIPE_PRICE_TRAINER_SEAT_MONTHLY` /
+ * `STRIPE_PRICE_TRAINER_SEAT_ANNUAL`. Deliberately NOT part of {@link
+ * REQUIRED_ENV}/{@link loadStripeConfig}: unlike the Pro price ids, the seat
+ * price is genuinely OPTIONAL (unset until seat billing is enabled) — a blank
+ * or missing value returns `undefined` for that field rather than throwing, so
+ * an unconfigured seat price never breaks the existing Pro checkout config.
+ */
+export interface TrainerSeatPriceIds {
+  trainerSeatMonthly?: string;
+  trainerSeatAnnual?: string;
+}
+
+/** Parse an optional env value: blank/whitespace-only counts as unset. */
+function readOptionalEnv(raw: string | undefined): string | undefined {
+  if (raw === undefined || raw.trim() === "") return undefined;
+  return raw;
+}
+
+export function resolveTrainerSeatPriceIds(
+  env: Record<string, string | undefined> = process.env,
+): TrainerSeatPriceIds {
+  const trainerSeatMonthly = readOptionalEnv(env.STRIPE_PRICE_TRAINER_SEAT_MONTHLY);
+  const trainerSeatAnnual = readOptionalEnv(env.STRIPE_PRICE_TRAINER_SEAT_ANNUAL);
+  return {
+    ...(trainerSeatMonthly !== undefined ? { trainerSeatMonthly } : {}),
+    ...(trainerSeatAnnual !== undefined ? { trainerSeatAnnual } : {}),
+  };
+}
+
+/**
  * Finite, high per-feature monthly Pro caps that replaced the provisional
  * `1_000_000` placeholder (wired into `plan-limits.ts` in Slice 3). Values fit
  * the 32-bit `integer` counter columns and read as generous vs Free (1/1/0/0).

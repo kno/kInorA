@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CreateCheckout } from "../create-checkout.js";
+import { CreateCheckout, TrainerSeatPriceNotConfiguredError } from "../create-checkout.js";
 import {
   InvalidPromotionCodeError,
   type CheckoutGateway,
@@ -28,6 +28,11 @@ import {
 // ---------------------------------------------------------------------------
 
 const PRICING = { priceMonthly: "price_monthly_cfg", priceAnnual: "price_annual_cfg" };
+const SEAT_PRICING = {
+  ...PRICING,
+  trainerSeatMonthly: "price_seat_monthly_cfg",
+  trainerSeatAnnual: "price_seat_annual_cfg",
+};
 const TENANT = "11111111-0000-0000-0000-000000000001";
 
 function fakeGateway(overrides: Partial<CheckoutGateway> = {}): {
@@ -109,5 +114,98 @@ describe("CreateCheckout (11b Slice 3)", () => {
 
   it("re-exports InvalidPromotionCodeError as an Error subclass for the route to map", () => {
     expect(new InvalidPromotionCodeError()).toBeInstanceOf(Error);
+  });
+
+  it("omitting product behaves EXACTLY as today: Pro price, quantity 1, no product field forwarded", async () => {
+    const { gateway, createSpy } = fakeGateway();
+    const uc = new CreateCheckout(gateway, SEAT_PRICING);
+
+    await uc.execute({ tenantId: TENANT, cycle: "monthly" });
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ priceId: "price_monthly_cfg" }),
+    );
+    const passed = createSpy.mock.calls[0]![0] as CreateCheckoutSessionInput;
+    expect(passed.quantity).toBeUndefined();
+  });
+
+  it('product: "pro" (explicit) uses the Pro price + quantity 1 exactly as today', async () => {
+    const { gateway, createSpy } = fakeGateway();
+    const uc = new CreateCheckout(gateway, SEAT_PRICING);
+
+    await uc.execute({ tenantId: TENANT, cycle: "annual", product: "pro" });
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ priceId: "price_annual_cfg" }),
+    );
+    const passed = createSpy.mock.calls[0]![0] as CreateCheckoutSessionInput;
+    expect(passed.quantity).toBeUndefined();
+  });
+});
+
+describe("CreateCheckout — trainer seat product (16c v3 Slice E)", () => {
+  it('product: "trainer" selects the MONTHLY seat price and floors quantity to initialSeatCount', async () => {
+    const { gateway, createSpy } = fakeGateway();
+    const uc = new CreateCheckout(gateway, SEAT_PRICING);
+
+    await uc.execute({
+      tenantId: TENANT,
+      cycle: "monthly",
+      product: "trainer",
+      initialSeatCount: 3,
+    });
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ priceId: "price_seat_monthly_cfg", quantity: 3 }),
+    );
+  });
+
+  it('product: "trainer" selects the ANNUAL seat price by cycle', async () => {
+    const { gateway, createSpy } = fakeGateway();
+    const uc = new CreateCheckout(gateway, SEAT_PRICING);
+
+    await uc.execute({
+      tenantId: TENANT,
+      cycle: "annual",
+      product: "trainer",
+      initialSeatCount: 2,
+    });
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ priceId: "price_seat_annual_cfg", quantity: 2 }),
+    );
+  });
+
+  it("floors quantity to 1 when initialSeatCount is 0 (brand-new trainer, zero-seat rule)", async () => {
+    const { gateway, createSpy } = fakeGateway();
+    const uc = new CreateCheckout(gateway, SEAT_PRICING);
+
+    await uc.execute({
+      tenantId: TENANT,
+      cycle: "monthly",
+      product: "trainer",
+      initialSeatCount: 0,
+    });
+
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ quantity: 1 }));
+  });
+
+  it("floors quantity to 1 when initialSeatCount is omitted", async () => {
+    const { gateway, createSpy } = fakeGateway();
+    const uc = new CreateCheckout(gateway, SEAT_PRICING);
+
+    await uc.execute({ tenantId: TENANT, cycle: "monthly", product: "trainer" });
+
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ quantity: 1 }));
+  });
+
+  it("fails with a clear error (NOT a silent Pro fallback) when the seat price is unconfigured", async () => {
+    const { gateway, createSpy } = fakeGateway();
+    const uc = new CreateCheckout(gateway, PRICING); // no trainerSeatMonthly/Annual configured
+
+    await expect(
+      uc.execute({ tenantId: TENANT, cycle: "monthly", product: "trainer", initialSeatCount: 2 }),
+    ).rejects.toBeInstanceOf(TrainerSeatPriceNotConfiguredError);
+    expect(createSpy).not.toHaveBeenCalled();
   });
 });

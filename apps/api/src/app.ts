@@ -111,7 +111,10 @@ import {
   type BillingCustomerReaderPort,
 } from "./billing/create-portal-session.js";
 import { ListInvoices } from "./billing/list-invoices.js";
-import { validateBillingPricingConfig } from "./billing/pricing-config.js";
+import {
+  resolveTrainerSeatPriceIds,
+  validateBillingPricingConfig,
+} from "./billing/pricing-config.js";
 import { StripeEventStoreRepository } from "./db/repositories/stripe-events.js";
 import { BillingCustomerRepository } from "./db/repositories/billing-customer.js";
 import {
@@ -888,6 +891,10 @@ export function resolveCheckoutPricing(
   return {
     priceMonthly: env.STRIPE_PRICE_MONTHLY ?? "",
     priceAnnual: env.STRIPE_PRICE_ANNUAL ?? "",
+    // 16c v3 Slice E — additive, optional "Trainer Seat" prices. `undefined`
+    // when `STRIPE_PRICE_TRAINER_SEAT_MONTHLY`/`_ANNUAL` are unset (today, in
+    // every deployed env), so the Pro checkout path above is unaffected.
+    ...resolveTrainerSeatPriceIds(env),
   };
 }
 

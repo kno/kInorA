@@ -152,6 +152,12 @@ export interface CreateCheckoutSessionInput {
   cycle: BillingCycle;
   priceId: string;
   promotionCodeId: string | null;
+  /**
+   * Line-item quantity (16c v3 Slice E — per-seat checkout). Undefined on the
+   * Pro path (the adapter defaults to `1`, byte-identical to pre-Slice-E
+   * behavior); set to the floored seat count on the trainer-seat path.
+   */
+  quantity?: number;
 }
 
 /** The Stripe-hosted checkout session URL to redirect the buyer to. */

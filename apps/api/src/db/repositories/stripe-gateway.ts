@@ -129,7 +129,7 @@ export class StripeApiGateway
   async createCheckoutSession(input: CreateCheckoutSessionInput): Promise<CheckoutSession> {
     const session = await this.stripe.checkout.sessions.create({
       mode: "subscription",
-      line_items: [{ price: input.priceId, quantity: 1 }],
+      line_items: [{ price: input.priceId, quantity: input.quantity ?? 1 }],
       client_reference_id: input.tenantId,
       subscription_data: { metadata: { tenantId: input.tenantId, cycle: input.cycle } },
       metadata: { tenantId: input.tenantId },

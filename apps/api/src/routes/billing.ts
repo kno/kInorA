@@ -26,8 +26,11 @@ import type {
 import { isActiveOwner } from "../billing/quota-admin.js";
 import type { GetBillingVisibilityOutcome } from "../billing/billing-visibility.js";
 import type { ProcessWebhookResult } from "../billing/process-webhook.js";
-import type { CreateCheckoutInput } from "../billing/create-checkout.js";
-import { InvalidPromotionCodeError } from "../billing/create-checkout.js";
+import type { CheckoutProduct, CreateCheckoutInput } from "../billing/create-checkout.js";
+import {
+  InvalidPromotionCodeError,
+  TrainerSeatPriceNotConfiguredError,
+} from "../billing/create-checkout.js";
 import type { CreatePortalSessionInput } from "../billing/create-portal-session.js";
 import { NoStripeCustomerError } from "../billing/create-portal-session.js";
 import type { ListInvoicesInput } from "../billing/list-invoices.js";
@@ -354,13 +357,23 @@ export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
   // read from authContext and stamped as the Stripe client_reference_id /
   // subscription metadata — a `tenantId` (or any tenant field) in the request
   // body is IGNORED, so a spoofed tenant can never be billed or upgraded.
-  // Body: CheckoutSessionRequest { cycle: 'monthly'|'annual', promotionCode? }.
+  // Body: CheckoutSessionRequest { cycle: 'monthly'|'annual', promotionCode? }
+  // plus the OPTIONAL 16c v3 Slice E fields `product` ('pro'|'trainer',
+  // defaults to 'pro') and `initialSeatCount` (trainer-seat product only).
+  // Neither field is part of the public CheckoutSessionRequest contract yet
+  // (seat billing is not user-facing in this slice) — they are additive infra
+  // only reachable by an internal caller that explicitly sets `product`.
   fastify.post(
     "/billing/checkout",
     { preHandler: requireAuth() },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { tenantId } = request.authContext!;
-      const body = request.body as Partial<CheckoutSessionRequest> | null;
+      const body = request.body as
+        | (Partial<CheckoutSessionRequest> & {
+            product?: CheckoutProduct;
+            initialSeatCount?: number;
+          })
+        | null;
 
       const cycle = body?.cycle;
       if (cycle !== "monthly" && cycle !== "annual") {
@@ -372,9 +385,23 @@ export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
           ? body.promotionCode.trim()
           : undefined;
 
+      // `product` defaults to "pro" — an existing caller that omits it gets
+      // EXACTLY today's behavior. `initialSeatCount` is only meaningful for
+      // "trainer" and is floored (>= 1) by the use case.
+      const product: CheckoutProduct | undefined =
+        body?.product === "trainer" ? "trainer" : undefined;
+      const initialSeatCount =
+        typeof body?.initialSeatCount === "number" ? body.initialSeatCount : undefined;
+
       try {
         // tenantId comes ONLY from authContext — never from the body.
-        const session = await createCheckout.execute({ tenantId, cycle, promotionCode });
+        const session = await createCheckout.execute({
+          tenantId,
+          cycle,
+          promotionCode,
+          ...(product ? { product } : {}),
+          ...(initialSeatCount !== undefined ? { initialSeatCount } : {}),
+        });
         // Deliberately 200 { url }, NOT a 303 redirect (4R FIX 3): the SPA web
         // client performs the redirect itself (window.location = url). Do NOT
         // "fix" this into a server-side redirect — that would break the
@@ -384,6 +411,10 @@ export const billingRoutes: FastifyPluginAsync<BillingRoutesOptions> = async (
         if (error instanceof InvalidPromotionCodeError) {
           // Our controlled coupon rejection — no session was created.
           return reply.code(422).send({ error: "invalid_promotion_code" });
+        }
+        if (error instanceof TrainerSeatPriceNotConfiguredError) {
+          // Controlled failure — NEVER a silent fallback to the Pro price.
+          return reply.code(422).send({ error: "trainer_seat_price_not_configured" });
         }
         // Any other failure (e.g. Stripe unconfigured/unreachable) propagates to
         // the global 500 handler; no partial billing state is exposed.
