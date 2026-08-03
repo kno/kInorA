@@ -207,10 +207,11 @@ export function mapSubscriptionToWrite(
   sub: StripeSubscriptionSnapshot,
   now: Date,
 ): BillingStateWrite {
+  const status = resolveBillingStatus(event.type, sub, now);
   return {
     tenantId: sub.tenantId as string,
     tier: "pro",
-    status: resolveBillingStatus(event.type, sub, now),
+    status,
     source: "stripe",
     stripeCustomerId: sub.stripeCustomerId,
     stripeSubscriptionId: sub.stripeSubscriptionId,
@@ -221,7 +222,14 @@ export function mapSubscriptionToWrite(
     // 16c Slice B (Q5): no price→tier mapping — `tier` above stays "pro".
     // Persist the observed Stripe quantity as-is; the 16d admin override is
     // the sole source of the trainer/gym TIER.
-    seatCount: sub.seatQuantity,
+    //
+    // 16c Slice F (design "Downgrade / lapse behavior"): a canceled/deleted
+    // Stripe subscription object can still report its last-known item
+    // quantity — `seatQuantity` alone is NOT trustworthy once the write
+    // resolves to `expired`. Zero it here so a lapsed sponsor's seatCount
+    // never lingers to inflate `resolveTenantFeatureLimit`'s seat-scaled
+    // formula (`max(base, seatCount × Pro)`) after billing has ended.
+    seatCount: status === "expired" ? null : sub.seatQuantity,
   };
 }
 
