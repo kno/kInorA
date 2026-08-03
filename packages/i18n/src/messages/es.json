@@ -1298,6 +1298,86 @@
       "generic": "Se produjo un error. Inténtalo de nuevo."
     }
   },
+  "brandingStudio": {
+    "eyebrow": "Marca blanca",
+    "title": "Estudio de marca",
+    "description": "Diseña la identidad de tu gimnasio y velo cobrar vida en la vista previa en tiempo real.",
+    "subdomain": {
+      "label": "Subdominio",
+      "placeholder": "tu-gimnasio",
+      "hint": "Letras minúsculas, números y guiones. Esta es la dirección de acceso de tus miembros.",
+      "invalid": "Usa entre 1 y 32 letras minúsculas, números o guiones (sin guion al inicio ni al final).",
+      "urlPreviewLabel": "Vista previa de la dirección de acceso"
+    },
+    "logo": {
+      "label": "Logotipo",
+      "dropHint": "Arrastra y suelta o haz clic para subir",
+      "browse": "Elegir archivo",
+      "formats": "PNG, JPEG, SVG o WebP · hasta 5 MB",
+      "uploading": "Subiendo…",
+      "uploadError": "No se pudo subir el logotipo. Inténtalo de nuevo.",
+      "unsupported": "Ese tipo de archivo no es compatible. Usa PNG, JPEG, SVG o WebP.",
+      "tooLarge": "El logotipo es demasiado grande. El límite es 5 MB.",
+      "remove": "Quitar logotipo",
+      "alt": "Logotipo del gimnasio",
+      "empty": "Aún no hay logotipo"
+    },
+    "palette": {
+      "label": "Paleta",
+      "hint": "Configura los tokens que quieras: lo que dejes sin tocar usará los valores predeterminados de kInorA."
+    },
+    "groups": {
+      "brand": "Marca",
+      "surfaces": "Superficies",
+      "text": "Texto"
+    },
+    "tokens": {
+      "accent": "Color de acento",
+      "accentFg": "Texto sobre acento",
+      "surface": "Superficie",
+      "surface2": "Superficie elevada",
+      "fg": "Primer plano",
+      "muted": "Texto atenuado"
+    },
+    "presets": {
+      "label": "Ajustes predefinidos",
+      "lime": "Lima",
+      "ember": "Brasa",
+      "ocean": "Océano",
+      "reset": "Restablecer valores predeterminados"
+    },
+    "contrast": {
+      "label": "Comprobación de contraste",
+      "accentPair": "Acento frente a texto sobre acento",
+      "textPair": "Texto frente a superficie",
+      "pass": "Buen contraste",
+      "warn": "Contraste bajo"
+    },
+    "preview": {
+      "label": "Vista previa en tiempo real",
+      "navDashboard": "Panel",
+      "navPlan": "Mi plan",
+      "navProgress": "Progreso",
+      "headerTitle": "Hoy",
+      "cardTitle": "Fuerza de tren superior",
+      "cardBody": "Cuatro ejercicios · unos 45 minutos. Tu entrenador ajustó la carga para hoy.",
+      "primaryCta": "Iniciar sesión de entrenamiento",
+      "secondaryCta": "Ver plan",
+      "mutedNote": "Último entrenamiento hace 2 días",
+      "badge": "Pro",
+      "logoFallback": "Tu logotipo"
+    },
+    "save": {
+      "button": "Guardar marca",
+      "saving": "Guardando…",
+      "saved": "Marca guardada."
+    },
+    "errors": {
+      "conflict": "Este subdominio ya está en uso.",
+      "invalid": "Revisa los colores e inténtalo de nuevo.",
+      "generic": "Algo salió mal. Inténtalo de nuevo."
+    }
+  },
   "logs": {
     "title": "Registros y observabilidad",
     "description": "Inspecciona los eventos de auditoría y de registro de la plataforma entre organizaciones.",

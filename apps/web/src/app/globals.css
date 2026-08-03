@@ -2479,3 +2479,548 @@ a {
 .stats-trend-arrow-flat {
   color: var(--muted);
 }
+
+/* =========================================================================
+ * Branding Studio — /branding white-label live-preview studio
+ * (16a-v3-gym-white-label). The right-hand `.brand-preview` container re-themes
+ * itself from scoped `--gym-*` custom properties injected by the studio (via
+ * buildGymStyleBlock) — every preview surface reads `var(--gym-x, <default>)`
+ * DIRECTLY so the scope override reaches it without touching the real chrome.
+ * ========================================================================= */
+
+.branding-studio-shell {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.branding-studio-head {
+  margin-bottom: var(--sp-5);
+}
+
+.branding-studio-eyebrow {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: var(--sp-1);
+}
+
+.branding-studio-head .kin-title {
+  font-family: var(--font-display);
+  margin-bottom: var(--sp-1);
+}
+
+.branding-studio {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-5);
+  align-items: start;
+}
+
+@media (min-width: 960px) {
+  .branding-studio {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  }
+}
+
+.branding-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.branding-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in oklab, var(--accent) 6%, transparent), transparent 55%),
+    var(--surface);
+}
+
+.branding-hint {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  margin: 0;
+}
+
+.branding-inline-error {
+  font-size: var(--fs-sm);
+  color: var(--danger);
+  margin: 0;
+}
+
+/* --- Subdomain URL chip --- */
+
+.branding-url-chip {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--r-pill);
+  border: 1px dashed var(--border);
+  background: var(--surface-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+}
+
+.branding-url-slug {
+  color: var(--accent);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branding-url-host {
+  color: var(--muted);
+}
+
+/* --- Logo dropzone --- */
+
+.branding-dropzone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: 148px;
+  padding: var(--sp-4);
+  border: 1.5px dashed var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.branding-dropzone:hover,
+.branding-dropzone:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.branding-dropzone.is-dragging {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 10%, var(--surface-2));
+  transform: scale(1.01);
+}
+
+.branding-dropzone-logo {
+  max-height: 72px;
+  max-width: 80%;
+  object-fit: contain;
+}
+
+.branding-dropzone-empty {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.branding-dropzone-cta {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--fg);
+}
+
+/* --- Palette tokens --- */
+
+.branding-token-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.branding-group-title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+
+.branding-token-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.branding-swatch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-btn);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, white 8%, transparent);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.branding-swatch input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
+.branding-token-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.branding-token-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.branding-token-default {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--muted);
+  opacity: 0.6;
+}
+
+.branding-hex-input {
+  font-family: var(--font-display);
+  text-transform: lowercase;
+  min-height: 40px;
+  padding: 6px var(--sp-2);
+  max-width: 160px;
+}
+
+/* --- Presets + reset --- */
+
+.branding-presets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.branding-presets-label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.branding-presets-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.branding-preset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 6px var(--sp-3);
+  min-height: 40px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.branding-preset-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px -8px color-mix(in oklab, black 60%, transparent);
+}
+
+.branding-preset-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px color-mix(in oklab, white 12%, transparent);
+}
+
+.branding-preset-reset {
+  background: transparent;
+  color: var(--muted);
+  border-style: dashed;
+}
+
+/* --- Contrast hints --- */
+
+.branding-contrast {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+
+.branding-contrast-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.branding-contrast-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.branding-contrast-row.is-ok .branding-contrast-icon {
+  background: color-mix(in oklab, var(--success) 20%, transparent);
+  color: var(--success);
+}
+
+.branding-contrast-row.is-warn .branding-contrast-icon {
+  background: color-mix(in oklab, var(--warning) 22%, transparent);
+  color: var(--warning);
+}
+
+.branding-contrast-label {
+  color: var(--muted);
+  min-width: 0;
+}
+
+.branding-contrast-ratio {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.branding-contrast-verdict {
+  font-weight: 600;
+}
+
+.branding-contrast-row.is-ok .branding-contrast-verdict {
+  color: var(--success);
+}
+
+.branding-contrast-row.is-warn .branding-contrast-verdict {
+  color: var(--warning);
+}
+
+/* --- Save bar --- */
+
+.branding-save-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.branding-saved {
+  color: var(--success);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+}
+
+/* -------------------------------------------------------------------------
+ * Live preview — a mini mock of the app chrome that re-themes in real time.
+ * Reads `--gym-*` DIRECTLY (with the kInorA defaults as the fallback) so the
+ * scoped override injected on `.brand-preview` reaches every surface.
+ * ------------------------------------------------------------------------- */
+
+.branding-preview-wrap {
+  position: sticky;
+  top: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.branding-preview-caption {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+
+.brand-preview {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  min-height: 360px;
+  border-radius: var(--r-card);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--gym-surface, oklch(11% 0.006 270));
+  color: var(--gym-fg, oklch(96% 0.002 270));
+  box-shadow:
+    0 24px 60px -24px color-mix(in oklab, black 70%, transparent),
+    inset 0 0 0 1px color-mix(in oklab, white 4%, transparent);
+  transition: background-color 260ms ease, color 260ms ease;
+}
+
+.bp-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-3);
+  background: var(--gym-surface-2, oklch(15% 0.006 270));
+  border-right: 1px solid color-mix(in oklab, white 6%, transparent);
+  transition: background-color 260ms ease;
+}
+
+.bp-brand {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+.bp-logo {
+  max-height: 36px;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.bp-logo-fallback {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  color: var(--gym-accent, oklch(89% 0.2 128));
+}
+
+.bp-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bp-nav-item {
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--r-btn);
+  font-size: var(--fs-sm);
+  color: var(--gym-muted, oklch(66% 0.006 270));
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+.bp-nav-item.is-active {
+  background: color-mix(in oklab, var(--gym-accent, oklch(89% 0.2 128)) 18%, transparent);
+  color: var(--gym-fg, oklch(96% 0.002 270));
+  font-weight: 600;
+}
+
+.bp-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+}
+
+.bp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bp-header-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: 700;
+}
+
+.bp-badge {
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-pill);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--gym-accent, oklch(89% 0.2 128));
+  color: var(--gym-accent-fg, oklch(5% 0.006 270));
+  transition: background-color 240ms ease, color 240ms ease;
+}
+
+.bp-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-radius: var(--r-btn);
+  background: var(--gym-surface-2, oklch(15% 0.006 270));
+  border: 1px solid color-mix(in oklab, white 6%, transparent);
+  transition: background-color 260ms ease;
+}
+
+.bp-card-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  margin: 0;
+}
+
+.bp-card-body {
+  font-size: var(--fs-sm);
+  margin: 0;
+  color: var(--gym-fg, oklch(96% 0.002 270));
+}
+
+.bp-muted {
+  font-size: var(--fs-sm);
+  margin: 0;
+  color: var(--gym-muted, oklch(66% 0.006 270));
+}
+
+.bp-actions {
+  display: flex;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+  flex-wrap: wrap;
+}
+
+.bp-btn-primary,
+.bp-btn-secondary {
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--r-btn);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: default;
+  transition: background-color 240ms ease, color 240ms ease, border-color 240ms ease;
+}
+
+.bp-btn-primary {
+  background: var(--gym-accent, oklch(89% 0.2 128));
+  color: var(--gym-accent-fg, oklch(5% 0.006 270));
+}
+
+.bp-btn-secondary {
+  background: transparent;
+  color: var(--gym-fg, oklch(96% 0.002 270));
+  border-color: color-mix(in oklab, white 16%, transparent);
+}
