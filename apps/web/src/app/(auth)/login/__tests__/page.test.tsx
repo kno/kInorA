@@ -32,7 +32,7 @@ vi.mock("next/headers", () => ({
 }));
 
 const fetchPublicBranding = vi.fn(async (_slug: string) => null as unknown);
-vi.mock("../gym-branding-client", () => ({
+vi.mock("@/lib/gym-branding-client", () => ({
   fetchPublicBranding: (...args: [string]) => fetchPublicBranding(...args),
 }));
 

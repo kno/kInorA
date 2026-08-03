@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
@@ -11,6 +11,21 @@ type AnyElement = ReactElement<AnyProps>;
 // test below can override it for a single call via `mockResolvedValueOnce`.
 vi.mock("next-intl/server", () => ({
   getTranslations: vi.fn(async () => createServerTranslator()),
+}));
+
+// 16a-v3-gym-white-label — root page host-resolved gym branding. Mirrors the
+// login page's Server Component test setup (see
+// `(auth)/login/__tests__/page.test.tsx`): `next/headers` and the shared
+// `@/lib/gym-branding-client` are mocked so the RSC never touches a real
+// host or network in tests.
+const headersGet = vi.fn((_name: string) => null as string | null);
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => ({ get: headersGet })),
+}));
+
+const fetchPublicBranding = vi.fn(async (_slug: string) => null as unknown);
+vi.mock("@/lib/gym-branding-client", () => ({
+  fetchPublicBranding: (...args: [string]) => fetchPublicBranding(...args),
 }));
 
 // The 7 landing children are themselves async server components migrated in
@@ -112,6 +127,63 @@ describe("HomePage", () => {
   });
 });
 
+// 16a-v3-gym-white-label — root page host-resolved theming (extends the
+// login page's Slice 4 pattern to `/` so a gym visitor sees the brand on the
+// first screen, without changing the default apex/no-slug rendering).
+describe("HomePage — gym branding", () => {
+  afterEach(() => {
+    headersGet.mockReset().mockReturnValue(null);
+    fetchPublicBranding.mockReset().mockResolvedValue(null);
+  });
+
+  it("renders a gym's inline <style> palette when the host resolves to a known slug", async () => {
+    headersGet.mockReturnValue("gymname.kinora.aitsai.com");
+    fetchPublicBranding.mockResolvedValue({
+      logoUrl: null,
+      palette: {
+        accent: "#112233",
+        accentFg: "#ffffff",
+        surface: "#000000",
+        surface2: "#111111",
+        fg: "#eeeeee",
+        muted: "#999999",
+      },
+    });
+
+    const page = await HomePage();
+
+    expect(fetchPublicBranding).toHaveBeenCalledWith("gymname");
+    const style = findByType(page, "style");
+    expect(style).toBeDefined();
+    const css = textOf(style);
+    expect(css).toContain("--gym-accent:#112233");
+    expect(css).toContain("--gym-surface:#000000");
+  });
+
+  it("renders no gym <style> (default theme) when the host resolves to no known slug", async () => {
+    headersGet.mockReturnValue("kinora.aitsai.com");
+
+    const page = await HomePage();
+
+    expect(fetchPublicBranding).not.toHaveBeenCalled();
+    expect(findByType(page, "style")).toBeUndefined();
+  });
+
+  it("fails safe to default theme when the public branding fetch resolves to null", async () => {
+    headersGet.mockReturnValue("gymname.kinora.aitsai.com");
+    fetchPublicBranding.mockResolvedValue(null);
+
+    const page = await HomePage();
+
+    expect(fetchPublicBranding).toHaveBeenCalledWith("gymname");
+    expect(findByType(page, "style")).toBeUndefined();
+  });
+});
+
+function findByType(node: ReactNode, type: string): AnyElement | undefined {
+  return findFirst(node, (el) => el.type === type);
+}
+
 // --- Tree inspection helpers ---
 
 function findFirst(
@@ -134,4 +206,12 @@ function findFirst(
 
 function isReactElement(node: ReactNode): node is AnyElement {
   return typeof node === "object" && node !== null && "props" in node;
+}
+
+function textOf(node: ReactNode): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join("");
+  if (isReactElement(node)) return textOf(node.props.children);
+  return "";
 }
