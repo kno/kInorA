@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { fetchBranding, updateBranding, uploadLogo } from "../branding-client.js";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { apiBaseUrl, fetchBranding, updateBranding, uploadLogo } from "../branding-client.js";
 
 const DTO = {
   tenantId: "aaaaaaaa-0000-0000-0000-000000000001",
@@ -22,6 +22,28 @@ function buildFetch(status: number, body: unknown) {
     json: vi.fn().mockResolvedValue(body),
   });
 }
+
+describe("apiBaseUrl", () => {
+  const ORIGINAL_ENV = process.env.API_BASE_URL;
+
+  afterEach(() => {
+    if (ORIGINAL_ENV === undefined) {
+      delete process.env.API_BASE_URL;
+    } else {
+      process.env.API_BASE_URL = ORIGINAL_ENV;
+    }
+  });
+
+  it("falls back to localhost:4000 when API_BASE_URL is unset", () => {
+    delete process.env.API_BASE_URL;
+    expect(apiBaseUrl()).toBe("http://localhost:4000");
+  });
+
+  it("uses API_BASE_URL when set", () => {
+    process.env.API_BASE_URL = "https://internal-api.example.com";
+    expect(apiBaseUrl()).toBe("https://internal-api.example.com");
+  });
+});
 
 describe("fetchBranding", () => {
   it("returns ok with the branding DTO on 200 and sends the Bearer token", async () => {

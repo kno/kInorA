@@ -17,7 +17,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("next-intl/server", () => ({
-  getTranslations: vi.fn(async () => createServerTranslator()),
+  getTranslations: vi.fn(async (namespace?: string) => createServerTranslator("en", namespace)),
 }));
 
 vi.mock("../branding-client", () => ({
