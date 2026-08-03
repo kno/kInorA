@@ -112,6 +112,37 @@ describe("SocialAuthService.login", () => {
     expect(provider.exchangeCode).toHaveBeenCalledWith("c", "state-xyz");
   });
 
+  it("stores the originSlug keyed by state and returns it from the callback", async () => {
+    const provider = fakeProvider({ providerId: "google", state: "s-slug" });
+    const { service } = buildService(provider);
+
+    await service.login("google", "downtown");
+    const response = await service.callback({ code: "c", state: "s-slug" });
+
+    expect(response.originSlug).toBe("downtown");
+    expect(typeof response.token).toBe("string");
+  });
+
+  it("omits originSlug from the callback result when the login had none", async () => {
+    const provider = fakeProvider({ providerId: "google", state: "s-noslug" });
+    const { service } = buildService(provider);
+
+    await service.login("google");
+    const response = await service.callback({ code: "c", state: "s-noslug" });
+
+    expect(response.originSlug).toBeUndefined();
+  });
+
+  it("does not leak the originSlug into the opaque client-visible state", async () => {
+    const provider = fakeProvider({ providerId: "google", state: "opaque-nonce" });
+    const { service } = buildService(provider);
+
+    const { state } = await service.login("google", "downtown");
+    // The state stays the provider's opaque nonce — the slug lives server-side.
+    expect(state).toBe("opaque-nonce");
+    expect(state).not.toContain("downtown");
+  });
+
   it("throws SocialAuthError for an unknown provider id", async () => {
     const provider = fakeProvider({ providerId: "google" });
     const { service } = buildService(provider, {

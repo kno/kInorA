@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { NextResponse } from "next/server";
 import { proxySocialCallback, SESSION_COOKIE } from "../callback-proxy";
 
@@ -245,6 +245,104 @@ describe("GET route handler", () => {
     } finally {
       globalThis.fetch = origFetch;
     }
+  });
+});
+
+describe("social callback proxy — gym subdomain round-trip (part B)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("redirects to the gym subdomain when the API returns a valid originSlug", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      fakeJsonResponse({ jsonValue: { token: "tok", originSlug: "downtown" } })
+    );
+
+    const res = await proxySocialCallback(
+      new URLSearchParams({ code: "c", state: "s" }),
+      { fetchImpl, apiBaseUrl: "http://api.test", origin: "https://kinora.aitsai.com" }
+    );
+
+    expect(res.status).toBe(303);
+    const location = res.headers.get("location") ?? "";
+    // Must land on the white-label subdomain, on the post-login path.
+    expect(location).toBe("https://downtown.kinora.aitsai.com/dashboard");
+    // Session cookie still set with the API-issued token.
+    expect(res.cookies.get(SESSION_COOKIE)?.value).toBe("tok");
+  });
+
+  it("falls back to the apex-relative path when the API returns no originSlug", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(fakeJsonResponse({ jsonValue: { token: "tok" } }));
+
+    const res = await proxySocialCallback(
+      new URLSearchParams({ code: "c", state: "s" }),
+      { fetchImpl, apiBaseUrl: "http://api.test", origin: "https://kinora.aitsai.com" }
+    );
+
+    const location = res.headers.get("location") ?? "";
+    expect(location).toBe("https://kinora.aitsai.com/dashboard");
+  });
+
+  // SECURITY: a malicious originSlug must never drive an off-domain redirect.
+  it("rejects malicious originSlug values and falls back to the apex (open-redirect guard)", async () => {
+    const malicious = ["evil.com", "../", "a.b", "//evil", "www", "https://evil.com"];
+
+    for (const bad of malicious) {
+      const fetchImpl = vi.fn().mockResolvedValue(
+        fakeJsonResponse({ jsonValue: { token: "tok", originSlug: bad } })
+      );
+
+      const res = await proxySocialCallback(
+        new URLSearchParams({ code: "c", state: "s" }),
+        { fetchImpl, apiBaseUrl: "http://api.test", origin: "https://kinora.aitsai.com" }
+      );
+
+      const location = res.headers.get("location") ?? "";
+      // Falls back to the trusted apex origin — never the attacker's host.
+      expect(location).toBe("https://kinora.aitsai.com/dashboard");
+      expect(location).not.toContain("evil");
+    }
+  });
+});
+
+describe("social callback proxy — session cookie domain (part C)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("sets NO cookie Domain on localhost / non-production", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(fakeJsonResponse({ jsonValue: { token: "tok" } }));
+
+    const res = await proxySocialCallback(
+      new URLSearchParams({ code: "c", state: "s" }),
+      { fetchImpl, apiBaseUrl: "http://api.test", origin: "http://localhost:3000" }
+    );
+
+    expect(res.cookies.get(SESSION_COOKIE)?.domain).toBeUndefined();
+  });
+
+  it("scopes the cookie to the parent Domain in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_APEX_HOST", "kinora.aitsai.com");
+    const fetchImpl = vi.fn().mockResolvedValue(
+      fakeJsonResponse({ jsonValue: { token: "tok", originSlug: "downtown" } })
+    );
+
+    const res = await proxySocialCallback(
+      new URLSearchParams({ code: "c", state: "s" }),
+      { fetchImpl, apiBaseUrl: "http://api.test", origin: "https://kinora.aitsai.com" }
+    );
+
+    const cookie = res.cookies.get(SESSION_COOKIE);
+    expect(cookie?.domain).toBe(".kinora.aitsai.com");
+    expect(cookie?.secure).toBe(true);
+    expect(cookie?.httpOnly).toBe(true);
+    expect(cookie?.sameSite).toBe("lax");
   });
 });
 

@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { getLocale } from "next-intl/server";
 import { redirect } from "next/navigation";
-import { SESSION_COOKIE } from "@/auth/session-cookie";
+import { SESSION_COOKIE, sessionCookieOptions } from "@/auth/session-cookie";
 import { fetchDashboardSummary, type FetchDashboardSummaryResult } from "./dashboard-client";
 import { adaptPlan } from "@/app/(app)/create-plan/plan-draft-client";
 
@@ -35,7 +35,10 @@ export async function logoutAction(): Promise<void> {
     }
   }
 
-  jar.set(SESSION_COOKIE, "", { maxAge: 0, path: "/" });
+  // Clear with the SAME attributes (incl. parent Domain in prod) the cookie
+  // was written with — otherwise a parent-domain session cookie would survive
+  // a host-only expiry and the user would stay logged in.
+  jar.set(SESSION_COOKIE, "", { ...sessionCookieOptions(), maxAge: 0 });
   redirect("/login");
 }
 
