@@ -158,6 +158,23 @@ describe("SidebarNav", () => {
     expect(htmlFalse).not.toContain('href="/admin"');
   });
 
+  it("renders the Branding nav item when isGym is true (GH #322)", () => {
+    const html = renderToStringWithIntl(<SidebarNav isGym />);
+
+    expect(html).toContain('href="/branding"');
+    const brandingLink = html.match(/<a[^>]*href="\/branding"[^>]*>[\s\S]*?<\/a>/);
+    expect(brandingLink).toBeTruthy();
+    expect(brandingLink![0]).toContain("Branding");
+  });
+
+  it("omits the Branding nav item when isGym is false or not provided", () => {
+    const html = renderToStringWithIntl(<SidebarNav />);
+    expect(html).not.toContain('href="/branding"');
+
+    const htmlFalse = renderToStringWithIntl(<SidebarNav isGym={false} />);
+    expect(htmlFalse).not.toContain('href="/branding"');
+  });
+
   it("marks the billing nav item active on the /billing route", () => {
     mockedUsePathname.mockReturnValueOnce("/billing");
 

@@ -93,6 +93,31 @@ describe("AppShell", () => {
     expect(screen.getByRole("menuitem", { name: /Admin/i })).toBeTruthy();
   });
 
+  it("forwards isGym to the mobile nav so Branding appears in its overflow menu (GH #322)", () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+
+    renderWithIntl(
+      <AppShell isGym>
+        <p>content</p>
+      </AppShell>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /More/i }));
+    expect(screen.getByRole("menuitem", { name: /Branding/i })).toBeTruthy();
+  });
+
   it("renders the desktop sidebar (and not the mobile nav) at >=768px", () => {
     // Mock matchMedia to report a desktop viewport so the post-hydration
     // effect switches AppShell to the SidebarNav branch.

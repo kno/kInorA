@@ -7,18 +7,27 @@ export interface OwnBrandingDTO {
 }
 
 /**
+ * Discriminated result of the own-tenant branding fetch. Unlike a plain
+ * fail-safe-to-null value, this distinguishes a NON-gym tenant (`forbidden`,
+ * 403 from `assertGymEntitled`) from a gym tenant with no branding row yet
+ * (`not_found`, 404) — both fall back to default branding styling, but ONLY
+ * `forbidden` means the tenant is not gym-tier. The `(app)` layout uses this
+ * distinction to gate the gym Branding Studio nav entry (GH #322) without a
+ * second endpoint or fetch.
+ */
+export type OwnBrandingResult =
+  | { kind: "ok"; data: OwnBrandingDTO }
+  | { kind: "not_found" }
+  | { kind: "forbidden" }
+  | { kind: "error" };
+
+/**
  * Server-side fetch of the AUTHENTICATED S3 `GET /branding` endpoint (16a-
  * v3-gym-white-label, Slice 5), consumed by the `(app)` root layout to theme
- * the whole app for a logged-in gym member.
- *
- * Mirrors `apps/web/src/app/(app)/auth/profile-client.ts`'s fail-safe-to-null
- * shape exactly: a non-gym tenant (403 from `assertGymEntitled` — tier-only,
- * so this covers both owners and regular members of a non-gym tenant), a
- * gym tenant with no branding row yet (404), any other non-OK response, a
- * network error, or a malformed payload all resolve to `null` so the layout
- * falls back to default kInorA branding with no server error.
+ * the whole app for a logged-in gym member and, as of GH #322, to derive
+ * whether the tenant is gym-tier for nav gating.
  */
-export async function fetchOwnBranding(token: string): Promise<OwnBrandingDTO | null> {
+export async function fetchOwnBranding(token: string): Promise<OwnBrandingResult> {
   const base = process.env.API_BASE_URL ?? "http://localhost:4000";
 
   let res: Response;
@@ -27,16 +36,21 @@ export async function fetchOwnBranding(token: string): Promise<OwnBrandingDTO | 
       headers: { Authorization: `Bearer ${token}` },
     });
   } catch {
-    return null;
+    return { kind: "error" };
   }
 
-  if (!res.ok) return null;
+  if (res.status === 403) return { kind: "forbidden" };
+  if (res.status === 404) return { kind: "not_found" };
+  if (!res.ok) return { kind: "error" };
 
   const payload = (await res.json().catch(() => null)) as Partial<OwnBrandingDTO> | null;
-  if (!payload?.palette) return null;
+  if (!payload?.palette) return { kind: "error" };
 
   return {
-    logoUrl: payload.logoUrl ?? null,
-    palette: payload.palette,
+    kind: "ok",
+    data: {
+      logoUrl: payload.logoUrl ?? null,
+      palette: payload.palette,
+    },
   };
 }
