@@ -813,6 +813,21 @@ export interface SessionResponse {
   tenant: { id: TenantId; name: string };
 }
 
+/**
+ * Response returned by the social (OIDC) callback flow. Extends the shared
+ * {@link SessionResponse} with the optional `originSlug` that the API rounds
+ * trips through server-side state — the gym subdomain the login was initiated
+ * from. The web callback validates this slug and redirects the user-agent back
+ * to `https://<slug>.<apex>` so the white-label survives the OAuth hop.
+ *
+ * `originSlug` is server-vouched (stored keyed by the opaque `state`, never
+ * echoed from the client); the web layer STILL re-validates it as a single DNS
+ * label before building a redirect target (open-redirect prevention).
+ */
+export interface SocialCallbackResponse extends SessionResponse {
+  originSlug?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Offline capture, reconnect sync & session history types — 09b-v1
 // These are the cross-boundary shapes for the client-side mutation queue

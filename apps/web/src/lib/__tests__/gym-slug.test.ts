@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { extractGymSlugFromHost } from "../gym-slug";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  DEFAULT_APEX_HOST,
+  extractGymSlugFromHost,
+  getApexHost,
+  sanitizeGymSlug,
+} from "../gym-slug";
 
 /**
  * 16a-v3-gym-white-label, Slice 4 (task 4.1's parsing edge cases, pulled
@@ -45,5 +50,68 @@ describe("extractGymSlugFromHost", () => {
 
   it("is case-insensitive", () => {
     expect(extractGymSlugFromHost("GymName.KINORA.AITSAI.COM")).toBe("gymname");
+  });
+});
+
+describe("getApexHost", () => {
+  const envKey = "NEXT_PUBLIC_APEX_HOST";
+
+  afterEach(() => {
+    delete process.env[envKey];
+  });
+
+  it("returns the default apex host when the env var is unset", () => {
+    delete process.env[envKey];
+    expect(getApexHost()).toBe(DEFAULT_APEX_HOST);
+  });
+
+  it("honors and lowercases NEXT_PUBLIC_APEX_HOST when set", () => {
+    process.env[envKey] = "Staging.KINORA.AITSAI.COM";
+    expect(getApexHost()).toBe("staging.kinora.aitsai.com");
+  });
+});
+
+describe("sanitizeGymSlug (open-redirect guard)", () => {
+  it("accepts and normalizes a valid single-label slug", () => {
+    expect(sanitizeGymSlug("downtown")).toBe("downtown");
+    expect(sanitizeGymSlug("  Downtown  ")).toBe("downtown");
+    expect(sanitizeGymSlug("gym-01")).toBe("gym-01");
+  });
+
+  it("rejects a full host with a dot (evil.com)", () => {
+    expect(sanitizeGymSlug("evil.com")).toBeNull();
+  });
+
+  it("rejects multi-label values (a.b)", () => {
+    expect(sanitizeGymSlug("a.b")).toBeNull();
+  });
+
+  it("rejects path-traversal (../)", () => {
+    expect(sanitizeGymSlug("../")).toBeNull();
+  });
+
+  it("rejects protocol-relative prefixes (//evil)", () => {
+    expect(sanitizeGymSlug("//evil")).toBeNull();
+    expect(sanitizeGymSlug("evil/path")).toBeNull();
+  });
+
+  it("rejects the www alias", () => {
+    expect(sanitizeGymSlug("www")).toBeNull();
+  });
+
+  it("rejects empty / nullish / whitespace-only input", () => {
+    expect(sanitizeGymSlug(null)).toBeNull();
+    expect(sanitizeGymSlug(undefined)).toBeNull();
+    expect(sanitizeGymSlug("")).toBeNull();
+    expect(sanitizeGymSlug("   ")).toBeNull();
+  });
+
+  it("rejects a label longer than 63 chars", () => {
+    expect(sanitizeGymSlug("a".repeat(64))).toBeNull();
+    expect(sanitizeGymSlug("a".repeat(63))).toBe("a".repeat(63));
+  });
+
+  it("rejects a full URL", () => {
+    expect(sanitizeGymSlug("https://evil.com")).toBeNull();
   });
 });

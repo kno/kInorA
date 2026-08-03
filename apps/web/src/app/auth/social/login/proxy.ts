@@ -20,6 +20,7 @@ export async function proxySocialLogin(
     fetchImpl?: typeof fetch;
     apiBaseUrl?: string;
     origin?: string;
+    originSlug?: string;
   } = {}
 ): Promise<SocialLoginProxyResult> {
   const origin = options.origin ?? "http://localhost";
@@ -33,9 +34,17 @@ export async function proxySocialLogin(
   const base = options.apiBaseUrl ?? process.env.API_BASE_URL ?? "http://localhost:4000";
   const fetchImpl = options.fetchImpl ?? fetch;
 
+  // Forward the origin gym slug to the API so it can round-trip it through the
+  // OAuth state and the callback can redirect back to the white-label
+  // subdomain. Omitted for apex logins.
+  const query = new URLSearchParams({ provider });
+  if (options.originSlug) {
+    query.set("originSlug", options.originSlug);
+  }
+
   let res: Response;
   try {
-    res = await fetchImpl(`${base}/auth/social/login?provider=${encodeURIComponent(provider)}`, {
+    res = await fetchImpl(`${base}/auth/social/login?${query.toString()}`, {
       method: "GET",
     });
   } catch {

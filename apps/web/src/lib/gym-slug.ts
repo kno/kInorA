@@ -17,9 +17,22 @@
  *    slug; multi-level gym subdomains are out of scope for this change.
  */
 
-const DEFAULT_APEX_HOST = "kinora.aitsai.com";
+export const DEFAULT_APEX_HOST = "kinora.aitsai.com";
 
-function apexHost(): string {
+/**
+ * A single DNS label: lowercase alphanumerics + hyphens, 1..63 chars. This is
+ * the strict allow-list a gym slug must satisfy before it is ever interpolated
+ * into a redirect target — it rejects dots, slashes, protocol-relative
+ * prefixes, and anything else that could smuggle in a host or path.
+ */
+const SLUG_PATTERN = /^[a-z0-9-]{1,63}$/;
+
+/**
+ * The apex host the white-label subdomains hang off, e.g.
+ * `kinora.aitsai.com`. Overridable via `NEXT_PUBLIC_APEX_HOST` for
+ * non-production environments.
+ */
+export function getApexHost(): string {
   return (process.env.NEXT_PUBLIC_APEX_HOST ?? DEFAULT_APEX_HOST).toLowerCase();
 }
 
@@ -31,7 +44,7 @@ export function extractGymSlugFromHost(
   const host = hostHeader.split(":")[0]!.trim().toLowerCase();
   if (!host || host === "localhost" || host === "127.0.0.1") return null;
 
-  const apex = apexHost();
+  const apex = getApexHost();
   if (host === apex || host === `www.${apex}`) return null;
 
   const suffix = `.${apex}`;
@@ -41,4 +54,25 @@ export function extractGymSlugFromHost(
   if (!subdomain || subdomain === "www" || subdomain.includes(".")) return null;
 
   return subdomain;
+}
+
+/**
+ * Validate + normalize an untrusted gym slug (e.g. one round-tripped through
+ * the OAuth state and returned by the API) to a safe single DNS label, or
+ * `null` if it is not one.
+ *
+ * SECURITY: this is the open-redirect guard for part B of the multi-tenant
+ * OAuth fix. The returned value is the ONLY thing allowed to be interpolated
+ * into `https://<slug>.<apex>` — never a raw host/URL. It rejects anything
+ * containing dots (`evil.com`, `a.b`), slashes (`//evil`, `../`), the `www`
+ * alias, empty strings, and over-long labels.
+ */
+export function sanitizeGymSlug(
+  slug: string | null | undefined
+): string | null {
+  if (!slug) return null;
+  const normalized = slug.trim().toLowerCase();
+  if (!SLUG_PATTERN.test(normalized)) return null;
+  if (normalized === "www") return null;
+  return normalized;
 }
