@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { evaluateAuthGate } from "./auth-gate";
+import { isGymSlugConfigured, resolveHostRedirect } from "./host-guard";
+import { extractGymSlugFromHost, getApexHost } from "./lib/gym-slug";
 import { SESSION_COOKIE } from "./auth/session-cookie";
 
 /**
@@ -42,7 +44,29 @@ function isProtectedPath(pathname: string): boolean {
   );
 }
 
-export function proxy(request: NextRequest): NextResponse | Response {
+export async function proxy(
+  request: NextRequest
+): Promise<NextResponse | Response> {
+  // White-label host guard runs FIRST, before the auth-gate, so an
+  // unconfigured gym subdomain bounces to the apex regardless of auth state.
+  // Resolving the slug is pure/cheap; the API is only consulted (and cached)
+  // when a slug is actually present.
+  const host = request.headers.get("host");
+  const slug = extractGymSlugFromHost(host);
+  const isConfigured = slug ? await isGymSlugConfigured(slug) : "unknown";
+  const hostDecision = resolveHostRedirect({
+    host,
+    pathname: request.nextUrl.pathname,
+    search: request.nextUrl.search,
+    apexHost: getApexHost(),
+    isConfigured,
+  });
+  if (hostDecision.kind === "redirect") {
+    // Short-circuit: 307 (temporary — the slug may be configured later, so it
+    // must not be cached as permanent). No lang-header injection on a redirect.
+    return NextResponse.redirect(hostDecision.location, 307);
+  }
+
   const requestHeaders = new Headers(request.headers);
   const lang = request.nextUrl.searchParams.get("lang");
 
