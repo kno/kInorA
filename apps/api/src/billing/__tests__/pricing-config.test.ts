@@ -6,6 +6,7 @@ import {
   buildBillingPricing,
   collectBillingPricingIssues,
   loadStripeConfig,
+  resolveTrainerSeatPriceIds,
   validateBillingPricingConfig,
 } from "../pricing-config.js";
 
@@ -61,6 +62,39 @@ describe("pricing-config env reads (11b Slice 1)", () => {
     // Secret hygiene: no configured secret VALUE may appear in the error.
     expect(message).not.toContain("sk_test_abc123");
     expect(message).not.toContain("price_monthly_1");
+  });
+});
+
+describe("resolveTrainerSeatPriceIds (16c Slice E — per-seat checkout)", () => {
+  it("reads both seat price ids from env when set", () => {
+    expect(
+      resolveTrainerSeatPriceIds({
+        STRIPE_PRICE_TRAINER_SEAT_MONTHLY: "price_seat_m1",
+        STRIPE_PRICE_TRAINER_SEAT_ANNUAL: "price_seat_a1",
+      }),
+    ).toEqual({
+      trainerSeatMonthly: "price_seat_m1",
+      trainerSeatAnnual: "price_seat_a1",
+    });
+  });
+
+  it("returns undefined fields when unset — does not break the existing Pro checkout config", () => {
+    expect(resolveTrainerSeatPriceIds({})).toEqual({});
+  });
+
+  it("treats a blank env value as unset", () => {
+    expect(
+      resolveTrainerSeatPriceIds({
+        STRIPE_PRICE_TRAINER_SEAT_MONTHLY: "   ",
+        STRIPE_PRICE_TRAINER_SEAT_ANNUAL: "",
+      }),
+    ).toEqual({});
+  });
+
+  it("reads only the configured field, leaving the other undefined", () => {
+    expect(
+      resolveTrainerSeatPriceIds({ STRIPE_PRICE_TRAINER_SEAT_MONTHLY: "price_seat_m1" }),
+    ).toEqual({ trainerSeatMonthly: "price_seat_m1" });
   });
 });
 

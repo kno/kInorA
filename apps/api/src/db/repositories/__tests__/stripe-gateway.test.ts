@@ -356,3 +356,53 @@ describe("StripeApiGateway normalizeSubscription — seatQuantity parsing (16c v
     expect(parsed.subscription?.seatQuantity).toBeNull();
   });
 });
+
+describe("StripeApiGateway.createCheckoutSession — line_items quantity (16c v3 Slice E)", () => {
+  function fakeCheckoutSessionsClient(): {
+    client: Stripe;
+    createSpy: ReturnType<typeof vi.fn>;
+  } {
+    const createSpy = vi.fn(async () => ({ url: "https://checkout.stripe.test/session/1" }));
+    const client = {
+      checkout: { sessions: { create: createSpy } },
+    } as unknown as Stripe;
+    return { client, createSpy };
+  }
+
+  it("defaults to quantity 1 when the input carries no quantity (Pro path — byte-identical to today)", async () => {
+    const { client, createSpy } = fakeCheckoutSessionsClient();
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "https://app.test", client);
+
+    await gateway.createCheckoutSession({
+      tenantId: "tenant-1",
+      cycle: "monthly",
+      priceId: "price_pro_m",
+      promotionCodeId: null,
+    });
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [{ price: "price_pro_m", quantity: 1 }],
+      }),
+    );
+  });
+
+  it("uses the supplied quantity on the seat path", async () => {
+    const { client, createSpy } = fakeCheckoutSessionsClient();
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "https://app.test", client);
+
+    await gateway.createCheckoutSession({
+      tenantId: "tenant-1",
+      cycle: "monthly",
+      priceId: "price_seat_m",
+      promotionCodeId: null,
+      quantity: 3,
+    });
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [{ price: "price_seat_m", quantity: 3 }],
+      }),
+    );
+  });
+});
