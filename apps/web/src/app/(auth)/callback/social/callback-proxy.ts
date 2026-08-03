@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { POST_LOGIN_PATH } from "@/auth/session-cookie";
+import { POST_LOGIN_PATH, sessionCookieOptions } from "@/auth/session-cookie";
+import { getApexHost, sanitizeGymSlug } from "@/lib/gym-slug";
 
 /**
  * Social OIDC callback proxy logic — extracted from the route handler so it
@@ -79,7 +80,10 @@ export async function proxySocialCallback(
     return redirectToLogin(payload.error ?? "social_login_failed", options.origin);
   }
 
-  const session = (await res.json().catch(() => ({}))) as { token?: string };
+  const session = (await res.json().catch(() => ({}))) as {
+    token?: string;
+    originSlug?: string;
+  };
 
   // The API responded ok but issued no token — treat as a failed login
   // instead of silently redirecting home with no session (redirect loop).
@@ -87,15 +91,38 @@ export async function proxySocialCallback(
     return redirectToLogin("missing_token", options.origin);
   }
 
-  const url = new URL(POST_LOGIN_PATH, options.origin ?? "http://localhost");
-  const next = NextResponse.redirect(url, { status: 303 });
+  const next = NextResponse.redirect(
+    resolvePostLoginTarget(session.originSlug, options.origin),
+    { status: 303 }
+  );
 
+  // Parent-domain cookie so the session survives the apex→subdomain hop (and
+  // is shared across all gym subdomains). Host-only on localhost/non-prod.
   next.cookies.set(SESSION_COOKIE, session.token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
+    ...sessionCookieOptions(),
     maxAge: SESSION_MAX_AGE,
   });
   return next;
+}
+
+/**
+ * Resolve where to send the user after a successful social login.
+ *
+ * When the API round-trips a valid gym `originSlug`, redirect back to that
+ * white-label subdomain (`https://<slug>.<apex><POST_LOGIN_PATH>`) so the
+ * gym branding survives the OAuth hop. The slug is re-validated here as a
+ * single DNS label via {@link sanitizeGymSlug} — a malformed or off-domain
+ * value (`evil.com`, `//evil`, `../`, `www`, a full host/URL) falls back to
+ * the apex-relative `POST_LOGIN_PATH`, so this can never become an open
+ * redirect.
+ */
+function resolvePostLoginTarget(
+  originSlug: string | undefined,
+  origin: string | undefined
+): URL {
+  const slug = sanitizeGymSlug(originSlug);
+  if (slug) {
+    return new URL(`https://${slug}.${getApexHost()}${POST_LOGIN_PATH}`);
+  }
+  return new URL(POST_LOGIN_PATH, origin ?? "http://localhost");
 }

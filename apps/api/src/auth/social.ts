@@ -26,7 +26,12 @@ import type {
 } from "./providers.js";
 import { UnverifiedEmailError, UnknownProviderError } from "./providers.js";
 import { generateToken } from "./session.js";
-import type { SessionResponse, UserId, TenantId } from "@kinora/contracts";
+import type {
+  SessionResponse,
+  SocialCallbackResponse,
+  UserId,
+  TenantId,
+} from "@kinora/contracts";
 
 /**
  * Session lifetime in milliseconds (30 days). Mirrors AuthService (PR2).
@@ -101,16 +106,31 @@ export class SocialAuthError extends Error {
  * callback over injected persistence ports.
  */
 export class SocialAuthService {
-  /** state → providerId map populated by login, consumed by callback. */
-  private readonly stateToProvider = new Map<string, string>();
+  /**
+   * state → { providerId, originSlug } map populated by login, consumed by
+   * callback. The opaque `state` (an unguessable nonce minted by the provider)
+   * is the ONLY thing round-tripped through the user-agent + Google; the
+   * origin gym slug is kept SERVER-SIDE here so it can never be tampered with
+   * in transit. `originSlug` is optional — non-gym (apex) logins carry none.
+   */
+  private readonly stateToProvider = new Map<
+    string,
+    { providerId: string; originSlug?: string }
+  >();
 
   constructor(private readonly deps: SocialServiceDeps) {}
 
   /**
    * Initiate an OIDC login for `providerId`.
    * Returns the authorization URL (with PKCE + state) and the opaque state.
+   *
+   * `originSlug` (optional) is the gym subdomain the login was initiated from;
+   * it is stored keyed by the generated `state` so the callback can redirect
+   * the user-agent back to that subdomain, preserving the white-label. It is
+   * NOT encoded into the client-visible state — the server map is the source
+   * of truth.
    */
-  async login(providerId: string): Promise<{
+  async login(providerId: string, originSlug?: string): Promise<{
     authorizationUrl: string;
     state: string;
   }> {
@@ -131,7 +151,7 @@ export class SocialAuthService {
       );
     }
 
-    this.stateToProvider.set(state, providerId);
+    this.stateToProvider.set(state, { providerId, originSlug });
     return { authorizationUrl, state };
   }
 
@@ -146,14 +166,15 @@ export class SocialAuthService {
   async callback(input: {
     code: string;
     state: string;
-  }): Promise<SessionResponse> {
-    const providerId = this.stateToProvider.get(input.state);
+  }): Promise<SocialCallbackResponse> {
+    const entry = this.stateToProvider.get(input.state);
     // Clean up the state entry immediately — it is single-use.
     this.stateToProvider.delete(input.state);
 
-    if (!providerId) {
+    if (!entry) {
       throw new SocialAuthError("Unknown or expired social login state");
     }
+    const { providerId, originSlug } = entry;
 
     let providerUser: ProviderUser;
     const provider = this.deps.registry.get(providerId);
@@ -180,7 +201,11 @@ export class SocialAuthService {
     }
 
     const context = await this.resolveUserTenantContext(providerUser);
-    return this.issueSession(context);
+    const session = await this.issueSession(context);
+    // Round-trip the origin gym slug (if the login started from a subdomain)
+    // so the web callback can redirect the user-agent back to it. Undefined for
+    // apex logins — omitted rather than sent as an empty string.
+    return originSlug ? { ...session, originSlug } : session;
   }
 
   /**

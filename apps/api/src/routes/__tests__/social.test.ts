@@ -191,4 +191,61 @@ describe("social routes (integration via app.inject)", () => {
     });
     expect(res.statusCode).toBe(422);
   });
+
+  it("round-trips a valid originSlug: login stores it, callback response echoes it", async () => {
+    const app = await startApp(ctx);
+    const loginRes = await app.inject({
+      method: "GET",
+      url: "/auth/social/login?provider=google&originSlug=downtown",
+    });
+    expect(loginRes.statusCode).toBe(200);
+    const state = loginRes.json().state;
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/social/callback",
+      payload: { code: "the-code", state },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().originSlug).toBe("downtown");
+  });
+
+  it("treats a malformed originSlug as none (still 200, no slug in the callback response)", async () => {
+    const app = await startApp(ctx);
+    // A dotted host-like value is not a single DNS label → sanitized to none.
+    const loginRes = await app.inject({
+      method: "GET",
+      url: `/auth/social/login?provider=google&originSlug=${encodeURIComponent("evil.com")}`,
+    });
+    expect(loginRes.statusCode).toBe(200);
+    const state = loginRes.json().state;
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/social/callback",
+      payload: { code: "c", state },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().originSlug).toBeUndefined();
+  });
+
+  it("omits originSlug from the callback response for an apex login (no slug)", async () => {
+    const app = await startApp(ctx);
+    const loginRes = await app.inject({
+      method: "GET",
+      url: "/auth/social/login?provider=google",
+    });
+    const state = loginRes.json().state;
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/social/callback",
+      payload: { code: "c", state },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().originSlug).toBeUndefined();
+  });
 });

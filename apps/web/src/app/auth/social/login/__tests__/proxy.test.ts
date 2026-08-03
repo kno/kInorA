@@ -40,6 +40,50 @@ describe("proxySocialLogin", () => {
     expect(init.method).toBe("GET");
   });
 
+  it("forwards the originSlug to the API when provided", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      fakeJsonResponse({
+        jsonValue: {
+          authorizationUrl: "https://accounts.google.com/o/oauth2/auth?client_id=abc",
+          state: "s",
+        },
+      })
+    );
+
+    await proxySocialLogin("google", {
+      fetchImpl,
+      apiBaseUrl: "http://api.test",
+      origin: "https://downtown.kinora.aitsai.com",
+      originSlug: "downtown",
+    });
+
+    const [url] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "http://api.test/auth/social/login?provider=google&originSlug=downtown"
+    );
+  });
+
+  it("omits originSlug from the API request when not provided (apex login)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      fakeJsonResponse({
+        jsonValue: {
+          authorizationUrl: "https://accounts.google.com/o/oauth2/auth?client_id=abc",
+          state: "s",
+        },
+      })
+    );
+
+    await proxySocialLogin("google", {
+      fetchImpl,
+      apiBaseUrl: "http://api.test",
+      origin: "https://kinora.aitsai.com",
+    });
+
+    const [url] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://api.test/auth/social/login?provider=google");
+    expect(url).not.toContain("originSlug");
+  });
+
   // Triangle: missing provider → error redirect
   it("returns an error redirect when the provider query param is missing", async () => {
     const fetchImpl = vi.fn();

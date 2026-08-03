@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import type {
   OidcCallbackParams,
-  SessionResponse,
+  SocialCallbackResponse,
   SocialLoginResponse,
 } from "@kinora/contracts";
 import {
@@ -23,10 +23,36 @@ const loginSchema = {
     required: ["provider"],
     properties: {
       provider: { type: "string", minLength: 1 },
+      // Optional gym subdomain the login was initiated from. Accepted as a
+      // free string here (so a malformed value never 422s the whole login);
+      // it is validated against ORIGIN_SLUG_PATTERN below and, if it fails,
+      // treated as none — the login still proceeds from the apex.
+      originSlug: { type: "string" },
     },
     additionalProperties: false,
   },
 };
+
+/**
+ * A single DNS label: lowercase alphanumerics + hyphens, 1..63 chars. Mirrors
+ * the web `extractGymSlugFromHost` allow-list so a slug that round-trips
+ * through the OAuth state can only ever be a bare subdomain label — never a
+ * host, path, or URL that could drive an open redirect on the way back.
+ */
+const ORIGIN_SLUG_PATTERN = /^[a-z0-9-]{1,63}$/;
+
+/**
+ * Normalize a raw `originSlug` query param to a safe single-label slug or
+ * `undefined`. Invalid shapes (empty, wrong chars, too long, `www`) are
+ * treated as none rather than rejected.
+ */
+function sanitizeOriginSlug(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const slug = raw.trim().toLowerCase();
+  if (!ORIGIN_SLUG_PATTERN.test(slug)) return undefined;
+  if (slug === "www") return undefined;
+  return slug;
+}
 
 const callbackSchema = {
   body: {
@@ -83,10 +109,14 @@ export const socialRoutes: FastifyPluginAsync<SocialRoutesOptions> = async (
       "/auth/social/login",
       { schema: loginSchema },
       async (
-        request: FastifyRequest<{ Querystring: { provider: string } }>,
+        request: FastifyRequest<{
+          Querystring: { provider: string; originSlug?: string };
+        }>,
       ) => {
+        const originSlug = sanitizeOriginSlug(request.query.originSlug);
         const result: SocialLoginResponse = await socialAuthService.login(
-          request.query.provider
+          request.query.provider,
+          originSlug
         );
         return result;
       }
@@ -98,7 +128,7 @@ export const socialRoutes: FastifyPluginAsync<SocialRoutesOptions> = async (
       async (
         request: FastifyRequest<{ Body: OidcCallbackParams }>,
       ) => {
-        const result: SessionResponse = await socialAuthService.callback(
+        const result: SocialCallbackResponse = await socialAuthService.callback(
           request.body
         );
         return result;
