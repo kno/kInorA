@@ -2,8 +2,8 @@ import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { getFirstParam } from "@/i18n/request";
 import { loginAction } from "./actions";
-import { extractGymSlugFromHost } from "./gym-slug";
-import { fetchPublicBranding } from "./gym-branding-client";
+import { extractGymSlugFromHost } from "@/lib/gym-slug";
+import { fetchPublicBranding } from "@/lib/gym-branding-client";
 import { buildGymStyleBlock } from "@/lib/gym-style";
 
 /**
