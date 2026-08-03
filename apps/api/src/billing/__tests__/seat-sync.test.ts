@@ -84,6 +84,7 @@ describe("SeatSyncService.syncSeats", () => {
       "sub_123",
       3,
       `seat-sync:${TENANT}:3`,
+      [],
     );
     // The recompute + update ran under the per-sponsor lock.
     expect(store.withSponsorLock).toHaveBeenCalledWith(TENANT, expect.any(Function));
@@ -100,6 +101,7 @@ describe("SeatSyncService.syncSeats", () => {
       "sub_zero",
       1,
       `seat-sync:${TENANT}:1`,
+      [],
     );
   });
 
@@ -122,6 +124,50 @@ describe("SeatSyncService.syncSeats", () => {
 
     await expect(service.syncSeats(TENANT)).resolves.toBeUndefined();
     expect(onError).toHaveBeenCalledWith(TENANT, expect.any(Error));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SEAT-PRICE GUARD (fix/seat-sync-price-guard) — `SEAT_BILLING_ENABLED` alone
+// never proves the sponsor's subscription IS a per-seat Trainer Seat one (the
+// trainer/gym tier is granted by an independent admin override, so a tenant
+// can hold a flat Pro subscription AND a trainer override). The actual guard
+// logic lives in the gateway adapter; this service's contract is simply to
+// forward the config-injected `seatPriceIds` through on EVERY call so the
+// gateway can enforce it. These tests assert that forwarding contract at the
+// service boundary — the gateway's own no-op behavior is proven in
+// `db/repositories/__tests__/stripe-gateway.test.ts`.
+// ---------------------------------------------------------------------------
+describe("SeatSyncService — SEAT-PRICE GUARD forwarding (fix/seat-sync-price-guard)", () => {
+  it("forwards the configured seatPriceIds through to gateway.updateSubscriptionQuantity on every call", async () => {
+    const store = fakeStore("sub_123");
+    const gateway = fakeGateway();
+    const seatPriceIds = ["price_seat_monthly", "price_seat_annual"];
+    const service = new SeatSyncService(fakeSeatSource(3), store, gateway, undefined, true, seatPriceIds);
+
+    await service.syncSeats(TENANT);
+
+    expect(gateway.updateSubscriptionQuantity).toHaveBeenCalledWith(
+      "sub_123",
+      3,
+      `seat-sync:${TENANT}:3`,
+      seatPriceIds,
+    );
+  });
+
+  it("defaults to an empty seatPriceIds array when not configured — the gateway then no-ops for every subscription", async () => {
+    const store = fakeStore("sub_123");
+    const gateway = fakeGateway();
+    const service = new SeatSyncService(fakeSeatSource(3), store, gateway, undefined, true);
+
+    await service.syncSeats(TENANT);
+
+    expect(gateway.updateSubscriptionQuantity).toHaveBeenCalledWith(
+      "sub_123",
+      3,
+      `seat-sync:${TENANT}:3`,
+      [],
+    );
   });
 });
 
