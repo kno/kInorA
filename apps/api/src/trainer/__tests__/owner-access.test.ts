@@ -184,6 +184,41 @@ describe("resolveAuthorizedOwner", () => {
     );
   });
 
+  // 16c-v3-b2b-seat-billing Slice F (design "Downgrade / lapse behavior"):
+  // "Seat removed (assignment revoked)" locks in that future trainer-mediated
+  // generation for that client is denied via this SAME resolver — no new
+  // production code, this proves the EXISTING widening-branch behavior is
+  // exactly the contract Slice F depends on. `findActiveAssignment` returning
+  // undefined for a revoked row (asserted directly in
+  // `trainer-assignment.integration.test.ts`) is indistinguishable here from a
+  // missing assignment, so the resolver denies identically with the flat
+  // `forbidden_owner_access` the route maps to a 403.
+  it("16c Slice F: a revoked assignment denies trainer-mediated generation for that client with ForbiddenOwnerAccess (forbidden_owner_access)", async () => {
+    const deps = {
+      entitlementReader: entitlementReader({
+        billing: { tier: "trainer", status: "active", source: "system", trialStartedAt: null, trialEndsAt: null },
+      }),
+      // Mirrors what a real revoked row produces: findActiveAssignment never
+      // returns a "revoked" row, only active ones — so post-revoke it's undefined.
+      assignmentRepo: assignmentRepo(undefined),
+    };
+
+    await expect(
+      resolveAuthorizedOwner(
+        { tenantId: TENANT, actorUserId: ACTOR, role: "trainer" },
+        deps,
+        CLIENT_A,
+      ),
+    ).rejects.toThrow(ForbiddenOwnerAccess);
+    await expect(
+      resolveAuthorizedOwner(
+        { tenantId: TENANT, actorUserId: ACTOR, role: "trainer" },
+        deps,
+        CLIENT_A,
+      ),
+    ).rejects.toThrow("forbidden_owner_access");
+  });
+
   it("requesting exactly the actor's own id is always the (unchanged) self path, regardless of role", async () => {
     const deps = {
       entitlementReader: entitlementReader({}),

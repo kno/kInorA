@@ -201,6 +201,48 @@ describe("mapSubscriptionToWrite (pure mapping)", () => {
     expect(write.seatCount).toBeNull();
     expect(write.tier).toBe("pro");
   });
+
+  // 16c-v3-b2b-seat-billing Slice F (design "Downgrade / lapse behavior"):
+  // Stripe retains the subscription's last-known item quantity on a canceled
+  // subscription object, so `seatQuantity` alone cannot be trusted once the
+  // subscription lapses — the seat count is meaningless without an ACTIVE
+  // seat subscription and must never linger to inflate the seat-scaled limit
+  // (`resolveTenantFeatureLimit`) for a sponsor whose Stripe billing ended.
+  it("a subscription.deleted event zeroes seatCount even though the snapshot still reports a stale quantity", () => {
+    const ev = event({
+      type: "customer.subscription.deleted",
+      subscription: snapshot({ status: "canceled", seatQuantity: 5 }),
+    });
+    const write = mapSubscriptionToWrite(ev, ev.subscription!, NOW);
+    expect(write.status).toBe("expired");
+    expect(write.seatCount).toBeNull();
+  });
+
+  it("an update event that resolves to expired (e.g. canceled status) also zeroes seatCount", () => {
+    const ev = event({
+      type: "customer.subscription.updated",
+      subscription: snapshot({ status: "canceled", seatQuantity: 5 }),
+    });
+    const write = mapSubscriptionToWrite(ev, ev.subscription!, NOW);
+    expect(write.status).toBe("expired");
+    expect(write.seatCount).toBeNull();
+  });
+
+  it("an active subscription that scheduled cancel_at_period_end but has NOT yet lapsed keeps its seatCount", () => {
+    const periodEnd = new Date("2026-08-25T00:00:00.000Z");
+    const before = new Date("2026-08-01T00:00:00.000Z");
+    const ev = event({
+      subscription: snapshot({
+        status: "active",
+        cancelAtPeriodEnd: true,
+        currentPeriodEnd: periodEnd,
+        seatQuantity: 5,
+      }),
+    });
+    const write = mapSubscriptionToWrite(ev, ev.subscription!, before);
+    expect(write.status).toBe("active");
+    expect(write.seatCount).toBe(5);
+  });
 });
 
 describe("ProcessStripeWebhook (orchestration)", () => {

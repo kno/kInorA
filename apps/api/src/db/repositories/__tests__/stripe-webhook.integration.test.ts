@@ -394,6 +394,47 @@ describe.skipIf(!hasDb)("StripeEventStoreRepository / ProcessStripeWebhook (real
     expect(afterLater?.tier).toBe("pro");
   });
 
+  // 16c-v3-b2b-seat-billing Slice F (design "Downgrade / lapse behavior"): a
+  // canceled Stripe subscription object can still report its last-known item
+  // quantity, so the webhook must explicitly zero the PERSISTED seat_count on
+  // cancel/expiry — it must never linger to inflate the seat-scaled limit
+  // formula for a sponsor whose Stripe billing has ended.
+  it("16c Slice F: a customer.subscription.deleted event zeroes the persisted seat_count", async () => {
+    const { tenantId } = await seedTenantWithMember();
+
+    const activeEvent: StripeWebhookEvent = {
+      id: `evt_seat_lapse_active_${RUN}`,
+      type: "customer.subscription.updated",
+      eventTs: new Date("2026-07-25T09:00:00.000Z"),
+      subscription: snapshot(tenantId, { status: "active", seatQuantity: 4 }),
+    };
+    await new ProcessStripeWebhook(fixedGateway(activeEvent), store).process(Buffer.from("raw"), "sig");
+
+    const [beforeLapse] = await db
+      .select()
+      .from(tenantBillingStates)
+      .where(eq(tenantBillingStates.tenantId, tenantId));
+    expect(beforeLapse?.seatCount).toBe(4);
+    expect(beforeLapse?.status).toBe("active");
+
+    // Stripe still reports the LAST-KNOWN quantity (4) on the deleted
+    // subscription object — the webhook must zero seat_count regardless.
+    const deletedEvent: StripeWebhookEvent = {
+      id: `evt_seat_lapse_deleted_${RUN}`,
+      type: "customer.subscription.deleted",
+      eventTs: new Date("2026-07-26T09:00:00.000Z"),
+      subscription: snapshot(tenantId, { status: "canceled", seatQuantity: 4 }),
+    };
+    await new ProcessStripeWebhook(fixedGateway(deletedEvent), store).process(Buffer.from("raw"), "sig");
+
+    const [afterLapse] = await db
+      .select()
+      .from(tenantBillingStates)
+      .where(eq(tenantBillingStates.tenantId, tenantId));
+    expect(afterLapse?.status).toBe("expired");
+    expect(afterLapse?.seatCount).toBeNull();
+  });
+
   it("#172: an active admin override still wins over a paid-subscription webhook write", async () => {
     const { tenantId, userId } = await seedTenantWithMember();
 
