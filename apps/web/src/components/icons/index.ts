@@ -1,4 +1,5 @@
 export {
+  BrandingIcon,
   CreateIcon,
   ExercisesIcon,
   HistoryIcon,

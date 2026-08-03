@@ -190,6 +190,18 @@ export const kinIconRegistry = {
       <path className={className} d="M12 7V12L16 14.5" />
     </>
   )),
+  // Paint palette glyph for the gym Branding Studio nav entry (GH #322).
+  palette: createOpenDesignIcon("Branding", ({ className }) => (
+    <>
+      <path
+        className={className}
+        d="M12 3C7 3 3 6.6 3 11c0 3 2 5 5 5h1.5a1.5 1.5 0 0 1 0 3H9c-.6 0-1 .6-.6 1.1A9 9 0 1 0 12 3Z"
+      />
+      <circle cx="7.5" cy="10.5" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="16.5" cy="10.5" r="1.2" fill="currentColor" stroke="none" />
+    </>
+  )),
 } as const;
 
 export type KinIconName = keyof typeof kinIconRegistry;
@@ -246,3 +258,4 @@ export const UserIcon = (props: Omit<KinIconProps, "name">) => <KinIcon name="us
 export const OrbitLogoIcon = (props: Omit<KinIconProps, "name" | "size"> & { size?: 16 | 24 | 32 }) => (
   <KinIcon name="orbitLogo" size={props.size ?? 24} {...props} />
 );
+export const BrandingIcon = (props: Omit<KinIconProps, "name">) => <KinIcon name="palette" {...props} />;

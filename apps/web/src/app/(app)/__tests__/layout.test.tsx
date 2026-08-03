@@ -43,8 +43,11 @@ vi.mock("../auth/profile-client", () => ({
 
 // 16a-v3-gym-white-label, Slice 5 — own-tenant branding fetch, called only
 // when a session token exists (mocked as undefined by the `next/headers`
-// mock above for the pre-existing describe block).
-const fetchOwnBranding = vi.fn(async (_token: string) => null as unknown);
+// mock above for the pre-existing describe block). GH #322: the result is
+// now a discriminated union, not a fail-safe-to-null value — default to
+// "forbidden" (non-gym tenant) so pre-existing tests keep their prior
+// no-branding, non-gym behavior.
+const fetchOwnBranding = vi.fn(async (_token: string) => ({ kind: "forbidden" }) as unknown);
 vi.mock("../auth/gym-branding-client", () => ({
   fetchOwnBranding: (...args: [string]) => fetchOwnBranding(...args),
 }));
@@ -118,20 +121,23 @@ describe("AppLayout (app route group)", () => {
 describe("AppLayout — gym branding", () => {
   afterEach(() => {
     jarGet.mockReset().mockReturnValue(undefined);
-    fetchOwnBranding.mockReset().mockResolvedValue(null);
+    fetchOwnBranding.mockReset().mockResolvedValue({ kind: "forbidden" });
   });
 
   it("injects an inline <style> with the member's own-tenant --gym-* palette when a session token resolves branding", async () => {
     jarGet.mockReturnValue({ value: "session-token-123" });
     fetchOwnBranding.mockResolvedValue({
-      logoUrl: "/media/branding/abc",
-      palette: {
-        accent: "#112233",
-        accentFg: "#ffffff",
-        surface: "#000000",
-        surface2: "#111111",
-        fg: "#eeeeee",
-        muted: "#999999",
+      kind: "ok",
+      data: {
+        logoUrl: "/media/branding/abc",
+        palette: {
+          accent: "#112233",
+          accentFg: "#ffffff",
+          surface: "#000000",
+          surface2: "#111111",
+          fg: "#eeeeee",
+          muted: "#999999",
+        },
       },
     });
 
@@ -146,7 +152,7 @@ describe("AppLayout — gym branding", () => {
 
   it("renders no gym <style> (default kInorA tokens) when the member's tenant has no branding", async () => {
     jarGet.mockReturnValue({ value: "session-token-123" });
-    fetchOwnBranding.mockResolvedValue(null);
+    fetchOwnBranding.mockResolvedValue({ kind: "not_found" });
 
     const html = renderToStringWithIntl(
       await AppLayout({ children: <p>Page content here</p> })
@@ -165,5 +171,73 @@ describe("AppLayout — gym branding", () => {
 
     expect(fetchOwnBranding).not.toHaveBeenCalled();
     expect(html).not.toContain("--gym-accent");
+  });
+});
+
+// GH #322 — the gym Branding Studio nav entry is gated on `isGym`, derived
+// from the SAME branding fetch the layout already makes for theming (no new
+// endpoint, no new fetch). A "forbidden" (403, non-gym tenant) result means
+// NOT gym; both "ok" (branding row present) and "not_found" (gym tenant, no
+// branding row yet) mean the tenant IS gym-tier.
+describe("AppLayout — isGym derivation for the Branding nav entry (GH #322)", () => {
+  afterEach(() => {
+    jarGet.mockReset().mockReturnValue(undefined);
+    fetchOwnBranding.mockReset().mockResolvedValue({ kind: "forbidden" });
+  });
+
+  it("wires isGym=true through to the AppShell when the branding fetch resolves ok", async () => {
+    jarGet.mockReturnValue({ value: "session-token-123" });
+    fetchOwnBranding.mockResolvedValue({
+      kind: "ok",
+      data: {
+        logoUrl: null,
+        palette: {
+          accent: "#112233",
+          accentFg: "#ffffff",
+          surface: "#000000",
+          surface2: "#111111",
+          fg: "#eeeeee",
+          muted: "#999999",
+        },
+      },
+    });
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    expect(html).toContain('href="/branding"');
+  });
+
+  it("wires isGym=true through to the AppShell when the branding fetch resolves not_found (gym tenant, no branding row yet)", async () => {
+    jarGet.mockReturnValue({ value: "session-token-123" });
+    fetchOwnBranding.mockResolvedValue({ kind: "not_found" });
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    expect(html).toContain('href="/branding"');
+  });
+
+  it("wires isGym=false through to the AppShell when the branding fetch resolves forbidden (non-gym tenant)", async () => {
+    jarGet.mockReturnValue({ value: "session-token-123" });
+    fetchOwnBranding.mockResolvedValue({ kind: "forbidden" });
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    expect(html).not.toContain('href="/branding"');
+  });
+
+  it("wires isGym=false through to the AppShell when there is no session token", async () => {
+    jarGet.mockReturnValue(undefined);
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    expect(html).not.toContain('href="/branding"');
   });
 });
