@@ -165,6 +165,23 @@ export function preservedSearchParams(
 }
 
 /**
+ * The query parameters a FILTER LINK must carry, as a base to mutate.
+ *
+ * Everything currently active EXCEPT `offset`, because toggling a filter
+ * changes the result set and must land on page 1.
+ *
+ * Unlike {@link preservedSearchParams} this KEEPS `search`: a chip narrows the
+ * current view rather than replacing it, and the chip's `href` is a complete
+ * destination URL rather than a form the search box also contributes to.
+ *
+ * It exists so the chips can carry a server-rendered `href` and therefore
+ * navigate WITHOUT JavaScript, exactly like the search form does.
+ */
+export function carriedFilterParams(params: ExerciseLibraryParams): Record<string, string> {
+  return Object.fromEntries(activeEntries(params, ["offset"]));
+}
+
+/**
  * Coerce `?offset=` to a non-negative integer; anything else means page one.
  *
  * Only a plain digit string is accepted, and the result is bounded — see

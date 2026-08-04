@@ -324,6 +324,28 @@ describe("fetchExerciseCatalogFacets", () => {
     });
   });
 
+  it("REJECTS an array body rather than degrading to 'no filters at all'", async () => {
+    // `typeof [] === "object"`, so an array used to pass the guard: every group
+    // normalised to `[]` and the call reported `kind: "ok"`. The library then
+    // rendered with every filter chip gone and no error anywhere — the reader
+    // silently loses all filtering and has no way to know something broke.
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, []));
+
+    const result = await fetchExerciseCatalogFacets(TOKEN, { ...OPTIONS, fetchImpl });
+
+    expect(result).toEqual({ kind: "error", message: "invalid_response" });
+  });
+
+  it("rejects a NON-EMPTY array body too (it is still not a facets object)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(200, [{ value: "chest", count: 12 }]));
+
+    const result = await fetchExerciseCatalogFacets(TOKEN, { ...OPTIONS, fetchImpl });
+
+    expect(result).toEqual({ kind: "error", message: "invalid_response" });
+  });
+
   it("returns the API error code on a non-2xx response", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(403, { error: "forbidden" }));
 

@@ -3124,6 +3124,10 @@ a {
   font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
+  /* The chips are anchors so they navigate without JavaScript — they must not
+     pick up the default link underline or visited colour. */
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .kin-ex-chip:hover {

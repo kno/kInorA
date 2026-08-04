@@ -190,7 +190,10 @@ describe("@kinora/i18n package assembly", () => {
     // +3 `exercises.library.outOfRange.*` — an `?offset=` past the end of a
     // NON-empty result set is not "nothing matched"; the card says so and
     // links back to the first page (the pager is skipped on that branch).
-    expect(nonBillingKeys).toHaveLength(750);
+    // +4 `exercises.history.{empty,error}.*` — "View my history" navigates
+    // whether or not the exercise was ever logged, so the target page must
+    // answer in both cases instead of rendering nothing at all.
+    expect(nonBillingKeys).toHaveLength(754);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {

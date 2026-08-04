@@ -45,6 +45,16 @@ export interface ExerciseLibraryControlsProps {
    * hydrating.
    */
   preserved?: Record<string, string>;
+  /**
+   * Every active query parameter EXCEPT `offset`, used as the base each chip
+   * and the clear-filters link mutate into a complete destination URL.
+   *
+   * Server-rendered, like `preserved`, so the chips carry a real `href` and
+   * navigate through the browser itself when React has not hydrated. It keeps
+   * `search` (which `preserved` drops, because there the text input supplies
+   * it) so a chip NARROWS the current view.
+   */
+  carried?: Record<string, string>;
 }
 
 /**
@@ -69,6 +79,7 @@ export function ExerciseLibraryControls({
   selected,
   search,
   preserved = {},
+  carried = {},
 }: ExerciseLibraryControlsProps) {
   const router = useRouter();
   const t = useTranslations();
@@ -107,6 +118,36 @@ export function ExerciseLibraryControls({
     params.delete("offset");
     const query = params.toString();
     router.push(query ? `/exercises?${query}` : "/exercises");
+  }
+
+  /**
+   * The URL a chip / the clear button points at, built from the SERVER-RENDERED
+   * `carried` params rather than `useSearchParams()`.
+   *
+   * That is what makes the `href` present in the html the browser first
+   * receives, so the control navigates natively with JavaScript disabled. When
+   * React is live the click handlers below intercept and soft-navigate instead,
+   * still reading the live params — so the hydrated path is unchanged.
+   */
+  function hrefFor(mutate: (params: URLSearchParams) => void): string {
+    const params = new URLSearchParams(carried);
+    mutate(params);
+    const query = params.toString();
+    return query ? `/exercises?${query}` : "/exercises";
+  }
+
+  function chipHref(field: FilterField, value: string): string {
+    return hrefFor((params) => {
+      if (selected[field] === value) params.delete(field);
+      else params.set(field, value);
+    });
+  }
+
+  function clearHref(): string {
+    return hrefFor((params) => {
+      params.delete("search");
+      for (const field of FILTER_FIELDS) params.delete(field);
+    });
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -187,19 +228,30 @@ export function ExerciseLibraryControls({
               role="group"
               aria-labelledby={`exercise-facet-${field}`}
             >
+              {/* LINKS, not buttons. As `type="button"` + `onClick` these did
+                  nothing at all without JavaScript, while the search form
+                  beside them deliberately worked — the same toolbar honouring
+                  two different contracts. A real `href` navigates natively;
+                  `aria-current` (not `aria-pressed`, which links may not carry)
+                  marks the applied one. */}
               {facets[field].map((facet) => {
                 const active = selected[field] === facet.value;
                 return (
-                  <button
+                  <a
                     key={facet.value}
-                    type="button"
-                    aria-pressed={active}
+                    href={chipHref(field, facet.value)}
+                    aria-current={active ? "true" : undefined}
                     className={`kin-ex-chip${active ? " kin-ex-chip--active" : ""}`}
-                    onClick={() => handleChipClick(field, facet.value)}
+                    onClick={(event) => {
+                      // Keep the soft navigation when React is live: a full
+                      // page load here would re-fetch the whole route.
+                      event.preventDefault();
+                      handleChipClick(field, facet.value);
+                    }}
                   >
                     {taxonomyLabel(tax, facet.value)}
                     <span className="kin-ex-chip__count">{facet.count}</span>
-                  </button>
+                  </a>
                 );
               })}
             </div>
@@ -208,9 +260,16 @@ export function ExerciseLibraryControls({
       )}
 
       {hasFilters && (
-        <button type="button" className="kin-btn kin-btn--ghost" onClick={handleClear}>
+        <a
+          className="kin-btn kin-btn--ghost"
+          href={clearHref()}
+          onClick={(event) => {
+            event.preventDefault();
+            handleClear();
+          }}
+        >
           {t("exercises.library.clearFilters")}
-        </button>
+        </a>
       )}
     </section>
   );
