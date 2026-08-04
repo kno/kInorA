@@ -783,7 +783,15 @@
       "date": "Date",
       "weight": "Weight",
       "reps": "Reps",
-      "rpe": "RPE"
+      "rpe": "RPE",
+      "empty": {
+        "title": "No history for {exerciseTitle} yet",
+        "description": "You have not logged any set of this exercise. Once you complete it in a workout, your recent sets will appear here."
+      },
+      "error": {
+        "title": "Your history could not be loaded",
+        "description": "We could not reach your training history right now. Please try again in a moment."
+      }
     },
     "library": {
       "searchLabel": "Search exercises",

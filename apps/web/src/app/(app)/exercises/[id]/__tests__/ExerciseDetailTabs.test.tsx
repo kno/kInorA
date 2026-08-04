@@ -67,3 +67,84 @@ describe("ExerciseDetailTabs", () => {
     );
   });
 });
+
+/**
+ * The ARIA tabs keyboard pattern.
+ *
+ * `role="tablist"` PROMISES arrow-key navigation. The tabs announced it while
+ * implementing none of it: no roving tabindex, no key handling, and a panel
+ * that could not be focused. Every test here fails against that version.
+ */
+describe("ExerciseDetailTabs — keyboard pattern", () => {
+  const execution = () => screen.getByRole("tab", { name: "Execution" });
+  const muscles = () => screen.getByRole("tab", { name: "Muscles worked" });
+
+  it("moves to the next tab on ArrowRight, with selection following focus", () => {
+    renderWithIntl(<ExerciseDetailTabs {...props} />);
+    execution().focus();
+
+    fireEvent.keyDown(execution(), { key: "ArrowRight" });
+
+    expect(document.activeElement).toBe(muscles());
+    expect(muscles().getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Waist")).toBeDefined();
+  });
+
+  it("wraps past the last tab back to the first", () => {
+    renderWithIntl(<ExerciseDetailTabs {...props} />);
+
+    fireEvent.keyDown(execution(), { key: "ArrowRight" });
+    fireEvent.keyDown(muscles(), { key: "ArrowRight" });
+
+    expect(document.activeElement).toBe(execution());
+    expect(execution().getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("moves backwards on ArrowLeft, wrapping from the first tab to the last", () => {
+    renderWithIntl(<ExerciseDetailTabs {...props} />);
+
+    fireEvent.keyDown(execution(), { key: "ArrowLeft" });
+
+    expect(document.activeElement).toBe(muscles());
+    expect(muscles().getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("jumps to the first tab with Home and the last with End", () => {
+    renderWithIntl(<ExerciseDetailTabs {...props} />);
+
+    fireEvent.keyDown(execution(), { key: "End" });
+    expect(document.activeElement).toBe(muscles());
+
+    fireEvent.keyDown(muscles(), { key: "Home" });
+    expect(document.activeElement).toBe(execution());
+    expect(execution().getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("keeps the whole tablist to a SINGLE tab stop (roving tabindex)", () => {
+    renderWithIntl(<ExerciseDetailTabs {...props} />);
+
+    expect(execution().getAttribute("tabindex")).toBe("0");
+    expect(muscles().getAttribute("tabindex")).toBe("-1");
+
+    fireEvent.click(muscles());
+
+    expect(muscles().getAttribute("tabindex")).toBe("0");
+    expect(execution().getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("leaves keys it does not own alone, so Tab still exits the tablist", () => {
+    renderWithIntl(<ExerciseDetailTabs {...props} />);
+
+    // `fireEvent` answers false when the handler called preventDefault.
+    expect(fireEvent.keyDown(execution(), { key: "Tab" })).toBe(true);
+    expect(fireEvent.keyDown(execution(), { key: "ArrowRight" })).toBe(false);
+  });
+
+  it("makes the rendered panel focusable, on both tabs", () => {
+    renderWithIntl(<ExerciseDetailTabs {...props} />);
+    expect(screen.getByRole("tabpanel").getAttribute("tabindex")).toBe("0");
+
+    fireEvent.click(muscles());
+    expect(screen.getByRole("tabpanel").getAttribute("tabindex")).toBe("0");
+  });
+});
