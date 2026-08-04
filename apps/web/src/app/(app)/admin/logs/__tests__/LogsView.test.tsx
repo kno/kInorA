@@ -71,6 +71,64 @@ describe("LogsView", () => {
     expect(within(row).getByText(/"planId":"p1"/)).toBeDefined();
   });
 
+  it("forwards the tenant filter, trimmed, and converts the date range to ISO", async () => {
+    fetchLogsAction.mockResolvedValue({
+      kind: "ok",
+      events: [],
+      nextCursor: undefined,
+    });
+
+    renderWithIntl(<LogsView />);
+
+    // A tenant scope that never reaches the query would show an admin
+    // another tenant's events, so each filter must survive the round trip.
+    fireEvent.change(screen.getByTestId("logs-filter-tenant"), {
+      target: { value: "  bbbbbbbb-0000-0000-0000-000000000001  " },
+    });
+    fireEvent.change(screen.getByTestId("logs-filter-from"), {
+      target: { value: "2026-07-30T10:00" },
+    });
+    fireEvent.change(screen.getByTestId("logs-filter-to"), {
+      target: { value: "2026-07-31T18:30" },
+    });
+    fireEvent.click(screen.getByTestId("logs-apply"));
+
+    await waitFor(() => {
+      expect(fetchLogsAction).toHaveBeenCalledTimes(1);
+    });
+
+    const filters = fetchLogsAction.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(filters.tenantId).toBe("bbbbbbbb-0000-0000-0000-000000000001");
+    // The datetime-local value is local time; the API takes ISO instants.
+    expect(filters.from).toBe(new Date("2026-07-30T10:00").toISOString());
+    expect(filters.to).toBe(new Date("2026-07-31T18:30").toISOString());
+  });
+
+  it("omits a blank tenant filter and an empty date range rather than sending empty strings", async () => {
+    fetchLogsAction.mockResolvedValue({
+      kind: "ok",
+      events: [],
+      nextCursor: undefined,
+    });
+
+    renderWithIntl(<LogsView />);
+
+    fireEvent.change(screen.getByTestId("logs-filter-tenant"), {
+      target: { value: "   " },
+    });
+    fireEvent.click(screen.getByTestId("logs-apply"));
+
+    await waitFor(() => {
+      expect(fetchLogsAction).toHaveBeenCalledTimes(1);
+    });
+
+    const filters = fetchLogsAction.mock.calls[0]?.[0] as Record<string, unknown>;
+    // A whitespace-only tenant must not narrow the query to a bogus id.
+    expect(filters.tenantId).toBeUndefined();
+    expect(filters.from).toBeUndefined();
+    expect(filters.to).toBeUndefined();
+  });
+
   it("shows an error message when the action returns a non-ok result", async () => {
     fetchLogsAction.mockResolvedValue({ kind: "forbidden" });
 
