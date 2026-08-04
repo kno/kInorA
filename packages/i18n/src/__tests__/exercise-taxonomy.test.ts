@@ -31,13 +31,24 @@ interface CatalogRecord {
 
 const records = JSON.parse(readFileSync(CATALOG_PATH, "utf8")) as CatalogRecord[];
 
-/** Every distinct taxonomy value the shipped catalog can render. */
-function distinctTerms(): string[] {
+/**
+ * Every distinct taxonomy value the shipped catalog can render.
+ *
+ * `muscleGroup` counts: `ExerciseDetailTabs` renders it through
+ * `taxonomyLabel`, so an unmapped value falls back to raw English exactly like
+ * the other four dimensions. It happens to be fully covered today, which is
+ * precisely why its omission was invisible.
+ *
+ * Takes the record set as a parameter so the collector itself is testable
+ * against a synthetic catalog rather than only against the shipped one.
+ */
+function distinctTerms(source: readonly CatalogRecord[] = records): string[] {
   const terms = new Set<string>();
-  for (const record of records) {
+  for (const record of source) {
     terms.add(record.bodyPart);
     terms.add(record.equipment);
     terms.add(record.target);
+    terms.add(record.muscleGroup);
     for (const muscle of record.secondaryMuscles) terms.add(muscle);
   }
   return [...terms].filter(Boolean).sort();
@@ -49,6 +60,29 @@ const taxonomy = (locale: "en" | "es") =>
 describe("exercise taxonomy coverage", () => {
   it("reads a non-empty generated catalog", () => {
     expect(records.length).toBeGreaterThan(1000);
+  });
+
+  it("collects EVERY rendered dimension, muscleGroup included", () => {
+    // Asserted against a synthetic record because every shipped muscleGroup is
+    // coincidentally covered by the other dimensions — so a regenerated catalog
+    // could ship an untranslated muscleGroup with CI green.
+    expect(
+      distinctTerms([
+        {
+          bodyPart: "only-body-part",
+          equipment: "only-equipment",
+          target: "only-target",
+          muscleGroup: "only-muscle-group",
+          secondaryMuscles: ["only-secondary"],
+        },
+      ]),
+    ).toEqual([
+      "only-body-part",
+      "only-equipment",
+      "only-muscle-group",
+      "only-secondary",
+      "only-target",
+    ]);
   });
 
   it("translates EVERY distinct term in the shipped catalog (en)", () => {

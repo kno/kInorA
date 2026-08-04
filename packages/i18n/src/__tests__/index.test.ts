@@ -187,7 +187,10 @@ describe("@kinora/i18n package assembly", () => {
     // one flat map keyed by the raw catalog value). See
     // `exercise-taxonomy.test.ts`, which fails when a catalog regeneration
     // introduces a term this map does not cover.
-    expect(nonBillingKeys).toHaveLength(747);
+    // +3 `exercises.library.outOfRange.*` — an `?offset=` past the end of a
+    // NON-empty result set is not "nothing matched"; the card says so and
+    // links back to the first page (the pager is skipped on that branch).
+    expect(nonBillingKeys).toHaveLength(750);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {

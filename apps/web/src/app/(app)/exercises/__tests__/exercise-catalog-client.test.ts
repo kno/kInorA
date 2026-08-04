@@ -53,6 +53,27 @@ describe("buildCatalogQueryString", () => {
     expect(buildCatalogQueryString({ search: "   ", bodyPart: "" })).toBe("");
   });
 
+  it("does not THROW when a filter arrives as an array (the HTTP 500 crash site)", () => {
+    // This is the function that actually threw: `?search=a&search=b` reaches
+    // the page as `["a", "b"]`, and `.trim()` on an array is a TypeError raised
+    // outside any try/catch — the whole route answered 500. The caller
+    // normalises now, but the crash site itself must not depend on every future
+    // caller remembering to. The cast is the point: it reproduces a value the
+    // types promise cannot exist and the URL produces anyway.
+    const repeated = { search: ["press", "squat"], bodyPart: ["", "chest"] } as unknown as {
+      search: string;
+      bodyPart: string;
+    };
+
+    expect(() => buildCatalogQueryString(repeated)).not.toThrow();
+    expect(buildCatalogQueryString(repeated)).toBe("?search=press&bodyPart=chest");
+  });
+
+  it("drops a filter that is neither a string nor a usable array", () => {
+    const junk = { search: 42, bodyPart: null, target: [] } as unknown as { search: string };
+    expect(buildCatalogQueryString(junk)).toBe("");
+  });
+
   it("serializes every filter plus the pagination window", () => {
     const query = buildCatalogQueryString({
       search: " press ",
@@ -189,6 +210,19 @@ describe("fetchExerciseCatalogDetail", () => {
       "http://api.test/exercises/catalog/00%2001",
       expect.objectContaining({ method: "GET" }),
     );
+  });
+
+  it("treats the reserved `facets` segment as not-found, without calling fetch", async () => {
+    // `/exercises/facets` arrives here as id="facets" and used to build the
+    // FACETS url. The API answers 200 with the facets object, the detail schema
+    // then fails to parse, and the reader was told the library is unavailable.
+    // There is no such exercise: it is a 404.
+    const fetchImpl = vi.fn();
+
+    const result = await fetchExerciseCatalogDetail(TOKEN, "facets", { ...OPTIONS, fetchImpl });
+
+    expect(result).toEqual({ kind: "not-found" });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("maps a 404 to the distinct not-found result (drives Next.js notFound())", async () => {

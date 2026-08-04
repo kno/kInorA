@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { taxonomyLabel, type TaxonomyTranslator } from "./taxonomy";
@@ -79,6 +80,26 @@ export function ExerciseLibraryControls({
   const hasFilters =
     Boolean(search) || FILTER_FIELDS.some((field) => Boolean(selected[field]));
 
+  // The search box is CONTROLLED, and resets itself when — and only when — the
+  // APPLIED term changes (React's documented "adjust state during render"
+  // pattern). Two bugs meet here:
+  //  - `defaultValue` alone seeded an uncontrolled field once. `router.push` is
+  //    a soft navigation that keeps this component mounted, so after "Clear
+  //    filters" the box still showed the old term and pressing Search silently
+  //    re-applied a filter the reader believed cleared.
+  //  - Keying the input on the applied term fixed that by REMOUNTING the node,
+  //    which threw focus to <body> on every submit — on a phone, that closes
+  //    the on-screen keyboard after each search.
+  // Adjusting state keeps one stable DOM node, so focus and caret survive a
+  // submit, while an unrelated navigation (a chip click, which leaves `search`
+  // untouched) never disturbs what the reader is mid-way through typing.
+  const [term, setTerm] = useState(search ?? "");
+  const [appliedTerm, setAppliedTerm] = useState(search);
+  if (appliedTerm !== search) {
+    setAppliedTerm(search);
+    setTerm(search ?? "");
+  }
+
   function navigate(mutate: (params: URLSearchParams) => void) {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
     mutate(params);
@@ -137,12 +158,16 @@ export function ExerciseLibraryControls({
         ))}
 
         <div className="kin-ex-search__row">
+          {/* Controlled, but never remounted — see the state above. React
+              server-renders the `value` attribute, so the no-JS form still
+              submits the applied term. */}
           <input
             id="exercise-search"
             name="search"
             type="search"
             className="kin-input"
-            defaultValue={search ?? ""}
+            value={term}
+            onChange={(event) => setTerm(event.target.value)}
             placeholder={t("exercises.library.searchPlaceholder")}
           />
           <button type="submit" className="kin-btn kin-btn--accent">

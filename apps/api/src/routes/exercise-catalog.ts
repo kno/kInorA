@@ -3,6 +3,7 @@ import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import { requireAuth } from "../auth/plugin.js";
 import {
   EXERCISE_BODY_PARTS,
+  MAX_EXERCISE_SEARCH_LENGTH,
   type ExerciseCatalogDetail,
   type ExerciseCatalogItem,
   type ExerciseCatalogListResponse,
@@ -36,8 +37,14 @@ import {
 export const DEFAULT_CATALOG_LIMIT = 24;
 /** Hard cap on `limit`, so one request can never fan out the whole catalog. */
 export const MAX_CATALOG_LIMIT = 100;
-/** Upper bound on free-text `search`, mirroring `admin-logs.ts`'s event filter. */
-const MAX_SEARCH_LENGTH = 200;
+/**
+ * Upper bound on free-text `search`, mirroring `admin-logs.ts`'s event filter.
+ *
+ * Imported from `@kinora/contracts` rather than declared here: the web library
+ * truncates against the SAME constant, so lowering the cap can no longer leave
+ * that side sending terms this route rejects.
+ */
+const MAX_SEARCH_LENGTH = MAX_EXERCISE_SEARCH_LENGTH;
 
 /** A distinct facet value plus how many catalog records carry it. */
 export interface ExerciseCatalogFacetValue {

@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import {
   ExerciseCatalogDetailSchema,
   ExerciseCatalogListResponseSchema,
+  MAX_EXERCISE_SEARCH_LENGTH,
 } from "@kinora/contracts";
 import { listExercises } from "@kinora/exercise-catalog";
 import { authPlugin } from "../../auth/plugin.js";
@@ -273,6 +274,30 @@ describe("GET /exercises/catalog", () => {
     });
 
     expect(response.statusCode).toBe(400);
+  });
+
+  it("draws the search-length boundary at the SHARED contract constant", async () => {
+    // The web library truncates to `MAX_EXERCISE_SEARCH_LENGTH` before sending.
+    // Pinning both sides to the same exported constant is what stops this route
+    // from rejecting terms the client still considers valid — which the page
+    // renders as a false "library unavailable" card.
+    app = await buildTestApp();
+    const url = (length: number) =>
+      `/exercises/catalog?limit=1&search=${"a".repeat(length)}`;
+
+    const atCap = await app.inject({
+      method: "GET",
+      url: url(MAX_EXERCISE_SEARCH_LENGTH),
+      headers: AUTH_HEADERS,
+    });
+    const overCap = await app.inject({
+      method: "GET",
+      url: url(MAX_EXERCISE_SEARCH_LENGTH + 1),
+      headers: AUTH_HEADERS,
+    });
+
+    expect(atCap.statusCode).toBe(200);
+    expect(overCap.statusCode).toBe(400);
   });
 
   it("ignores unknown query parameters", async () => {

@@ -804,6 +804,11 @@
         "title": "Ningún ejercicio coincide con tu búsqueda",
         "description": "Prueba con otro término o quita los filtros para ver toda la biblioteca."
       },
+      "outOfRange": {
+        "title": "Esta página está más allá del final de los resultados",
+        "description": "La biblioteca tiene {total, plural, one {# ejercicio que coincide} other {# ejercicios que coinciden}}, pero este número de página los supera.",
+        "action": "Volver a la primera página"
+      },
       "error": {
         "title": "La biblioteca de ejercicios no está disponible",
         "description": "No hemos podido cargar la biblioteca ahora mismo. Inténtalo de nuevo en un momento."

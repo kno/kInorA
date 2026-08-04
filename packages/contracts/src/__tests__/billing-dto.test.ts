@@ -113,6 +113,7 @@ describe("stripe billing DTO contracts (11b Slice 1)", () => {
       "MUSCLE_GROUPS",
       "PlanSpecDraftSchema",
       "EXERCISE_BODY_PARTS",
+      "MAX_EXERCISE_SEARCH_LENGTH",
       "ExerciseCatalogItemSchema",
       "ExerciseCatalogDetailSchema",
       "ExerciseCatalogListResponseSchema",

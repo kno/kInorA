@@ -173,6 +173,54 @@ describe("ExercisesPage — library grid", () => {
     );
   });
 
+  it("survives a REPEATED query parameter, applying its first value", async () => {
+    // The App Router delivers `?search=press&search=squat` as an array. The
+    // page used to hand that straight to the catalog client, whose `.trim()`
+    // threw OUTSIDE the action's try/catch — the whole route answered 500.
+    const page = await ExercisesPage({
+      searchParams: Promise.resolve({
+        search: ["press", "squat"],
+        bodyPart: ["chest", "back"],
+        equipment: ["barbell", "cable"],
+        target: ["abs", "lats"],
+      }),
+    });
+
+    expect(listExerciseCatalogAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: "press",
+        bodyPart: "chest",
+        equipment: "barbell",
+        target: "abs",
+      }),
+    );
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-grid")).toBeDefined();
+  });
+
+  it("never forwards a bodyPart the API enum would reject as a 400", async () => {
+    await ExercisesPage({ searchParams: Promise.resolve({ bodyPart: "Chest" }) });
+
+    expect(listExerciseCatalogAction).toHaveBeenCalledWith(
+      expect.objectContaining({ bodyPart: undefined }),
+    );
+  });
+
+  it("truncates an oversized search term instead of letting the API 400", async () => {
+    await ExercisesPage({ searchParams: Promise.resolve({ search: "a".repeat(250) }) });
+
+    const [[query]] = listExerciseCatalogAction.mock.calls as [[{ search?: string }]];
+    expect(query.search).toHaveLength(200);
+  });
+
+  it("bounds an absurd offset so it stays a plain digit string on the wire", async () => {
+    await ExercisesPage({
+      searchParams: Promise.resolve({ offset: "1000000000000000000000" }),
+    });
+
+    const [[query]] = listExerciseCatalogAction.mock.calls as [[{ offset?: number }]];
+    expect(String(query.offset)).toMatch(/^\d+$/);
+  });
+
   it("renders the empty state when nothing matches", async () => {
     listExerciseCatalogAction.mockResolvedValue({
       kind: "ok",
@@ -182,6 +230,33 @@ describe("ExercisesPage — library grid", () => {
 
     expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-empty")).toBeDefined();
     expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-grid")).toBeUndefined();
+    // A GENUINE no-match must NOT be dressed up as an out-of-range page.
+    expect(
+      findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-out-of-range"),
+    ).toBeUndefined();
+  });
+
+  it("offers a way back when the offset is past the end of a NON-empty result set", async () => {
+    // `?offset=5000` against 1324 matches: the filters match plenty, this page
+    // just does not exist. The empty card claimed "nothing matches" and the
+    // pager is skipped on this branch, so there was no link back at all.
+    listExerciseCatalogAction.mockResolvedValue({
+      kind: "ok",
+      page: { items: [], total: 1324, limit: 24, offset: 5000 },
+    });
+    const page = await ExercisesPage({
+      searchParams: Promise.resolve({ offset: "5000", bodyPart: "chest" }),
+    });
+
+    const card = findFirst(
+      page,
+      (el) => el.props?.["data-testid"] === "exercise-library-out-of-range",
+    );
+    expect(card).toBeDefined();
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-empty")).toBeUndefined();
+
+    const back = findFirst(card, (el) => el.type === "a");
+    expect(back?.props?.href).toBe("/exercises?bodyPart=chest");
   });
 
   it("renders an error card when the catalog cannot be read", async () => {

@@ -9,10 +9,11 @@ import { ExerciseLibraryControls, type ExerciseLibraryFacets } from "./ExerciseL
 import { taxonomyTerm, type TaxonomyTranslator } from "./taxonomy";
 import {
   EXERCISE_PAGE_SIZE,
+  normalizeLibraryParams,
   pageHref,
   parseOffset,
   preservedSearchParams,
-  type ExerciseLibraryParams,
+  type RawExerciseLibraryParams,
 } from "./library-query";
 
 interface ExercisesPageProps {
@@ -24,8 +25,12 @@ interface ExercisesPageProps {
    * `?search=`, `?bodyPart=`, `?equipment=`, `?target=` and `?offset=` drive
    * the library grid; they are forwarded to the API, never applied in the
    * browser (see `exercise-catalog-client.ts`).
+   *
+   * Typed RAW (`string | string[]`) because that is what the App Router
+   * actually delivers — a repeated key arrives as an array. Everything below
+   * works on the normalised form (see `normalizeLibraryParams`).
    */
-  searchParams?: Promise<ExerciseLibraryParams>;
+  searchParams?: Promise<RawExerciseLibraryParams>;
 }
 
 /**
@@ -50,7 +55,10 @@ export default async function ExercisesPage({ searchParams }: ExercisesPageProps
   const t = await getTranslations();
   // See `taxonomy.ts` — runtime-built keys cannot satisfy next-intl's typing.
   const tax = t as unknown as TaxonomyTranslator;
-  const params = (await searchParams) ?? {};
+  // Collapses repeated keys and drops/clamps values the API would reject, so a
+  // hand-written URL yields an ordinary result rather than a crash or a false
+  // "library unavailable" card.
+  const params = normalizeLibraryParams((await searchParams) ?? {});
   const { title, search, bodyPart, equipment, target } = params;
 
   const detailResult = title ? await getExerciseDetailAction(title) : undefined;
@@ -120,6 +128,20 @@ export default async function ExercisesPage({ searchParams }: ExercisesPageProps
         <div className="kin-card kin-card--warning" data-testid="exercise-library-error">
           <h2 className="kin-title">{t("exercises.library.error.title")}</h2>
           <p className="kin-text kin-muted">{t("exercises.library.error.description")}</p>
+        </div>
+      ) : listResult.page.items.length === 0 && listResult.page.total > 0 ? (
+        /* The filters DO match — this page is simply past the end of them
+           (`?offset=5000`). Saying "nothing matches" would be a lie, and the
+           pager below is skipped on this branch, so without this link the
+           reader has no way back to a page that exists. */
+        <div className="kin-card kin-card--center" data-testid="exercise-library-out-of-range">
+          <h2 className="kin-title">{t("exercises.library.outOfRange.title")}</h2>
+          <p className="kin-text kin-muted">
+            {t("exercises.library.outOfRange.description", { total: listResult.page.total })}
+          </p>
+          <a className="kin-btn kin-btn--accent" href={pageHref(params, 0)}>
+            {t("exercises.library.outOfRange.action")}
+          </a>
         </div>
       ) : listResult.page.items.length === 0 ? (
         <div className="kin-card kin-card--center" data-testid="exercise-library-empty">

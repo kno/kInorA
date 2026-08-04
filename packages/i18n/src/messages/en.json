@@ -804,6 +804,11 @@
         "title": "No exercises match your search",
         "description": "Try a different term or clear the filters to browse the whole library."
       },
+      "outOfRange": {
+        "title": "This page is past the end of the results",
+        "description": "The library has {total, plural, one {# matching exercise} other {# matching exercises}}, but this page number goes beyond them.",
+        "action": "Back to the first page"
+      },
       "error": {
         "title": "The exercise library is unavailable",
         "description": "We could not load the library right now. Please try again in a moment."

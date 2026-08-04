@@ -1236,6 +1236,17 @@ export const EXERCISE_BODY_PARTS = [
 export type ExerciseBodyPart = (typeof EXERCISE_BODY_PARTS)[number];
 
 /**
+ * Longest free-text `?search=` the catalog list endpoint accepts.
+ *
+ * SINGLE SOURCE OF TRUTH, for the same reason `EXERCISE_BODY_PARTS` is one: the
+ * API REJECTS a longer term with 400, and the web library TRUNCATES to this
+ * length before sending. When the number was duplicated on both sides, lowering
+ * the API cap would have left the web layer sending terms it now 400s on, which
+ * the page renders as a false "library unavailable" card.
+ */
+export const MAX_EXERCISE_SEARCH_LENGTH = 200;
+
+/**
  * A single exercise as rendered in a browse/search grid.
  *
  * `attribution` is REQUIRED on the wire: the media referenced by `imagePath`

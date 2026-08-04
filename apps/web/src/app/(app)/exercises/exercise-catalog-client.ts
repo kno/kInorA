@@ -97,6 +97,16 @@ export async function fetchExerciseCatalogList(
 }
 
 /**
+ * Segments mounted UNDER `/exercises/catalog/` that are not exercise ids.
+ *
+ * `/exercises/facets` reaches this function with `id="facets"`, which builds
+ * the facets URL — the API answers 200 with the facets object, the detail
+ * schema then fails to parse, and the reader is told the library is
+ * unavailable. There is no such exercise: it is a 404.
+ */
+const RESERVED_CATALOG_SEGMENTS = new Set(["facets"]);
+
+/**
  * Fetch one exercise's full detail via `GET /exercises/catalog/:id`.
  *
  * A 404 is a distinct `"not-found"` result rather than a generic error so the
@@ -109,6 +119,10 @@ export async function fetchExerciseCatalogDetail(
 ): Promise<FetchExerciseCatalogDetailResult> {
   if (!token) {
     return { kind: "error", message: "no_session" };
+  }
+
+  if (!id || RESERVED_CATALOG_SEGMENTS.has(id)) {
+    return { kind: "not-found" };
   }
 
   const base = options.apiBaseUrl ?? apiBaseUrl();
@@ -192,12 +206,32 @@ export async function fetchExerciseCatalogFacets(
   };
 }
 
+/**
+ * Coerce one filter value to a usable string, or drop it.
+ *
+ * DEFENCE IN DEPTH. The types say `string | undefined`, but the values
+ * originate in a URL: a repeated key (`?search=a&search=b`) reaches the page as
+ * an ARRAY, and calling `.trim()` on that threw a TypeError outside any
+ * try/catch — the whole page answered HTTP 500. Callers normalise upstream now;
+ * this makes the crash site itself unable to throw, rather than depending on
+ * every future caller remembering to. An array collapses to its first non-blank
+ * entry, matching `normalizeLibraryParams`.
+ */
+function filterValue(raw: unknown): string | undefined {
+  if (Array.isArray(raw)) {
+    return filterValue(raw.find((entry) => typeof entry === "string" && entry.trim() !== ""));
+  }
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 /** Serialize the filter/pagination window, omitting blank values. */
 export function buildCatalogQueryString(query: ExerciseCatalogQuery): string {
   const params = new URLSearchParams();
 
   for (const key of ["search", "bodyPart", "equipment", "target"] as const) {
-    const value = query[key]?.trim();
+    const value = filterValue(query[key]);
     if (value) params.set(key, value);
   }
   if (typeof query.limit === "number") params.set("limit", String(query.limit));

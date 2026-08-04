@@ -1,8 +1,27 @@
 // @vitest-environment jsdom
+import type { ReactNode } from "react";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import { catalogs } from "@kinora/i18n";
 import { renderWithIntl } from "@/test-utils/render-with-intl";
 import type { ExerciseLibraryFacets } from "../ExerciseLibraryControls";
+
+/**
+ * Local provider wrapper, mirroring `ExerciseCard.test.tsx`.
+ *
+ * `renderWithIntl` applies the provider around the element it is given, so its
+ * `rerender` would drop it. Re-rendering with NEW PROPS is how a soft
+ * navigation is simulated, so the two tests that need it wrap explicitly and
+ * keep the tree shape identical across renders.
+ */
+function withIntl(ui: ReactNode) {
+  return (
+    <NextIntlClientProvider locale="en" messages={catalogs.en} timeZone="UTC">
+      {ui}
+    </NextIntlClientProvider>
+  );
+}
 
 // --- Module mocks ---
 
@@ -38,6 +57,64 @@ describe("ExerciseLibraryControls", () => {
   it("renders a search field seeded with the applied term", () => {
     renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} search="press" />);
     expect(screen.getByLabelText("Search exercises")).toHaveProperty("value", "press");
+  });
+
+  it("resets the search box when the applied term is cleared by a navigation", () => {
+    // `router.push` is a SOFT navigation: this component stays mounted, so an
+    // uncontrolled field seeded once by `defaultValue` kept the old term after
+    // "Clear filters" — and pressing Search re-applied a filter the reader
+    // believed cleared. The field must follow the URL.
+    const { rerender } = render(withIntl(<ExerciseLibraryControls facets={facets} selected={{}} />));
+    const box = () => screen.getByLabelText("Search exercises") as HTMLInputElement;
+
+    // The reader types the term, which marks the field dirty.
+    fireEvent.change(box(), { target: { value: "press" } });
+    rerender(withIntl(<ExerciseLibraryControls facets={facets} selected={{}} search="press" />));
+    expect(box().value).toBe("press");
+
+    // "Clear filters" → /exercises → the server re-renders with no term.
+    rerender(withIntl(<ExerciseLibraryControls facets={facets} selected={{}} />));
+    expect(box().value).toBe("");
+  });
+
+  it("keeps FOCUS in the search box when the submitted term comes back applied", () => {
+    // Making the field follow the URL by keying it on the applied term worked,
+    // but at the cost of REMOUNTING the node on every submit: focus fell to
+    // <body>, which on a phone closes the on-screen keyboard after each single
+    // search. The field must track the URL without changing identity.
+    const { rerender } = render(withIntl(<ExerciseLibraryControls facets={facets} selected={{}} />));
+    const box = () => screen.getByLabelText("Search exercises") as HTMLInputElement;
+
+    box().focus();
+    fireEvent.change(box(), { target: { value: "press" } });
+    fireEvent.submit(box().closest("form") as HTMLFormElement);
+
+    // The soft navigation lands: the server re-renders with the term applied.
+    rerender(withIntl(<ExerciseLibraryControls facets={facets} selected={{}} search="press" />));
+
+    expect(routerPush).toHaveBeenCalledWith("/exercises?search=press");
+    expect(box().value).toBe("press");
+    expect(document.activeElement).toBe(box());
+  });
+
+  it("keeps the typed term AND focus while an unrelated filter navigation happens", () => {
+    // A chip click leaves the applied term untouched, so nothing may disturb
+    // what the reader is mid-way through typing — text or caret.
+    const { rerender } = render(
+      withIntl(<ExerciseLibraryControls facets={facets} selected={{}} search="press" />),
+    );
+    const box = () => screen.getByLabelText("Search exercises") as HTMLInputElement;
+
+    box().focus();
+    fireEvent.change(box(), { target: { value: "press up" } });
+    rerender(
+      withIntl(
+        <ExerciseLibraryControls facets={facets} selected={{ bodyPart: "chest" }} search="press" />,
+      ),
+    );
+
+    expect(box().value).toBe("press up");
+    expect(document.activeElement).toBe(box());
   });
 
   it("renders a chip per facet value, with its match count", () => {
