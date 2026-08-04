@@ -191,17 +191,22 @@ export async function fetchExerciseCatalogFacets(
     return { kind: "error", message: payload.error ?? "fetch_exercise_facets_failed" };
   }
 
-  const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!body || typeof body !== "object") {
+  const body = (await res.json().catch(() => null)) as unknown;
+  // `typeof [] === "object"`, so an ARRAY body used to pass this guard: every
+  // group normalised to `[]` and the result was reported as `kind: "ok"`. The
+  // reader then lost every filter chip with no error anywhere — a wrong page
+  // that looks perfectly fine. Only a plain object can carry facet groups.
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { kind: "error", message: "invalid_response" };
   }
 
+  const groups = body as Record<string, unknown>;
   return {
     kind: "ok",
     facets: {
-      bodyPart: normalizeFacetValues(body.bodyPart),
-      equipment: normalizeFacetValues(body.equipment),
-      target: normalizeFacetValues(body.target),
+      bodyPart: normalizeFacetValues(groups.bodyPart),
+      equipment: normalizeFacetValues(groups.equipment),
+      target: normalizeFacetValues(groups.target),
     },
   };
 }

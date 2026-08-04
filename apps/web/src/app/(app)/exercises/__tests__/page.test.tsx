@@ -94,7 +94,11 @@ describe("ExercisesPage — read-only history reference (09c-v1 Slice 4b)", () =
     expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-history")).toBeUndefined();
   });
 
-  it("omits the section when the exercise has no history (empty recentSets)", async () => {
+  it("answers with an EMPTY STATE when the exercise has never been logged", async () => {
+    // `?title=` means the reader clicked "View my history" on a detail page.
+    // Rendering nothing at all made that button a silent no-op for every
+    // exercise they have not performed: the click navigated and the page said
+    // nothing about why there was no history.
     getExerciseDetailAction.mockResolvedValue({
       kind: "ok",
       detail: { exerciseTitle: "Never Performed", recentSets: [] },
@@ -102,7 +106,54 @@ describe("ExercisesPage — read-only history reference (09c-v1 Slice 4b)", () =
     const page = await ExercisesPage({ searchParams: Promise.resolve({ title: "Never Performed" }) });
 
     expect(getExerciseDetailAction).toHaveBeenCalledWith("Never Performed");
+    // The sets TABLE is still absent — there is nothing to tabulate.
     expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-history")).toBeUndefined();
+
+    const empty = findFirst(page, (el) => el.props?.["data-testid"] === "exercise-history-empty");
+    expect(empty).toBeDefined();
+    // Names the exercise the reader came from, so the card is unmistakably
+    // about their click and not a generic blank.
+    expect(textOf(empty)).toContain("Never Performed");
+    expect(textOf(empty)).toContain("not logged");
+  });
+
+  it("says so in Spanish too, rather than leaking the EN empty state", async () => {
+    vi.mocked(getTranslations).mockResolvedValueOnce(createServerTranslator("es"));
+    getExerciseDetailAction.mockResolvedValue({
+      kind: "ok",
+      detail: { exerciseTitle: "Press de banca", recentSets: [] },
+    });
+    const page = await ExercisesPage({ searchParams: Promise.resolve({ title: "Press de banca" }) });
+
+    expect(textOf(page)).toContain("Todavía no hay historial de Press de banca");
+  });
+
+  it("falls back to the requested title when the API returns no exercise name", async () => {
+    getExerciseDetailAction.mockResolvedValue({
+      kind: "ok",
+      detail: { exerciseTitle: undefined, recentSets: [] },
+    });
+    const page = await ExercisesPage({ searchParams: Promise.resolve({ title: "Hack Squat" }) });
+
+    const empty = findFirst(page, (el) => el.props?.["data-testid"] === "exercise-history-empty");
+    expect(textOf(empty)).toContain("Hack Squat");
+  });
+
+  it("says the history could not be read when the call fails, instead of nothing", async () => {
+    getExerciseDetailAction.mockResolvedValue({ kind: "error", message: "api_unreachable" });
+    const page = await ExercisesPage({ searchParams: Promise.resolve({ title: "Bench Press" }) });
+
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-history-error")).toBeDefined();
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-history-empty")).toBeUndefined();
+    // The library itself still renders — a history failure is not a page failure.
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-grid")).toBeDefined();
+  });
+
+  it("shows neither history card when no ?title= was selected", async () => {
+    const page = await ExercisesPage({ searchParams: Promise.resolve({}) });
+
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-history-empty")).toBeUndefined();
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-history-error")).toBeUndefined();
   });
 
   it("renders recent sets when history exists", async () => {
@@ -273,6 +324,17 @@ describe("ExercisesPage — library grid", () => {
 
     const controls = findFirst(page, (el) => Boolean(el.props?.facets));
     expect(controls?.props?.facets).toEqual({ bodyPart: [], equipment: [], target: [] });
+  });
+
+  it("hands the controls the params their no-JS chip links are built from", async () => {
+    // Without this the chips have nothing to compose an `href` out of, and are
+    // back to doing nothing when JavaScript is unavailable.
+    const page = await ExercisesPage({
+      searchParams: Promise.resolve({ search: "press", bodyPart: "chest", offset: "48" }),
+    });
+
+    const controls = findFirst(page, (el) => Boolean(el.props?.facets));
+    expect(controls?.props?.carried).toEqual({ search: "press", bodyPart: "chest" });
   });
 
   it("renders the attribution block (licensing obligation, both views)", async () => {

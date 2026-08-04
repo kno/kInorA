@@ -9,6 +9,7 @@ import { ExerciseLibraryControls, type ExerciseLibraryFacets } from "./ExerciseL
 import { taxonomyTerm, type TaxonomyTranslator } from "./taxonomy";
 import {
   EXERCISE_PAGE_SIZE,
+  carriedFilterParams,
   normalizeLibraryParams,
   pageHref,
   parseOffset,
@@ -90,6 +91,27 @@ export default async function ExercisesPage({ searchParams }: ExercisesPageProps
         <p className="kin-text kin-muted">{t("exercises.description")}</p>
       </div>
 
+      {/* `?title=` means the reader ARRIVED HERE by clicking "View my history"
+          on a detail page, so this block must always answer. Rendering it only
+          for a non-empty `recentSets` made that button a silent no-op for every
+          exercise the reader has never logged — the click navigated and nothing
+          on the page acknowledged it. */}
+      {title && detailResult?.kind === "error" && (
+        <div className="kin-card kin-card--warning" data-testid="exercise-history-error">
+          <h2 className="kin-title">{t("exercises.history.error.title")}</h2>
+          <p className="kin-text kin-muted">{t("exercises.history.error.description")}</p>
+        </div>
+      )}
+
+      {title && detailResult?.kind === "ok" && recentSets.length === 0 && (
+        <div className="kin-card kin-card--center" data-testid="exercise-history-empty">
+          <h2 className="kin-title">
+            {t("exercises.history.empty.title", { exerciseTitle: exerciseTitle ?? title })}
+          </h2>
+          <p className="kin-text kin-muted">{t("exercises.history.empty.description")}</p>
+        </div>
+      )}
+
       {recentSets.length > 0 && (
         <div className="kin-card" data-testid="exercise-history">
           {exerciseTitle && <h3 className="kin-title">{t("exercises.history.exerciseHeading", { exerciseTitle })}</h3>}
@@ -122,6 +144,7 @@ export default async function ExercisesPage({ searchParams }: ExercisesPageProps
         selected={{ bodyPart, equipment, target }}
         search={search}
         preserved={preservedSearchParams(params)}
+        carried={carriedFilterParams(params)}
       />
 
       {listResult.kind === "error" ? (

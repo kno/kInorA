@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   taxonomyLabel,
@@ -41,23 +41,68 @@ export function ExerciseDetailTabs({
 }: ExerciseDetailTabsProps) {
   const t = useTranslations();
   const [active, setActive] = useState<TabId>("execution");
+  const tabRefs = useRef<Partial<Record<TabId, HTMLButtonElement | null>>>({});
   // See `taxonomy.ts` — runtime-built keys cannot satisfy next-intl's literal
   // message-path typing.
   const tax = t as unknown as TaxonomyTranslator;
 
+  /**
+   * The ARIA tabs keyboard pattern: Arrow/Home/End move between tabs, wrapping
+   * at both ends, and selection follows focus (both panels are already
+   * rendered from data in hand, so activating on focus costs nothing).
+   *
+   * Announcing `role="tablist"` PROMISES this to a screen-reader user. Without
+   * it the arrow keys did nothing and the tabs were reachable only with Tab,
+   * which is the roving-tabindex behaviour below being contradicted.
+   */
+  function handleKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    const last = TABS.length - 1;
+    let target: number;
+
+    switch (event.key) {
+      case "ArrowRight":
+        target = index === last ? 0 : index + 1;
+        break;
+      case "ArrowLeft":
+        target = index === 0 ? last : index - 1;
+        break;
+      case "Home":
+        target = 0;
+        break;
+      case "End":
+        target = last;
+        break;
+      default:
+        return;
+    }
+
+    // Only once a key we OWN was pressed — Tab must keep leaving the tablist.
+    event.preventDefault();
+    const tab = TABS[target]!;
+    setActive(tab);
+    tabRefs.current[tab]?.focus();
+  }
+
   return (
     <div className="kin-ex-tabs-block">
       <div className="kin-ex-tabs" role="tablist">
-        {TABS.map((tab) => (
+        {TABS.map((tab, index) => (
           <button
             key={tab}
             type="button"
             role="tab"
             id={`exercise-tab-${tab}`}
+            ref={(node) => {
+              tabRefs.current[tab] = node;
+            }}
             aria-selected={active === tab}
             aria-controls={`exercise-panel-${tab}`}
+            // Roving tabindex: the tablist is ONE tab stop, and the arrow keys
+            // move within it.
+            tabIndex={active === tab ? 0 : -1}
             className={`kin-ex-tab${active === tab ? " kin-ex-tab--active" : ""}`}
             onClick={() => setActive(tab)}
+            onKeyDown={(event) => handleKeyDown(event, index)}
           >
             {tab === "execution"
               ? t("exercises.detail.tabs.execution")
@@ -72,6 +117,9 @@ export function ExerciseDetailTabs({
           role="tabpanel"
           id="exercise-panel-execution"
           aria-labelledby="exercise-tab-execution"
+          // The panel is the next tab stop after the tablist, so a keyboard
+          // reader reaches its content without hunting for a focusable child.
+          tabIndex={0}
         >
           {steps.map((step, index) => (
             <li className="kin-ex-step" key={`${index}-${step}`}>
@@ -88,6 +136,7 @@ export function ExerciseDetailTabs({
           role="tabpanel"
           id="exercise-panel-muscles"
           aria-labelledby="exercise-tab-muscles"
+          tabIndex={0}
         >
           <div className="kin-ex-muscle">
             <dt>{t("exercises.detail.stats.bodyPart")}</dt>

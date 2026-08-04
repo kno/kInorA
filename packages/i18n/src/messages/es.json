@@ -783,7 +783,15 @@
       "date": "Fecha",
       "weight": "Peso",
       "reps": "Reps",
-      "rpe": "RPE"
+      "rpe": "RPE",
+      "empty": {
+        "title": "Todavía no hay historial de {exerciseTitle}",
+        "description": "No has registrado ninguna serie de este ejercicio. Cuando lo completes en un entrenamiento, tus series recientes aparecerán aquí."
+      },
+      "error": {
+        "title": "No se pudo cargar tu historial",
+        "description": "No hemos podido acceder a tu historial de entrenamiento ahora mismo. Inténtalo de nuevo en un momento."
+      }
     },
     "library": {
       "searchLabel": "Buscar ejercicios",
