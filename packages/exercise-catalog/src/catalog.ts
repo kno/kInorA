@@ -15,6 +15,7 @@ import type {
   ExerciseCatalogFilters,
   ExerciseCatalogPage,
   ExerciseCatalogRecord,
+  ExerciseFacetFilters,
 } from "./types.js";
 
 /**
@@ -85,19 +86,28 @@ function clampLimit(limit: number | undefined, remaining: number): number {
   return Math.min(truncated, remaining);
 }
 
+/**
+ * Membership test for one list-valued filter field. Absent and empty are both
+ * "unconstrained" — enforced in exactly this one place so no per-field branch
+ * can diverge from it.
+ */
+function selects(chosen: readonly string[] | undefined, actual: string): boolean {
+  return chosen === undefined || chosen.length === 0 || chosen.includes(actual);
+}
+
 function matches(
   entry: IndexedExercise,
   filters: ExerciseCatalogFilters,
   normalizedSearch: string,
 ): boolean {
   const { record } = entry;
-  if (filters.bodyPart !== undefined && record.bodyPart !== filters.bodyPart) {
+  if (!selects(filters.bodyPart, record.bodyPart)) {
     return false;
   }
-  if (filters.equipment !== undefined && record.equipment !== filters.equipment) {
+  if (!selects(filters.equipment, record.equipment)) {
     return false;
   }
-  if (filters.target !== undefined && record.target !== filters.target) {
+  if (!selects(filters.target, record.target)) {
     return false;
   }
   if (normalizedSearch !== "" && !entry.normalizedName.includes(normalizedSearch)) {
@@ -135,4 +145,63 @@ export function listExercises(
 /** Returns the record with the given upstream id, or `undefined` if unknown. */
 export function getExerciseById(id: string): ExerciseCatalogRecord | undefined {
   return byId.get(id);
+}
+
+/** One filterable group whose distinct values can be tallied. */
+export type ExerciseFacetField = "bodyPart" | "equipment" | "target";
+
+/** One distinct facet value plus how many matching records carry it. */
+export interface ExerciseFacetTally {
+  value: string;
+  count: number;
+}
+
+/** Same (count desc, value asc) ordering as the tally itself. */
+function compareFacetTally(a: ExerciseFacetTally, b: ExerciseFacetTally): number {
+  if (a.count !== b.count) {
+    return b.count - a.count;
+  }
+  return a.value.localeCompare(b.value);
+}
+
+/** Tally one field across a set of records, ordered count desc, then value asc. */
+function tallyField(
+  records: readonly ExerciseCatalogRecord[],
+  pick: (record: ExerciseCatalogRecord) => string,
+): ExerciseFacetTally[] {
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    const value = pick(record);
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort(compareFacetTally);
+}
+
+/**
+ * Per-group facet tally, scoped to the current result set. For each group G,
+ * the count reflects every OTHER active filter (including `search`) but
+ * ignores G's own selection — a record excluded by the current bodyPart
+ * selection must still be countable in the bodyPart facet itself.
+ *
+ * This is why the parameter type is {@link ExerciseFacetFilters}: it cannot
+ * express `limit`/`offset`, so a tally can never be silently computed over
+ * page 1 only. It genuinely re-filters per group — three `listExercises`
+ * passes, each with that group's own key deleted — because records excluded
+ * from the current result set by definition cannot appear in a single shared
+ * filtered pass.
+ */
+export function tallyExerciseFacets(
+  filters: ExerciseFacetFilters = {},
+): Record<ExerciseFacetField, ExerciseFacetTally[]> {
+  const withoutBodyPart = listExercises({ ...filters, bodyPart: undefined }).items;
+  const withoutEquipment = listExercises({ ...filters, equipment: undefined }).items;
+  const withoutTarget = listExercises({ ...filters, target: undefined }).items;
+
+  return {
+    bodyPart: tallyField(withoutBodyPart, (record) => record.bodyPart),
+    equipment: tallyField(withoutEquipment, (record) => record.equipment),
+    target: tallyField(withoutTarget, (record) => record.target),
+  };
 }

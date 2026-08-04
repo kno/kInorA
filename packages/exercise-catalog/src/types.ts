@@ -86,13 +86,20 @@ export interface ExerciseCatalogRecord {
   attribution: string;
 }
 
-/** Filters accepted by `listExercises`. Every field is optional. */
+/**
+ * Filters accepted by `listExercises`. Every field is optional.
+ *
+ * `bodyPart`/`equipment`/`target` are list-valued: a record matches a group
+ * when its value is a member of the supplied list (OR within the group).
+ * Absent and empty are equivalent — both mean "unconstrained" — so callers
+ * may omit a key or pass `[]` interchangeably.
+ */
 export interface ExerciseCatalogFilters {
-  bodyPart?: BodyPart;
-  /** Exact-match equipment label. */
-  equipment?: string;
-  /** Exact-match target muscle. */
-  target?: string;
+  bodyPart?: readonly BodyPart[];
+  /** Free-form equipment labels; a record matches ANY listed value. */
+  equipment?: readonly string[];
+  /** Free-form target muscles; a record matches ANY listed value. */
+  target?: readonly string[];
   /** Case- and accent-insensitive substring match on `name`. */
   search?: string;
   /** Maximum number of items returned. Omitted means "no limit". */
@@ -100,6 +107,16 @@ export interface ExerciseCatalogFilters {
   /** Number of matches skipped before the returned page. Defaults to 0. */
   offset?: number;
 }
+
+/**
+ * Filter dimensions only — no pagination window. Used by
+ * `tallyExerciseFacets`, whose contract is to scan the WHOLE matching set, so
+ * this type makes it impossible to accidentally pass `limit`/`offset` in.
+ */
+export type ExerciseFacetFilters = Pick<
+  ExerciseCatalogFilters,
+  "bodyPart" | "equipment" | "target" | "search"
+>;
 
 /** A page of catalog records plus the pre-pagination match count. */
 export interface ExerciseCatalogPage {

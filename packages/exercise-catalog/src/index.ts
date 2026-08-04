@@ -7,7 +7,8 @@
  * visible wherever its media is rendered. Full terms:
  * `apps/web/public/exercises/ATTRIBUTION.md`.
  */
-export { getExerciseById, listExercises } from "./catalog.js";
+export { getExerciseById, listExercises, tallyExerciseFacets } from "./catalog.js";
+export type { ExerciseFacetField, ExerciseFacetTally } from "./catalog.js";
 
 export { BODY_PARTS } from "./types.js";
 export type {
@@ -15,5 +16,6 @@ export type {
   ExerciseCatalogFilters,
   ExerciseCatalogPage,
   ExerciseCatalogRecord,
+  ExerciseFacetFilters,
   ExerciseInstructionSteps,
 } from "./types.js";
