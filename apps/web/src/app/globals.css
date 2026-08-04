@@ -3024,3 +3024,491 @@ a {
   color: var(--gym-fg, oklch(96% 0.002 270));
   border-color: color-mix(in oklab, white 16%, transparent);
 }
+/* -------------------------------------------------------------------------
+ * Exercise library — /exercises and /exercises/[id]
+ *
+ * Structure and interaction follow Open Design
+ * `screens/web-exercise-detail.html`; the styling is re-expressed with the
+ * kInorA tokens above, so a gym's `--gym-*` palette reaches these blocks with
+ * no per-rule rewrite (16a-v3-gym-white-label, Slice 4 fallback pattern).
+ * ------------------------------------------------------------------------- */
+
+/* FULL-BLEED CONTRACT — do not remove.
+ *
+ * `.kin-page` is a centering column shell (`align-items: center`) written for
+ * the original single `kin-card--center` scaffold. Under it a flex child sizes
+ * to its CONTENT, not to the container, so any `auto-fill` grid measures itself
+ * against a shrink-to-fit width and lays out far fewer tracks than it should —
+ * the library grid collapsed to two 15rem columns (511px) inside a 1192px page.
+ *
+ * `.kin-page` is shared by every route, so it is deliberately NOT touched here.
+ * Instead each exercise-library block opts OUT of the centering by stretching
+ * across the cross axis. `align-self` handles the flex contract, `width` covers
+ * any non-flex ancestor these blocks may end up under.
+ */
+.kin-ex-toolbar,
+.kin-ex-count,
+.kin-ex-grid,
+.kin-ex-pager,
+.kin-ex-hero,
+.kin-ex-record-attribution,
+.kin-ex-attribution {
+  align-self: stretch;
+  width: 100%;
+}
+
+.kin-ex-count {
+  text-align: start;
+}
+
+.kin-ex-toolbar {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  background-color: var(--gym-surface, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  justify-items: start;
+}
+
+.kin-ex-search {
+  display: grid;
+  gap: var(--sp-1);
+  width: 100%;
+}
+
+.kin-ex-search__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.kin-ex-search__row .kin-input {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.kin-ex-facet {
+  display: grid;
+  gap: var(--sp-1);
+  width: 100%;
+}
+
+.kin-ex-facet__label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gym-muted, var(--muted));
+}
+
+.kin-ex-chips {
+  display: flex;
+  gap: var(--sp-1);
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.kin-ex-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: var(--tap);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background-color: var(--surface-2);
+  color: var(--gym-muted, var(--muted));
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kin-ex-chip:hover {
+  color: var(--gym-fg, var(--fg));
+}
+
+.kin-ex-chip--active {
+  background-color: var(--gym-accent, var(--accent));
+  color: var(--gym-accent-fg, var(--accent-fg));
+  border-color: var(--gym-accent, var(--accent));
+}
+
+.kin-ex-chip__count {
+  font-size: 0.6875rem;
+  opacity: 0.75;
+}
+
+.kin-ex-chip:focus-visible,
+.kin-ex-tab:focus-visible,
+.kin-ex-media__mode:focus-visible,
+.kin-ex-card:focus-visible {
+  outline: 2px solid var(--gym-accent, var(--accent));
+  outline-offset: 2px;
+}
+
+/* --- Card grid --- */
+
+.kin-ex-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--sp-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.kin-ex-card {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: var(--sp-2);
+  align-items: center;
+  height: 100%;
+  padding: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background-color: var(--gym-surface, var(--surface));
+  color: var(--gym-fg, var(--fg));
+  text-decoration: none;
+}
+
+.kin-ex-card:hover {
+  border-color: var(--gym-accent, var(--accent));
+}
+
+.kin-ex-card__media {
+  width: 88px;
+  height: 88px;
+  object-fit: contain;
+  border-radius: var(--r-btn);
+  background-color: var(--surface-2);
+}
+
+.kin-ex-card__body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.kin-ex-card__name {
+  font-family: var(--font-display);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.kin-ex-card__meta {
+  font-size: var(--fs-sm);
+  color: var(--gym-muted, var(--muted));
+}
+
+.kin-ex-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+/* --- Detail: hero (media + detail card) --- */
+
+.kin-ex-hero {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-2);
+}
+
+@media (min-width: 900px) {
+  .kin-ex-hero {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  }
+}
+
+.kin-ex-media {
+  position: relative;
+  display: grid;
+  place-items: center;
+  /* Matches the prototype's 560px media panel. */
+  min-height: 35rem;
+  padding: var(--sp-4);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background-color: var(--gym-surface, var(--surface));
+}
+
+/* The panel stretches to the height of the taller detail card beside it, so
+ * sizing the media by WIDTH alone left large empty bands above and below.
+ * Driving it from the available HEIGHT (capped at the prototype's 460px, and
+ * bounded on the cross axis by max-width) keeps the image filling the panel at
+ * any row height without ever overflowing either axis. */
+.kin-ex-media__img {
+  width: auto;
+  height: min(80%, 28.75rem);
+  max-width: 90%;
+  aspect-ratio: 1;
+  object-fit: contain;
+}
+
+@media (max-width: 900px) {
+  .kin-ex-media {
+    min-height: 24rem;
+  }
+}
+
+.kin-ex-media__label {
+  position: absolute;
+  top: var(--sp-2);
+  left: var(--sp-2);
+  padding: 8px var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background-color: var(--gym-surface, var(--surface));
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.kin-ex-media__toggle {
+  position: absolute;
+  right: var(--sp-2);
+  bottom: var(--sp-2);
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  background-color: var(--gym-surface, var(--surface));
+}
+
+.kin-ex-media__mode {
+  min-height: 40px;
+  padding: 0 var(--sp-2);
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--gym-muted, var(--muted));
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kin-ex-media__mode--active {
+  background-color: var(--gym-accent, var(--accent));
+  color: var(--gym-accent-fg, var(--accent-fg));
+  font-weight: 700;
+}
+
+/* The animation is third-party and cross-origin; when it fails to load the
+   card falls back to the self-hosted still and this mode goes away. */
+.kin-ex-media__mode:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.kin-ex-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background-color: var(--gym-surface, var(--surface));
+}
+
+.kin-ex-eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gym-muted, var(--muted));
+}
+
+.kin-ex-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.kin-ex-tag {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background-color: var(--surface-2);
+  color: var(--gym-muted, var(--muted));
+  font-size: 0.75rem;
+  /* No `text-transform: capitalize` — taxonomy casing comes from the i18n
+     catalog via `taxonomyLabel()`, which preserves internal capitals that CSS
+     would corrupt ("EZ barbell" -> "Ez Barbell"). */
+}
+
+.kin-ex-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  line-height: 1.05;
+  text-transform: capitalize;
+}
+
+/* Derived one-liner under the exercise name (see the detail page). */
+.kin-ex-summary {
+  max-width: 60ch;
+  font-size: var(--fs-sm);
+  color: var(--gym-muted, var(--muted));
+}
+
+.kin-ex-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: var(--sp-1);
+}
+
+.kin-ex-stat {
+  padding: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  background-color: var(--surface-2);
+}
+
+.kin-ex-stat span {
+  display: block;
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gym-muted, var(--muted));
+}
+
+.kin-ex-stat strong {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--fs-sm);
+  /* Casing comes from the taxonomy catalog — see `.kin-ex-tag`. */
+}
+
+/* --- Detail: tabs, steps, muscles --- */
+
+.kin-ex-tabs-block {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.kin-ex-tabs {
+  display: flex;
+  gap: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.kin-ex-tab {
+  padding: 0 0 var(--sp-2);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--gym-muted, var(--muted));
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.kin-ex-tab--active {
+  color: var(--gym-fg, var(--fg));
+  border-bottom-color: var(--gym-accent, var(--accent));
+}
+
+.kin-ex-steps {
+  display: grid;
+  gap: var(--sp-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.kin-ex-step {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: var(--sp-2);
+  align-items: start;
+}
+
+.kin-ex-step__num {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background-color: var(--surface-2);
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.kin-ex-step__text {
+  padding-top: 4px;
+  font-size: var(--fs-sm);
+  color: var(--gym-muted, var(--muted));
+}
+
+.kin-ex-muscles {
+  display: grid;
+  gap: var(--sp-1);
+  margin: 0;
+}
+
+.kin-ex-muscle {
+  display: grid;
+  grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  background-color: var(--surface-2);
+}
+
+.kin-ex-muscle dt {
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gym-muted, var(--muted));
+}
+
+.kin-ex-muscle dd {
+  margin: 0;
+  font-size: var(--fs-sm);
+  /* Casing comes from the taxonomy catalog — see `.kin-ex-tag`. */
+}
+
+.kin-ex-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-top: auto;
+  padding-top: var(--sp-2);
+}
+
+/* --- Attribution (licensing obligation — see ExerciseAttribution.tsx) --- */
+
+.kin-ex-record-attribution {
+  font-size: 0.75rem;
+}
+
+.kin-ex-attribution {
+  display: grid;
+  gap: var(--sp-1);
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background-color: var(--gym-surface, var(--surface));
+}
+
+.kin-ex-attribution__heading {
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.kin-ex-attribution__text {
+  font-size: 0.75rem;
+  color: var(--gym-muted, var(--muted));
+}

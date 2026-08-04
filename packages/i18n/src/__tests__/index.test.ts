@@ -171,7 +171,23 @@ describe("@kinora/i18n package assembly", () => {
     // + 1 `auth.login.gymLogoAlt` authored for 16a-v3-gym-white-label Slice
     // S4 (accessible alt text for the host-resolved gym logo on the login
     // page).
-    expect(nonBillingKeys).toHaveLength(617);
+    // +43 `exercises.{library,detail,attribution}.*` authored for the exercise
+    // library: the searchable/filterable `/exercises` grid, the
+    // `/exercises/[id]` detail view (media toggle, stats, execution and
+    // muscle tabs) and the Gym visual / exercises-dataset attribution block
+    // that must accompany the media wherever it is displayed.
+    // +1 `exercises.detail.media.unavailable` — the exercise animation is a
+    // third-party cross-origin asset, so the media card degrades to the
+    // self-hosted still on a load failure and says so rather than showing a
+    // broken image.
+    // +1 `exercises.detail.summary` — the dataset has no summary field, so the
+    // detail page composes one from `equipment`/`target`/`bodyPart`.
+    // +85 `exercises.taxonomy.*` — the dataset's controlled vocabulary (10 body
+    // parts, 28 equipment, 19 targets, 40 secondary muscles, deduplicated into
+    // one flat map keyed by the raw catalog value). See
+    // `exercise-taxonomy.test.ts`, which fails when a catalog regeneration
+    // introduces a term this map does not cover.
+    expect(nonBillingKeys).toHaveLength(747);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
