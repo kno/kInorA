@@ -37,7 +37,9 @@ describe("CreatePlanForClientForm", () => {
       });
     });
     await waitFor(() => {
-      expect(push).toHaveBeenCalledWith("/plan/plan_1");
+      // #341: the trainer-scoped view, NOT `/plan/plan_1` (which is scoped to
+      // the caller's own userId and 404s on a client-owned plan).
+      expect(push).toHaveBeenCalledWith("/clients/user_1/plan/plan_1");
     });
   });
 
