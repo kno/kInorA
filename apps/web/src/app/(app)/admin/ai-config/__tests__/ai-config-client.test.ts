@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { apiBaseUrl } from "../ai-config-client";
 import {
   fetchAiConfig,
   updateAiConfig,
@@ -171,5 +172,37 @@ describe("updateAiConfig", () => {
     const body = JSON.parse(init.body as string) as { provider: string; model: string };
     expect(body.provider).toBe("anthropic");
     expect(body.model).toBe("claude-3-5-haiku-20241022");
+  });
+});
+
+/**
+ * `apiBaseUrl` resolves the API host for the AI provider config client. Every other
+ * test in this file injects an explicit base, so this is the only place the
+ * real env-var resolution is exercised — and an unset API_BASE_URL in a
+ * container silently pointing at localhost is a production failure mode.
+ */
+
+describe("apiBaseUrl", () => {
+  const original = process.env.API_BASE_URL;
+  afterEach(() => {
+    if (original === undefined) delete process.env.API_BASE_URL;
+    else process.env.API_BASE_URL = original;
+  });
+
+  it("uses API_BASE_URL when the deployment sets it", () => {
+    process.env.API_BASE_URL = "http://api.internal:4000";
+    expect(apiBaseUrl()).toBe("http://api.internal:4000");
+  });
+
+  it("falls back to the local dev API when API_BASE_URL is unset", () => {
+    delete process.env.API_BASE_URL;
+    expect(apiBaseUrl()).toBe("http://localhost:4000");
+  });
+
+  it("is read per call, so a late-injected env var still takes effect", () => {
+    delete process.env.API_BASE_URL;
+    expect(apiBaseUrl()).toBe("http://localhost:4000");
+    process.env.API_BASE_URL = "http://api.other:4000";
+    expect(apiBaseUrl()).toBe("http://api.other:4000");
   });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { catalogs } from "@kinora/i18n";
 import type { SessionExerciseRecord, SetRecordDTO } from "@kinora/contracts";
@@ -144,6 +144,76 @@ describe("ExerciseCard — granular load step (#253)", () => {
     fireEvent.click(stepOption(5));
     fireEvent.click(dec()); // 2 - 5 = -3 -> clamped to 0
     expect(loadValue()).toBe("0");
+  });
+
+  it("records the reps the stepper landed on, in both directions", async () => {
+    const { onRecordSet, onSetCompleted } = renderCard({
+      activeSet: makeSet({ targetReps: "8" }),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /increase reps/i }));
+    fireEvent.click(screen.getByRole("button", { name: /increase reps/i }));
+    fireEvent.click(screen.getByRole("button", { name: /decrease reps/i }));
+    fireEvent.click(screen.getByRole("button", { name: /complete set/i }));
+
+    await waitFor(() => expect(onRecordSet).toHaveBeenCalledTimes(1));
+    // Seeded from targetReps 8, then +1 +1 -1.
+    expect(onRecordSet.mock.calls[0]?.[1]).toMatchObject({
+      completed: true,
+      actualReps: 9,
+      weightKg: 40,
+    });
+    expect(onSetCompleted).toHaveBeenCalled();
+  });
+
+  it("records the typed RPE and note, trimming the note", async () => {
+    const { onRecordSet } = renderCard();
+
+    fireEvent.click(screen.getByRole("button", { name: /add note/i }));
+    fireEvent.change(screen.getByLabelText("Notes"), {
+      target: { value: "  felt heavy  " },
+    });
+    fireEvent.change(screen.getByLabelText("RPE"), { target: { value: "8" } });
+    fireEvent.click(screen.getByRole("button", { name: /complete set/i }));
+
+    await waitFor(() => expect(onRecordSet).toHaveBeenCalledTimes(1));
+    expect(onRecordSet.mock.calls[0]?.[1]).toMatchObject({
+      rpe: 8,
+      notes: "felt heavy",
+    });
+  });
+
+  it("clamps an out-of-range RPE into 0..10 instead of sending it raw", async () => {
+    const { onRecordSet } = renderCard();
+
+    fireEvent.change(screen.getByLabelText("RPE"), { target: { value: "42" } });
+    fireEvent.click(screen.getByRole("button", { name: /complete set/i }));
+
+    await waitFor(() => expect(onRecordSet).toHaveBeenCalledTimes(1));
+    expect(onRecordSet.mock.calls[0]?.[1]).toMatchObject({ rpe: 10 });
+  });
+
+  it("omits RPE and notes when left blank rather than sending empty values", async () => {
+    const { onRecordSet } = renderCard();
+
+    fireEvent.click(screen.getByRole("button", { name: /add note/i }));
+    fireEvent.change(screen.getByLabelText("Notes"), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: /complete set/i }));
+
+    await waitFor(() => expect(onRecordSet).toHaveBeenCalledTimes(1));
+    const payload = onRecordSet.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(payload.rpe).toBeUndefined();
+    expect(payload.notes).toBeUndefined();
+  });
+
+  it("swaps the Add note button for the note field once pressed", () => {
+    renderCard();
+    expect(screen.queryByLabelText("Notes")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /add note/i }));
+
+    expect(screen.getByLabelText("Notes")).toBeDefined();
+    expect(screen.queryByRole("button", { name: /add note/i })).toBeNull();
   });
 
   it("disables the step selector together with the stepper when recording is blocked", () => {

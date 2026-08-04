@@ -117,4 +117,21 @@ describe("getRequestConfig", () => {
 
     consoleErrorSpy.mockRestore();
   });
+
+  it("renders the raw key as the fallback when a message is missing entirely", async () => {
+    mockedHeaders.mockResolvedValue(new Headers({ "x-kinora-lang": "en" }));
+    const { getMessageFallback } = await callRequestConfig();
+
+    // Paired with the `onError` swallow above: a missing key must degrade to
+    // the key itself rather than next-intl's default
+    // "namespace.key (en)" string, so a gap surfaces as readable text
+    // instead of leaking the locale into the UI.
+    expect(
+      getMessageFallback?.({
+        key: "marketing.missingKey",
+        namespace: "marketing",
+        error: { code: "MISSING_MESSAGE", message: "Missing" } as never,
+      }),
+    ).toBe("marketing.missingKey");
+  });
 });
