@@ -60,6 +60,26 @@ describe("openOfflineDb (idb adapter)", () => {
     expect(result).toBe("stored-value");
   });
 
+  it("delete() removes the key through idb's delete on the given store name", async () => {
+    const { openOfflineDb } = await import("../db");
+    const store = await openOfflineDb();
+
+    await store.delete("mutations", "set-9");
+
+    expect(fakeDb.delete).toHaveBeenCalledWith("mutations", "set-9");
+  });
+
+  it("clear() empties only the named store", async () => {
+    const { openOfflineDb } = await import("../db");
+    const store = await openOfflineDb();
+
+    await store.clear("snapshots");
+
+    expect(fakeDb.clear).toHaveBeenCalledWith("snapshots");
+    // Clearing snapshots must not touch the queued mutations.
+    expect(fakeDb.delete).not.toHaveBeenCalled();
+  });
+
   it("entries() pairs idb's keys with their values", async () => {
     fakeDb.getAllKeys.mockResolvedValueOnce(["k1", "k2"]);
     fakeDb.getAll.mockResolvedValueOnce(["v1", "v2"]);
@@ -72,6 +92,55 @@ describe("openOfflineDb (idb adapter)", () => {
       { key: "k1", value: "v1" },
       { key: "k2", value: "v2" },
     ]);
+  });
+});
+
+describe("openOfflineDb — schema upgrade", () => {
+  /**
+   * Runs the `upgrade` callback idb invokes on a version change, against a
+   * fake db reporting `existing` as already present. This is the schema
+   * migration: a store it fails to create makes every later read/write on
+   * that store throw NotFoundError, taking the whole offline queue down.
+   */
+  async function runUpgrade(existing: string[]) {
+    vi.resetModules();
+    const { openOfflineDb } = await import("../db");
+    await openOfflineDb();
+
+    const [name, version, opts] = openDB.mock.calls[0] as [
+      string,
+      number,
+      { upgrade: (db: unknown) => void },
+    ];
+    const createObjectStore = vi.fn();
+    opts.upgrade({
+      objectStoreNames: { contains: (n: string) => existing.includes(n) },
+      createObjectStore,
+    });
+
+    return { name, version, created: createObjectStore.mock.calls.flat() };
+  }
+
+  it("creates all three object stores on a fresh database", async () => {
+    const { name, version, created } = await runUpgrade([]);
+
+    expect(name).toBe("kinora-offline");
+    expect(version).toBe(1);
+    expect(created).toEqual(["mutations", "snapshots", "meta"]);
+  });
+
+  it("creates only the stores that are missing, leaving existing data intact", async () => {
+    const { created } = await runUpgrade(["mutations"]);
+
+    // Re-creating an existing store would throw ConstraintError and abort the
+    // upgrade transaction, so the guard has to hold.
+    expect(created).toEqual(["snapshots", "meta"]);
+  });
+
+  it("creates nothing when every store already exists", async () => {
+    const { created } = await runUpgrade(["mutations", "snapshots", "meta"]);
+
+    expect(created).toEqual([]);
   });
 });
 
