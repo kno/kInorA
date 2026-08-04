@@ -57,7 +57,13 @@ export function CreatePlanForClientForm({
       });
 
       if (result.kind === "ok") {
-        router.push(`/plan/${result.planId}`);
+        // #341: the created plan is owned by the CLIENT, so `/plan/:planId`
+        // (hard-scoped to the caller's own userId) 404s for the trainer. Land
+        // on the trainer-scoped view instead, which reads the plan through
+        // `GET /clients/:clientUserId/workout-plans/:planId`.
+        router.push(
+          `/clients/${encodeURIComponent(clientUserId)}/plan/${encodeURIComponent(result.planId)}`,
+        );
         return;
       }
 

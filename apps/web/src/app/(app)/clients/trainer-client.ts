@@ -12,6 +12,7 @@ import "server-only";
  *   GET  /trainer/clients                    → 200 ClientSummaryDTO[] | 403 (non-trainer/not entitled)
  *   POST /trainer/clients/invite              → 201 TrainerClientAssignmentDTO | 403 | 404 | 409
  *   POST /clients/:clientUserId/plan-specs    → 201 { id, spec, planId, status } | 403 | 409 | 422
+ *   GET  /clients/:clientUserId/workout-plans/:planId → 200 ClientPlanDetail | 403 | 404 (#341)
  *
  * A `403` on `fetchClients` is the ONLY signal the web app has that the
  * caller is not an entitled trainer (no `role`/`tier` is exposed to the web
@@ -22,15 +23,19 @@ import "server-only";
 import type { ClientSummaryDTO } from "@kinora/contracts";
 import { apiBaseUrl } from "@/app/(app)/create-plan/plan-draft-client";
 import type {
+  ClientPlanDetail,
   CreatePlanForClientInput,
   CreatePlanForClientResult,
+  FetchClientPlanResult,
   FetchClientsResult,
   InviteClientResult,
 } from "./trainer-client-types";
 
 export type {
+  ClientPlanDetail,
   CreatePlanForClientInput,
   CreatePlanForClientResult,
+  FetchClientPlanResult,
   FetchClientsResult,
   InviteClientResult,
 } from "./trainer-client-types";
@@ -159,4 +164,63 @@ export async function createPlanForClient(
   }
 
   return { kind: "ok", planId: body.planId, status: body.status };
+}
+
+/**
+ * Read an assigned client's plan detail via
+ * `GET /clients/:clientUserId/workout-plans/:planId` (#341).
+ *
+ * The trainer CANNOT use `GET /workout-plans/:planId` for this: that read is
+ * hard-scoped to the caller's own `(tenantId, userId)`, so a client-owned plan
+ * 404s there. Authorization lives entirely server-side (`resolveAuthorizedOwner`
+ * — role + trainer entitlement + ACTIVE assignment); this function only maps the
+ * outcome, and treats anything other than an explicit 403/404 as a generic
+ * error so a new API status can never be read as success.
+ */
+export async function fetchClientPlan(
+  clientUserId: string,
+  planId: string,
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<FetchClientPlanResult> {
+  if (!token) {
+    return { kind: "error", message: "no_session" };
+  }
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(
+      `${base}/clients/${encodeURIComponent(clientUserId)}/workout-plans/${encodeURIComponent(planId)}`,
+      {
+        method: "GET",
+        headers: { authorization: `Bearer ${token}` },
+        cache: "no-store",
+      },
+    );
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (res.status === 403) {
+    return { kind: "forbidden" };
+  }
+
+  if (res.status === 404) {
+    return { kind: "notFound" };
+  }
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? "fetch_client_plan_failed" };
+  }
+
+  const body = (await res.json().catch(() => null)) as ClientPlanDetail | null;
+  if (!body?.id) {
+    return { kind: "error", message: "invalid_response" };
+  }
+
+  return { kind: "ok", plan: body };
 }
