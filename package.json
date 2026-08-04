@@ -2,7 +2,8 @@
   "name": "kinora",
   "private": true,
   "scripts": {
-    "dev": "concurrently --kill-others --success first -n web,api -c blue,green \"pnpm --filter web dev\" \"pnpm --filter api dev\"",
+    "dev:packages": "pnpm --filter \"./packages/*\" build",
+    "dev": "pnpm dev:packages && concurrently --kill-others --success first -n web,api -c blue,green \"pnpm --filter web dev\" \"pnpm --filter api dev\"",
     "start": "node scripts/start-production.mjs",
     "start:api": "pnpm --filter api start",
     "start:web": "pnpm --filter web start",
@@ -14,6 +15,7 @@
     "test:e2e": "node scripts/e2e-with-stack.mjs",
     "test:e2e:pwa": "E2E_PWA_PRODUCTION=true pnpm test:e2e --project=pwa-production tests/e2e/pwa.spec.ts",
     "deps-guard": "node scripts/deps-guard.mjs",
+    "import:exercise-catalog": "node scripts/import-exercise-catalog.ts",
     "architecture": "depcruise --config .dependency-cruiser.cjs packages/domain/src packages/contracts/src apps/api/src && node scripts/architecture-negative-test.mjs",
     "prepare": "git rev-parse --git-dir > /dev/null 2>&1 && git config core.hooksPath .githooks || true"
   },

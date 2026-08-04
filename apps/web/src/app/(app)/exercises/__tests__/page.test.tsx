@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ExerciseCatalogItem } from "@kinora/contracts";
 import ExercisesPage from "../page";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
@@ -15,12 +16,48 @@ vi.mock("next-intl/server", () => ({
 }));
 
 const getExerciseDetailAction = vi.fn();
+const listExerciseCatalogAction = vi.fn();
+const getExerciseCatalogFacetsAction = vi.fn();
 vi.mock("../actions", () => ({
   getExerciseDetailAction: (...args: unknown[]) => getExerciseDetailAction(...args),
+  listExerciseCatalogAction: (...args: unknown[]) => listExerciseCatalogAction(...args),
+  getExerciseCatalogFacetsAction: (...args: unknown[]) => getExerciseCatalogFacetsAction(...args),
 }));
 
 import { getTranslations } from "next-intl/server";
 import { createServerTranslator } from "@/test-utils/server-translator";
+
+const item: ExerciseCatalogItem = {
+  id: "0001",
+  name: "3/4 sit-up",
+  bodyPart: "waist",
+  equipment: "body weight",
+  target: "abs",
+  muscleGroup: "hip flexors",
+  imagePath: "/exercises/images/0001-abc.jpg",
+  gifPath: "https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@7455efae41b330c265e7cd4b78dfa848e7ce5ebd/videos/0001-abc.gif",
+  attribution: "(c) Gym visual — https://gymvisual.com/",
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  getExerciseDetailAction.mockResolvedValue({
+    kind: "ok",
+    detail: { exerciseTitle: "Unused", recentSets: [] },
+  });
+  listExerciseCatalogAction.mockResolvedValue({
+    kind: "ok",
+    page: { items: [item], total: 1, limit: 24, offset: 0 },
+  });
+  getExerciseCatalogFacetsAction.mockResolvedValue({
+    kind: "ok",
+    facets: {
+      bodyPart: [{ value: "waist", count: 1 }],
+      equipment: [],
+      target: [],
+    },
+  });
+});
 
 describe("ExercisesPage", () => {
   it("renders the exercises heading via getTranslations, no messages.* access", async () => {
@@ -83,6 +120,224 @@ describe("ExercisesPage — read-only history reference (09c-v1 Slice 4b)", () =
     expect(text).toContain("80");
     expect(text).toContain("8");
   });
+
+  it("still renders the library alongside the history section", async () => {
+    getExerciseDetailAction.mockResolvedValue({
+      kind: "ok",
+      detail: {
+        exerciseTitle: "Bench Press",
+        recentSets: [{ completedAt: "2026-07-10T09:00:00.000Z", weightKg: 80, actualReps: 8, rpe: 8 }],
+      },
+    });
+    const page = await ExercisesPage({ searchParams: Promise.resolve({ title: "Bench Press" }) });
+
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-history")).toBeDefined();
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-grid")).toBeDefined();
+  });
+});
+
+describe("ExercisesPage — library grid", () => {
+  it("renders a card per item, linking to the detail route", async () => {
+    const page = await ExercisesPage({ searchParams: Promise.resolve({}) });
+
+    const link = findFirst(page, (el) => el.props?.className === "kin-ex-card");
+    expect(link?.props?.href).toBe("/exercises/0001");
+    expect(textOf(page)).toContain("3/4 sit-up");
+  });
+
+  it("requests only one page of results — never the whole catalog", async () => {
+    await ExercisesPage({ searchParams: Promise.resolve({}) });
+
+    expect(listExerciseCatalogAction).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 24, offset: 0 }),
+    );
+  });
+
+  it("forwards the search and filter query parameters to the API", async () => {
+    await ExercisesPage({
+      searchParams: Promise.resolve({
+        search: "press",
+        bodyPart: "chest",
+        equipment: "barbell",
+        target: "pectorals",
+      }),
+    });
+
+    expect(listExerciseCatalogAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: "press",
+        bodyPart: "chest",
+        equipment: "barbell",
+        target: "pectorals",
+      }),
+    );
+  });
+
+  it("survives a REPEATED query parameter, applying its first value", async () => {
+    // The App Router delivers `?search=press&search=squat` as an array. The
+    // page used to hand that straight to the catalog client, whose `.trim()`
+    // threw OUTSIDE the action's try/catch — the whole route answered 500.
+    const page = await ExercisesPage({
+      searchParams: Promise.resolve({
+        search: ["press", "squat"],
+        bodyPart: ["chest", "back"],
+        equipment: ["barbell", "cable"],
+        target: ["abs", "lats"],
+      }),
+    });
+
+    expect(listExerciseCatalogAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: "press",
+        bodyPart: "chest",
+        equipment: "barbell",
+        target: "abs",
+      }),
+    );
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-grid")).toBeDefined();
+  });
+
+  it("never forwards a bodyPart the API enum would reject as a 400", async () => {
+    await ExercisesPage({ searchParams: Promise.resolve({ bodyPart: "Chest" }) });
+
+    expect(listExerciseCatalogAction).toHaveBeenCalledWith(
+      expect.objectContaining({ bodyPart: undefined }),
+    );
+  });
+
+  it("truncates an oversized search term instead of letting the API 400", async () => {
+    await ExercisesPage({ searchParams: Promise.resolve({ search: "a".repeat(250) }) });
+
+    const [[query]] = listExerciseCatalogAction.mock.calls as [[{ search?: string }]];
+    expect(query.search).toHaveLength(200);
+  });
+
+  it("bounds an absurd offset so it stays a plain digit string on the wire", async () => {
+    await ExercisesPage({
+      searchParams: Promise.resolve({ offset: "1000000000000000000000" }),
+    });
+
+    const [[query]] = listExerciseCatalogAction.mock.calls as [[{ offset?: number }]];
+    expect(String(query.offset)).toMatch(/^\d+$/);
+  });
+
+  it("renders the empty state when nothing matches", async () => {
+    listExerciseCatalogAction.mockResolvedValue({
+      kind: "ok",
+      page: { items: [], total: 0, limit: 24, offset: 0 },
+    });
+    const page = await ExercisesPage({ searchParams: Promise.resolve({ search: "zzz" }) });
+
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-empty")).toBeDefined();
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-grid")).toBeUndefined();
+    // A GENUINE no-match must NOT be dressed up as an out-of-range page.
+    expect(
+      findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-out-of-range"),
+    ).toBeUndefined();
+  });
+
+  it("offers a way back when the offset is past the end of a NON-empty result set", async () => {
+    // `?offset=5000` against 1324 matches: the filters match plenty, this page
+    // just does not exist. The empty card claimed "nothing matches" and the
+    // pager is skipped on this branch, so there was no link back at all.
+    listExerciseCatalogAction.mockResolvedValue({
+      kind: "ok",
+      page: { items: [], total: 1324, limit: 24, offset: 5000 },
+    });
+    const page = await ExercisesPage({
+      searchParams: Promise.resolve({ offset: "5000", bodyPart: "chest" }),
+    });
+
+    const card = findFirst(
+      page,
+      (el) => el.props?.["data-testid"] === "exercise-library-out-of-range",
+    );
+    expect(card).toBeDefined();
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-empty")).toBeUndefined();
+
+    const back = findFirst(card, (el) => el.type === "a");
+    expect(back?.props?.href).toBe("/exercises?bodyPart=chest");
+  });
+
+  it("renders an error card when the catalog cannot be read", async () => {
+    listExerciseCatalogAction.mockResolvedValue({ kind: "error", message: "api_unreachable" });
+    const page = await ExercisesPage({ searchParams: Promise.resolve({}) });
+
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-error")).toBeDefined();
+    expect(textOf(page)).toContain("library is unavailable");
+  });
+
+  it("falls back to empty filter chips when the facets call fails (page still renders)", async () => {
+    getExerciseCatalogFacetsAction.mockResolvedValue({ kind: "error", message: "api_unreachable" });
+    const page = await ExercisesPage({ searchParams: Promise.resolve({}) });
+
+    const controls = findFirst(page, (el) => Boolean(el.props?.facets));
+    expect(controls?.props?.facets).toEqual({ bodyPart: [], equipment: [], target: [] });
+  });
+
+  it("renders the attribution block (licensing obligation, both views)", async () => {
+    const page = await ExercisesPage({ searchParams: Promise.resolve({}) });
+    const attribution = findFirst(
+      page,
+      (el) => typeof el.type === "function" && el.type.name === "ExerciseAttribution",
+    );
+    expect(attribution).toBeDefined();
+  });
+});
+
+describe("ExercisesPage — pagination", () => {
+  it("hides the previous link on the first page and offers the next one", async () => {
+    listExerciseCatalogAction.mockResolvedValue({
+      kind: "ok",
+      page: { items: [item], total: 100, limit: 24, offset: 0 },
+    });
+    const page = await ExercisesPage({ searchParams: Promise.resolve({}) });
+
+    const links = findAll(page, (el) => el.type === "a" && el.props?.className === "kin-btn kin-btn--ghost");
+    expect(links).toHaveLength(1);
+    expect(links[0]?.props?.href).toBe("/exercises?offset=24");
+  });
+
+  it("offers both links in the middle of the result set, preserving the filters", async () => {
+    listExerciseCatalogAction.mockResolvedValue({
+      kind: "ok",
+      page: { items: [item], total: 100, limit: 24, offset: 48 },
+    });
+    const page = await ExercisesPage({
+      searchParams: Promise.resolve({ offset: "48", search: "press" }),
+    });
+
+    const hrefs = findAll(page, (el) => el.type === "a" && el.props?.className === "kin-btn kin-btn--ghost").map(
+      (el) => el.props?.href,
+    );
+    expect(hrefs).toEqual(["/exercises?search=press&offset=24", "/exercises?search=press&offset=72"]);
+  });
+
+  it("steps by the limit the API APPLIED, not the one we requested (it clamps)", async () => {
+    listExerciseCatalogAction.mockResolvedValue({
+      kind: "ok",
+      // The API clamps an over-max limit and echoes the applied window.
+      page: { items: [item], total: 500, limit: 100, offset: 100 },
+    });
+    const page = await ExercisesPage({ searchParams: Promise.resolve({ offset: "100" }) });
+
+    const hrefs = findAll(page, (el) => el.type === "a" && el.props?.className === "kin-btn kin-btn--ghost").map(
+      (el) => el.props?.href,
+    );
+    expect(hrefs).toEqual(["/exercises", "/exercises?offset=200"]);
+  });
+
+  it("reports the visible window", async () => {
+    listExerciseCatalogAction.mockResolvedValue({
+      kind: "ok",
+      page: { items: [item], total: 100, limit: 24, offset: 24 },
+    });
+    const page = await ExercisesPage({ searchParams: Promise.resolve({ offset: "24" }) });
+
+    const status = findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-page-status");
+    expect(textOf(status)).toContain("25");
+    expect(textOf(status)).toContain("100");
+  });
 });
 
 // --- React tree inspection helpers ---
@@ -103,6 +358,18 @@ function findFirst(
     }
   }
   return undefined;
+}
+
+function findAll(node: ReactNode, match: (el: AnyElement) => boolean): AnyElement[] {
+  const found: AnyElement[] = [];
+  if (isReactElement(node)) {
+    if (match(node)) found.push(node);
+    found.push(...findAll(node.props.children, match));
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) found.push(...findAll(child, match));
+  }
+  return found;
 }
 
 function textOf(node: ReactNode): string {

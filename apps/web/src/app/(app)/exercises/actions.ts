@@ -3,6 +3,15 @@
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { fetchExerciseDetail, type FetchExerciseDetailResult } from "./exercise-detail-client";
+import {
+  fetchExerciseCatalogDetail,
+  fetchExerciseCatalogFacets,
+  fetchExerciseCatalogList,
+  type ExerciseCatalogQuery,
+  type FetchExerciseCatalogDetailResult,
+  type FetchExerciseCatalogFacetsResult,
+  type FetchExerciseCatalogListResult,
+} from "./exercise-catalog-client";
 
 /**
  * Server Action fetching the read-only exercise-history reference
@@ -14,4 +23,33 @@ export async function getExerciseDetailAction(title: string): Promise<FetchExerc
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   return fetchExerciseDetail(token, title);
+}
+
+/**
+ * Server Action listing a filtered page of the exercise library. Thin
+ * framework glue over `fetchExerciseCatalogList` — see that module for why
+ * filtering and pagination stay server-side.
+ */
+export async function listExerciseCatalogAction(
+  query: ExerciseCatalogQuery
+): Promise<FetchExerciseCatalogListResult> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  return fetchExerciseCatalogList(token, query);
+}
+
+/** Server Action fetching one library exercise's full detail. */
+export async function getExerciseCatalogDetailAction(
+  id: string
+): Promise<FetchExerciseCatalogDetailResult> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  return fetchExerciseCatalogDetail(token, id);
+}
+
+/** Server Action fetching the distinct filter values for the library chips. */
+export async function getExerciseCatalogFacetsAction(): Promise<FetchExerciseCatalogFacetsResult> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  return fetchExerciseCatalogFacets(token);
 }

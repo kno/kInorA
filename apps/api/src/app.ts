@@ -11,6 +11,7 @@ import { socialRoutes } from "./routes/social.js";
 import { planRoutes } from "./routes/plan.js";
 import { workoutSessionRoutes } from "./routes/workout-session.js";
 import { progressRoutes } from "./routes/progress.js";
+import { exerciseCatalogRoutes } from "./routes/exercise-catalog.js";
 import { wsRoutes } from "./routes/ws.js";
 import { WorkoutPlanRepository } from "./db/repositories/workout-plan.js";
 import { PlanSpecRepository } from "./db/repositories/plan-spec.js";
@@ -532,6 +533,11 @@ export async function buildApp(
   await app.register(progressRoutes, {
     repo: workoutSessionRepo,
   });
+
+  // Exercise library — GET /exercises/catalog(/:id|/facets), requireAuth().
+  // Static, read-only reference data bundled in `@kinora/exercise-catalog`:
+  // no repository, no tenant scoping and no options to compose here.
+  await app.register(exerciseCatalogRoutes);
 
   // Admin AI config routes — GET/PUT /admin/ai-config (requireAuth + requireAdmin).
   // Route port: findUserById feeds buildRequireAdmin; config ops reuse the same
