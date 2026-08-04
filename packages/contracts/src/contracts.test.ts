@@ -56,12 +56,18 @@ describe("shared contracts boundary", () => {
     // for the BillingFeature union — routes/billing.ts imports it directly.
     // PlanSpecDraftSchema (12-interactive-text-chat) is the Zod contract for a
     // per-turn extracted Partial<PlanSpec> over the six wizard input fields.
+    // EXERCISE_BODY_PARTS + the three ExerciseCatalog* schemas (exercise library)
+    // are the wire projection of @kinora/exercise-catalog records.
     expect(Object.keys(contracts)).toEqual([
       "WorkoutProgramSchema",
       "DEFAULT_VECTOR_MEMORY_EMBEDDING_CONFIG",
       "BILLING_FEATURES",
       "MUSCLE_GROUPS",
       "PlanSpecDraftSchema",
+      "EXERCISE_BODY_PARTS",
+      "ExerciseCatalogItemSchema",
+      "ExerciseCatalogDetailSchema",
+      "ExerciseCatalogListResponseSchema",
     ]);
   });
 

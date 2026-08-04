@@ -109,6 +109,7 @@ const WORKSPACE_PACKAGE_FILES = [
   join(ROOT, "apps/mobile/package.json"),
   join(ROOT, "packages/contracts/package.json"),
   join(ROOT, "packages/domain/package.json"),
+  join(ROOT, "packages/exercise-catalog/package.json"),
 ];
 
 function isAllowedWorkspace(filepath, allowedWorkspaces) {

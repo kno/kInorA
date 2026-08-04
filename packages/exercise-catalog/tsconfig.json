@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    // The generated catalog lives OUTSIDE rootDir (at `<pkg>/data/`) so that the
+    // very same file is resolved by `../data/exercises.catalog.json` from both
+    // `src/` (source/test condition) and `dist/` (built condition) — no copy step.
+    // `resolveJsonModule` is therefore disabled and the module is described by the
+    // ambient declaration in `src/json-module.d.ts`; letting tsc infer the literal
+    // type of a multi-megabyte JSON would explode the emitted declarations.
+    "resolveJsonModule": false
+  },
+  "include": ["src"]
+}

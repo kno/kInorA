@@ -1204,3 +1204,97 @@ export type PlanSpecDraftField =
   | "location"
   | "equipment"
   | "limitations";
+
+// ---------------------------------------------------------------------------
+// Exercise library — DTOs exchanged between the API and the clients.
+//
+// The catalog itself lives in `@kinora/exercise-catalog`. These schemas are the
+// WIRE projection of `ExerciseCatalogRecord`: the list item carries only what a
+// grid card renders, the detail adds the heavy instruction payload.
+//
+// COUPLING: `@kinora/contracts` is a leaf package and MUST NOT import
+// `@kinora/exercise-catalog`, so the body-part enum is duplicated here. It MUST
+// stay in sync with the `BodyPart` union in
+// `packages/exercise-catalog/src/types.ts` — change both in the same slice.
+// ---------------------------------------------------------------------------
+
+/** Upstream body-part taxonomy (lowercase, space-separated), mirroring `BodyPart`. */
+export const EXERCISE_BODY_PARTS = [
+  "back",
+  "cardio",
+  "chest",
+  "lower arms",
+  "lower legs",
+  "neck",
+  "shoulders",
+  "upper arms",
+  "upper legs",
+  "waist",
+] as const;
+
+/** The body part an exercise trains. */
+export type ExerciseBodyPart = (typeof EXERCISE_BODY_PARTS)[number];
+
+/**
+ * A single exercise as rendered in a browse/search grid.
+ *
+ * `attribution` is REQUIRED on the wire: the media referenced by `imagePath`
+ * (self-hosted) and `gifPath` (CDN-served) is © Gym visual and its notice must
+ * travel with it. Never strip it to shrink the payload — serving a file from a
+ * public CDN does not relax the attribution obligation.
+ */
+export const ExerciseCatalogItemSchema = z.object({
+  /** Zero-padded upstream id, e.g. `"0001"`. */
+  id: z.string().min(1),
+  name: z.string().min(1),
+  bodyPart: z.enum(EXERCISE_BODY_PARTS),
+  equipment: z.string().min(1),
+  target: z.string().min(1),
+  muscleGroup: z.string().min(1),
+  /** Self-hosted thumbnail, app-absolute — e.g. `"/exercises/images/0001-2gPfomN.jpg"`. */
+  imagePath: z.string().min(1),
+  /**
+   * CDN-served animation, an ABSOLUTE https URL (jsDelivr, pinned to an upstream
+   * commit SHA) — e.g.
+   * `"https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@<sha>/videos/0001-2gPfomN.gif"`.
+   *
+   * Intentionally validated as a plain non-empty string, not `z.url()` or a
+   * prefix check: the delivery mechanism is an operational decision owned by
+   * `scripts/import-exercise-catalog.ts`, and the wire contract must not have to
+   * change if the media moves back to self-hosting. Render it as-is.
+   */
+  gifPath: z.string().min(1),
+  attribution: z.string().min(1),
+});
+
+export type ExerciseCatalogItem = z.infer<typeof ExerciseCatalogItemSchema>;
+
+/**
+ * A single exercise with its full detail payload. Extends the list item with
+ * the fields only the detail view needs, so the list response stays small.
+ * `instructionSteps` always carries both shipped locales.
+ */
+export const ExerciseCatalogDetailSchema = ExerciseCatalogItemSchema.extend({
+  secondaryMuscles: z.array(z.string()),
+  instructionSteps: z.object({
+    en: z.array(z.string()).min(1),
+    es: z.array(z.string()).min(1),
+  }),
+});
+
+export type ExerciseCatalogDetail = z.infer<typeof ExerciseCatalogDetailSchema>;
+
+/**
+ * A page of catalog items. `total` is the match count BEFORE pagination, so
+ * clients can render a pager; `limit`/`offset` echo the applied window.
+ */
+export const ExerciseCatalogListResponseSchema = z.object({
+  items: z.array(ExerciseCatalogItemSchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().nonnegative(),
+  offset: z.number().int().nonnegative(),
+});
+
+export type ExerciseCatalogListResponse = z.infer<
+  typeof ExerciseCatalogListResponseSchema
+>;
