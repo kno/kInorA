@@ -476,26 +476,25 @@ export function stackEnv() {
 
 /**
  * Build the workspace libraries the api and web servers depend on. Both dev
- * servers import `@kinora/contracts`, `@kinora/domain`, and `@kinora/i18n`
- * (the web layout/i18n request config) through their published `dist/` entry
- * points, which only exist after a `tsc` build — Next resolves these packages
- * via their "default" export (no `transpilePackages`). CI runs the "Build"
- * step AFTER e2e (and a fresh clone has no dist at all), so the webServer would
- * fail to start with "Module not found: Can't resolve '@kinora/i18n'" unless we
- * build these first. Keeps `pnpm test:e2e` self-contained.
+ * servers import them through their published `dist/` entry points, which only
+ * exist after a `tsc` build — Next resolves these packages via their "default"
+ * export (no `transpilePackages`). CI runs the "Build" step AFTER e2e (and a
+ * fresh clone has no dist at all), so the webServer would fail to start with
+ * "Module not found" unless we build them first. Keeps `pnpm test:e2e`
+ * self-contained.
+ *
+ * Deliberately a glob over `./packages/*` rather than a list of names. This
+ * function used to name contracts/domain/i18n explicitly, and adding
+ * `@kinora/exercise-catalog` broke CI with "Cannot find module
+ * '@kinora/exercise-catalog/dist/index.js'" because nobody remembered to
+ * extend the list. The repo hardcodes its workspace set in several places
+ * (the Dockerfile `deps` stage, `scripts/deps-guard.mjs`); this one no longer
+ * needs maintaining when a package is added.
  */
 async function buildWorkspaceLibs(env, signal) {
   const code = await runInherit(
     "pnpm",
-    [
-      "--filter",
-      "@kinora/contracts",
-      "--filter",
-      "@kinora/domain",
-      "--filter",
-      "@kinora/i18n",
-      "build",
-    ],
+    ["--filter", "./packages/*", "build"],
     env,
     signal,
   );
