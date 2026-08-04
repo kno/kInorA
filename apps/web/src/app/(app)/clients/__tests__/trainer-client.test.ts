@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import type { ClientSummaryDTO } from "@kinora/contracts";
 import {
   createPlanForClient,
+  fetchClientPlan,
   fetchClients,
   inviteClient,
   type CreatePlanForClientInput,
@@ -147,5 +148,87 @@ describe("createPlanForClient", () => {
     const result = await createPlanForClient("user_1", input, TOKEN, { ...OPTIONS, fetchImpl });
 
     expect(result).toEqual({ kind: "error", message: "forbidden" });
+  });
+});
+
+describe("fetchClientPlan (#341)", () => {
+  const plan = {
+    id: "plan_1",
+    status: "ready",
+    program: { weeklySessions: [], limitationWarnings: [] },
+    specId: "spec_1",
+    name: "Client plan",
+  };
+
+  it("returns an error when no session token is present, without calling fetch", async () => {
+    const fetchImpl = vi.fn();
+
+    const result = await fetchClientPlan("user_1", "plan_1", undefined, { ...OPTIONS, fetchImpl });
+
+    expect(result).toEqual({ kind: "error", message: "no_session" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("GETs the trainer-scoped read route and returns the plan on 200", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, plan));
+
+    const result = await fetchClientPlan("user_1", "plan_1", TOKEN, { ...OPTIONS, fetchImpl });
+
+    expect(result).toEqual({ kind: "ok", plan });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://api.test/clients/user_1/workout-plans/plan_1",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("percent-encodes both path segments", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, plan));
+
+    await fetchClientPlan("a/b", "c d", TOKEN, { ...OPTIONS, fetchImpl });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://api.test/clients/a%2Fb/workout-plans/c%20d",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("maps a 403 (not this client's trainer) to forbidden", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(403, { error: "forbidden" }));
+
+    const result = await fetchClientPlan("user_1", "plan_1", TOKEN, { ...OPTIONS, fetchImpl });
+
+    expect(result).toEqual({ kind: "forbidden" });
+  });
+
+  it("maps a 404 to notFound, distinct from forbidden", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(404, { error: "not_found" }));
+
+    const result = await fetchClientPlan("user_1", "plan_1", TOKEN, { ...OPTIONS, fetchImpl });
+
+    expect(result).toEqual({ kind: "notFound" });
+  });
+
+  it("maps any other non-ok status to a generic error — never to ok", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(500, { error: "boom" }));
+
+    const result = await fetchClientPlan("user_1", "plan_1", TOKEN, { ...OPTIONS, fetchImpl });
+
+    expect(result).toEqual({ kind: "error", message: "boom" });
+  });
+
+  it("maps a network failure to api_unreachable", async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error("down"));
+
+    const result = await fetchClientPlan("user_1", "plan_1", TOKEN, { ...OPTIONS, fetchImpl });
+
+    expect(result).toEqual({ kind: "error", message: "api_unreachable" });
+  });
+
+  it("rejects a 200 body without an id as invalid_response", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { status: "ready" }));
+
+    const result = await fetchClientPlan("user_1", "plan_1", TOKEN, { ...OPTIONS, fetchImpl });
+
+    expect(result).toEqual({ kind: "error", message: "invalid_response" });
   });
 });

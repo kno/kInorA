@@ -32,3 +32,29 @@ export interface CreatePlanForClientInput {
 export type CreatePlanForClientResult =
   | { kind: "ok"; planId: string; status: string }
   | { kind: "error"; message: string };
+
+/**
+ * A client-owned plan as read by an assigned trainer (#341). Same client DTO
+ * `GET /workout-plans/:id` returns — the API never exposes the raw row.
+ */
+export interface ClientPlanDetail {
+  id: string;
+  status: string;
+  program?: unknown;
+  specId?: string;
+  /** Resolved plan label (#93) — the API applies the blank→default rule. */
+  name?: string;
+}
+
+/**
+ * `forbidden` and `notFound` are DISTINCT so the trainer-facing view can tell
+ * "you are not this client's trainer" from "no such plan for this client",
+ * without either state leaking the other's existence: the API already answers
+ * 403 before any read on a denial, so `notFound` is only ever reached by an
+ * authorized caller.
+ */
+export type FetchClientPlanResult =
+  | { kind: "ok"; plan: ClientPlanDetail }
+  | { kind: "forbidden" }
+  | { kind: "notFound" }
+  | { kind: "error"; message: string };

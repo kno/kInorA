@@ -581,6 +581,10 @@ export function isLikelyRateLimitMessage(error: unknown): boolean {
  *     entitled, assigned trainer creates a CONFIRMED plan spec + starts generation
  *     OWNED BY the client (`userId = clientUserId`), not the trainer. Registered
  *     only when `trainerAccess` is wired.
+ *   GET  /clients/:clientUserId/workout-plans/:id — #341: the READ counterpart of
+ *     the route above. Same `resolveAuthorizedOwner` gate; the resolved owner is
+ *     passed to the UNCHANGED `(tenantId, userId)`-scoped `findPlanById`.
+ *     Registered only when `trainerAccess` is wired.
  *
  * Stuck-generating strategy: MANUAL REGENERATE ONLY.
  * Stale "generating" rows from aborted generation (e.g. server restart) are
@@ -867,6 +871,72 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
           spec: persisted.spec,
           planId: generation.planId,
           status: generation.status,
+        });
+      }
+    );
+
+    // GET /clients/:clientUserId/workout-plans/:id  (#341)
+    //
+    // Trainer-scoped READ of a client-owned plan detail — the read counterpart
+    // of the create route above. `GET /workout-plans/:id` stays hard-scoped to
+    // the CALLER's own `(tenantId, userId)`, so the trainer that just created a
+    // plan for a client 404s on it; this route is the ONLY widened read, and it
+    // widens through the SAME deny-by-default choke point, never a parallel
+    // authorization path.
+    //
+    // Order of operations (fail-closed):
+    //   1. requireAuth                           — 401 if no session
+    //   2. resolveAuthorizedOwner(:clientUserId) — role → tier → ACTIVE
+    //      assignment, all BEFORE any repo call. Denied → flat 403 and ZERO
+    //      reads, so an unauthorized caller cannot even probe plan existence.
+    //   3. repo.findPlanById(tenantId, ownerUserId, id) — the repository's
+    //      `(tenantId, userId)` filter is UNTOUCHED; only WHO computes
+    //      `ownerUserId` differs. A plan id belonging to a different client
+    //      (even one the trainer is also assigned to) does not match the
+    //      resolved owner and yields 404, so `:clientUserId` and `:id` must
+    //      agree — the path cannot be used to enumerate other owners' plans.
+    //
+    // A caller passing their OWN id takes `resolveAuthorizedOwner`'s unchanged
+    // self path and reads exactly what `GET /workout-plans/:id` would: this
+    // route can never widen a non-trainer's access.
+    fastify.get(
+      "/clients/:clientUserId/workout-plans/:id",
+      { preHandler: requireAuth() },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        const { tenantId, userId, role } = request.authContext!;
+        const { clientUserId, id } = request.params as {
+          clientUserId: string;
+          id: string;
+        };
+        const ctx: ActorOwnerContext = { tenantId, actorUserId: userId, role };
+
+        let ownerUserId: UserId;
+        try {
+          ownerUserId = await resolveAuthorizedOwner(
+            ctx,
+            trainerAccess,
+            clientUserId as UserId
+          );
+        } catch (err) {
+          if (err instanceof ForbiddenOwnerAccess) {
+            return reply.code(403).send({ error: "forbidden" });
+          }
+          throw err;
+        }
+
+        const plan = await repo.findPlanById(tenantId, ownerUserId, id);
+        if (!plan) {
+          return reply.code(404).send({ error: "not_found" });
+        }
+
+        // Same client DTO as `GET /workout-plans/:id` — never the raw DB row
+        // (its internal tenantId/userId/errorMessage columns must not leak).
+        return reply.code(200).send({
+          id: plan.id,
+          status: plan.status,
+          program: plan.programJson ?? undefined,
+          specId: plan.planSpecId,
+          name: plan.name,
         });
       }
     );

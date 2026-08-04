@@ -2,10 +2,11 @@
 
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
-import { createPlanForClient, fetchClients, inviteClient } from "./trainer-client";
+import { createPlanForClient, fetchClientPlan, fetchClients, inviteClient } from "./trainer-client";
 import type {
   CreatePlanForClientInput,
   CreatePlanForClientResult,
+  FetchClientPlanResult,
   FetchClientsResult,
   InviteClientResult,
 } from "./trainer-client-types";
@@ -37,4 +38,13 @@ export async function createPlanForClientAction(
 ): Promise<CreatePlanForClientResult> {
   const token = await sessionToken();
   return createPlanForClient(clientUserId, input, token);
+}
+
+/** Read an assigned client's plan detail (#341). Authorization is server-side. */
+export async function getClientPlanAction(
+  clientUserId: string,
+  planId: string,
+): Promise<FetchClientPlanResult> {
+  const token = await sessionToken();
+  return fetchClientPlan(clientUserId, planId, token);
 }
