@@ -520,3 +520,332 @@ describe("POST /clients/:clientUserId/plan-specs (15a-v2-trainer-account-access,
     expect(persistedSpec).not.toHaveProperty("branding");
   });
 });
+
+/**
+ * `GET /clients/:clientUserId/workout-plans/:id` (#341 — trainer-scoped plan
+ * detail READ).
+ *
+ * These tests exercise the AUTHORIZATION MATRIX explicitly: this route is the
+ * only widened plan read, so every row of the matrix (assigned trainer,
+ * unassigned trainer, non-trainer, cross-tenant, self) is asserted here rather
+ * than inferred from `resolveAuthorizedOwner`'s own unit tests. The assignment
+ * repo used below is STRICT — it matches on `(tenantId, trainerUserId,
+ * clientUserId)` — so a denial cannot pass just because a permissive mock
+ * returned a row for any argument.
+ */
+
+const PLAN_ID = "plan-uuid-1";
+
+const clientPlanRow = {
+  id: PLAN_ID,
+  status: "ready",
+  programJson: { weeklySessions: [] },
+  planSpecId: "spec-uuid-1",
+  name: "Client plan",
+  // Internal columns that must NEVER reach the client DTO.
+  tenantId: TENANT_ID,
+  userId: CLIENT_ID,
+  errorMessage: null,
+};
+
+/**
+ * Assignment repo that resolves ONLY for the exact
+ * `(TENANT_ID, TRAINER_ID, assignedClientId)` triple — every other combination
+ * (other tenant, other trainer, other client) resolves to `undefined`, i.e. a
+ * denial.
+ */
+function buildStrictAssignmentRepo(assignedClientId: string) {
+  return {
+    findActiveAssignment: vi.fn(
+      async (tenantId: string, trainerUserId: string, clientUserId: string) =>
+        tenantId === TENANT_ID &&
+        trainerUserId === TRAINER_ID &&
+        clientUserId === assignedClientId
+          ? {
+              id: "assignment-1",
+              tenantId: TENANT_ID,
+              trainerUserId: TRAINER_ID,
+              clientUserId: assignedClientId,
+              status: "active",
+            }
+          : undefined,
+    ),
+  };
+}
+
+/**
+ * Plan repo whose `findPlanById` honors the SAME `(tenantId, userId, id)`
+ * filter the real repository applies — so a widened-to-the-wrong-owner or
+ * cross-tenant read resolves to `undefined` here exactly as it would in the DB.
+ */
+function buildOwnerScopedPlanRepo(owner: { tenantId: string; userId: string }) {
+  return buildPlanRepo({
+    findPlanById: vi.fn(async (tenantId: string, userId: string, id: string) =>
+      tenantId === owner.tenantId && userId === owner.userId && id === PLAN_ID
+        ? clientPlanRow
+        : undefined,
+    ),
+  });
+}
+
+describe("GET /clients/:clientUserId/workout-plans/:id (#341)", () => {
+  let app: FastifyInstance | undefined;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    await app?.close();
+    app = undefined;
+  });
+
+  it("returns 200 with the client's plan for an entitled, actively assigned trainer", async () => {
+    const repo = buildOwnerScopedPlanRepo({ tenantId: TENANT_ID, userId: CLIENT_ID });
+
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, TRAINER_ID, "trainer"),
+      repo,
+      trainerAccess: {
+        assignmentRepo: buildStrictAssignmentRepo(CLIENT_ID),
+        entitlementReader: buildEntitlementReader("trainer"),
+      },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/clients/${CLIENT_ID}/workout-plans/${PLAN_ID}`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      id: PLAN_ID,
+      status: "ready",
+      program: { weeklySessions: [] },
+      specId: "spec-uuid-1",
+      name: "Client plan",
+    });
+    // The resolved owner is the CLIENT; the tenant is the session's, never
+    // caller-supplied. Internal columns are not echoed back.
+    expect(repo.findPlanById).toHaveBeenCalledWith(TENANT_ID, CLIENT_ID, PLAN_ID);
+    expect(res.json()).not.toHaveProperty("userId");
+    expect(res.json()).not.toHaveProperty("tenantId");
+  });
+
+  it("denies (403) an entitled trainer with no active assignment to the requested client — no plan read at all", async () => {
+    const repo = buildOwnerScopedPlanRepo({ tenantId: TENANT_ID, userId: OTHER_CLIENT_ID });
+
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, TRAINER_ID, "trainer"),
+      repo,
+      trainerAccess: {
+        assignmentRepo: buildStrictAssignmentRepo(CLIENT_ID), // assigned to a DIFFERENT client
+        entitlementReader: buildEntitlementReader("trainer"),
+      },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/clients/${OTHER_CLIENT_ID}/workout-plans/${PLAN_ID}`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repo.findPlanById).not.toHaveBeenCalled();
+  });
+
+  it("denies (403) a trainer role without the trainer entitlement, before any assignment or plan read", async () => {
+    const repo = buildOwnerScopedPlanRepo({ tenantId: TENANT_ID, userId: CLIENT_ID });
+    const assignmentRepo = buildStrictAssignmentRepo(CLIENT_ID);
+
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, TRAINER_ID, "trainer"),
+      repo,
+      trainerAccess: { assignmentRepo, entitlementReader: buildEntitlementReader("pro") },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/clients/${CLIENT_ID}/workout-plans/${PLAN_ID}`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(assignmentRepo.findActiveAssignment).not.toHaveBeenCalled();
+    expect(repo.findPlanById).not.toHaveBeenCalled();
+  });
+
+  it("denies (403) a plain member reading another same-tenant user's plan, before any entitlement/assignment/plan read", async () => {
+    const repo = buildOwnerScopedPlanRepo({ tenantId: TENANT_ID, userId: CLIENT_ID });
+    const entitlementReader = buildEntitlementReader("trainer");
+    const assignmentRepo = buildStrictAssignmentRepo(CLIENT_ID);
+
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, MEMBER_ID, "member"),
+      repo,
+      trainerAccess: { assignmentRepo, entitlementReader },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/clients/${CLIENT_ID}/workout-plans/${PLAN_ID}`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(entitlementReader.loadContext).not.toHaveBeenCalled();
+    expect(assignmentRepo.findActiveAssignment).not.toHaveBeenCalled();
+    expect(repo.findPlanById).not.toHaveBeenCalled();
+  });
+
+  it("denies (403) a trainer whose session is scoped to a different tenant than the assignment", async () => {
+    const otherTenantId = "aaaaaaaa-0000-0000-0000-0000000000ff";
+    const repo = buildOwnerScopedPlanRepo({ tenantId: TENANT_ID, userId: CLIENT_ID });
+
+    app = await buildTestApp({
+      db: buildSessionDb(otherTenantId, TRAINER_ID, "trainer"),
+      repo,
+      trainerAccess: {
+        assignmentRepo: buildStrictAssignmentRepo(CLIENT_ID), // active only in TENANT_ID
+        entitlementReader: buildEntitlementReader("trainer"),
+      },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/clients/${CLIENT_ID}/workout-plans/${PLAN_ID}`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repo.findPlanById).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the plan id belongs to a different owner than :clientUserId — the two must agree", async () => {
+    // The trainer is legitimately assigned to CLIENT_ID, but PLAN_ID is owned
+    // by OTHER_CLIENT_ID: the (tenantId, ownerUserId) filter does not match, so
+    // the read yields nothing instead of leaking another owner's plan.
+    const repo = buildOwnerScopedPlanRepo({ tenantId: TENANT_ID, userId: OTHER_CLIENT_ID });
+
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, TRAINER_ID, "trainer"),
+      repo,
+      trainerAccess: {
+        assignmentRepo: buildStrictAssignmentRepo(CLIENT_ID),
+        entitlementReader: buildEntitlementReader("trainer"),
+      },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/clients/${CLIENT_ID}/workout-plans/${PLAN_ID}`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ error: "not_found" });
+    expect(repo.findPlanById).toHaveBeenCalledWith(TENANT_ID, CLIENT_ID, PLAN_ID);
+  });
+
+  it("returns 404 for an unknown plan id an assigned trainer requests", async () => {
+    const repo = buildOwnerScopedPlanRepo({ tenantId: TENANT_ID, userId: CLIENT_ID });
+
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, TRAINER_ID, "trainer"),
+      repo,
+      trainerAccess: {
+        assignmentRepo: buildStrictAssignmentRepo(CLIENT_ID),
+        entitlementReader: buildEntitlementReader("trainer"),
+      },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/clients/${CLIENT_ID}/workout-plans/unknown-plan-id`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("preserves the self path: a non-trainer member reading THEIR OWN plan through this route succeeds", async () => {
+    const repo = buildOwnerScopedPlanRepo({ tenantId: TENANT_ID, userId: MEMBER_ID });
+    const entitlementReader = buildEntitlementReader("free");
+    const assignmentRepo = buildStrictAssignmentRepo(CLIENT_ID);
+
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, MEMBER_ID, "member"),
+      repo,
+      trainerAccess: { assignmentRepo, entitlementReader },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/clients/${MEMBER_ID}/workout-plans/${PLAN_ID}`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(repo.findPlanById).toHaveBeenCalledWith(TENANT_ID, MEMBER_ID, PLAN_ID);
+    // The self path never touches the widening checks.
+    expect(entitlementReader.loadContext).not.toHaveBeenCalled();
+    expect(assignmentRepo.findActiveAssignment).not.toHaveBeenCalled();
+  });
+
+  it("leaves the unwidened GET /workout-plans/:id isolation intact — a trainer still 404s on the client's plan there", async () => {
+    const repo = buildOwnerScopedPlanRepo({ tenantId: TENANT_ID, userId: CLIENT_ID });
+
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, TRAINER_ID, "trainer"),
+      repo,
+      trainerAccess: {
+        assignmentRepo: buildStrictAssignmentRepo(CLIENT_ID),
+        entitlementReader: buildEntitlementReader("trainer"),
+      },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/workout-plans/${PLAN_ID}`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(404);
+    // Scoped to the CALLER, never widened.
+    expect(repo.findPlanById).toHaveBeenCalledWith(TENANT_ID, TRAINER_ID, PLAN_ID);
+  });
+
+  it("returns 401 without a session, before any authorization work", async () => {
+    const repo = buildOwnerScopedPlanRepo({ tenantId: TENANT_ID, userId: CLIENT_ID });
+
+    app = await buildTestApp({
+      db: buildSessionDb(TENANT_ID, TRAINER_ID, "trainer"),
+      repo,
+      trainerAccess: {
+        assignmentRepo: buildStrictAssignmentRepo(CLIENT_ID),
+        entitlementReader: buildEntitlementReader("trainer"),
+      },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/clients/${CLIENT_ID}/workout-plans/${PLAN_ID}`,
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(repo.findPlanById).not.toHaveBeenCalled();
+  });
+
+  it("does not register the read route at all when trainerAccess is not wired", async () => {
+    app = await buildTestApp({ db: buildSessionDb(TENANT_ID, TRAINER_ID, "trainer") });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/clients/${CLIENT_ID}/workout-plans/${PLAN_ID}`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+});
