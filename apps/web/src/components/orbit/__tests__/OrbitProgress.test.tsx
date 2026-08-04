@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, act } from "@testing-library/react";
 import { OrbitProgress } from "../OrbitProgress";
 
 const C = 2 * Math.PI * 16; // circumference ≈ 100.53
@@ -145,5 +145,60 @@ describe("OrbitProgress", () => {
     const ball = container.querySelector('[data-orbit="ball"]') as SVGElement;
     expect(arc.style.transition).toBe("none");
     expect(ball.style.transition).toBe("none");
+  });
+
+  it("drops the transitions live when the reduced-motion preference flips on after mount", () => {
+    // A real MediaQueryList stays live for the page's lifetime: the user can
+    // toggle the OS setting while the app is open. Model that by capturing
+    // the "change" listener the component registers and firing it.
+    let changeListener: ((e: MediaQueryListEvent) => void) | undefined;
+    vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: (_type: string, listener: (e: MediaQueryListEvent) => void) => {
+        changeListener = listener;
+      },
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }) as unknown as MediaQueryList);
+
+    const { container } = render(
+      <OrbitProgress value={25} max={100} aria-label="Live" />,
+    );
+    const arc = container.querySelector('[data-orbit="arc"]') as SVGElement;
+    // Motion is allowed at mount, so the transitions are present.
+    expect(arc.style.transition).toBe("stroke-dashoffset .3s ease");
+
+    act(() => {
+      changeListener?.({ matches: true } as MediaQueryListEvent);
+    });
+
+    const arcAfter = container.querySelector('[data-orbit="arc"]') as SVGElement;
+    const ballAfter = container.querySelector('[data-orbit="ball"]') as SVGElement;
+    expect(arcAfter.style.transition).toBe("none");
+    expect(ballAfter.style.transition).toBe("none");
+  });
+
+  it("unsubscribes from the media query on unmount", () => {
+    const removeEventListener = vi.fn();
+    vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }) as unknown as MediaQueryList);
+
+    const { unmount } = render(<OrbitProgress value={10} max={100} aria-label="Bye" />);
+    expect(removeEventListener).not.toHaveBeenCalled();
+
+    unmount();
+    expect(removeEventListener).toHaveBeenCalledWith("change", expect.any(Function));
   });
 });

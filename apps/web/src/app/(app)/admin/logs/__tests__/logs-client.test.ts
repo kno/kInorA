@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { apiBaseUrl } from "../logs-client.js";
 import { fetchLogs } from "../logs-client.js";
 
 const TENANT_ID = "bbbbbbbb-0000-0000-0000-000000000001";
@@ -136,5 +137,37 @@ describe("fetchLogs", () => {
     );
     const [url] = fetchMock.mock.calls[0] as [string];
     expect(url).toBe("http://api/admin/logs?level=warn");
+  });
+});
+
+/**
+ * `apiBaseUrl` resolves the API host for the admin logs client. Every other
+ * test in this file injects an explicit base, so this is the only place the
+ * real env-var resolution is exercised — and an unset API_BASE_URL in a
+ * container silently pointing at localhost is a production failure mode.
+ */
+
+describe("apiBaseUrl", () => {
+  const original = process.env.API_BASE_URL;
+  afterEach(() => {
+    if (original === undefined) delete process.env.API_BASE_URL;
+    else process.env.API_BASE_URL = original;
+  });
+
+  it("uses API_BASE_URL when the deployment sets it", () => {
+    process.env.API_BASE_URL = "http://api.internal:4000";
+    expect(apiBaseUrl()).toBe("http://api.internal:4000");
+  });
+
+  it("falls back to the local dev API when API_BASE_URL is unset", () => {
+    delete process.env.API_BASE_URL;
+    expect(apiBaseUrl()).toBe("http://localhost:4000");
+  });
+
+  it("is read per call, so a late-injected env var still takes effect", () => {
+    delete process.env.API_BASE_URL;
+    expect(apiBaseUrl()).toBe("http://localhost:4000");
+    process.env.API_BASE_URL = "http://api.other:4000";
+    expect(apiBaseUrl()).toBe("http://api.other:4000");
   });
 });
