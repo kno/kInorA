@@ -120,9 +120,9 @@ describe("ExerciseLibraryControls", () => {
   it("renders a chip per facet value, with its match count", () => {
     renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} />);
 
-    expect(screen.getByRole("button", { name: /Chest/ })).toBeDefined();
-    expect(screen.getByRole("button", { name: /Barbell/ })).toBeDefined();
-    expect(screen.getByRole("button", { name: /12/ })).toBeDefined();
+    expect(screen.getByRole("link", { name: /Chest/ })).toBeDefined();
+    expect(screen.getByRole("link", { name: /Barbell/ })).toBeDefined();
+    expect(screen.getByRole("link", { name: /12/ })).toBeDefined();
   });
 
   it("translates the chip LABEL but filters by the RAW catalog value", () => {
@@ -130,7 +130,7 @@ describe("ExerciseLibraryControls", () => {
     // "?bodyPart=Pecho" would 400 — the taxonomy must never leak into the URL.
     renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Chest/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Chest/ }));
 
     expect(routerPush).toHaveBeenCalledWith("/exercises?bodyPart=chest");
   });
@@ -144,7 +144,7 @@ describe("ExerciseLibraryControls", () => {
     );
 
     // Capitalised, never blank and never an `exercises.taxonomy.*` key path.
-    expect(screen.getByRole("button", { name: /Exosuit/ })).toBeDefined();
+    expect(screen.getByRole("link", { name: /Exosuit/ })).toBeDefined();
     expect(screen.queryByText(/exercises\.taxonomy/)).toBeNull();
   });
 
@@ -160,10 +160,12 @@ describe("ExerciseLibraryControls", () => {
     expect(screen.getByText("Body part")).toBeDefined();
   });
 
-  it("marks the applied filter's chip as pressed", () => {
+  it("marks the applied filter's chip as current", () => {
+    // `aria-pressed` is a BUTTON state and is not valid on a link, so the
+    // applied chip announces itself with `aria-current` instead.
     renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{ bodyPart: "chest" }} />);
-    expect(screen.getByRole("button", { name: /Chest/ }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("button", { name: /Back/ }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("link", { name: /Chest/ }).getAttribute("aria-current")).toBe("true");
+    expect(screen.getByRole("link", { name: /Back/ }).getAttribute("aria-current")).toBeNull();
   });
 
   // --- The form must WORK WITHOUT JAVASCRIPT ---
@@ -298,7 +300,7 @@ describe("ExerciseLibraryControls", () => {
   it("applies a filter when its chip is clicked", () => {
     renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Chest/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Chest/ }));
 
     expect(routerPush).toHaveBeenCalledWith("/exercises?bodyPart=chest");
   });
@@ -307,7 +309,7 @@ describe("ExerciseLibraryControls", () => {
     currentSearch = "bodyPart=chest";
     renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{ bodyPart: "chest" }} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Chest/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Chest/ }));
 
     expect(routerPush).toHaveBeenCalledWith("/exercises");
   });
@@ -316,7 +318,7 @@ describe("ExerciseLibraryControls", () => {
     currentSearch = "offset=48";
     renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Barbell/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Barbell/ }));
 
     expect(routerPush).toHaveBeenCalledWith("/exercises?equipment=barbell");
   });
@@ -325,14 +327,14 @@ describe("ExerciseLibraryControls", () => {
     currentSearch = "title=Bench+Press";
     renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Chest/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Chest/ }));
 
     expect(routerPush).toHaveBeenCalledWith("/exercises?title=Bench+Press&bodyPart=chest");
   });
 
   it("hides the clear-filters button when nothing is applied", () => {
     renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} />);
-    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Clear filters" })).toBeNull();
   });
 
   it("clears the search and every filter, keeping unrelated parameters", () => {
@@ -345,8 +347,168 @@ describe("ExerciseLibraryControls", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    fireEvent.click(screen.getByRole("link", { name: "Clear filters" }));
 
     expect(routerPush).toHaveBeenCalledWith("/exercises?title=Bench+Press");
+  });
+
+  // --- The chips must WORK WITHOUT JAVASCRIPT, like the form beside them ---
+  //
+  // They were `type="button"` elements carrying only an `onClick`, sitting
+  // OUTSIDE the search form. With JavaScript off, clicking a body-part chip or
+  // "Clear filters" did nothing at all, while the search box next to them
+  // navigated perfectly — one toolbar honouring two different contracts.
+  //
+  // These assert the DECLARATIVE `href` the browser acts on by itself; firing a
+  // synthetic React click assumes hydration and can never catch this.
+
+  it("renders each chip as a real link, not a bare button", () => {
+    renderWithIntl(
+      <ExerciseLibraryControls facets={facets} selected={{}} carried={{}} />,
+    );
+
+    const chip = screen.getByRole("link", { name: /Chest/ });
+    expect(chip.tagName).toBe("A");
+    expect(chip.getAttribute("href")).toBe("/exercises?bodyPart=chest");
+  });
+
+  it("builds the chip href from the server-rendered params, keeping the search and ?title=", () => {
+    // The href must be composed from props, NOT from `useSearchParams()`:
+    // hooks have not run when there is no JavaScript, but this markup is what
+    // the server already sent.
+    currentSearch = "";
+    renderWithIntl(
+      <ExerciseLibraryControls
+        facets={facets}
+        selected={{}}
+        search="press"
+        carried={{ title: "Bench Press", search: "press" }}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: /Chest/ }).getAttribute("href")).toBe(
+      "/exercises?title=Bench+Press&search=press&bodyPart=chest",
+    );
+  });
+
+  it("points the ACTIVE chip's href at removing that filter (toggle without JS)", () => {
+    renderWithIntl(
+      <ExerciseLibraryControls
+        facets={facets}
+        selected={{ bodyPart: "chest" }}
+        carried={{ bodyPart: "chest", equipment: "barbell" }}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: /Chest/ }).getAttribute("href")).toBe(
+      "/exercises?equipment=barbell",
+    );
+  });
+
+  it("gives Clear filters a real href that drops the search and every filter", () => {
+    renderWithIntl(
+      <ExerciseLibraryControls
+        facets={facets}
+        selected={{ bodyPart: "chest", equipment: "barbell", target: "pectorals" }}
+        search="press"
+        carried={{
+          title: "Bench Press",
+          search: "press",
+          bodyPart: "chest",
+          equipment: "barbell",
+          target: "pectorals",
+          lang: "es",
+        }}
+      />,
+    );
+
+    const clear = screen.getByRole("link", { name: "Clear filters" });
+    expect(clear.tagName).toBe("A");
+    // Only the library's OWN filters are dropped; `?title=` and `?lang=` are
+    // not filters and must survive.
+    expect(clear.getAttribute("href")).toBe("/exercises?title=Bench+Press&lang=es");
+  });
+
+  it("falls back to the bare route when clearing leaves nothing behind", () => {
+    renderWithIntl(
+      <ExerciseLibraryControls
+        facets={facets}
+        selected={{ bodyPart: "chest" }}
+        carried={{ bodyPart: "chest" }}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Clear filters" }).getAttribute("href")).toBe(
+      "/exercises",
+    );
+  });
+
+  it("still SOFT-navigates when JavaScript is live, rather than reloading the page", () => {
+    // The href is the no-JS fallback; hydrated, the click must be intercepted
+    // so the route is not fetched from scratch.
+    currentSearch = "";
+    renderWithIntl(
+      <ExerciseLibraryControls facets={facets} selected={{}} carried={{}} />,
+    );
+
+    // `fireEvent` answers false when the handler called preventDefault.
+    expect(fireEvent.click(screen.getByRole("link", { name: /Chest/ }))).toBe(false);
+    expect(routerPush).toHaveBeenCalledWith("/exercises?bodyPart=chest");
+  });
+
+  // --- A modifier click belongs to the BROWSER ---
+  //
+  // Turning the chips into links created an expectation that did not exist
+  // before: they now show a target in the status bar and readers open those in
+  // a new tab. Cmd/Ctrl+click, Shift+click and Alt+click all arrive as ordinary
+  // `click` events, so a handler that calls `preventDefault()` unconditionally
+  // swallows them and soft-navigates in the SAME tab — a link that refuses to
+  // behave like one. Only a plain primary click may be intercepted.
+
+  it.each([
+    ["Cmd/Ctrl (new tab, macOS)", { metaKey: true }],
+    ["Ctrl (new tab, Windows/Linux)", { ctrlKey: true }],
+    ["Shift (new window)", { shiftKey: true }],
+    ["Alt (save target)", { altKey: true }],
+    ["a non-primary mouse button", { button: 1 }],
+  ])("leaves a %s chip click to the browser", (_label, modifier) => {
+    currentSearch = "";
+    renderWithIntl(
+      <ExerciseLibraryControls facets={facets} selected={{}} carried={{}} />,
+    );
+
+    // `fireEvent` answers true when nothing called preventDefault.
+    expect(fireEvent.click(screen.getByRole("link", { name: /Chest/ }), modifier)).toBe(true);
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it("leaves a modifier click on Clear filters to the browser too", () => {
+    currentSearch = "bodyPart=chest";
+    renderWithIntl(
+      <ExerciseLibraryControls
+        facets={facets}
+        selected={{ bodyPart: "chest" }}
+        carried={{ bodyPart: "chest" }}
+      />,
+    );
+
+    expect(
+      fireEvent.click(screen.getByRole("link", { name: "Clear filters" }), { metaKey: true }),
+    ).toBe(true);
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it("intercepts the Clear filters link too", () => {
+    currentSearch = "bodyPart=chest";
+    renderWithIntl(
+      <ExerciseLibraryControls
+        facets={facets}
+        selected={{ bodyPart: "chest" }}
+        carried={{ bodyPart: "chest" }}
+      />,
+    );
+
+    expect(fireEvent.click(screen.getByRole("link", { name: "Clear filters" }))).toBe(false);
+    expect(routerPush).toHaveBeenCalledWith("/exercises");
   });
 });

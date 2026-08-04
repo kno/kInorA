@@ -8,6 +8,7 @@ import {
   pageHref,
   parseOffset,
   preservedSearchParams,
+  carriedFilterParams,
 } from "../library-query";
 
 describe("EXERCISE_PAGE_SIZE", () => {
@@ -220,5 +221,44 @@ describe("pageHref", () => {
     expect(href).toContain("equipment=barbell");
     expect(href).toContain("target=pectorals");
     expect(href).toContain("offset=48");
+  });
+});
+
+describe("carriedFilterParams", () => {
+  it("carries everything active EXCEPT offset, so a filter change restarts at page 1", () => {
+    const carried = carriedFilterParams({
+      title: "Bench Press",
+      search: "press",
+      bodyPart: "chest",
+      offset: "48",
+      lang: "es",
+    });
+
+    expect(carried).toEqual({
+      title: "Bench Press",
+      search: "press",
+      bodyPart: "chest",
+      lang: "es",
+    });
+  });
+
+  it("KEEPS the search, unlike the form's hidden fields", () => {
+    // The chip href is a complete destination URL; nothing else contributes
+    // the term to it, so dropping `search` here would silently clear the
+    // reader's search every time they touched a filter.
+    const params = { search: "press", bodyPart: "chest" };
+
+    expect(carriedFilterParams(params).search).toBe("press");
+    expect(preservedSearchParams(params).search).toBeUndefined();
+  });
+
+  it("does not echo unrelated third-party query junk into the chip links", () => {
+    expect(carriedFilterParams({ utm_source: "newsletter", bodyPart: "chest" })).toEqual({
+      bodyPart: "chest",
+    });
+  });
+
+  it("is empty when nothing is applied", () => {
+    expect(carriedFilterParams({})).toEqual({});
   });
 });
