@@ -456,6 +456,48 @@ describe("ExerciseLibraryControls", () => {
     expect(routerPush).toHaveBeenCalledWith("/exercises?bodyPart=chest");
   });
 
+  // --- A modifier click belongs to the BROWSER ---
+  //
+  // Turning the chips into links created an expectation that did not exist
+  // before: they now show a target in the status bar and readers open those in
+  // a new tab. Cmd/Ctrl+click, Shift+click and Alt+click all arrive as ordinary
+  // `click` events, so a handler that calls `preventDefault()` unconditionally
+  // swallows them and soft-navigates in the SAME tab — a link that refuses to
+  // behave like one. Only a plain primary click may be intercepted.
+
+  it.each([
+    ["Cmd/Ctrl (new tab, macOS)", { metaKey: true }],
+    ["Ctrl (new tab, Windows/Linux)", { ctrlKey: true }],
+    ["Shift (new window)", { shiftKey: true }],
+    ["Alt (save target)", { altKey: true }],
+    ["a non-primary mouse button", { button: 1 }],
+  ])("leaves a %s chip click to the browser", (_label, modifier) => {
+    currentSearch = "";
+    renderWithIntl(
+      <ExerciseLibraryControls facets={facets} selected={{}} carried={{}} />,
+    );
+
+    // `fireEvent` answers true when nothing called preventDefault.
+    expect(fireEvent.click(screen.getByRole("link", { name: /Chest/ }), modifier)).toBe(true);
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it("leaves a modifier click on Clear filters to the browser too", () => {
+    currentSearch = "bodyPart=chest";
+    renderWithIntl(
+      <ExerciseLibraryControls
+        facets={facets}
+        selected={{ bodyPart: "chest" }}
+        carried={{ bodyPart: "chest" }}
+      />,
+    );
+
+    expect(
+      fireEvent.click(screen.getByRole("link", { name: "Clear filters" }), { metaKey: true }),
+    ).toBe(true);
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
   it("intercepts the Clear filters link too", () => {
     currentSearch = "bodyPart=chest";
     renderWithIntl(

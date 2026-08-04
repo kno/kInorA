@@ -24,6 +24,30 @@ export interface ExerciseLibraryFacets {
   target: FacetValue[];
 }
 
+/**
+ * Whether a click on a link may be intercepted and turned into a soft
+ * navigation.
+ *
+ * Only a PLAIN primary-button click may. Cmd/Ctrl+click (new tab),
+ * Shift+click (new window) and Alt+click (save target) all arrive as ordinary
+ * `click` events, so a handler that calls `preventDefault()` unconditionally
+ * swallows them and navigates in the same tab instead — the control looks like
+ * a link, shows a target in the status bar, and then refuses to behave like
+ * one. Letting these through costs one full page load and keeps the promise
+ * the `href` makes.
+ *
+ * Middle-click needs nothing here: it fires `auxclick`, not `click`.
+ */
+function isPlainClick(event: React.MouseEvent): boolean {
+  return (
+    event.button === 0 &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey
+  );
+}
+
 /** The filter fields the library exposes, in the order they are rendered. */
 const FILTER_FIELDS = ["bodyPart", "equipment", "target"] as const;
 
@@ -244,7 +268,10 @@ export function ExerciseLibraryControls({
                     className={`kin-ex-chip${active ? " kin-ex-chip--active" : ""}`}
                     onClick={(event) => {
                       // Keep the soft navigation when React is live: a full
-                      // page load here would re-fetch the whole route.
+                      // page load here would re-fetch the whole route. A
+                      // modifier click is the reader asking for a NEW TAB or
+                      // window, so it is left to the browser.
+                      if (!isPlainClick(event)) return;
                       event.preventDefault();
                       handleChipClick(field, facet.value);
                     }}
@@ -264,6 +291,7 @@ export function ExerciseLibraryControls({
           className="kin-btn kin-btn--ghost"
           href={clearHref()}
           onClick={(event) => {
+            if (!isPlainClick(event)) return;
             event.preventDefault();
             handleClear();
           }}
