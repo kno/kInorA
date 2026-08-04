@@ -187,10 +187,39 @@ async function hasContent(path: string): Promise<boolean> {
   }
 }
 
+/**
+ * A plain filename: letters, digits, dot, underscore and hyphen only, and
+ * never the traversal names `.` / `..` (both of which are otherwise spelled
+ * with allowed characters). Every name in the upstream dataset matches this
+ * (verified across all 2648 media files), so the pattern costs nothing
+ * legitimate while rejecting path separators, traversal, NUL bytes and
+ * shell-significant characters outright.
+ */
+const PLAIN_FILENAME = /^(?!\.\.?$)[A-Za-z0-9._-]+$/;
+
+/**
+ * Last path segment of an UNTRUSTED upstream media path, validated as a plain
+ * filename.
+ *
+ * The return value is joined into a write destination under `IMAGES_DIR` /
+ * `VIDEOS_DIR`, so it is a path-traversal sink. Splitting on `/` alone is not
+ * enough: on Windows `\` is also a separator, so `images\..\..\evil.js` has a
+ * single `/`-segment and would be joined verbatim, escaping the media
+ * directory. A bare `..` segment is likewise not a filename and would resolve
+ * to the parent directory (EISDIR at best).
+ *
+ * EVERY segment is checked, not just the last, so a traversal attempt fails
+ * loudly at import time instead of being silently normalised away — the
+ * dataset is expected to contain plain relative paths, and anything else means
+ * the upstream source is not what we think it is.
+ */
 function basenameOf(relativePath: string): string {
-  const segments = relativePath.split("/");
+  const segments = relativePath.split(/[/\\]/);
   const last = segments[segments.length - 1];
-  if (last === undefined || last === "") {
+  if (
+    last === undefined ||
+    !segments.every((segment) => PLAIN_FILENAME.test(segment))
+  ) {
     throw new Error(`Unusable media path in dataset: "${relativePath}"`);
   }
   return last;
@@ -483,7 +512,19 @@ async function main(): Promise<void> {
   log("Done.");
 }
 
-main().catch((error: unknown) => {
-  process.stderr.write(`import-exercise-catalog failed: ${String(error)}\n`);
-  process.exitCode = 1;
-});
+// Exported for unit testing only — `basenameOf` guards a path-traversal sink,
+// so its rejection rules are asserted directly rather than through a full
+// import run.
+export { basenameOf };
+
+// Run only when invoked directly as `node scripts/import-exercise-catalog.ts`,
+// not when imported by unit tests. Plain-Node ESM has no `import.meta.main`
+// yet, so use the path-equality guard (same shape as `e2e-with-stack.mjs`).
+// A side-effecting import would otherwise download the whole dataset.
+const isMain = import.meta.url === `file://${process.argv[1]}`;
+if (isMain) {
+  main().catch((error: unknown) => {
+    process.stderr.write(`import-exercise-catalog failed: ${String(error)}\n`);
+    process.exitCode = 1;
+  });
+}
