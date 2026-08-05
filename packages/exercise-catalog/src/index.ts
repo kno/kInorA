@@ -10,6 +10,9 @@
 export { getExerciseById, listExercises, tallyExerciseFacets } from "./catalog.js";
 export type { ExerciseFacetField, ExerciseFacetTally } from "./catalog.js";
 
+export { resolveExerciseByName, resolveExerciseIdByName } from "./resolve.js";
+export type { ExerciseMatchTier, ExerciseNameMatch } from "./resolve.js";
+
 export { BODY_PARTS } from "./types.js";
 export type {
   BodyPart,
