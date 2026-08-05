@@ -194,6 +194,20 @@ const TIERS: ReadonlyArray<{
  * `undefined`, which callers MUST degrade silently on (no link, no error card).
  * The returned `tier` says how much normalization was needed, so coverage and
  * match quality can be measured in production instead of estimated.
+ *
+ * ## Known bound of the `lenient` tier
+ *
+ * Because it discards the query's parentheses, a title whose parenthetical is
+ * MEANINGFUL rather than annotation can fall through to the unqualified record:
+ * `"Push-Ups (on stability ball)"` is plural, so it misses `exact` and `loose`,
+ * and then resolves to the plain `push-up` instead of
+ * `push-up (on stability ball)`. That is the same movement with the variant
+ * lost — categorically milder than the different-movement errors that got fuzzy
+ * matching rejected, and not observed in any production title (every real
+ * parenthetical was prescription annotation: "(each side)", "(Negative Focus)",
+ * "(Assisted if needed)"). It is nonetheless why `tier` is part of the return
+ * value: a consumer that wants no imprecision at all can require
+ * `exact`/`loose` and treat `lenient` as unresolved.
  */
 export function resolveExerciseByName(title: string): ExerciseNameMatch | undefined {
   if (typeof title !== "string" || title.trim() === "") {

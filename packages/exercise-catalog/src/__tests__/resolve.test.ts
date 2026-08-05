@@ -102,6 +102,22 @@ describe("resolveExerciseByName — lenient tier", () => {
     expect(nameOf("crunch floor")).toBe("crunch floor");
   });
 
+  it("loses a MEANINGFUL parenthetical to the unqualified record (known bound)", () => {
+    // Documented limitation, pinned so it is a decision rather than a surprise:
+    // the parenthetical here identifies a real catalog variant, but the plural
+    // misses the exact/loose tiers, so lenient drops it and lands on the plain
+    // exercise. Same movement, variant lost — and reported as `lenient`, which
+    // is exactly the signal a consumer needs to reject it if that matters.
+    const match = resolveExerciseByName("Push-Ups (on stability ball)");
+    expect(match?.record.name).toBe("push-up");
+    expect(match?.tier).toBe("lenient");
+
+    // The singular form still reaches the variant precisely, via `exact`.
+    const precise = resolveExerciseByName("push-up (on stability ball)");
+    expect(precise?.record.name).toBe("push-up (on stability ball)");
+    expect(precise?.tier).toBe("exact");
+  });
+
   it("does not mangle a name ending in -ss", () => {
     // "press" must never be singularized to "pres", or every press in the
     // catalog would stop resolving.
