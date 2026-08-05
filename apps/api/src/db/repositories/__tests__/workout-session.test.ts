@@ -28,7 +28,7 @@ const readyProgram: WorkoutProgram = {
           sets: 1,
           reps: "10-12",
           restSeconds: 75,
-          substitutionNote: "Use dumbbells if machine busy",
+          notes: "Use dumbbells if machine busy",
         },
       ],
     },

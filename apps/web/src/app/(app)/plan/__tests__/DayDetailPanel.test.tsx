@@ -29,8 +29,8 @@ const sessions: WorkoutSession[] = [
     day: 1,
     title: "Push Day",
     exercises: [
-      { name: "Bench Press", sets: 4, reps: "8-10", restSeconds: 90, notes: undefined, substitutionNote: undefined },
-      { name: "Overhead Press", sets: 3, reps: "10", restSeconds: 60, notes: "Keep elbows tucked", substitutionNote: undefined },
+      { name: "Bench Press", sets: 4, reps: "8-10", restSeconds: 90, notes: undefined },
+      { name: "Overhead Press", sets: 3, reps: "10", restSeconds: 60, notes: "Keep elbows tucked" },
     ],
   },
   {
@@ -42,8 +42,7 @@ const sessions: WorkoutSession[] = [
         sets: 4,
         reps: "8",
         restSeconds: 90,
-        notes: undefined,
-        substitutionNote: "Can use dumbbells",
+        notes: "Can use dumbbells",
       },
     ],
   },
@@ -51,7 +50,7 @@ const sessions: WorkoutSession[] = [
     day: 3,
     title: "Leg Day",
     exercises: [
-      { name: "Squat", sets: 5, reps: "5", restSeconds: 180, notes: undefined, substitutionNote: undefined },
+      { name: "Squat", sets: 5, reps: "5", restSeconds: 180, notes: undefined },
     ],
   },
 ];
@@ -229,11 +228,11 @@ describe("DayDetailPanel — detail panel exercise table (SC-12, SC-13, SC-23)",
     expect(screen.getByText("Keep elbows tucked")).toBeDefined();
   });
 
-  it("SC-13 triangulation: substitutionNote appears when present", () => {
+  it("SC-13 triangulation: an exercise note appears when present", () => {
     renderWithIntl(<DayDetailPanel sessions={sessions} />);
     fireEvent.click(screen.getByText("Pull Day"));
 
-    // Barbell Row has substitutionNote: "Can use dumbbells"
+    // Barbell Row has notes: "Can use dumbbells"
     expect(screen.getByText("Can use dumbbells")).toBeDefined();
   });
 

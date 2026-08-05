@@ -29,13 +29,18 @@ describe("WorkoutExercise (08-v1-ai-plan-generation)", () => {
     expectTypeOf<WorkoutExercise>().toHaveProperty("restSeconds").toBeNumber();
   });
 
-  it("has optional fields: notes and substitutionNote", () => {
+  it("has one optional field: notes", () => {
     expectTypeOf<WorkoutExercise>()
       .toHaveProperty("notes")
       .toMatchTypeOf<string | undefined>();
-    expectTypeOf<WorkoutExercise>()
-      .toHaveProperty("substitutionNote")
-      .toMatchTypeOf<string | undefined>();
+  });
+
+  it("has NO substitutionNote field (#357)", () => {
+    // The field was removed because nothing wrote it: the LLM filled it with
+    // coaching tips only because the structured-output schema exposed it as a
+    // second undescribed string, and the one server-side writer
+    // (applyEquipmentSubstitutions) was a measured no-op and is gone.
+    expectTypeOf<WorkoutExercise>().not.toHaveProperty("substitutionNote");
   });
 
   it("full shape matches design contract exactly", () => {
@@ -45,7 +50,6 @@ describe("WorkoutExercise (08-v1-ai-plan-generation)", () => {
       reps: string;
       restSeconds: number;
       notes?: string;
-      substitutionNote?: string;
     }>();
   });
 });
@@ -91,7 +95,7 @@ const validProgram = {
           sets: 3,
           reps: "6-10",
           restSeconds: 60,
-          substitutionNote: "Use lat pulldown if no bar available",
+          notes: "Use lat pulldown if no bar available",
         },
       ],
     },
@@ -141,9 +145,7 @@ describe("WorkoutProgramSchema (08-v1-ai-plan-generation)", () => {
 
     expect(benchPress.name).toBe("Bench Press");
     expect(benchPress.notes).toBe("Focus on chest contraction");
-    expect(pullUp.substitutionNote).toBe(
-      "Use lat pulldown if no bar available",
-    );
+    expect(pullUp.notes).toBe("Use lat pulldown if no bar available");
 
     expect(program.limitationWarnings).toHaveLength(1);
   });
@@ -199,7 +201,7 @@ describe("WorkoutProgramSchema (08-v1-ai-plan-generation)", () => {
     expect(result.success).toBe(false);
   });
 
-  it("allows optional notes and substitutionNote to be absent", () => {
+  it("allows the optional notes field to be absent", () => {
     const minimal = {
       weeklySessions: [
         {
@@ -211,7 +213,7 @@ describe("WorkoutProgramSchema (08-v1-ai-plan-generation)", () => {
               sets: 3,
               reps: "15",
               restSeconds: 45,
-              // no notes, no substitutionNote
+              // no notes
             },
           ],
         },
