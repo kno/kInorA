@@ -4,6 +4,7 @@ import {
   BODY_PARTS,
   getExerciseById,
   listExercises,
+  tallyExerciseFacets,
   type ExerciseCatalogRecord,
 } from "../index.js";
 
@@ -86,9 +87,32 @@ describe("catalog integrity", () => {
   });
 });
 
+describe("listExercises — multi-value filtering (additive facets)", () => {
+  it("treats an empty bodyPart list the same as an absent one", () => {
+    expect(listExercises({ bodyPart: [] }).total).toBe(listExercises({}).total);
+  });
+
+  it("matches ANY listed value within a group (OR within group)", () => {
+    expect(listExercises({ bodyPart: ["cardio", "chest"] }).total).toBe(192);
+  });
+
+  it("ANDs a second group on top of a widened first group", () => {
+    expect(
+      listExercises({ bodyPart: ["cardio", "chest"], equipment: ["body weight"] }).total,
+    ).toBe(57);
+  });
+
+  it("a single-element list reduces to the old exact-match behaviour", () => {
+    expect(listExercises({ bodyPart: ["neck"] }).total).toBe(
+      listExercises({ bodyPart: ["neck"] }).items.length,
+    );
+    expect(listExercises({ bodyPart: ["neck"] }).total).toBeGreaterThan(0);
+  });
+});
+
 describe("listExercises — bodyPart filter", () => {
   it("returns only matching records", () => {
-    const { items, total } = listExercises({ bodyPart: "neck" });
+    const { items, total } = listExercises({ bodyPart: ["neck"] });
     expect(total).toBe(items.length);
     expect(items.length).toBeGreaterThan(0);
     expect(items.every((record) => record.bodyPart === "neck")).toBe(true);
@@ -96,7 +120,7 @@ describe("listExercises — bodyPart filter", () => {
 
   it("partitions the catalog across every body part", () => {
     const sum = BODY_PARTS.reduce(
-      (acc, bodyPart) => acc + listExercises({ bodyPart }).total,
+      (acc, bodyPart) => acc + listExercises({ bodyPart: [bodyPart] }).total,
       0,
     );
     expect(sum).toBe(CATALOG_SIZE);
@@ -105,25 +129,25 @@ describe("listExercises — bodyPart filter", () => {
 
 describe("listExercises — equipment filter", () => {
   it("matches exactly", () => {
-    const { items, total } = listExercises({ equipment: "body weight" });
+    const { items, total } = listExercises({ equipment: ["body weight"] });
     expect(items.every((record) => record.equipment === "body weight")).toBe(true);
     expect(total).toBeGreaterThan(0);
   });
 
   it("returns an empty page for an unknown equipment label", () => {
-    expect(listExercises({ equipment: "jetpack" })).toEqual({ items: [], total: 0 });
+    expect(listExercises({ equipment: ["jetpack"] })).toEqual({ items: [], total: 0 });
   });
 });
 
 describe("listExercises — target filter", () => {
   it("matches exactly", () => {
-    const { items, total } = listExercises({ target: "abs" });
+    const { items, total } = listExercises({ target: ["abs"] });
     expect(items.every((record) => record.target === "abs")).toBe(true);
     expect(total).toBeGreaterThan(0);
   });
 
   it("returns an empty page for an unknown target", () => {
-    expect(listExercises({ target: "gills" }).total).toBe(0);
+    expect(listExercises({ target: ["gills"] }).total).toBe(0);
   });
 });
 
@@ -168,9 +192,9 @@ describe("listExercises — search", () => {
 describe("listExercises — combined filters", () => {
   it("ANDs every supplied filter", () => {
     const filters = {
-      bodyPart: "waist",
-      equipment: "body weight",
-      target: "abs",
+      bodyPart: ["waist"],
+      equipment: ["body weight"],
+      target: ["abs"],
       search: "sit-up",
     } as const;
     const { items, total } = listExercises(filters);
@@ -187,7 +211,7 @@ describe("listExercises — combined filters", () => {
   });
 
   it("returns nothing for a contradictory combination", () => {
-    expect(listExercises({ bodyPart: "neck", target: "abs" }).total).toBe(0);
+    expect(listExercises({ bodyPart: ["neck"], target: ["abs"] }).total).toBe(0);
   });
 });
 
@@ -207,8 +231,8 @@ describe("listExercises — pagination", () => {
   });
 
   it("does not paginate when limit and offset are omitted", () => {
-    expect(listExercises({ bodyPart: "cardio" }).items.length).toBe(
-      listExercises({ bodyPart: "cardio" }).total,
+    expect(listExercises({ bodyPart: ["cardio"] }).items.length).toBe(
+      listExercises({ bodyPart: ["cardio"] }).total,
     );
   });
 
@@ -242,11 +266,91 @@ describe("listExercises — pagination", () => {
   });
 
   it("paginates a filtered result set", () => {
-    const filtered = listExercises({ bodyPart: "neck" });
-    const page = listExercises({ bodyPart: "neck", limit: 1, offset: 1 });
+    const filtered = listExercises({ bodyPart: ["neck"] });
+    const page = listExercises({ bodyPart: ["neck"], limit: 1, offset: 1 });
     expect(page.total).toBe(filtered.total);
     expect(page.items).toHaveLength(1);
     expect(page.items[0]?.id).toBe(filtered.items[1]?.id);
+  });
+});
+
+describe("tallyExerciseFacets", () => {
+  it("tallies every group over the whole catalog with no filters", () => {
+    const tally = tallyExerciseFacets();
+    for (const key of ["bodyPart", "equipment", "target"] as const) {
+      const sum = tally[key].reduce((acc, facet) => acc + facet.count, 0);
+      expect(sum).toBe(CATALOG_SIZE);
+    }
+  });
+
+  it("computes equipment(20)/target(3) under a two-value bodyPart filter, self-excluding bodyPart", () => {
+    const tally = tallyExerciseFacets({ bodyPart: ["cardio", "chest"] });
+
+    expect(tally.equipment).toHaveLength(20);
+    expect(tally.target).toHaveLength(3);
+    expect(tally.target).toEqual(
+      expect.arrayContaining([
+        { value: "cardiovascular system", count: 29 },
+        { value: "pectorals", count: 158 },
+        { value: "serratus anterior", count: 5 },
+      ]),
+    );
+    // Self-exclusion: bodyPart's own tally ignores its own selection and still
+    // lists all 10 body parts, not just cardio/chest.
+    expect(tally.bodyPart).toHaveLength(10);
+  });
+
+  it("re-tallies target when a second group narrows the same selection", () => {
+    // The spec's combined-filter scenario. Adding equipment on top of the two
+    // body parts must shift the target counts (29/158/5 -> 21/34/2), not just
+    // the result total — this is the assertion that would catch a tally
+    // computed against the wrong filter set while every other number still
+    // looked right.
+    const tally = tallyExerciseFacets({
+      bodyPart: ["cardio", "chest"],
+      equipment: ["body weight"],
+    });
+
+    expect(tally.target).toEqual(
+      expect.arrayContaining([
+        { value: "cardiovascular system", count: 21 },
+        { value: "pectorals", count: 34 },
+        { value: "serratus anterior", count: 2 },
+      ]),
+    );
+  });
+
+  it("computes equipment(7)/target(1) under a single-value bodyPart filter", () => {
+    const tally = tallyExerciseFacets({ bodyPart: ["cardio"] });
+
+    expect(tally.equipment).toHaveLength(7);
+    expect(tally.target).toHaveLength(1);
+  });
+
+  it("orders each group by count descending, then value ascending", () => {
+    const tally = tallyExerciseFacets({ bodyPart: ["cardio", "chest"] });
+
+    for (const key of ["bodyPart", "equipment", "target"] as const) {
+      const group = tally[key];
+      for (let i = 1; i < group.length; i++) {
+        const prev = group[i - 1]!;
+        const curr = group[i]!;
+        const orderedByCount = prev.count > curr.count;
+        const tiedThenByValue =
+          prev.count === curr.count && prev.value.localeCompare(curr.value) <= 0;
+        expect(orderedByCount || tiedThenByValue).toBe(true);
+      }
+    }
+  });
+
+  it("applies search as an AND dimension across every group's tally", () => {
+    const unfiltered = tallyExerciseFacets();
+    const searched = tallyExerciseFacets({ search: "press" });
+
+    const unfilteredTotal = unfiltered.bodyPart.reduce((acc, f) => acc + f.count, 0);
+    const searchedTotal = searched.bodyPart.reduce((acc, f) => acc + f.count, 0);
+    expect(searchedTotal).toBeLessThan(unfilteredTotal);
+    expect(searchedTotal).toBe(listExercises({ search: "press" }).total);
   });
 });
 

@@ -11,8 +11,11 @@ import {
 import {
   getExerciseById,
   listExercises,
+  tallyExerciseFacets,
   type ExerciseCatalogFilters,
   type ExerciseCatalogRecord,
+  type ExerciseFacetFilters,
+  type ExerciseFacetTally,
 } from "@kinora/exercise-catalog";
 
 /**
@@ -65,18 +68,75 @@ export interface ExerciseCatalogFacets {
 }
 
 /**
+ * Coerce one raw query value into a list: `undefined` → `[]` (key absent),
+ * a single string → a one-element list (Fastify hands a bare string for one
+ * occurrence), an array is passed through (Fastify hands an array for a
+ * repeated key).
+ */
+function toList(raw: unknown): unknown[] {
+  return raw === undefined ? [] : Array.isArray(raw) ? raw : [raw];
+}
+
+/**
+ * Builds a `z.array(item)` schema fed by a preprocessor that trims, drops
+ * blanks and de-duplicates BEFORE `item` validates each entry. This is what
+ * makes a blank value (`?bodyPart=`) resolve to an empty, unconstrained list
+ * instead of failing validation — the same shield that stops a repeated
+ * blank-then-value parameter (`?search=&search=press`, issue #343) from ever
+ * reaching a 500 is extended here to the array case.
+ */
+function valueList<T extends z.ZodTypeAny>(item: T) {
+  return z
+    .preprocess((raw) => {
+      const seen = new Set<string>();
+      return toList(raw)
+        .filter((entry): entry is string => typeof entry === "string")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry !== "" && !seen.has(entry) && (seen.add(entry), true));
+    }, z.array(item))
+    .optional();
+}
+
+/**
+ * `search` stays single-valued — it is NOT widened into an OR-membership list
+ * like the other three fields. A repeated key (`?search=&search=press`, issue
+ * #343) is collapsed to its first non-blank entry before validation, so it
+ * never reaches the catalog as a 500 or a spurious 400; a single (non-array)
+ * blank value is passed through UNCHANGED and still fails `min(1)` (→ 400,
+ * unchanged contract).
+ */
+function collapseRepeatedSearch(raw: unknown): unknown {
+  if (!Array.isArray(raw)) {
+    return raw;
+  }
+  return raw.find((entry) => typeof entry === "string" && entry.trim() !== "");
+}
+
+/**
+ * The filter fields shared by the list and facets endpoints. `bodyPart` stays
+ * an enum — an unrecognized value still fails validation (→ 400), preserving
+ * today's contract. `equipment`/`target` are free-form: an unrecognized value
+ * is accepted and simply matches nothing.
+ */
+const filterFieldsSchema = z.object({
+  search: z.preprocess(
+    collapseRepeatedSearch,
+    z.string().trim().min(1).max(MAX_SEARCH_LENGTH).optional(),
+  ),
+  bodyPart: valueList(z.enum(EXERCISE_BODY_PARTS)),
+  equipment: valueList(z.string()),
+  target: valueList(z.string()),
+});
+
+/**
  * Zod schema for the raw list query string. Every field is optional; a present
  * but malformed value fails the parse (→ 400). `limit`/`offset` arrive as
  * strings and are coerced to non-negative integers here — `limit` is then
  * CLAMPED to {@link MAX_CATALOG_LIMIT} rather than rejected, so an over-eager
  * client gets a capped page instead of an error.
  */
-const listQuerySchema = z
-  .object({
-    search: z.string().trim().min(1).max(MAX_SEARCH_LENGTH).optional(),
-    bodyPart: z.enum(EXERCISE_BODY_PARTS).optional(),
-    equipment: z.string().trim().min(1).optional(),
-    target: z.string().trim().min(1).optional(),
+const listQuerySchema = filterFieldsSchema
+  .extend({
     limit: z
       .string()
       .regex(/^\d+$/)
@@ -89,6 +149,21 @@ const listQuerySchema = z
       .optional(),
   })
   .strip();
+
+/** Same schema minus the pagination window — used by `/exercises/catalog/facets`. */
+const facetQuerySchema = filterFieldsSchema.strip();
+
+/** Builds the filter-dimension part of the parsed query, shared by both endpoints. */
+function buildFacetFilters(
+  parsed: z.infer<typeof filterFieldsSchema>,
+): ExerciseFacetFilters {
+  const filters: ExerciseFacetFilters = {};
+  if (parsed.search) filters.search = parsed.search;
+  if (parsed.bodyPart && parsed.bodyPart.length > 0) filters.bodyPart = parsed.bodyPart;
+  if (parsed.equipment && parsed.equipment.length > 0) filters.equipment = parsed.equipment;
+  if (parsed.target && parsed.target.length > 0) filters.target = parsed.target;
+  return filters;
+}
 
 /** The applied window echoed back on the response alongside the filters used. */
 interface PlannedCatalogQuery {
@@ -112,21 +187,31 @@ export function planCatalogQuery(raw: unknown): PlanCatalogQueryResult {
   if (!parsed.success) {
     return { ok: false };
   }
-  const { search, bodyPart, equipment, target, limit, offset } = parsed.data;
+  const { limit, offset } = parsed.data;
 
   const appliedLimit = Math.min(limit ?? DEFAULT_CATALOG_LIMIT, MAX_CATALOG_LIMIT);
   const appliedOffset = offset ?? 0;
 
   const filters: ExerciseCatalogFilters = {
+    ...buildFacetFilters(parsed.data),
     limit: appliedLimit,
     offset: appliedOffset,
   };
-  if (search) filters.search = search;
-  if (bodyPart) filters.bodyPart = bodyPart;
-  if (equipment) filters.equipment = equipment;
-  if (target) filters.target = target;
 
   return { ok: true, query: { filters, limit: appliedLimit, offset: appliedOffset } };
+}
+
+export type PlanFacetQueryResult =
+  | { ok: true; filters: ExerciseFacetFilters }
+  | { ok: false };
+
+/** Pure query-string validator/planner for the facets endpoint — no pagination window. */
+export function planFacetQuery(raw: unknown): PlanFacetQueryResult {
+  const parsed = facetQuerySchema.safeParse(raw ?? {});
+  if (!parsed.success) {
+    return { ok: false };
+  }
+  return { ok: true, filters: buildFacetFilters(parsed.data) };
 }
 
 /**
@@ -160,40 +245,53 @@ function toDetail(record: ExerciseCatalogRecord): ExerciseCatalogDetail {
   };
 }
 
-/** Tally one record field across the whole catalog, sorted by value ascending. */
-function tally(
-  records: readonly ExerciseCatalogRecord[],
-  pick: (record: ExerciseCatalogRecord) => string,
-): ExerciseCatalogFacetValue[] {
-  const counts = new Map<string, number>();
-  for (const record of records) {
-    const value = pick(record);
-    counts.set(value, (counts.get(value) ?? 0) + 1);
+/** Same (count desc, value asc) order `tallyExerciseFacets` uses internally. */
+function compareFacetTally(a: ExerciseFacetTally, b: ExerciseFacetTally): number {
+  if (a.count !== b.count) {
+    return b.count - a.count;
   }
-  return [...counts.entries()]
-    .map(([value, count]) => ({ value, count }))
-    .sort((a, b) => a.value.localeCompare(b.value));
+  return a.value.localeCompare(b.value);
 }
 
 /**
- * Memoized facets. The catalog is frozen at build time, so the full scan is
- * done at most ONCE per process and every later request is a map lookup.
- * Lazy (not module-init) so importing the route never pays for it.
+ * Unions a computed tally with the caller's current selection: any selected
+ * value the tally omits (its count under the OTHER active filters is zero) is
+ * appended at `count: 0` so it stays visible and checked in the response,
+ * then the whole group is re-sorted — zero-count entries land last, ordered
+ * alphabetically among themselves.
  */
-let cachedFacets: ExerciseCatalogFacets | undefined;
-
-export function computeExerciseCatalogFacets(): ExerciseCatalogFacets {
-  if (cachedFacets) {
-    return cachedFacets;
+function mergeSelected(
+  tally: readonly ExerciseFacetTally[],
+  selected: readonly string[] | undefined,
+): ExerciseCatalogFacetValue[] {
+  if (!selected || selected.length === 0) {
+    return [...tally];
   }
-  // `limit` omitted → every record, which is exactly what a facet scan needs.
-  const all = listExercises().items;
-  cachedFacets = {
-    bodyPart: tally(all, (record) => record.bodyPart),
-    equipment: tally(all, (record) => record.equipment),
-    target: tally(all, (record) => record.target),
+  const byValue = new Map(tally.map((entry) => [entry.value, entry] as const));
+  for (const value of selected) {
+    if (!byValue.has(value)) {
+      byValue.set(value, { value, count: 0 });
+    }
+  }
+  return [...byValue.values()].sort(compareFacetTally);
+}
+
+/**
+ * Result-scoped facet counts for the given filters. Recomputed on every call
+ * — the catalog is a frozen 1,324-record dataset, so a fresh scan is
+ * sub-millisecond and there is no correctness upside to caching results that
+ * vary per request (there is no longer a single "the" facets result once
+ * filters can shape it).
+ */
+export function computeExerciseCatalogFacets(
+  filters: ExerciseFacetFilters = {},
+): ExerciseCatalogFacets {
+  const tally = tallyExerciseFacets(filters);
+  return {
+    bodyPart: mergeSelected(tally.bodyPart, filters.bodyPart),
+    equipment: mergeSelected(tally.equipment, filters.equipment),
+    target: mergeSelected(tally.target, filters.target),
   };
-  return cachedFacets;
 }
 
 export const exerciseCatalogRoutes: FastifyPluginAsync = async (fastify) => {
@@ -225,8 +323,12 @@ export const exerciseCatalogRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exercises/catalog/facets",
     { preHandler: requireAuth() },
-    async (_request: FastifyRequest, reply: FastifyReply) => {
-      return reply.code(200).send(computeExerciseCatalogFacets());
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const plan = planFacetQuery(request.query ?? {});
+      if (!plan.ok) {
+        return reply.code(400).send({ error: "invalid_query" });
+      }
+      return reply.code(200).send(computeExerciseCatalogFacets(plan.filters));
     },
   );
 
