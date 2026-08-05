@@ -275,9 +275,16 @@ export const tenantBillingOverrides = pgTable(
     tier: billingTierEnum("tier").notNull(),
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
     endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
-    createdByUserId: uuid("created_by_user_id")
-      .notNull()
-      .references(() => users.id),
+    /**
+     * Attribution, not ownership (#354): `ON DELETE SET NULL`, never `CASCADE`.
+     * An override must outlive the admin who granted it — an admin leaving must
+     * not silently reset a tenant's entitlements. Nullable because "who granted
+     * this" can legitimately become unknown once the account is erased (GDPR
+     * deletion), while the grant itself stays auditable.
+     */
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     reason: text("reason").notNull(),
     /**
      * Optional caller-supplied idempotency key (#313). A grant retry after a
@@ -346,9 +353,15 @@ export const memberQuotaAllocations = pgTable(
     feature: billingFeatureEnum("feature").notNull(),
     period: text("period").notNull(),
     limit: integer("limit").notNull(),
-    updatedByUserId: uuid("updated_by_user_id")
-      .notNull()
-      .references(() => users.id),
+    /**
+     * Attribution, not ownership (#354): `ON DELETE SET NULL`, never `CASCADE`.
+     * The allocation belongs to `(tenantId, userId)` — deleting the admin who
+     * last changed the limit must drop only the credit for the change, never the
+     * limit itself.
+     */
+    updatedByUserId: uuid("updated_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -464,10 +477,14 @@ export const billingAuditEvents = pgTable(
     // composite FK. A global superadmin (`users.is_admin`) may act on a tenant
     // they hold zero `memberships` rows for (e.g. granting a tier override), so
     // the audit actor must be recordable independent of tenant membership.
-    actorUserId: uuid("actor_user_id")
-      .notNull()
-      .references(() => users.id),
-    subjectUserId: uuid("subject_user_id").references(() => users.id),
+    //
+    // Attribution, not ownership (#354): both are `ON DELETE SET NULL`, never
+    // `CASCADE`. An audit event exists precisely to outlive the thing it
+    // describes — erasing the billing trail along with the account would drop it
+    // exactly when it is needed (chargeback, "why was I charged"). An event with
+    // an unknown actor still says what happened and to which tenant.
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    subjectUserId: uuid("subject_user_id").references(() => users.id, { onDelete: "set null" }),
     action: billingAuditActionEnum("action").notNull(),
     feature: billingFeatureEnum("feature"),
     period: text("period"),
