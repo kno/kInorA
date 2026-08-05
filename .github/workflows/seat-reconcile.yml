@@ -1,0 +1,91 @@
+name: Seat reconcile sweep
+
+# Scheduled seat-billing reconcile sweep (issue #330 step 5).
+#
+# Runs `SeatSyncService.reconcileAllStaleSponsors()` INSIDE the production api
+# container, healing Stripe/DB seat-count drift left behind by a swallowed
+# outbound Stripe failure. Daily is deliberate: drift only appears when an
+# outbound Stripe call fails without a follow-up assignment event to correct
+# it, so hours of latency are harmless.
+#
+# WHAT THIS CAN DO: the sweep MUTATES real Stripe subscription quantities. Two
+# guards stand in front of that — `SEAT_BILLING_ENABLED` must be `1` (the
+# recompute still runs, the outbound call is skipped when off) and the
+# seat-price guard from PR #331 means only a seat-priced subscription is ever
+# touched, never a flat Pro one. It is idempotent (per-sponsor advisory lock,
+# recompute rather than increment) and safe to run repeatedly.
+#
+# The sweep records `billing.seat_sync_sweep` started/completed/failed events
+# (see apps/api/src/billing/seat-sync-sweep.ts), so a run — including a failure
+# — is visible in the superadmin /admin/logs view, not only in this job's log.
+# On a healthy empty system it reconciles nothing and exits 0 quietly.
+
+on:
+  schedule:
+    # 04:20 UTC daily — off the top of the hour to avoid the GitHub-wide
+    # scheduling spike, and away from the deploy traffic of a working day.
+    - cron: "20 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize against a deploy (the `Deploy on VPS` job in ci-cd.yml shares this
+# group) and against another sweep. Queue rather than cancel: a half-run sweep
+# is pointless, and the next scheduled run would heal anything left over anyway.
+concurrency:
+  group: kinora-vps-prod
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Reconcile seats on VPS
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      VPS_DEPLOY_DIR: ${{ secrets.VPS_DEPLOY_DIR || '/opt/kinora' }}
+      VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Validate required secrets
+        run: |
+          errors=0
+          if [ -z "${{ secrets.VPS_SSH_KEY }}" ]; then
+            echo "ERROR: VPS_SSH_KEY secret is required."
+            errors=$((errors + 1))
+          fi
+          if [ -z "${{ secrets.VPS_KNOWN_HOSTS }}" ]; then
+            echo "ERROR: VPS_KNOWN_HOSTS secret is required."
+            echo "Generate it with: ssh-keyscan -p <port> <host>"
+            echo "Then store the output (pinned host key) as a GitHub secret."
+            errors=$((errors + 1))
+          fi
+          if [ -z "${{ secrets.VPS_USER }}" ]; then
+            echo "ERROR: VPS_USER secret is required."
+            errors=$((errors + 1))
+          fi
+          if [ -z "${{ secrets.VPS_HOST }}" ]; then
+            echo "ERROR: VPS_HOST secret is required."
+            errors=$((errors + 1))
+          fi
+          if [ "$errors" -gt 0 ]; then
+            echo "One or more required secrets are missing. Configure them in GitHub repository settings."
+            exit 1
+          fi
+          echo "All required secrets are configured."
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          install -m 600 /dev/null ~/.ssh/kinora_vps
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/kinora_vps
+          printf '%s\n' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Run reconcile sweep in the api container
+        run: |
+          # `set -o pipefail` plus no output filtering: the ssh exit status is
+          # the script's exit status, so a failed sweep (non-zero exit from
+          # reconcile-seats.mjs) fails this step and turns the job red.
+          set -o pipefail
+          ssh -i ~/.ssh/kinora_vps -p "$VPS_PORT" \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "cd '$VPS_DEPLOY_DIR' && docker compose exec -T api node apps/api/scripts/reconcile-seats.mjs"
