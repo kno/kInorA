@@ -300,6 +300,26 @@ describe("tallyExerciseFacets", () => {
     expect(tally.bodyPart).toHaveLength(10);
   });
 
+  it("re-tallies target when a second group narrows the same selection", () => {
+    // The spec's combined-filter scenario. Adding equipment on top of the two
+    // body parts must shift the target counts (29/158/5 -> 21/34/2), not just
+    // the result total — this is the assertion that would catch a tally
+    // computed against the wrong filter set while every other number still
+    // looked right.
+    const tally = tallyExerciseFacets({
+      bodyPart: ["cardio", "chest"],
+      equipment: ["body weight"],
+    });
+
+    expect(tally.target).toEqual(
+      expect.arrayContaining([
+        { value: "cardiovascular system", count: 21 },
+        { value: "pectorals", count: 34 },
+        { value: "serratus anterior", count: 2 },
+      ]),
+    );
+  });
+
   it("computes equipment(7)/target(1) under a single-value bodyPart filter", () => {
     const tally = tallyExerciseFacets({ bodyPart: ["cardio"] });
 
