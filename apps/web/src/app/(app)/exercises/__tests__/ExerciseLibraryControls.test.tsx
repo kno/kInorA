@@ -214,7 +214,13 @@ describe("ExerciseLibraryControls", () => {
 
     fireEvent.click(screen.getByRole("checkbox", { name: /Back/ }));
 
-    expect(routerPush).toHaveBeenCalledWith("/exercises?bodyPart=chest&bodyPart=back");
+    // JOINED into ONE occurrence, never a repeated key: the checkboxes submit
+    // `bodyPart` twice (that is what a native multi-checkbox form does), but a
+    // pushed URL where one key repeats is invisible to Next's client router
+    // cache, which then re-renders the PREVIOUS results (#345). See
+    // `facet-values.ts`. The e2e spec proves the render actually follows —
+    // this only pins the URL shape that makes it possible.
+    expect(routerPush).toHaveBeenCalledWith("/exercises?bodyPart=chest%2Cback");
   });
 
   it("unchecks one value without clearing the rest of the same group", () => {

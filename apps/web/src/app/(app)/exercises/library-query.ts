@@ -7,6 +7,7 @@
  */
 
 import { EXERCISE_BODY_PARTS, MAX_EXERCISE_SEARCH_LENGTH } from "@kinora/contracts";
+import { joinFacetValues, splitFacetValues } from "./facet-values";
 
 /** How many cards one library page shows. */
 export const EXERCISE_PAGE_SIZE = 24;
@@ -100,20 +101,14 @@ function firstValue(raw: string | string[] | undefined): string | undefined {
  * (`bodyPart`, `equipment`, `target`), in URL order.
  *
  * Repeat-tolerant by design, unlike `firstValue`: a facet group is additive
- * (OR within the group), so `?bodyPart=chest&bodyPart=cardio` must keep BOTH
- * values rather than collapsing to the first one. Blanks are still skipped —
- * `?bodyPart=&bodyPart=chest` behaves exactly like the single-value path, so
- * the #343 HTTP 500 shape cannot return through either.
+ * (OR within the group), so BOTH `?bodyPart=chest,cardio` (the form the
+ * library writes) and `?bodyPart=chest&bodyPart=cardio` (the form a native
+ * no-JS submit produces) must keep BOTH values rather than collapsing to the
+ * first one. See `facet-values.ts` for why the two forms exist. Blanks are
+ * still skipped — `?bodyPart=&bodyPart=chest` behaves exactly like the
+ * single-value path, so the #343 HTTP 500 shape cannot return through either.
  */
-function allValues(raw: string | string[] | undefined): string[] {
-  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
-  const out: string[] = [];
-  for (const entry of list) {
-    const trimmed = typeof entry === "string" ? entry.trim() : "";
-    if (trimmed && !out.includes(trimmed)) out.push(trimmed);
-  }
-  return out;
-}
+const allValues = splitFacetValues;
 
 /**
  * Normalise `searchParams` at the boundary where the page reads them.
@@ -175,7 +170,11 @@ function activeEntries(
     if (skip.has(key)) continue;
     const value = params[key];
     if (MULTI_KEYS.has(key)) {
-      for (const single of (value as string[] | undefined) ?? []) entries.push([key, single]);
+      // ONE entry carrying every selected value, never a repeated key — see
+      // `facet-values.ts`: a key that appears twice is invisible to Next's
+      // client router cache, which silently re-renders the previous results.
+      const joined = joinFacetValues((value as string[] | undefined) ?? []);
+      if (joined) entries.push([key, joined]);
     } else if (typeof value === "string" && value) {
       entries.push([key, value]);
     }
@@ -227,14 +226,64 @@ export function preservedSearchParams(
  * fields: the clear-filters `href` is a complete destination URL, not a form
  * other controls also contribute to.
  *
- * Returns `[key, value][]` — REPEATED per value for `bodyPart`/`equipment`/
- * `target` — because `Object.fromEntries(...)` would silently collapse a
- * multi-select facet to its LAST selected value. The return-type change from
- * `Record<string,string>` forces every call site to be revisited by the
- * compiler, which is the point.
+ * Returns `[key, value][]` rather than a `Record<string,string>` for the same
+ * reason {@link preservedSearchParams} does: an ordered pair list is the shape
+ * every caller can hand straight to `URLSearchParams` without a lossy detour
+ * through `Object.fromEntries`.
  */
 export function carriedFilterParams(params: ExerciseLibraryParams): [string, string][] {
   return activeEntries(params, ["offset"]);
+}
+
+/**
+ * Whether the incoming raw parameters carry the SAME key more than once.
+ *
+ * The App Router hands a repeated key through as an array, so that is the
+ * whole test. A URL in this shape is legal and fully readable (see
+ * `allValues`), but it is NOT the library's canonical form, and Next's client
+ * router cannot distinguish it from a URL that merely shares its last value —
+ * see `facet-values.ts`. `page.tsx` redirects such a URL to
+ * {@link canonicalLibraryHref} so only one shape is ever live in the browser.
+ */
+export function hasRepeatedKey(raw: RawExerciseLibraryParams): boolean {
+  return Object.values(raw).some((value) => Array.isArray(value));
+}
+
+/**
+ * The canonical `/exercises?…` URL for an already-normalised parameter set:
+ * every key exactly once, multi-select facets joined.
+ *
+ * Unlike {@link carriedFilterParams} this keeps EVERYTHING the reader's URL
+ * carried, `offset` and unrecognised parameters included — it is a
+ * canonicalisation of the reader's own address, not one of the library's
+ * generated links, so dropping anything would silently lose their place.
+ *
+ * IDEMPOTENT by construction, which is what makes it safe to redirect to: its
+ * output has no repeated key, so feeding it back through
+ * `normalizeLibraryParams` + `hasRepeatedKey` never asks for another redirect.
+ */
+export function canonicalLibraryHref(params: ExerciseLibraryParams): string {
+  const query = new URLSearchParams();
+  const written = new Set<string>();
+
+  for (const key of LIBRARY_KEYS) {
+    const value = params[key];
+    if (MULTI_KEYS.has(key)) {
+      const joined = joinFacetValues((value as string[] | undefined) ?? []);
+      if (joined) query.set(key, joined);
+    } else if (typeof value === "string" && value) {
+      query.set(key, value);
+    }
+    written.add(key);
+  }
+
+  for (const [key, value] of Object.entries(params)) {
+    if (written.has(key)) continue;
+    if (typeof value === "string" && value) query.set(key, value);
+  }
+
+  const serialized = query.toString();
+  return serialized ? `/exercises?${serialized}` : "/exercises";
 }
 
 /**

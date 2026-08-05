@@ -15,6 +15,16 @@ vi.mock("next-intl/server", () => ({
   getTranslations: vi.fn(async () => createServerTranslator()),
 }));
 
+// `redirect()` is spied on rather than run: the real one throws a control-flow
+// error the App Router catches, and these tests need to assert the DESTINATION
+// (the canonical URL, #345) as well as the fact that rendering stopped.
+const redirect = vi.fn((href: string) => {
+  throw new Error(`NEXT_REDIRECT;replace;${href}`);
+});
+vi.mock("next/navigation", () => ({
+  redirect: (href: string) => redirect(href),
+}));
+
 const getExerciseDetailAction = vi.fn();
 const listExerciseCatalogAction = vi.fn();
 const getExerciseCatalogFacetsAction = vi.fn();
@@ -228,24 +238,21 @@ describe("ExercisesPage — library grid", () => {
     // The App Router delivers `?search=press&search=squat` as an array. The
     // page used to hand that straight to the catalog client, whose `.trim()`
     // threw OUTSIDE the action's try/catch — the whole route answered 500.
-    const page = await ExercisesPage({
-      searchParams: Promise.resolve({
-        search: ["press", "squat"],
-      }),
-    });
+    // It now REDIRECTS to the canonical single-occurrence URL first (#345),
+    // and that URL is built from the same first-non-blank normalisation.
+    await expect(
+      ExercisesPage({ searchParams: Promise.resolve({ search: ["press", "squat"] }) }),
+    ).rejects.toThrowError(/NEXT_REDIRECT/);
 
-    expect(listExerciseCatalogAction).toHaveBeenCalledWith(
-      expect.objectContaining({ search: "press" }),
-    );
-    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-grid")).toBeDefined();
+    expect(redirect).toHaveBeenCalledWith("/exercises?search=press");
   });
 
-  it("forwards EVERY repeated facet value — the whole point of additive filtering", async () => {
+  it("forwards EVERY selected facet value — the whole point of additive filtering", async () => {
     const page = await ExercisesPage({
       searchParams: Promise.resolve({
-        bodyPart: ["chest", "back"],
-        equipment: ["barbell", "cable"],
-        target: ["abs", "lats"],
+        bodyPart: "chest,back",
+        equipment: "barbell,cable",
+        target: "abs,lats",
       }),
     });
 
@@ -259,6 +266,52 @@ describe("ExercisesPage — library grid", () => {
     expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-grid")).toBeDefined();
   });
 
+  it("REDIRECTS a repeated-key URL to the canonical joined one", async () => {
+    // `?bodyPart=chest&bodyPart=back` is what a no-JS `<form method="get">`
+    // submit produces, and it is read correctly — but Next's client router
+    // keys a cached page segment on the LAST occurrence of each key, so
+    // leaving the reader on that URL means their NEXT filter click can push a
+    // URL the router considers identical and the results silently freeze
+    // (#345). Landing them on the canonical address removes the ambiguity.
+    await expect(
+      ExercisesPage({
+        searchParams: Promise.resolve({ bodyPart: ["chest", "back"], search: "press" }),
+      }),
+    ).rejects.toThrowError(/NEXT_REDIRECT/);
+
+    expect(redirect).toHaveBeenCalledWith("/exercises?search=press&bodyPart=chest%2Cback");
+    expect(listExerciseCatalogAction).not.toHaveBeenCalled();
+  });
+
+  it("keeps the reader's offset and unrelated parameters through that redirect", async () => {
+    // The canonical URL replaces the reader's OWN address, so unlike the
+    // library's generated links it must not quietly drop where they were.
+    await expect(
+      ExercisesPage({
+        searchParams: Promise.resolve({
+          bodyPart: ["chest", "back"],
+          offset: "48",
+          utm_source: "newsletter",
+        }),
+      }),
+    ).rejects.toThrowError(/NEXT_REDIRECT/);
+
+    const [href] = redirect.mock.calls.at(-1) as [string];
+    const query = new URL(href, "http://localhost").searchParams;
+    expect(query.get("bodyPart")).toBe("chest,back");
+    expect(query.get("offset")).toBe("48");
+    expect(query.get("utm_source")).toBe("newsletter");
+  });
+
+  it("does NOT redirect a URL that is already canonical", async () => {
+    // Idempotence: the redirect target must never ask for another redirect.
+    await ExercisesPage({
+      searchParams: Promise.resolve({ bodyPart: "chest,back", search: "press" }),
+    });
+
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
   it("never forwards a bodyPart the API enum would reject as a 400", async () => {
     await ExercisesPage({ searchParams: Promise.resolve({ bodyPart: "Chest" }) });
 
@@ -268,7 +321,7 @@ describe("ExercisesPage — library grid", () => {
   });
 
   it("keeps only the enum-valid values among several selected bodyParts", async () => {
-    await ExercisesPage({ searchParams: Promise.resolve({ bodyPart: ["Chest", "back"] }) });
+    await ExercisesPage({ searchParams: Promise.resolve({ bodyPart: "Chest,back" }) });
 
     expect(listExerciseCatalogAction).toHaveBeenCalledWith(
       expect.objectContaining({ bodyPart: ["back"] }),
@@ -363,7 +416,7 @@ describe("ExercisesPage — library grid", () => {
     // Design §2/§3: the equipment/target facets must be tallied against
     // exercises matching the OTHER active filters, not the whole catalog.
     await ExercisesPage({
-      searchParams: Promise.resolve({ bodyPart: ["cardio", "chest"], search: "press" }),
+      searchParams: Promise.resolve({ bodyPart: "cardio,chest", search: "press" }),
     });
 
     expect(getExerciseCatalogFacetsAction).toHaveBeenCalledWith(

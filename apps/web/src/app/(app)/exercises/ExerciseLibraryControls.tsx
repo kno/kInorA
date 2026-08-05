@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { joinFacetValues } from "./facet-values";
 import { taxonomyLabel, type TaxonomyTranslator } from "./taxonomy";
 
 /**
@@ -57,6 +58,11 @@ const FILTER_FIELDS = ["bodyPart", "equipment", "target"] as const;
 
 type FilterField = (typeof FILTER_FIELDS)[number];
 
+/** Whether a submitted form field name is one of the facet groups. */
+function isFilterField(name: string): name is FilterField {
+  return (FILTER_FIELDS as readonly string[]).includes(name);
+}
+
 /** The current checkbox selection per facet group. */
 type SelectedFilters = Partial<Record<FilterField, string[]>>;
 
@@ -96,8 +102,8 @@ export interface ExerciseLibraryControlsProps {
    * Every active query parameter EXCEPT `offset`, used as the base the
    * clear-filters link mutates into a complete destination URL.
    *
-   * `[key, value][]`, REPEATED per value for a multi-select facet — the same
-   * reason `preserved` changed shape. Server-rendered, like `preserved`, so
+   * `[key, value][]` — the same reason `preserved` carries pairs rather than
+   * a `Record`. Server-rendered, like `preserved`, so
    * the clear-filters link carries a real `href` and navigates through the
    * browser itself when React has not hydrated.
    */
@@ -247,15 +253,39 @@ export function ExerciseLibraryControls({
    * live URL instead would let a stale single-value param survive a
    * multi-select change it should have replaced. `offset` is never part of
    * this form, so it is never emitted — every submit restarts at page 1.
+   *
+   * The three facet groups submit as a REPEATED key (that is what a native
+   * multi-checkbox form does) and are JOINED here into one occurrence before
+   * the push. Pushing the repeated form is what broke #345: Next's router
+   * keys the page's cached segment on
+   * `Object.fromEntries(new URLSearchParams(search))`, which keeps only the
+   * LAST occurrence, so `?bodyPart=chest&bodyPart=cardio` was
+   * indistinguishable from `?bodyPart=cardio` — the RSC payload came back
+   * correct and was discarded in favour of the previous results. See
+   * `facet-values.ts`. The native no-JS submit still sends the repeated form,
+   * which the page reads and then canonicalises.
    */
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const params = new URLSearchParams();
+    const facetValues = new Map<FilterField, string[]>();
+
     for (const [name, raw] of new FormData(event.currentTarget).entries()) {
       if (typeof raw !== "string") continue;
+      if (isFilterField(name)) {
+        const value = raw.trim();
+        if (value) facetValues.set(name, [...(facetValues.get(name) ?? []), value]);
+        continue;
+      }
       const value = name === "search" ? raw.trim() : raw;
       if (value) params.append(name, value);
     }
+
+    for (const field of FILTER_FIELDS) {
+      const joined = joinFacetValues(facetValues.get(field) ?? []);
+      if (joined) params.set(field, joined);
+    }
+
     const query = params.toString();
     router.push(query ? `/exercises?${query}` : "/exercises");
   }

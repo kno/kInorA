@@ -9,6 +9,8 @@ import {
   parseOffset,
   preservedSearchParams,
   carriedFilterParams,
+  canonicalLibraryHref,
+  hasRepeatedKey,
 } from "../library-query";
 
 describe("EXERCISE_PAGE_SIZE", () => {
@@ -257,9 +259,14 @@ describe("pageHref", () => {
     expect(href).toContain("offset=48");
   });
 
-  it("serializes MULTIPLE values of the same facet as repeated pairs, in URL order", () => {
+  it("serializes MULTIPLE values of the same facet into ONE joined pair, in URL order", () => {
+    // Never `bodyPart=cardio&bodyPart=chest`: Next's client router keys a
+    // page's cached segment on `Object.fromEntries(new URLSearchParams(…))`,
+    // which keeps only the LAST occurrence, so a repeated key makes two
+    // different selections indistinguishable and the results stop following
+    // the URL (#345). See `facet-values.ts`.
     const href = pageHref({ bodyPart: ["cardio", "chest"] }, 0);
-    expect(href).toBe("/exercises?bodyPart=cardio&bodyPart=chest");
+    expect(href).toBe("/exercises?bodyPart=cardio%2Cchest");
   });
 });
 
@@ -291,14 +298,14 @@ describe("carriedFilterParams", () => {
     expect(preservedSearchParams(params).some(([key]) => key === "search")).toBe(false);
   });
 
-  it("carries EVERY value of a multi-select facet, in URL order — the Object.fromEntries trap", () => {
-    // `Object.fromEntries` silently keeps only the LAST of repeated keys.
-    // This is the exact bug the return-type change (Record → tuple array)
-    // exists to make impossible: the compiler forces every call site that
-    // still expects a Record to be revisited.
+  it("carries EVERY value of a multi-select facet, in URL order, as ONE joined pair", () => {
+    // The values must all survive (that is what additive filtering means) AND
+    // the key must appear exactly once. `Object.fromEntries` keeps only the
+    // LAST of repeated keys — which is precisely how Next's client router
+    // keys a cached page segment, so a repeated key silently freezes the
+    // rendered results (#345). One occurrence makes that collapse lossless.
     expect(carriedFilterParams({ bodyPart: ["cardio", "chest"] })).toEqual([
-      ["bodyPart", "cardio"],
-      ["bodyPart", "chest"],
+      ["bodyPart", "cardio,chest"],
     ]);
   });
 
@@ -310,5 +317,59 @@ describe("carriedFilterParams", () => {
 
   it("is empty when nothing is applied", () => {
     expect(carriedFilterParams({})).toEqual([]);
+  });
+});
+
+describe("hasRepeatedKey", () => {
+  it("is true when the App Router delivered a key as an array (a repeated key)", () => {
+    expect(hasRepeatedKey({ bodyPart: ["chest", "back"] })).toBe(true);
+    expect(hasRepeatedKey({ search: ["press", "squat"] })).toBe(true);
+  });
+
+  it("is false for the canonical single-occurrence form", () => {
+    expect(hasRepeatedKey({ bodyPart: "chest,back", search: "press" })).toBe(false);
+    expect(hasRepeatedKey({})).toBe(false);
+  });
+});
+
+describe("canonicalLibraryHref", () => {
+  it("writes each multi-select facet ONCE, joined, in selection order", () => {
+    expect(canonicalLibraryHref({ bodyPart: ["chest", "back"] })).toBe(
+      "/exercises?bodyPart=chest%2Cback",
+    );
+  });
+
+  it("keeps the reader's offset and unrelated parameters, unlike the library's own links", () => {
+    // This replaces the reader's OWN address, so dropping `offset` would move
+    // them off the page they were on and dropping `utm_source` would rewrite a
+    // link somebody sent them.
+    const href = canonicalLibraryHref({
+      bodyPart: ["chest"],
+      offset: "48",
+      utm_source: "newsletter",
+    });
+    const query = new URL(href, "http://localhost").searchParams;
+
+    expect(query.get("bodyPart")).toBe("chest");
+    expect(query.get("offset")).toBe("48");
+    expect(query.get("utm_source")).toBe("newsletter");
+  });
+
+  it("is IDEMPOTENT — its own output never asks for another redirect", () => {
+    // The whole safety of redirecting to it rests on this: re-parsing the
+    // canonical URL must produce no repeated key, or the page would loop.
+    const href = canonicalLibraryHref({
+      bodyPart: ["chest", "back"],
+      search: "press",
+      lang: "es",
+    });
+    const raw = Object.fromEntries(new URL(href, "http://localhost").searchParams);
+
+    expect(hasRepeatedKey(raw)).toBe(false);
+    expect(canonicalLibraryHref(normalizeLibraryParams(raw))).toBe(href);
+  });
+
+  it("is the bare route when nothing is applied", () => {
+    expect(canonicalLibraryHref({})).toBe("/exercises");
   });
 });
