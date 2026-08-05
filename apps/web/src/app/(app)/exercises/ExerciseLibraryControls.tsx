@@ -37,6 +37,10 @@ export interface ExerciseLibraryFacets {
  * the `href` makes.
  *
  * Middle-click needs nothing here: it fires `auxclick`, not `click`.
+ *
+ * Only used by the CLEAR-FILTERS link now — the facet controls are
+ * checkboxes, which have no navigation target and therefore no modifier-click
+ * contract to honour (design §7).
  */
 function isPlainClick(event: React.MouseEvent): boolean {
   return (
@@ -53,37 +57,56 @@ const FILTER_FIELDS = ["bodyPart", "equipment", "target"] as const;
 
 type FilterField = (typeof FILTER_FIELDS)[number];
 
+/** The current checkbox selection per facet group. */
+type SelectedFilters = Partial<Record<FilterField, string[]>>;
+
+/**
+ * A stable, value-based signature of the resolved selection.
+ *
+ * Used instead of comparing the `selected` object by reference: a Server
+ * Component parent hands down a NEW object literal on every render, so `!==`
+ * would treat "the same selection, re-rendered" as a change and reset the
+ * reader's in-progress toggle. Comparing by value mirrors how the search box
+ * already tracks `search` (a primitive) across renders.
+ */
+function selectedSignature(selected: SelectedFilters): string {
+  return FILTER_FIELDS.map((field) => `${field}:${(selected[field] ?? []).join(",")}`).join("|");
+}
+
 export interface ExerciseLibraryControlsProps {
   facets: ExerciseLibraryFacets;
   /** The currently applied filters, as resolved server-side from the URL. */
-  selected: Partial<Record<FilterField, string>>;
+  selected: SelectedFilters;
   search?: string;
   /**
    * Query parameters to carry through a search submit, as hidden fields —
-   * every active param EXCEPT `search` (the field itself) and `offset` (a new
-   * search must land on page 1).
+   * every active param EXCEPT `search` (the field itself), `offset` (a new
+   * search must land on page 1) and `bodyPart`/`equipment`/`target` (the
+   * facet checkboxes, now inside this same form, contribute those
+   * themselves).
    *
-   * Passed from the server rather than read from `useSearchParams()` so the
-   * hidden inputs are present in the SERVER-RENDERED html. That is what lets
-   * the form compose with the active filters even before (or without) React
-   * hydrating.
+   * `[key, value][]` rather than a `Record`, so a repeated key is never
+   * silently collapsed to its last value by `Object.fromEntries`. Passed from
+   * the server rather than read from `useSearchParams()` so the hidden inputs
+   * are present in the SERVER-RENDERED html — what lets the form compose with
+   * the active filters even before (or without) React hydrating.
    */
-  preserved?: Record<string, string>;
+  preserved?: [string, string][];
   /**
-   * Every active query parameter EXCEPT `offset`, used as the base each chip
-   * and the clear-filters link mutate into a complete destination URL.
+   * Every active query parameter EXCEPT `offset`, used as the base the
+   * clear-filters link mutates into a complete destination URL.
    *
-   * Server-rendered, like `preserved`, so the chips carry a real `href` and
-   * navigate through the browser itself when React has not hydrated. It keeps
-   * `search` (which `preserved` drops, because there the text input supplies
-   * it) so a chip NARROWS the current view.
+   * `[key, value][]`, REPEATED per value for a multi-select facet — the same
+   * reason `preserved` changed shape. Server-rendered, like `preserved`, so
+   * the clear-filters link carries a real `href` and navigates through the
+   * browser itself when React has not hydrated.
    */
-  carried?: Record<string, string>;
+  carried?: [string, string][];
 }
 
 /**
- * ExerciseLibraryControls — search box plus facet filter chips for
- * `/exercises`.
+ * ExerciseLibraryControls — search box plus facet filter checkboxes for
+ * `/exercises`, all inside ONE `method="get"` form.
  *
  * Every interaction is a NAVIGATION: the component rewrites the query string
  * and lets the server component re-fetch the matching page. The ~1300-record
@@ -102,8 +125,8 @@ export function ExerciseLibraryControls({
   facets,
   selected,
   search,
-  preserved = {},
-  carried = {},
+  preserved = [],
+  carried = [],
 }: ExerciseLibraryControlsProps) {
   const router = useRouter();
   const t = useTranslations();
@@ -113,7 +136,7 @@ export function ExerciseLibraryControls({
   const tax = t as unknown as TaxonomyTranslator;
 
   const hasFilters =
-    Boolean(search) || FILTER_FIELDS.some((field) => Boolean(selected[field]));
+    Boolean(search) || FILTER_FIELDS.some((field) => (selected[field]?.length ?? 0) > 0);
 
   // The search box is CONTROLLED, and resets itself when — and only when — the
   // APPLIED term changes (React's documented "adjust state during render"
@@ -135,6 +158,20 @@ export function ExerciseLibraryControls({
     setTerm(search ?? "");
   }
 
+  // The checkbox selection is CONTROLLED the same way, comparing by VALUE
+  // (`selectedSignature`) rather than object reference — see that helper.
+  // Each checkbox is keyed on `${field}:${value}` (never on `selected`), so
+  // toggling one never remounts it: that is what keeps DOM focus on the
+  // checkbox the reader just clicked once the auto-submitted navigation
+  // lands (#343's lesson — remounting is exactly what stole focus there).
+  const [checkedByField, setCheckedByField] = useState<SelectedFilters>(selected);
+  const [appliedSignature, setAppliedSignature] = useState(selectedSignature(selected));
+  const currentSignature = selectedSignature(selected);
+  if (appliedSignature !== currentSignature) {
+    setAppliedSignature(currentSignature);
+    setCheckedByField(selected);
+  }
+
   function navigate(mutate: (params: URLSearchParams) => void) {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
     mutate(params);
@@ -145,13 +182,14 @@ export function ExerciseLibraryControls({
   }
 
   /**
-   * The URL a chip / the clear button points at, built from the SERVER-RENDERED
+   * The URL the clear-filters link points at, built from the SERVER-RENDERED
    * `carried` params rather than `useSearchParams()`.
    *
    * That is what makes the `href` present in the html the browser first
    * receives, so the control navigates natively with JavaScript disabled. When
-   * React is live the click handlers below intercept and soft-navigate instead,
-   * still reading the live params — so the hydrated path is unchanged.
+   * React is live the click handler below intercepts and soft-navigates
+   * instead, still reading the live params — so the hydrated path is
+   * unchanged.
    */
   function hrefFor(mutate: (params: URLSearchParams) => void): string {
     const params = new URLSearchParams(carried);
@@ -160,35 +198,10 @@ export function ExerciseLibraryControls({
     return query ? `/exercises?${query}` : "/exercises";
   }
 
-  function chipHref(field: FilterField, value: string): string {
-    return hrefFor((params) => {
-      if (selected[field] === value) params.delete(field);
-      else params.set(field, value);
-    });
-  }
-
   function clearHref(): string {
     return hrefFor((params) => {
       params.delete("search");
       for (const field of FILTER_FIELDS) params.delete(field);
-    });
-  }
-
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const value = new FormData(event.currentTarget).get("search");
-    const term = typeof value === "string" ? value.trim() : "";
-    navigate((params) => {
-      if (term) params.set("search", term);
-      else params.delete("search");
-    });
-  }
-
-  function handleChipClick(field: FilterField, value: string) {
-    navigate((params) => {
-      // Clicking the active chip clears that filter (chips are a toggle).
-      if (selected[field] === value) params.delete(field);
-      else params.set(field, value);
     });
   }
 
@@ -199,26 +212,73 @@ export function ExerciseLibraryControls({
     });
   }
 
+  /**
+   * Toggle one facet value, then auto-submit the form.
+   *
+   * `event.currentTarget.form?.requestSubmit()` fires the form's own
+   * `onSubmit`, which does a soft `router.push` — the same component stays
+   * mounted, so this is a NAVIGATION, not a client-side filter. It is called
+   * synchronously here, reading the DOM's own (already-toggled, by the
+   * browser's default action) checkbox state rather than waiting on this
+   * `setState` to flush — so the submitted form always reflects what the
+   * reader just clicked, not a stale render.
+   */
+  function handleToggle(
+    field: FilterField,
+    value: string,
+    event: React.ChangeEvent<HTMLInputElement>
+  ) {
+    setCheckedByField((prev) => {
+      const current = prev[field] ?? [];
+      const next = current.includes(value)
+        ? current.filter((entry) => entry !== value)
+        : [...current, value];
+      return { ...prev, [field]: next };
+    });
+    event.currentTarget.form?.requestSubmit();
+  }
+
+  /**
+   * Rebuilt from the submitted form's OWN entries, not from live
+   * `useSearchParams()`.
+   *
+   * That is what lets one submit carry the search term plus every ticked
+   * checkbox plus the hidden `title`/`lang` fields coherently: reading the
+   * live URL instead would let a stale single-value param survive a
+   * multi-select change it should have replaced. `offset` is never part of
+   * this form, so it is never emitted — every submit restarts at page 1.
+   */
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const params = new URLSearchParams();
+    for (const [name, raw] of new FormData(event.currentTarget).entries()) {
+      if (typeof raw !== "string") continue;
+      const value = name === "search" ? raw.trim() : raw;
+      if (value) params.append(name, value);
+    }
+    const query = params.toString();
+    router.push(query ? `/exercises?${query}` : "/exercises");
+  }
+
   return (
     <section className="kin-ex-toolbar">
-      {/* A REAL GET form: `action` + `method` mean submitting navigates to
-          /exercises?…&search=… through the browser itself, with no JavaScript
-          involved. The previous version carried only an `onSubmit` handler, so
-          the entire feature silently depended on this client component having
-          hydrated — when it had not, the button did nothing at all.
+      {/* ONE real GET form: `action` + `method` mean submitting navigates to
+          /exercises?…&search=…&bodyPart=… through the browser itself, with no
+          JavaScript involved — the search row, every facet checkbox and the
+          trailing "Apply filters" button all live inside it (design §7).
 
-          `onSubmit` is now a progressive ENHANCEMENT: when React is live it
-          intercepts, drops an empty `search` and does a soft client-side push.
-          When it is not, the native submit still produces a working URL. */}
+          `onSubmit` is a progressive ENHANCEMENT: when React is live it
+          intercepts and does a soft client-side push from the form's own
+          FormData. When it is not, the native submit still produces a
+          working URL with repeated `bodyPart=…` pairs. */}
       <form className="kin-ex-search" method="get" action="/exercises" onSubmit={handleSubmit} role="search">
         <label className="kin-label" htmlFor="exercise-search">
           {t("exercises.library.searchLabel")}
         </label>
 
-        {/* Carries the active filters through the submit, so a search NARROWS
-            the current view instead of replacing it. `offset` is deliberately
-            absent: a new search restarts at page 1. */}
-        {Object.entries(preserved).map(([name, value]) => (
+        {/* Carries `title`/`lang` through the submit — everything the facet
+            checkboxes do not already contribute. */}
+        {preserved.map(([name, value]) => (
           <input key={name} type="hidden" name={name} value={value} readOnly />
         ))}
 
@@ -239,52 +299,62 @@ export function ExerciseLibraryControls({
             {t("exercises.library.searchSubmit")}
           </button>
         </div>
-      </form>
 
-      {FILTER_FIELDS.map((field) =>
-        facets[field].length === 0 ? null : (
-          <div className="kin-ex-facet" key={field}>
-            <p className="kin-ex-facet__label" id={`exercise-facet-${field}`}>
-              {t(`exercises.library.filters.${field}`)}
-            </p>
-            <div
-              className="kin-ex-chips kin-scroll"
-              role="group"
-              aria-labelledby={`exercise-facet-${field}`}
-            >
-              {/* LINKS, not buttons. As `type="button"` + `onClick` these did
-                  nothing at all without JavaScript, while the search form
-                  beside them deliberately worked — the same toolbar honouring
-                  two different contracts. A real `href` navigates natively;
-                  `aria-current` (not `aria-pressed`, which links may not carry)
-                  marks the applied one. */}
-              {facets[field].map((facet) => {
-                const active = selected[field] === facet.value;
-                return (
-                  <a
-                    key={facet.value}
-                    href={chipHref(field, facet.value)}
-                    aria-current={active ? "true" : undefined}
-                    className={`kin-ex-chip${active ? " kin-ex-chip--active" : ""}`}
-                    onClick={(event) => {
-                      // Keep the soft navigation when React is live: a full
-                      // page load here would re-fetch the whole route. A
-                      // modifier click is the reader asking for a NEW TAB or
-                      // window, so it is left to the browser.
-                      if (!isPlainClick(event)) return;
-                      event.preventDefault();
-                      handleChipClick(field, facet.value);
-                    }}
-                  >
-                    {taxonomyLabel(tax, facet.value)}
-                    <span className="kin-ex-chip__count">{facet.count}</span>
-                  </a>
-                );
-              })}
+        {FILTER_FIELDS.map((field) =>
+          facets[field].length === 0 ? null : (
+            <div className="kin-ex-facet" key={field}>
+              <p className="kin-ex-facet__label" id={`exercise-facet-${field}`}>
+                {t(`exercises.library.filters.${field}`)}
+              </p>
+              <div
+                className="kin-ex-chips kin-scroll"
+                role="group"
+                aria-labelledby={`exercise-facet-${field}`}
+              >
+                {/* Native CHECKBOXES, not links: multi-select has no correct
+                    ARIA on an anchor — an `<a>` cannot legally carry
+                    `aria-pressed`, and `aria-current` means "the current
+                    SINGLE item". A checkbox natively submits repeated
+                    same-name values with zero JavaScript, and its `checked`
+                    state IS the applied/unapplied signal, so no `aria-*`
+                    attribute is needed at all.
+
+                    Keyed on `${field}:${value}` — NEVER on `selected` — so
+                    toggling one never remounts it and DOM focus survives the
+                    auto-submitted navigation. */}
+                {facets[field].map((facet) => {
+                  const checked = (checkedByField[field] ?? []).includes(facet.value);
+                  return (
+                    <label
+                      key={`${field}:${facet.value}`}
+                      className={`kin-ex-chip${checked ? " kin-ex-chip--active" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="kin-visually-hidden"
+                        name={field}
+                        value={facet.value}
+                        checked={checked}
+                        onChange={(event) => handleToggle(field, facet.value, event)}
+                      />
+                      {taxonomyLabel(tax, facet.value)}
+                      <span className="kin-ex-chip__count">{facet.count}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )
-      )}
+          )
+        )}
+
+        {/* ALWAYS rendered, so the no-JS/pre-hydration path can submit a
+            checkbox change at all — the search button beside it only submits
+            the search box's OWN row visually, but this one is the form's
+            single always-present control dedicated to the facet groups. */}
+        <button type="submit" className="kin-btn kin-btn--ghost kin-ex-apply">
+          {t("exercises.library.applyFilters")}
+        </button>
+      </form>
 
       {hasFilters && (
         <a

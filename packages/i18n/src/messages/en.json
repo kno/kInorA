@@ -797,6 +797,7 @@
       "searchLabel": "Search exercises",
       "searchPlaceholder": "Search by name…",
       "searchSubmit": "Search",
+      "applyFilters": "Apply filters",
       "clearFilters": "Clear filters",
       "filterAll": "All",
       "filters": {
