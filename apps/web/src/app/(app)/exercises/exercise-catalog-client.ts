@@ -13,12 +13,19 @@ interface ClientOptions {
   apiBaseUrl?: string;
 }
 
-/** Filters accepted by the catalog list endpoint. Every field is optional. */
+/**
+ * Filters accepted by the catalog list endpoint. Every field is optional.
+ *
+ * `bodyPart`/`equipment`/`target` accept EITHER a single value (legacy
+ * call shape, still valid — the API's `selects()` membership check reduces a
+ * one-element list to plain equality) or an array for a multi-select facet
+ * (OR within the group, design §1/§4).
+ */
 export interface ExerciseCatalogQuery {
   search?: string;
-  bodyPart?: string;
-  equipment?: string;
-  target?: string;
+  bodyPart?: string | string[];
+  equipment?: string | string[];
+  target?: string | string[];
   limit?: number;
   offset?: number;
 }
@@ -157,8 +164,20 @@ export async function fetchExerciseCatalogDetail(
   return { kind: "ok", exercise: parsed.data };
 }
 
+/** The filter dimensions the facets endpoint scopes its tallies against. */
+export type ExerciseCatalogFacetQuery = Pick<
+  ExerciseCatalogQuery,
+  "search" | "bodyPart" | "equipment" | "target"
+>;
+
 /**
  * Fetch the distinct filter values via `GET /exercises/catalog/facets`.
+ *
+ * `filters` is forwarded verbatim so counts stay RESULT-SCOPED (design §2/§3):
+ * with `bodyPart=cardio` active, the equipment facet must report only the
+ * equipment values that co-occur with `cardio`, not the whole catalog's. An
+ * absent/empty filter set (the default) tallies over the whole catalog, same
+ * as today.
  *
  * The facet payload is small and purely presentational (it only decides which
  * filter chips are offered), so an unparseable or missing group degrades to an
@@ -166,6 +185,7 @@ export async function fetchExerciseCatalogDetail(
  */
 export async function fetchExerciseCatalogFacets(
   token: string | undefined,
+  filters: ExerciseCatalogFacetQuery = {},
   options: ClientOptions = {}
 ): Promise<FetchExerciseCatalogFacetsResult> {
   if (!token) {
@@ -174,10 +194,11 @@ export async function fetchExerciseCatalogFacets(
 
   const base = options.apiBaseUrl ?? apiBaseUrl();
   const fetchImpl = options.fetchImpl ?? fetch;
+  const search = buildCatalogQueryString(filters);
 
   let res: Response;
   try {
-    res = await fetchImpl(`${base}/exercises/catalog/facets`, {
+    res = await fetchImpl(`${base}/exercises/catalog/facets${search}`, {
       method: "GET",
       headers: { authorization: `Bearer ${token}` },
       cache: "no-store",
@@ -231,14 +252,41 @@ function filterValue(raw: unknown): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-/** Serialize the filter/pagination window, omitting blank values. */
+/**
+ * Every non-blank, de-duplicated value of a multi-select facet filter, in
+ * order — the OR-within-group selection for `bodyPart`/`equipment`/`target`.
+ *
+ * A plain string is treated as a one-element list, so a call site that still
+ * passes a single value keeps working unchanged.
+ */
+function filterValues(raw: string | string[] | undefined): string[] {
+  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+  const out: string[] = [];
+  for (const entry of list) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim();
+    if (trimmed && !out.includes(trimmed)) out.push(trimmed);
+  }
+  return out;
+}
+
+/**
+ * Serialize the filter/pagination window, omitting blank values.
+ *
+ * `bodyPart`/`equipment`/`target` serialize as REPEATED `key=value` pairs —
+ * one per selected value, in order — so the API receives the same shape a
+ * native multi-select `<form>` submission produces (design §6).
+ */
 export function buildCatalogQueryString(query: ExerciseCatalogQuery): string {
   const params = new URLSearchParams();
 
-  for (const key of ["search", "bodyPart", "equipment", "target"] as const) {
-    const value = filterValue(query[key]);
-    if (value) params.set(key, value);
+  const singleValue = filterValue(query.search);
+  if (singleValue) params.set("search", singleValue);
+
+  for (const key of ["bodyPart", "equipment", "target"] as const) {
+    for (const value of filterValues(query[key])) params.append(key, value);
   }
+
   if (typeof query.limit === "number") params.set("limit", String(query.limit));
   if (typeof query.offset === "number") params.set("offset", String(query.offset));
 

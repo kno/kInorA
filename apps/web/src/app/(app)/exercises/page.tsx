@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import {
   getExerciseCatalogFacetsAction,
@@ -9,7 +10,9 @@ import { ExerciseLibraryControls, type ExerciseLibraryFacets } from "./ExerciseL
 import { taxonomyTerm, type TaxonomyTranslator } from "./taxonomy";
 import {
   EXERCISE_PAGE_SIZE,
+  canonicalLibraryHref,
   carriedFilterParams,
+  hasRepeatedKey,
   normalizeLibraryParams,
   pageHref,
   parseOffset,
@@ -59,7 +62,20 @@ export default async function ExercisesPage({ searchParams }: ExercisesPageProps
   // Collapses repeated keys and drops/clamps values the API would reject, so a
   // hand-written URL yields an ordinary result rather than a crash or a false
   // "library unavailable" card.
-  const params = normalizeLibraryParams((await searchParams) ?? {});
+  const raw = (await searchParams) ?? {};
+  const params = normalizeLibraryParams(raw);
+
+  // A URL where one key appears twice — what the no-JS `<form method="get">`
+  // submit produces, and what a link shared before this encoding existed still
+  // carries — is read correctly (see `allValues`) but is NOT canonical, and
+  // Next's client router cannot tell it apart from a URL that merely shares
+  // its LAST value (see `facet-values.ts`). Landing the reader on the
+  // canonical address instead means the browser only ever holds one shape, so
+  // their next filter click cannot collide with the page they are on.
+  if (hasRepeatedKey(raw)) {
+    redirect(canonicalLibraryHref(params));
+  }
+
   const { title, search, bodyPart, equipment, target } = params;
 
   const detailResult = title ? await getExerciseDetailAction(title) : undefined;
@@ -67,6 +83,9 @@ export default async function ExercisesPage({ searchParams }: ExercisesPageProps
   const exerciseTitle = detailResult?.kind === "ok" ? detailResult.detail.exerciseTitle : undefined;
 
   const offset = parseOffset(params.offset);
+  // The facets request carries the SAME active filters as the list request
+  // (minus pagination), so its counts stay scoped to the current result set
+  // rather than the whole catalog (design §2/§3).
   const [listResult, facetsResult] = await Promise.all([
     listExerciseCatalogAction({
       search,
@@ -76,7 +95,7 @@ export default async function ExercisesPage({ searchParams }: ExercisesPageProps
       limit: EXERCISE_PAGE_SIZE,
       offset,
     }),
-    getExerciseCatalogFacetsAction(),
+    getExerciseCatalogFacetsAction({ search, bodyPart, equipment, target }),
   ]);
 
   const facets: ExerciseLibraryFacets =

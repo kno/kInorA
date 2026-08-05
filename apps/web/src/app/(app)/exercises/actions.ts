@@ -7,6 +7,7 @@ import {
   fetchExerciseCatalogDetail,
   fetchExerciseCatalogFacets,
   fetchExerciseCatalogList,
+  type ExerciseCatalogFacetQuery,
   type ExerciseCatalogQuery,
   type FetchExerciseCatalogDetailResult,
   type FetchExerciseCatalogFacetsResult,
@@ -47,9 +48,16 @@ export async function getExerciseCatalogDetailAction(
   return fetchExerciseCatalogDetail(token, id);
 }
 
-/** Server Action fetching the distinct filter values for the library chips. */
-export async function getExerciseCatalogFacetsAction(): Promise<FetchExerciseCatalogFacetsResult> {
+/**
+ * Server Action fetching the distinct filter values for the library chips,
+ * scoped to the currently active filters so counts always match the current
+ * result set (design §2/§3). Defaults to no filter — a whole-catalog tally,
+ * same as today.
+ */
+export async function getExerciseCatalogFacetsAction(
+  query: ExerciseCatalogFacetQuery = {}
+): Promise<FetchExerciseCatalogFacetsResult> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
-  return fetchExerciseCatalogFacets(token);
+  return fetchExerciseCatalogFacets(token, query);
 }

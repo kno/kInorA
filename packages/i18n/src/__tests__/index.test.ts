@@ -193,7 +193,7 @@ describe("@kinora/i18n package assembly", () => {
     // +4 `exercises.history.{empty,error}.*` — "View my history" navigates
     // whether or not the exercise was ever logged, so the target page must
     // answer in both cases instead of rendering nothing at all.
-    expect(nonBillingKeys).toHaveLength(754);
+    expect(nonBillingKeys).toHaveLength(755);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
