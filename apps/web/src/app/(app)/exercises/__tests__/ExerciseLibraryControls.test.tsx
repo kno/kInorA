@@ -98,8 +98,8 @@ describe("ExerciseLibraryControls", () => {
   });
 
   it("keeps the typed term AND focus while an unrelated filter navigation happens", () => {
-    // A chip click leaves the applied term untouched, so nothing may disturb
-    // what the reader is mid-way through typing — text or caret.
+    // A checkbox toggle leaves the applied term untouched, so nothing may
+    // disturb what the reader is mid-way through typing — text or caret.
     const { rerender } = render(
       withIntl(<ExerciseLibraryControls facets={facets} selected={{}} search="press" />),
     );
@@ -109,7 +109,11 @@ describe("ExerciseLibraryControls", () => {
     fireEvent.change(box(), { target: { value: "press up" } });
     rerender(
       withIntl(
-        <ExerciseLibraryControls facets={facets} selected={{ bodyPart: "chest" }} search="press" />,
+        <ExerciseLibraryControls
+          facets={facets}
+          selected={{ bodyPart: ["chest"] }}
+          search="press"
+        />,
       ),
     );
 
@@ -117,12 +121,22 @@ describe("ExerciseLibraryControls", () => {
     expect(document.activeElement).toBe(box());
   });
 
-  it("renders a chip per facet value, with its match count", () => {
+  it("renders a checkbox per facet value, with its match count", () => {
     renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} />);
 
-    expect(screen.getByRole("link", { name: /Chest/ })).toBeDefined();
-    expect(screen.getByRole("link", { name: /Barbell/ })).toBeDefined();
-    expect(screen.getByRole("link", { name: /12/ })).toBeDefined();
+    expect(screen.getByRole("checkbox", { name: /Chest/ })).toBeDefined();
+    expect(screen.getByRole("checkbox", { name: /Barbell/ })).toBeDefined();
+    expect(screen.getByRole("checkbox", { name: /12/ })).toBeDefined();
+  });
+
+  it("the checkbox input carries the .kin-visually-hidden utility class", () => {
+    // The focusable, submittable element is the checkbox itself now, not the
+    // wrapping label — it must be visually hidden while remaining in the
+    // accessibility tree and keyboard-focusable.
+    renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} />);
+    expect(screen.getByRole("checkbox", { name: /Chest/ }).className).toContain(
+      "kin-visually-hidden",
+    );
   });
 
   it("translates the chip LABEL but filters by the RAW catalog value", () => {
@@ -130,7 +144,7 @@ describe("ExerciseLibraryControls", () => {
     // "?bodyPart=Pecho" would 400 — the taxonomy must never leak into the URL.
     renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} />);
 
-    fireEvent.click(screen.getByRole("link", { name: /Chest/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Chest/ }));
 
     expect(routerPush).toHaveBeenCalledWith("/exercises?bodyPart=chest");
   });
@@ -144,7 +158,7 @@ describe("ExerciseLibraryControls", () => {
     );
 
     // Capitalised, never blank and never an `exercises.taxonomy.*` key path.
-    expect(screen.getByRole("link", { name: /Exosuit/ })).toBeDefined();
+    expect(screen.getByRole("checkbox", { name: /Exosuit/ })).toBeDefined();
     expect(screen.queryByText(/exercises\.taxonomy/)).toBeNull();
   });
 
@@ -160,12 +174,63 @@ describe("ExerciseLibraryControls", () => {
     expect(screen.getByText("Body part")).toBeDefined();
   });
 
-  it("marks the applied filter's chip as current", () => {
-    // `aria-pressed` is a BUTTON state and is not valid on a link, so the
-    // applied chip announces itself with `aria-current` instead.
-    renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{ bodyPart: "chest" }} />);
-    expect(screen.getByRole("link", { name: /Chest/ }).getAttribute("aria-current")).toBe("true");
-    expect(screen.getByRole("link", { name: /Back/ }).getAttribute("aria-current")).toBeNull();
+  it("renders the applied filter's checkbox as checked", () => {
+    renderWithIntl(
+      <ExerciseLibraryControls facets={facets} selected={{ bodyPart: ["chest"] }} />,
+    );
+    expect((screen.getByRole("checkbox", { name: /Chest/ }) as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect((screen.getByRole("checkbox", { name: /Back/ }) as HTMLInputElement).checked).toBe(
+      false,
+    );
+  });
+
+  it("renders a ZERO-COUNT selected value as still checked (spec: it stays visible)", () => {
+    // The API keeps a selected value in the response with `count: 0` when
+    // narrowing has excluded every matching record. It must still render, and
+    // still show as applied.
+    renderWithIntl(
+      <ExerciseLibraryControls
+        facets={{ bodyPart: [{ value: "chest", count: 0 }], equipment: [], target: [] }}
+        selected={{ bodyPart: ["chest"] }}
+      />,
+    );
+    const checkbox = screen.getByRole("checkbox", { name: /Chest/ }) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    expect(screen.getByText("0")).toBeDefined();
+  });
+
+  it("marks each facet group with role=\"group\" and an accessible name, not a fieldset", () => {
+    // `<fieldset>`/`<legend>` fight the existing responsive grid layout; a
+    // labelled group is the correct, lighter-weight grouping for checkboxes.
+    renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} />);
+    const group = screen.getByRole("group", { name: "Body part" });
+    expect(group.tagName).not.toBe("FIELDSET");
+  });
+
+  it("selects MULTIPLE values within the same group — the whole point of additive filtering", () => {
+    renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{ bodyPart: ["chest"] }} />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Back/ }));
+
+    // JOINED into ONE occurrence, never a repeated key: the checkboxes submit
+    // `bodyPart` twice (that is what a native multi-checkbox form does), but a
+    // pushed URL where one key repeats is invisible to Next's client router
+    // cache, which then re-renders the PREVIOUS results (#345). See
+    // `facet-values.ts`. The e2e spec proves the render actually follows —
+    // this only pins the URL shape that makes it possible.
+    expect(routerPush).toHaveBeenCalledWith("/exercises?bodyPart=chest%2Cback");
+  });
+
+  it("unchecks one value without clearing the rest of the same group", () => {
+    renderWithIntl(
+      <ExerciseLibraryControls facets={facets} selected={{ bodyPart: ["chest", "back"] }} />,
+    );
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Chest/ }));
+
+    expect(routerPush).toHaveBeenCalledWith("/exercises?bodyPart=back");
   });
 
   // --- The form must WORK WITHOUT JAVASCRIPT ---
@@ -196,52 +261,69 @@ describe("ExerciseLibraryControls", () => {
     expect(input.type).toBe("search");
   });
 
-  it("carries the active filters as hidden fields so a search COMPOSES with them", () => {
+  it("carries only the non-facet params as hidden fields — the checkboxes contribute the rest", () => {
     const { container } = renderWithIntl(
       <ExerciseLibraryControls
         facets={facets}
-        selected={{ bodyPart: "chest" }}
-        preserved={{ bodyPart: "chest", title: "Bench Press" }}
+        selected={{ bodyPart: ["chest"] }}
+        preserved={[["title", "Bench Press"]]}
       />,
     );
 
-    const hidden = Object.fromEntries(
-      [...container.querySelectorAll("form.kin-ex-search input[type=hidden]")].map((el) => [
-        el.getAttribute("name"),
-        el.getAttribute("value"),
-      ]),
+    const hidden = [...container.querySelectorAll("form.kin-ex-search input[type=hidden]")].map(
+      (el) => [el.getAttribute("name"), el.getAttribute("value")],
     );
-    expect(hidden).toEqual({ bodyPart: "chest", title: "Bench Press" });
+    expect(hidden).toEqual([["title", "Bench Press"]]);
   });
 
   it("never carries offset, so a new search restarts at page 1", () => {
     const { container } = renderWithIntl(
       <ExerciseLibraryControls
         facets={facets}
-        selected={{ bodyPart: "chest" }}
-        preserved={{ bodyPart: "chest" }}
+        selected={{ bodyPart: ["chest"] }}
+        preserved={[["title", "Bench Press"]]}
       />,
     );
 
     expect(container.querySelector("input[name=offset]")).toBeNull();
   });
 
-  it("produces the composed URL a native submit would, with a filter active", () => {
-    // What the browser itself builds from method + action + the form's fields.
+  it("both facet checkboxes AND the always-rendered Apply filters submit exist inside the same form", () => {
     const { container } = renderWithIntl(
-      <ExerciseLibraryControls
-        facets={facets}
-        selected={{ bodyPart: "chest" }}
-        preserved={{ bodyPart: "chest" }}
-      />,
+      <ExerciseLibraryControls facets={facets} selected={{}} />,
+    );
+    const form = container.querySelector("form.kin-ex-search") as HTMLFormElement;
+
+    expect(form.querySelectorAll('input[type="checkbox"]').length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Apply filters" }).closest("form")).toBe(form);
+  });
+
+  it("produces the composed URL a native submit would, with a filter checked", () => {
+    // What the browser itself builds from method + action + the form's own
+    // fields — no synthetic event, no handler.
+    const { container } = renderWithIntl(
+      <ExerciseLibraryControls facets={facets} selected={{ bodyPart: ["chest"] }} />,
     );
     const form = container.querySelector("form.kin-ex-search") as HTMLFormElement;
     (form.querySelector("input[name=search]") as HTMLInputElement).value = "squat";
 
     const query = new URLSearchParams(new FormData(form) as unknown as string[][]);
     expect(`${form.getAttribute("action")}?${query}`).toBe(
-      "/exercises?bodyPart=chest&search=squat",
+      "/exercises?search=squat&bodyPart=chest",
     );
+  });
+
+  it("a no-JS submit emits REPEATED bodyPart pairs for a multi-value selection", () => {
+    const { container } = renderWithIntl(
+      <ExerciseLibraryControls
+        facets={facets}
+        selected={{ bodyPart: ["chest", "back"] }}
+      />,
+    );
+    const form = container.querySelector("form.kin-ex-search") as HTMLFormElement;
+
+    const params = new URLSearchParams(new FormData(form) as unknown as string[][]);
+    expect(params.getAll("bodyPart")).toEqual(["chest", "back"]);
   });
 
   it("navigates with the search term on submit (server-side filtering)", () => {
@@ -254,7 +336,6 @@ describe("ExerciseLibraryControls", () => {
   });
 
   it("drops the search parameter when the box is submitted empty", () => {
-    currentSearch = "search=press";
     renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} search="press" />);
 
     fireEvent.change(screen.getByLabelText("Search exercises"), { target: { value: "   " } });
@@ -264,29 +345,23 @@ describe("ExerciseLibraryControls", () => {
     expect(routerPush).toHaveBeenCalledWith("/exercises");
   });
 
-  it("composes the search with an active filter on the hydrated path too", () => {
-    currentSearch = "bodyPart=chest";
+  it("composes the search with an active filter checkbox on submit", () => {
     renderWithIntl(
-      <ExerciseLibraryControls
-        facets={facets}
-        selected={{ bodyPart: "chest" }}
-        preserved={{ bodyPart: "chest" }}
-      />,
+      <ExerciseLibraryControls facets={facets} selected={{ bodyPart: ["chest"] }} />,
     );
 
     fireEvent.change(screen.getByLabelText("Search exercises"), { target: { value: "squat" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
 
-    expect(routerPush).toHaveBeenCalledWith("/exercises?bodyPart=chest&search=squat");
+    expect(routerPush).toHaveBeenCalledWith("/exercises?search=squat&bodyPart=chest");
   });
 
-  it("resets the offset when a new search is submitted", () => {
+  it("never emits offset when the search is submitted, even if the current URL has one", () => {
     currentSearch = "bodyPart=chest&offset=48";
     renderWithIntl(
       <ExerciseLibraryControls
         facets={facets}
-        selected={{ bodyPart: "chest" }}
-        preserved={{ bodyPart: "chest" }}
+        selected={{ bodyPart: ["chest"] }}
         search="press"
       />,
     );
@@ -294,42 +369,8 @@ describe("ExerciseLibraryControls", () => {
     fireEvent.change(screen.getByLabelText("Search exercises"), { target: { value: "squat" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
 
-    expect(routerPush).toHaveBeenCalledWith("/exercises?bodyPart=chest&search=squat");
-  });
-
-  it("applies a filter when its chip is clicked", () => {
-    renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} />);
-
-    fireEvent.click(screen.getByRole("link", { name: /Chest/ }));
-
-    expect(routerPush).toHaveBeenCalledWith("/exercises?bodyPart=chest");
-  });
-
-  it("clears the filter when the active chip is clicked again (toggle)", () => {
-    currentSearch = "bodyPart=chest";
-    renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{ bodyPart: "chest" }} />);
-
-    fireEvent.click(screen.getByRole("link", { name: /Chest/ }));
-
-    expect(routerPush).toHaveBeenCalledWith("/exercises");
-  });
-
-  it("resets the pagination offset whenever the result set changes", () => {
-    currentSearch = "offset=48";
-    renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} />);
-
-    fireEvent.click(screen.getByRole("link", { name: /Barbell/ }));
-
-    expect(routerPush).toHaveBeenCalledWith("/exercises?equipment=barbell");
-  });
-
-  it("preserves unrelated query parameters such as ?title= (history reference)", () => {
-    currentSearch = "title=Bench+Press";
-    renderWithIntl(<ExerciseLibraryControls facets={facets} selected={{}} />);
-
-    fireEvent.click(screen.getByRole("link", { name: /Chest/ }));
-
-    expect(routerPush).toHaveBeenCalledWith("/exercises?title=Bench+Press&bodyPart=chest");
+    const [url] = routerPush.mock.calls[0] as [string];
+    expect(url).not.toContain("offset");
   });
 
   it("hides the clear-filters button when nothing is applied", () => {
@@ -342,7 +383,7 @@ describe("ExerciseLibraryControls", () => {
     renderWithIntl(
       <ExerciseLibraryControls
         facets={facets}
-        selected={{ bodyPart: "chest", equipment: "barbell", target: "pectorals" }}
+        selected={{ bodyPart: ["chest"], equipment: ["barbell"], target: ["pectorals"] }}
         search="press"
       />,
     );
@@ -352,73 +393,99 @@ describe("ExerciseLibraryControls", () => {
     expect(routerPush).toHaveBeenCalledWith("/exercises?title=Bench+Press");
   });
 
-  // --- The chips must WORK WITHOUT JAVASCRIPT, like the form beside them ---
+  // --- Focus after auto-submit (design §7 / #343's lesson applied literally) ---
+
+  it("KEEPS FOCUS on the toggled checkbox once the auto-submitted navigation lands", () => {
+    // Toggling a checkbox calls `form.requestSubmit()`, which soft-navigates
+    // via `router.push` — this component stays mounted. Checkboxes are keyed
+    // on `${field}:${value}`, never on `selected`, so nothing in this tree
+    // remounts when the server re-renders with the new selection. A stable
+    // key is what keeps focus; #343 lost it precisely by remounting on
+    // navigation, invisibly to a test that never checked `activeElement`.
+    const { rerender } = render(
+      withIntl(<ExerciseLibraryControls facets={facets} selected={{}} />),
+    );
+    const chestBox = () => screen.getByRole("checkbox", { name: /Chest/ }) as HTMLInputElement;
+
+    chestBox().focus();
+    fireEvent.click(chestBox());
+
+    expect(routerPush).toHaveBeenCalledWith("/exercises?bodyPart=chest");
+
+    // The soft navigation lands: the server re-renders with the filter applied.
+    rerender(
+      withIntl(<ExerciseLibraryControls facets={facets} selected={{ bodyPart: ["chest"] }} />),
+    );
+
+    expect(chestBox().checked).toBe(true);
+    expect(document.activeElement).toBe(chestBox());
+  });
+
+  it("restores the true applied selection on a browser back navigation", () => {
+    // The signature-based comparison must pick up a selection change even
+    // though `selected` is a brand-new object literal on every render (a
+    // Server Component parent never hands down the same reference twice).
+    const { rerender } = render(
+      withIntl(<ExerciseLibraryControls facets={facets} selected={{ bodyPart: ["chest"] }} />),
+    );
+    rerender(withIntl(<ExerciseLibraryControls facets={facets} selected={{}} />));
+
+    expect((screen.getByRole("checkbox", { name: /Chest/ }) as HTMLInputElement).checked).toBe(
+      false,
+    );
+  });
+
+  // --- A modifier click on the clear-filters link belongs to the BROWSER ---
   //
-  // They were `type="button"` elements carrying only an `onClick`, sitting
-  // OUTSIDE the search form. With JavaScript off, clicking a body-part chip or
-  // "Clear filters" did nothing at all, while the search box next to them
-  // navigated perfectly — one toolbar honouring two different contracts.
-  //
-  // These assert the DECLARATIVE `href` the browser acts on by itself; firing a
-  // synthetic React click assumes hydration and can never catch this.
+  // Cmd/Ctrl+click, Shift+click and Alt+click all arrive as ordinary `click`
+  // events, so a handler that calls `preventDefault()` unconditionally
+  // swallows them and soft-navigates in the SAME tab — a link that refuses to
+  // behave like one. Only a plain primary click may be intercepted. Checkboxes
+  // have no navigation target, so this guard no longer applies to them
+  // (design §7 retires `isPlainClick` for the facet controls).
 
-  it("renders each chip as a real link, not a bare button", () => {
+  it.each([
+    ["Cmd/Ctrl (new tab, macOS)", { metaKey: true }],
+    ["Ctrl (new tab, Windows/Linux)", { ctrlKey: true }],
+    ["Shift (new window)", { shiftKey: true }],
+    ["Alt (save target)", { altKey: true }],
+  ])("leaves a %s click on Clear filters to the browser", (_label, modifier) => {
+    currentSearch = "bodyPart=chest";
     renderWithIntl(
-      <ExerciseLibraryControls facets={facets} selected={{}} carried={{}} />,
+      <ExerciseLibraryControls facets={facets} selected={{ bodyPart: ["chest"] }} />,
     );
 
-    const chip = screen.getByRole("link", { name: /Chest/ });
-    expect(chip.tagName).toBe("A");
-    expect(chip.getAttribute("href")).toBe("/exercises?bodyPart=chest");
+    // `fireEvent` answers true when nothing called preventDefault.
+    expect(
+      fireEvent.click(screen.getByRole("link", { name: "Clear filters" }), modifier),
+    ).toBe(true);
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
-  it("builds the chip href from the server-rendered params, keeping the search and ?title=", () => {
-    // The href must be composed from props, NOT from `useSearchParams()`:
-    // hooks have not run when there is no JavaScript, but this markup is what
-    // the server already sent.
-    currentSearch = "";
+  it("intercepts a plain click on Clear filters", () => {
+    currentSearch = "bodyPart=chest";
+    renderWithIntl(
+      <ExerciseLibraryControls facets={facets} selected={{ bodyPart: ["chest"] }} />,
+    );
+
+    expect(fireEvent.click(screen.getByRole("link", { name: "Clear filters" }))).toBe(false);
+    expect(routerPush).toHaveBeenCalledWith("/exercises");
+  });
+
+  it("gives Clear filters a real href built from the server-rendered carried params", () => {
     renderWithIntl(
       <ExerciseLibraryControls
         facets={facets}
-        selected={{}}
+        selected={{ bodyPart: ["chest"], equipment: ["barbell"], target: ["pectorals"] }}
         search="press"
-        carried={{ title: "Bench Press", search: "press" }}
-      />,
-    );
-
-    expect(screen.getByRole("link", { name: /Chest/ }).getAttribute("href")).toBe(
-      "/exercises?title=Bench+Press&search=press&bodyPart=chest",
-    );
-  });
-
-  it("points the ACTIVE chip's href at removing that filter (toggle without JS)", () => {
-    renderWithIntl(
-      <ExerciseLibraryControls
-        facets={facets}
-        selected={{ bodyPart: "chest" }}
-        carried={{ bodyPart: "chest", equipment: "barbell" }}
-      />,
-    );
-
-    expect(screen.getByRole("link", { name: /Chest/ }).getAttribute("href")).toBe(
-      "/exercises?equipment=barbell",
-    );
-  });
-
-  it("gives Clear filters a real href that drops the search and every filter", () => {
-    renderWithIntl(
-      <ExerciseLibraryControls
-        facets={facets}
-        selected={{ bodyPart: "chest", equipment: "barbell", target: "pectorals" }}
-        search="press"
-        carried={{
-          title: "Bench Press",
-          search: "press",
-          bodyPart: "chest",
-          equipment: "barbell",
-          target: "pectorals",
-          lang: "es",
-        }}
+        carried={[
+          ["title", "Bench Press"],
+          ["search", "press"],
+          ["bodyPart", "chest"],
+          ["equipment", "barbell"],
+          ["target", "pectorals"],
+          ["lang", "es"],
+        ]}
       />,
     );
 
@@ -433,82 +500,13 @@ describe("ExerciseLibraryControls", () => {
     renderWithIntl(
       <ExerciseLibraryControls
         facets={facets}
-        selected={{ bodyPart: "chest" }}
-        carried={{ bodyPart: "chest" }}
+        selected={{ bodyPart: ["chest"] }}
+        carried={[["bodyPart", "chest"]]}
       />,
     );
 
     expect(screen.getByRole("link", { name: "Clear filters" }).getAttribute("href")).toBe(
       "/exercises",
     );
-  });
-
-  it("still SOFT-navigates when JavaScript is live, rather than reloading the page", () => {
-    // The href is the no-JS fallback; hydrated, the click must be intercepted
-    // so the route is not fetched from scratch.
-    currentSearch = "";
-    renderWithIntl(
-      <ExerciseLibraryControls facets={facets} selected={{}} carried={{}} />,
-    );
-
-    // `fireEvent` answers false when the handler called preventDefault.
-    expect(fireEvent.click(screen.getByRole("link", { name: /Chest/ }))).toBe(false);
-    expect(routerPush).toHaveBeenCalledWith("/exercises?bodyPart=chest");
-  });
-
-  // --- A modifier click belongs to the BROWSER ---
-  //
-  // Turning the chips into links created an expectation that did not exist
-  // before: they now show a target in the status bar and readers open those in
-  // a new tab. Cmd/Ctrl+click, Shift+click and Alt+click all arrive as ordinary
-  // `click` events, so a handler that calls `preventDefault()` unconditionally
-  // swallows them and soft-navigates in the SAME tab — a link that refuses to
-  // behave like one. Only a plain primary click may be intercepted.
-
-  it.each([
-    ["Cmd/Ctrl (new tab, macOS)", { metaKey: true }],
-    ["Ctrl (new tab, Windows/Linux)", { ctrlKey: true }],
-    ["Shift (new window)", { shiftKey: true }],
-    ["Alt (save target)", { altKey: true }],
-    ["a non-primary mouse button", { button: 1 }],
-  ])("leaves a %s chip click to the browser", (_label, modifier) => {
-    currentSearch = "";
-    renderWithIntl(
-      <ExerciseLibraryControls facets={facets} selected={{}} carried={{}} />,
-    );
-
-    // `fireEvent` answers true when nothing called preventDefault.
-    expect(fireEvent.click(screen.getByRole("link", { name: /Chest/ }), modifier)).toBe(true);
-    expect(routerPush).not.toHaveBeenCalled();
-  });
-
-  it("leaves a modifier click on Clear filters to the browser too", () => {
-    currentSearch = "bodyPart=chest";
-    renderWithIntl(
-      <ExerciseLibraryControls
-        facets={facets}
-        selected={{ bodyPart: "chest" }}
-        carried={{ bodyPart: "chest" }}
-      />,
-    );
-
-    expect(
-      fireEvent.click(screen.getByRole("link", { name: "Clear filters" }), { metaKey: true }),
-    ).toBe(true);
-    expect(routerPush).not.toHaveBeenCalled();
-  });
-
-  it("intercepts the Clear filters link too", () => {
-    currentSearch = "bodyPart=chest";
-    renderWithIntl(
-      <ExerciseLibraryControls
-        facets={facets}
-        selected={{ bodyPart: "chest" }}
-        carried={{ bodyPart: "chest" }}
-      />,
-    );
-
-    expect(fireEvent.click(screen.getByRole("link", { name: "Clear filters" }))).toBe(false);
-    expect(routerPush).toHaveBeenCalledWith("/exercises");
   });
 });

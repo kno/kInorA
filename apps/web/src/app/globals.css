@@ -3110,6 +3110,13 @@ a {
 }
 
 .kin-ex-chip {
+  /* Containing block for the visually-hidden checkbox inside. Without it that
+     `position: absolute` input resolves against the initial containing block,
+     so `.kin-ex-chips`'s `overflow-x: auto` does not clip it and every chip
+     past the fold extends the DOCUMENT's scrollable width — the page then
+     scrolls sideways at every viewport. Caught only in a browser: the chip row
+     still looked correct and `body.scrollWidth` still equalled the viewport. */
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -3146,11 +3153,31 @@ a {
 }
 
 .kin-ex-chip:focus-visible,
+.kin-ex-chip:has(input:focus-visible),
 .kin-ex-tab:focus-visible,
 .kin-ex-media__mode:focus-visible,
 .kin-ex-card:focus-visible {
   outline: 2px solid var(--gym-accent, var(--accent));
   outline-offset: 2px;
+}
+
+/**
+ * Visually hides an element while keeping it in the accessibility tree and
+ * keyboard-focusable — the standard "screen-reader only" pattern. Used for the
+ * checkbox `<input>` inside `.kin-ex-chip`: the LABEL carries the chip's
+ * visual appearance, but the checkbox itself must remain the real focusable,
+ * submittable form control.
+ */
+.kin-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* --- Card grid --- */
