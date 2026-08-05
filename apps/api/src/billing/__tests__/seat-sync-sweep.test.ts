@@ -11,6 +11,8 @@ import {
   runSeatSyncSweep,
   type SeatSyncSweepReconciler,
 } from "../seat-sync-sweep.js";
+import { buildSeatSyncService } from "../seat-sync-factory.js";
+import type { Database } from "../../db/client.js";
 import type { ObservabilityEventInput, ObservabilityLogger } from "../../observability/event-logger.js";
 
 function recordingLogger(): { logger: ObservabilityLogger; events: ObservabilityEventInput[] } {
@@ -25,8 +27,23 @@ function recordingLogger(): { logger: ObservabilityLogger; events: Observability
   };
 }
 
-function reconcilerReturning(tenantIds: string[]): SeatSyncSweepReconciler {
-  return { reconcileAllStaleSponsors: vi.fn(async () => tenantIds) };
+function reconcilerReturning(
+  tenantIds: string[],
+  outboundMutationEnabled = false,
+): SeatSyncSweepReconciler {
+  return { reconcileAllStaleSponsors: vi.fn(async () => tenantIds), outboundMutationEnabled };
+}
+
+function failingReconciler(
+  failure: unknown,
+  outboundMutationEnabled = false,
+): SeatSyncSweepReconciler {
+  return {
+    reconcileAllStaleSponsors: vi.fn(async () => {
+      throw failure;
+    }),
+    outboundMutationEnabled,
+  };
 }
 
 describe("runSeatSyncSweep", () => {
@@ -34,7 +51,7 @@ describe("runSeatSyncSweep", () => {
     const { logger, events } = recordingLogger();
 
     const reconciled = await runSeatSyncSweep({
-      seatSync: reconcilerReturning(["tenant-a", "tenant-b"]),
+      seatSync: reconcilerReturning(["tenant-a", "tenant-b"], true),
       observability: logger,
     });
 
@@ -45,7 +62,7 @@ describe("runSeatSyncSweep", () => {
         level: "info",
         event: SEAT_SYNC_SWEEP_EVENT,
         outcome: "completed",
-        metadata: { reconciledCount: 2 },
+        metadata: { reconciledCount: 2, seatBillingEnabled: true },
       },
     ]);
   });
@@ -59,7 +76,7 @@ describe("runSeatSyncSweep", () => {
     });
 
     expect(events).toHaveLength(2);
-    expect(events[1]?.metadata).toEqual({ reconciledCount: 0 });
+    expect(events[1]?.metadata).toEqual({ reconciledCount: 0, seatBillingEnabled: false });
   });
 
   it("records a failed event with the error name and message, then rethrows", async () => {
@@ -68,11 +85,7 @@ describe("runSeatSyncSweep", () => {
 
     await expect(
       runSeatSyncSweep({
-        seatSync: {
-          reconcileAllStaleSponsors: vi.fn(async () => {
-            throw failure;
-          }),
-        },
+        seatSync: failingReconciler(failure, true),
         observability: logger,
       }),
     ).rejects.toBe(failure);
@@ -86,6 +99,7 @@ describe("runSeatSyncSweep", () => {
         metadata: {
           errorName: "TypeError",
           errorMessage: "stripe unconfigured — seat sync unavailable",
+          seatBillingEnabled: true,
         },
       },
     ]);
@@ -96,16 +110,16 @@ describe("runSeatSyncSweep", () => {
 
     await expect(
       runSeatSyncSweep({
-        seatSync: {
-          reconcileAllStaleSponsors: vi.fn(async () => {
-            throw "boom";
-          }),
-        },
+        seatSync: failingReconciler("boom"),
         observability: logger,
       }),
     ).rejects.toBe("boom");
 
-    expect(events[1]?.metadata).toEqual({ errorName: "unknown", errorMessage: "boom" });
+    expect(events[1]?.metadata).toEqual({
+      errorName: "unknown",
+      errorMessage: "boom",
+      seatBillingEnabled: false,
+    });
   });
 
   it("flushes pending event writes before returning on success", async () => {
@@ -133,16 +147,71 @@ describe("runSeatSyncSweep", () => {
 
     await expect(
       runSeatSyncSweep({
-        seatSync: {
-          reconcileAllStaleSponsors: vi.fn(async () => {
-            throw new Error("db down");
-          }),
-        },
+        seatSync: failingReconciler(new Error("db down")),
         observability: logger,
         flush,
       }),
     ).rejects.toThrow("db down");
 
     expect(flush).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * ANTI-DRIFT: the recorded `seatBillingEnabled` must come from the SAME field
+ * `SeatSyncService` gates its outbound Stripe call on, resolved through the
+ * real factory — not from a second `SEAT_BILLING_ENABLED` read. These drive a
+ * real service (with the DB/Stripe seams faked) so a future change that stops
+ * honouring the flag would flip the recorded value too, instead of leaving the
+ * log confidently wrong.
+ */
+describe("runSeatSyncSweep — recorded flag state tracks the real composition", () => {
+  const fakeDatabase = {} as Database;
+
+  function serviceWithEnv(env: NodeJS.ProcessEnv) {
+    return buildSeatSyncService({
+      database: fakeDatabase,
+      env,
+      trainerAssignmentRepo: { countActiveByTrainer: vi.fn(async () => 0) },
+      stripeGateway: { updateSubscriptionQuantity: vi.fn(async () => undefined) },
+      store: {
+        withSponsorLock: vi.fn(async () => undefined),
+        findSponsorsWithSeatDrift: vi.fn(async () => []),
+      },
+    });
+  }
+
+  it("records seatBillingEnabled false when SEAT_BILLING_ENABLED is unset (DB-side recompute only)", async () => {
+    const { logger, events } = recordingLogger();
+    const service = serviceWithEnv({});
+    expect(service.outboundMutationEnabled).toBe(false);
+
+    await runSeatSyncSweep({ seatSync: service, observability: logger });
+
+    expect(events[1]?.metadata).toEqual({ reconciledCount: 0, seatBillingEnabled: false });
+  });
+
+  it("records seatBillingEnabled true when SEAT_BILLING_ENABLED=1", async () => {
+    const { logger, events } = recordingLogger();
+    const service = serviceWithEnv({
+      SEAT_BILLING_ENABLED: "1",
+      STRIPE_PRICE_TRAINER_SEAT_MONTHLY: "price_seat_monthly",
+    });
+    expect(service.outboundMutationEnabled).toBe(true);
+
+    await runSeatSyncSweep({ seatSync: service, observability: logger });
+
+    expect(events[1]?.metadata).toEqual({ reconciledCount: 0, seatBillingEnabled: true });
+  });
+
+  it("records seatBillingEnabled false for any value other than the exact '1' the service gates on", async () => {
+    const { logger, events } = recordingLogger();
+
+    await runSeatSyncSweep({
+      seatSync: serviceWithEnv({ SEAT_BILLING_ENABLED: "true" }),
+      observability: logger,
+    });
+
+    expect(events[1]?.metadata).toEqual({ reconciledCount: 0, seatBillingEnabled: false });
   });
 });

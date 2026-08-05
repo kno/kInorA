@@ -40,12 +40,18 @@ describe.skipIf(!hasDb)("seat-sync sweep observability (real Postgres)", () => {
     const { observability, flush } = buildSeatSyncSweepObservability(db, silentSink);
 
     await runSeatSyncSweep({
-      seatSync: { reconcileAllStaleSponsors: async () => ["tenant-x"] },
+      seatSync: { reconcileAllStaleSponsors: async () => ["tenant-x"], outboundMutationEnabled: false },
       observability,
       flush,
     });
 
-    const outcomes = (await sweepEventsSince(since)).map((row) => row.outcome);
+    const rows = await sweepEventsSince(since);
+    expect(rows.find((row) => row.outcome === "completed")?.metadata).toMatchObject({
+      reconciledCount: 1,
+      seatBillingEnabled: false,
+    });
+
+    const outcomes = rows.map((row) => row.outcome);
     expect(outcomes).toContain("started");
     expect(outcomes).toContain("completed");
     expect(outcomes).not.toContain("failed");
@@ -61,6 +67,7 @@ describe.skipIf(!hasDb)("seat-sync sweep observability (real Postgres)", () => {
           reconcileAllStaleSponsors: async () => {
             throw new Error("stripe unconfigured — seat sync unavailable");
           },
+          outboundMutationEnabled: true,
         },
         observability,
         flush,
@@ -70,7 +77,7 @@ describe.skipIf(!hasDb)("seat-sync sweep observability (real Postgres)", () => {
     const failed = (await sweepEventsSince(since)).find((row) => row.outcome === "failed");
     expect(failed).toBeDefined();
     expect(failed?.level).toBe("error");
-    expect(failed?.metadata).toMatchObject({ errorName: "Error" });
+    expect(failed?.metadata).toMatchObject({ errorName: "Error", seatBillingEnabled: true });
   });
 });
 

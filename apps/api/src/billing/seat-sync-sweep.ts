@@ -12,7 +12,11 @@
  *
  * Records exactly three PII-free events (`billing.seat_sync_sweep`, system
  * level — no tenantId, no actorUserId): `started`, `completed` with the
- * reconciled sponsor count, and `failed` with the error name/message. Sponsor
+ * reconciled sponsor count, and `failed` with the error name/message. Both
+ * terminal events also carry `seatBillingEnabled` — read off the composed
+ * service, not from env — because with the flag off the sweep recomputes
+ * DB-side and pushes NOTHING to Stripe, and a bare count cannot tell those two
+ * outcomes apart a month later. Sponsor
  * tenant ids are returned to the caller but deliberately NOT written into
  * metadata: the count answers "did the sweep heal anything", and /admin/logs is
  * a cross-tenant view where a per-tenant list adds no operational signal.
@@ -37,6 +41,12 @@ export const SEAT_SYNC_SWEEP_EVENT = "billing.seat_sync_sweep";
  */
 export interface SeatSyncSweepReconciler {
   reconcileAllStaleSponsors(): Promise<string[]>;
+  /**
+   * Read off the SERVICE, never re-read from `SEAT_BILLING_ENABLED` here — a
+   * second env read could report a mutation that the service skipped (or vice
+   * versa). See `SeatSyncService.outboundMutationEnabled`.
+   */
+  readonly outboundMutationEnabled: boolean;
 }
 
 /** Dependencies for {@link runSeatSyncSweep}. */
@@ -74,7 +84,14 @@ export async function runSeatSyncSweep(deps: SeatSyncSweepDeps): Promise<string[
       level: "info",
       event: SEAT_SYNC_SWEEP_EVENT,
       outcome: "completed",
-      metadata: { reconciledCount: reconciled.length },
+      metadata: {
+        reconciledCount: reconciled.length,
+        // Without this the count is unreadable: with the flag OFF the sweep
+        // recomputes DB-side and pushes NOTHING to Stripe, so
+        // `reconciledCount: 61, seatBillingEnabled: false` means "61
+        // recomputed, zero subscriptions actually corrected".
+        seatBillingEnabled: seatSync.outboundMutationEnabled,
+      },
     });
 
     await flush?.();
@@ -87,6 +104,10 @@ export async function runSeatSyncSweep(deps: SeatSyncSweepDeps): Promise<string[
       metadata: {
         errorName: error instanceof Error ? error.name : "unknown",
         errorMessage: error instanceof Error ? error.message : String(error),
+        // Recorded here too: whether a partial sweep could have already pushed
+        // a quantity to Stripe before it broke is the first thing an operator
+        // triaging a red run needs to know.
+        seatBillingEnabled: seatSync.outboundMutationEnabled,
       },
     });
 
