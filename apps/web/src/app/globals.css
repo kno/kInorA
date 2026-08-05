@@ -3110,6 +3110,13 @@ a {
 }
 
 .kin-ex-chip {
+  /* Containing block for the visually-hidden checkbox inside. Without it that
+     `position: absolute` input resolves against the initial containing block,
+     so `.kin-ex-chips`'s `overflow-x: auto` does not clip it and every chip
+     past the fold extends the DOCUMENT's scrollable width — the page then
+     scrolls sideways at every viewport. Caught only in a browser: the chip row
+     still looked correct and `body.scrollWidth` still equalled the viewport. */
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
