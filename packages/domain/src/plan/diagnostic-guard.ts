@@ -48,7 +48,7 @@ function findViolatingPattern(text: string): RegExp | undefined {
 
 /**
  * Collects all user-visible text strings from a WorkoutProgram for inspection.
- * This includes session titles, exercise names, notes, substitutionNotes,
+ * This includes session titles, exercise names, notes
  * and limitation warnings — every string the user (or a downstream system)
  * might read.
  */
@@ -65,7 +65,6 @@ function extractTextStrings(program: WorkoutProgram): string[] {
     for (const exercise of session.exercises) {
       texts.push(exercise.name);
       if (exercise.notes) texts.push(exercise.notes);
-      if (exercise.substitutionNote) texts.push(exercise.substitutionNote);
     }
   }
 

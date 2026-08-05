@@ -1585,10 +1585,8 @@ function mapWorkoutSessionRecord(
 }
 
 function combineExerciseNotes(exercise: WorkoutExercise): string | null {
-  const notes = [exercise.notes, exercise.substitutionNote].filter(
-    (value): value is string => typeof value === "string" && value.trim() !== ""
-  );
-  return notes.length === 0 ? null : notes.join("\n\n");
+  const note = exercise.notes;
+  return typeof note === "string" && note.trim() !== "" ? note : null;
 }
 
 function toOptionalNumber(value: number | string | null): number | undefined {

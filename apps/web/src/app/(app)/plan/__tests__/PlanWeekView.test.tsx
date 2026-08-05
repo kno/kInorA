@@ -89,15 +89,15 @@ const twoSessionProgram: WorkoutProgram = {
       day: 1,
       title: "Push Day",
       exercises: [
-        { name: "Bench Press", sets: 4, reps: "8-10", restSeconds: 90, notes: undefined, substitutionNote: undefined },
-        { name: "Overhead Press", sets: 3, reps: "10", restSeconds: 60, notes: undefined, substitutionNote: undefined },
+        { name: "Bench Press", sets: 4, reps: "8-10", restSeconds: 90, notes: undefined },
+        { name: "Overhead Press", sets: 3, reps: "10", restSeconds: 60, notes: undefined },
       ],
     },
     {
       day: 2,
       title: "Pull Day",
       exercises: [
-        { name: "Barbell Row", sets: 4, reps: "8", restSeconds: 90, notes: undefined, substitutionNote: undefined },
+        { name: "Barbell Row", sets: 4, reps: "8", restSeconds: 90, notes: undefined },
       ],
     },
   ],
@@ -109,7 +109,7 @@ const fiveSessionProgram: WorkoutProgram = {
     day,
     title: `Day ${day} session`,
     exercises: [
-      { name: "Squat", sets: 3, reps: "8", restSeconds: 120, notes: undefined, substitutionNote: undefined },
+      { name: "Squat", sets: 3, reps: "8", restSeconds: 120, notes: undefined },
     ],
   })),
   limitationWarnings: [],

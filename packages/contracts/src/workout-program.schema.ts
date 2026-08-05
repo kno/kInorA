@@ -11,7 +11,6 @@ const WorkoutExerciseSchema = z.object({
   reps: z.string(),
   restSeconds: z.number().int().nonnegative(),
   notes: z.string().optional(),
-  substitutionNote: z.string().optional(),
 });
 
 /**

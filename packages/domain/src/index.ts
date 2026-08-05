@@ -15,7 +15,6 @@ export { defaultPlanName } from "./plan/default-plan-name.js";
 export { validateRpe } from "./plan/rpe.js";
 export type { RpeValidation } from "./plan/rpe.js";
 
-export { applyEquipmentSubstitutions } from "./plan/equipment-substitution.js";
 export { injectLimitationWarnings } from "./plan/limitation-warnings.js";
 export type { WarningLocale } from "./plan/limitation-warnings.js";
 export { assertNoDiagnosticLanguage } from "./plan/diagnostic-guard.js";

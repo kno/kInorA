@@ -8,7 +8,6 @@ import type { ObservabilityLogger } from "../observability/event-logger.js";
 import { mask } from "./mask.js";
 import { assertPlanSpecShape } from "../plan/boundary.js";
 import {
-  applyEquipmentSubstitutions,
   injectLimitationWarnings,
   assertNoDiagnosticLanguage,
   normalizeProgramReps,
@@ -51,8 +50,8 @@ export class PlanSpecShapeError extends Error {
  * 3. Create a "generating" row in WorkoutPlanRepository and return { planId, status }
  *    IMMEDIATELY to the caller — the LLM call is fire-and-forget.
  * 4. Background task (unhandled rejection is caught → markFailed):
- *    generator.generate → normalizeProgramReps → applyEquipmentSubstitutions
- *    → injectLimitationWarnings → assertNoDiagnosticLanguage → markReady.
+ *    generator.generate → normalizeProgramReps → injectLimitationWarnings
+ *    → assertNoDiagnosticLanguage → markReady.
  *    On ANY error → markFailed.
  *
  * Stuck-generating strategy: MANUAL REGENERATE ONLY.
@@ -209,13 +208,12 @@ export class PlanGenerationService {
       // generate → post-process → guard → persist
       const rawProgram = await this.generator.generate(generationInput);
       const normalized = normalizeProgramReps(rawProgram);
-      const substituted = applyEquipmentSubstitutions(normalized, spec.equipment);
       // #260: limitation warnings are DETERMINISTIC and LOCALIZED — they are the
       // SINGLE source of truth. Drop any warnings the LLM may have authored
       // (its English prompt can leak English prose even when the app is in
       // Spanish) before injecting the locale-correct deterministic ones, so no
       // mixed-language text ever reaches the persisted program.
-      const withoutLlmWarnings = { ...substituted, limitationWarnings: [] };
+      const withoutLlmWarnings = { ...normalized, limitationWarnings: [] };
       const withWarnings = injectLimitationWarnings(
         withoutLlmWarnings,
         spec.limitations,
