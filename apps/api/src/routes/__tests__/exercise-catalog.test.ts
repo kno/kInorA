@@ -13,6 +13,7 @@ import {
   computeExerciseCatalogFacets,
   exerciseCatalogRoutes,
   planCatalogQuery,
+  planFacetQuery,
 } from "../exercise-catalog.js";
 import {
   VALID_TOKEN,
@@ -115,7 +116,7 @@ describe("GET /exercises/catalog", () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body.total).toBe(listExercises({ bodyPart: "chest" }).total);
+    expect(body.total).toBe(listExercises({ bodyPart: ["chest"] }).total);
     expect(body.items.every((item: { bodyPart: string }) => item.bodyPart === "chest")).toBe(true);
   });
 
@@ -130,7 +131,7 @@ describe("GET /exercises/catalog", () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body.total).toBe(listExercises({ equipment: "body weight" }).total);
+    expect(body.total).toBe(listExercises({ equipment: ["body weight"] }).total);
     expect(body.items.every((item: { equipment: string }) => item.equipment === "body weight")).toBe(
       true,
     );
@@ -147,7 +148,7 @@ describe("GET /exercises/catalog", () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body.total).toBe(listExercises({ target: "abs" }).total);
+    expect(body.total).toBe(listExercises({ target: ["abs"] }).total);
     expect(body.items.every((item: { target: string }) => item.target === "abs")).toBe(true);
   });
 
@@ -175,7 +176,124 @@ describe("GET /exercises/catalog", () => {
       headers: AUTH_HEADERS,
     });
 
-    expect(response.json().total).toBe(listExercises({ bodyPart: "waist", target: "abs" }).total);
+    expect(response.json().total).toBe(
+      listExercises({ bodyPart: ["waist"], target: ["abs"] }).total,
+    );
+  });
+
+  it("widens the result set with a repeated bodyPart parameter (OR within group)", async () => {
+    app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/exercises/catalog?bodyPart=cardio&bodyPart=chest&limit=200",
+      headers: AUTH_HEADERS,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().total).toBe(192);
+  });
+
+  it("narrows a widened selection with a second group (AND across groups)", async () => {
+    app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/exercises/catalog?bodyPart=cardio&bodyPart=chest&equipment=${encodeURIComponent("body weight")}&limit=200`,
+      headers: AUTH_HEADERS,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().total).toBe(57);
+  });
+
+  it.each([
+    ["bodyPart", "/exercises/catalog?bodyPart="],
+    ["equipment", "/exercises/catalog?equipment="],
+    ["target", "/exercises/catalog?target="],
+  ])(
+    "treats a blank %s alone as absent, never a 400 (deliberate contract change)",
+    async (_field, url) => {
+      app = await buildTestApp();
+
+      const response = await app.inject({ method: "GET", url, headers: AUTH_HEADERS });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().total).toBe(listExercises().total);
+    },
+  );
+
+  it("strips a blank value that precedes a real one for bodyPart (no 400)", async () => {
+    app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/exercises/catalog?bodyPart=&bodyPart=chest&limit=200",
+      headers: AUTH_HEADERS,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().total).toBe(listExercises({ bodyPart: ["chest"] }).total);
+  });
+
+  it("strips a blank value that precedes a real one for equipment (no 400)", async () => {
+    app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/exercises/catalog?equipment=&equipment=${encodeURIComponent("barbell")}&limit=200`,
+      headers: AUTH_HEADERS,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().total).toBe(listExercises({ equipment: ["barbell"] }).total);
+  });
+
+  it("dedupes a repeated identical value", async () => {
+    app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/exercises/catalog?bodyPart=chest&bodyPart=chest&limit=200",
+      headers: AUTH_HEADERS,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().total).toBe(listExercises({ bodyPart: ["chest"] }).total);
+  });
+
+  it("accepts an unrecognized free-form equipment value and matches nothing", async () => {
+    app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/exercises/catalog?equipment=jetpack",
+      headers: AUTH_HEADERS,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.items).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  // Regression, issue #343 — a repeated blank-then-value search must never
+  // reach the catalog as a 500; the array-tolerant schema keeps `search`
+  // single-valued and unaffected, but the request as a whole must stay a
+  // normal, filtered 200.
+  it("returns 200 filtered by the surviving value for a repeated blank-then-value search", async () => {
+    app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/exercises/catalog?search=&search=press",
+      headers: AUTH_HEADERS,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.total).toBeGreaterThan(0);
+    expect(body.items.every((item: { name: string }) => item.name.includes("press"))).toBe(true);
   });
 
   it("paginates via offset and echoes the applied window", async () => {
@@ -254,7 +372,6 @@ describe("GET /exercises/catalog", () => {
     ["fractional limit", "/exercises/catalog?limit=1.5"],
     ["negative offset", "/exercises/catalog?offset=-10"],
     ["blank search", "/exercises/catalog?search=%20%20"],
-    ["blank equipment", "/exercises/catalog?equipment="],
   ])("returns 400 for %s", async (_label, url) => {
     app = await buildTestApp();
 
@@ -398,16 +515,128 @@ describe("GET /exercises/catalog/facets", () => {
       // Each record contributes exactly once to each facet dimension.
       expect(sum).toBe(total);
       const values = body[key].map((facet: { value: string }) => facet.value);
-      expect(values).toEqual([...values].sort((a: string, b: string) => a.localeCompare(b)));
       expect(new Set(values).size).toBe(values.length);
+      // Ordering is count-desc then value-asc (ties broken alphabetically) —
+      // deliberately changed from the previous value-asc order (design §8).
+      for (let i = 1; i < body[key].length; i++) {
+        const prev = body[key][i - 1];
+        const curr = body[key][i];
+        const orderedByCount = prev.count > curr.count;
+        const tiedThenByValue =
+          prev.count === curr.count && prev.value.localeCompare(curr.value) <= 0;
+        expect(orderedByCount || tiedThenByValue).toBe(true);
+      }
     }
 
     const chest = body.bodyPart.find((facet: { value: string }) => facet.value === "chest");
-    expect(chest.count).toBe(listExercises({ bodyPart: "chest" }).total);
+    expect(chest.count).toBe(listExercises({ bodyPart: ["chest"] }).total);
   });
 
-  it("memoizes the computed facets", () => {
-    expect(computeExerciseCatalogFacets()).toBe(computeExerciseCatalogFacets());
+  // `cachedFacets` was deleted (decisions #2579): facets now vary per request,
+  // so there is no longer a single memoized result to compare.
+  it("recomputes facets freshly for each distinct filter combination", () => {
+    const unfiltered = computeExerciseCatalogFacets();
+    const filtered = computeExerciseCatalogFacets({ bodyPart: ["cardio"] });
+
+    expect(filtered).not.toEqual(unfiltered);
+    expect(filtered.equipment).toHaveLength(7);
+  });
+
+  it("scopes facet counts to the current filters via the query string", async () => {
+    app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/exercises/catalog/facets?bodyPart=cardio&bodyPart=chest",
+      headers: AUTH_HEADERS,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.equipment).toHaveLength(20);
+    expect(body.target).toHaveLength(3);
+    expect(body.target).toEqual(
+      expect.arrayContaining([
+        { value: "cardiovascular system", count: 29 },
+        { value: "pectorals", count: 158 },
+        { value: "serratus anterior", count: 5 },
+      ]),
+    );
+  });
+
+  it("self-excludes: the bodyPart facet still lists all 10 body parts under a bodyPart filter", async () => {
+    app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/exercises/catalog/facets?bodyPart=cardio&bodyPart=chest",
+      headers: AUTH_HEADERS,
+    });
+
+    expect(response.json().bodyPart).toHaveLength(10);
+  });
+
+  it("narrows every group's counts with search as an AND dimension", async () => {
+    app = await buildTestApp();
+
+    const unfiltered = await app.inject({
+      method: "GET",
+      url: "/exercises/catalog/facets",
+      headers: AUTH_HEADERS,
+    });
+    const searched = await app.inject({
+      method: "GET",
+      url: "/exercises/catalog/facets?search=press",
+      headers: AUTH_HEADERS,
+    });
+
+    const sumOf = (group: { count: number }[]) =>
+      group.reduce((acc, facet) => acc + facet.count, 0);
+    const unfilteredSum = sumOf(unfiltered.json().bodyPart);
+    const searchedSum = sumOf(searched.json().bodyPart);
+
+    expect(searchedSum).toBeLessThan(unfilteredSum);
+    expect(searchedSum).toBe(listExercises({ search: "press" }).total);
+  });
+
+  it("keeps a selected-but-zero-count value visible at count: 0, sorted last", () => {
+    // "jetpack" is not a real equipment label, so under this filter its own
+    // tally is empty — but because it is part of the current selection it
+    // must still be present in the response, not silently dropped.
+    const facets = computeExerciseCatalogFacets({ equipment: ["jetpack"] });
+
+    const jetpack = facets.equipment.find((facet) => facet.value === "jetpack");
+    expect(jetpack).toEqual({ value: "jetpack", count: 0 });
+    // Zero-count entries land last within their group after the resort.
+    expect(facets.equipment.at(-1)).toEqual({ value: "jetpack", count: 0 });
+  });
+
+  it("returns 400 for an unknown bodyPart even on the facets endpoint", async () => {
+    app = await buildTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/exercises/catalog/facets?bodyPart=gills",
+      headers: AUTH_HEADERS,
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+});
+
+describe("planFacetQuery", () => {
+  it("defaults to unconstrained filters for an empty query", () => {
+    expect(planFacetQuery({})).toEqual({ ok: true, filters: {} });
+  });
+
+  it("never carries a pagination window — the type cannot express one", () => {
+    const result = planFacetQuery({ bodyPart: "chest", limit: "5", offset: "10" });
+
+    expect(result).toEqual({ ok: true, filters: { bodyPart: ["chest"] } });
+  });
+
+  it("rejects an unknown bodyPart", () => {
+    expect(planFacetQuery({ bodyPart: "gills" })).toEqual({ ok: false });
   });
 });
 
@@ -437,5 +666,50 @@ describe("planCatalogQuery", () => {
 
   it("rejects a malformed query", () => {
     expect(planCatalogQuery({ bodyPart: "gills" })).toEqual({ ok: false });
+  });
+
+  // One row per case of design §4's query-schema table.
+  describe("list-valued filter fields (design §4)", () => {
+    it("absent → unconstrained (key omitted from filters)", () => {
+      const result = planCatalogQuery({});
+      expect(result.ok && result.query.filters.bodyPart).toBeUndefined();
+    });
+
+    it("single value → a one-element list", () => {
+      const result = planCatalogQuery({ bodyPart: "chest" });
+      expect(result.ok && result.query.filters.bodyPart).toEqual(["chest"]);
+    });
+
+    it("repeated values → an array in URL order", () => {
+      const result = planCatalogQuery({ bodyPart: ["chest", "cardio"] });
+      expect(result.ok && result.query.filters.bodyPart).toEqual(["chest", "cardio"]);
+    });
+
+    it("a duplicated value is deduped", () => {
+      const result = planCatalogQuery({ bodyPart: ["chest", "chest"] });
+      expect(result.ok && result.query.filters.bodyPart).toEqual(["chest"]);
+    });
+
+    it("a blank value alone strips to an empty, unconstrained list — never 400", () => {
+      const result = planCatalogQuery({ bodyPart: "" });
+      expect(result.ok).toBe(true);
+      expect(result.ok && result.query.filters.bodyPart).toBeUndefined();
+    });
+
+    it("a blank value ahead of a real one is stripped, not rejected", () => {
+      const result = planCatalogQuery({ bodyPart: ["", "chest"] });
+      expect(result.ok && result.query.filters.bodyPart).toEqual(["chest"]);
+    });
+
+    it("an unknown enum bodyPart value still fails validation (unchanged contract)", () => {
+      expect(planCatalogQuery({ bodyPart: "gills" })).toEqual({ ok: false });
+    });
+
+    it("an unknown free-form equipment/target value is accepted and matches nothing", () => {
+      const result = planCatalogQuery({ equipment: "jetpack", target: "core of the earth" });
+      expect(result.ok && result.query.filters.equipment).toEqual(["jetpack"]);
+      expect(result.ok && result.query.filters.target).toEqual(["core of the earth"]);
+      expect(result.ok && listExercises(result.query.filters).total).toBe(0);
+    });
   });
 });
