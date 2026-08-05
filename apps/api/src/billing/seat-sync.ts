@@ -134,6 +134,25 @@ export class SeatSyncService {
   ) {}
 
   /**
+   * Whether the OUTBOUND Stripe mutation is enabled — i.e. whether this
+   * service's recompute can actually push a quantity to Stripe, or is a
+   * DB-side-only no-op.
+   *
+   * Exposed READ-ONLY for observability (issue #330 step 5): the reconcile
+   * sweep records it alongside the reconciled count, so `/admin/logs` can
+   * distinguish "61 subscriptions corrected in Stripe" from "61 recomputed,
+   * nothing pushed". It returns the SAME field `resyncUnderLock` gates on, so
+   * the recorded value can never drift from the real behaviour — never
+   * re-derive it by reading `SEAT_BILLING_ENABLED` a second time.
+   *
+   * NOTE: `true` does not promise a given sponsor was mutated — the seat-price
+   * guard (`seatPriceIds`, see above) still skips a non-seat subscription.
+   */
+  get outboundMutationEnabled(): boolean {
+    return this.seatSyncEnabled;
+  }
+
+  /**
    * Trigger entrypoint — fired on the assignment transitions that change the
    * active set (accept → active, revoke → revoked). Semantically identical to
    * {@link reconcileSeats}: the recompute is authoritative, so every trigger is

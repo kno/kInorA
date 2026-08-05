@@ -43,10 +43,21 @@
  * `SeatSyncService`), and a no-op when nothing is drifted. Safe on an empty
  * DB (queries return zero rows, zero iterations, exit 0). NEVER logs secrets
  * — only tenant ids + a reconciled count.
+ *
+ * OBSERVABLE (issue #330 step 5): the sweep itself lives in
+ * `src/billing/seat-sync-sweep.ts` (imported here as compiled
+ * `dist/billing/seat-sync-sweep.js`) and records `billing.seat_sync_sweep`
+ * started/completed/failed events through the #310 observability logger, so an
+ * unattended nightly run shows up — including a FAILURE — in the superadmin
+ * /admin/logs view and not only on this process's stdout.
  */
 
 import { createDbClient } from "../dist/db/client.js";
 import { buildSeatSyncService } from "../dist/billing/seat-sync-factory.js";
+import {
+  buildSeatSyncSweepObservability,
+  runSeatSyncSweep,
+} from "../dist/billing/seat-sync-sweep.js";
 
 async function main() {
   if (!process.env.DATABASE_URL) {
@@ -57,12 +68,19 @@ async function main() {
     );
   }
 
-  console.log("[reconcile-seats] sweep started");
-
   const { db, pool } = createDbClient();
   try {
     const seatSyncService = buildSeatSyncService({ database: db, env: process.env });
-    const reconciled = await seatSyncService.reconcileAllStaleSponsors();
+    const { observability, flush } = buildSeatSyncSweepObservability(db);
+
+    const reconciled = await runSeatSyncSweep({
+      seatSync: seatSyncService,
+      observability,
+      // Flushed inside the sweep, BEFORE the pool below is closed and before a
+      // failure rethrow exits the process — otherwise the fire-and-forget
+      // event INSERT could be lost.
+      flush,
+    });
 
     console.log(
       `[reconcile-seats] sweep done: reconciled=${reconciled.length} sponsor(s)`,

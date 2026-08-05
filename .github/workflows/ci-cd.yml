@@ -296,6 +296,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: merge-image
     environment: prod
+    # Shared with the scheduled seat reconcile sweep
+    # (.github/workflows/seat-reconcile.yml), so a sweep can never run against
+    # the VPS while a deploy is recreating containers. Queue, never cancel.
+    concurrency:
+      group: kinora-vps-prod
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: read
