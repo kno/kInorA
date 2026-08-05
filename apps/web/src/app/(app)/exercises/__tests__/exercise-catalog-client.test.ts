@@ -96,6 +96,24 @@ describe("buildCatalogQueryString", () => {
   it("keeps an explicit zero offset (page one is still an explicit window)", () => {
     expect(buildCatalogQueryString({ offset: 0 })).toBe("?offset=0");
   });
+
+  it("serializes an ARRAY filter as REPEATED pairs, in order — the facet OR selection", () => {
+    const query = buildCatalogQueryString({ bodyPart: ["cardio", "chest"] });
+    expect(query).toBe("?bodyPart=cardio&bodyPart=chest");
+  });
+
+  it("still accepts a plain string filter (single-value call sites are unaffected)", () => {
+    expect(buildCatalogQueryString({ equipment: "barbell" })).toBe("?equipment=barbell");
+  });
+
+  it("drops blanks and de-duplicates within an array filter", () => {
+    const query = buildCatalogQueryString({ target: ["", "abs", "abs", "  "] });
+    expect(query).toBe("?target=abs");
+  });
+
+  it("omits an empty array filter entirely", () => {
+    expect(buildCatalogQueryString({ bodyPart: [] })).toBe("");
+  });
 });
 
 describe("fetchExerciseCatalogList", () => {
@@ -139,6 +157,21 @@ describe("fetchExerciseCatalogList", () => {
     expect(url).toContain("search=press");
     expect(url).toContain("bodyPart=chest");
     expect(url).toContain("offset=24");
+  });
+
+  it("forwards a multi-select facet as repeated query pairs", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(200, { items: [], total: 0, limit: 24, offset: 0 }));
+
+    await fetchExerciseCatalogList(
+      TOKEN,
+      { bodyPart: ["cardio", "chest"] },
+      { ...OPTIONS, fetchImpl },
+    );
+
+    const url = fetchImpl.mock.calls[0]![0] as string;
+    expect(url).toContain("bodyPart=cardio&bodyPart=chest");
   });
 
   it("returns the API error code on a non-2xx response", async () => {
@@ -274,7 +307,7 @@ describe("fetchExerciseCatalogFacets", () => {
   it("returns an error when no session token is present, without calling fetch", async () => {
     const fetchImpl = vi.fn();
 
-    const result = await fetchExerciseCatalogFacets(undefined, { ...OPTIONS, fetchImpl });
+    const result = await fetchExerciseCatalogFacets(undefined, {}, { ...OPTIONS, fetchImpl });
 
     expect(result).toEqual({ kind: "error", message: "no_session" });
     expect(fetchImpl).not.toHaveBeenCalled();
@@ -288,9 +321,38 @@ describe("fetchExerciseCatalogFacets", () => {
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, facets));
 
-    const result = await fetchExerciseCatalogFacets(TOKEN, { ...OPTIONS, fetchImpl });
+    const result = await fetchExerciseCatalogFacets(TOKEN, {}, { ...OPTIONS, fetchImpl });
 
     expect(result).toEqual({ kind: "ok", facets });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://api.test/exercises/catalog/facets",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("forwards the active filters to the facets endpoint, so counts stay result-scoped", () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse(200, { bodyPart: [], equipment: [], target: [] }),
+    );
+
+    void fetchExerciseCatalogFacets(
+      TOKEN,
+      { bodyPart: ["cardio", "chest"], search: "press" },
+      { ...OPTIONS, fetchImpl },
+    );
+
+    const url = fetchImpl.mock.calls[0]![0] as string;
+    expect(url).toContain("bodyPart=cardio&bodyPart=chest");
+    expect(url).toContain("search=press");
+  });
+
+  it("calls the facets endpoint with no query string when no filter is active", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse(200, { bodyPart: [], equipment: [], target: [] }),
+    );
+
+    await fetchExerciseCatalogFacets(TOKEN, {}, { ...OPTIONS, fetchImpl });
+
     expect(fetchImpl).toHaveBeenCalledWith(
       "http://api.test/exercises/catalog/facets",
       expect.objectContaining({ method: "GET" }),
@@ -312,7 +374,7 @@ describe("fetchExerciseCatalogFacets", () => {
       }),
     );
 
-    const result = await fetchExerciseCatalogFacets(TOKEN, { ...OPTIONS, fetchImpl });
+    const result = await fetchExerciseCatalogFacets(TOKEN, {}, { ...OPTIONS, fetchImpl });
 
     expect(result).toEqual({
       kind: "ok",
@@ -331,7 +393,7 @@ describe("fetchExerciseCatalogFacets", () => {
     // silently loses all filtering and has no way to know something broke.
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, []));
 
-    const result = await fetchExerciseCatalogFacets(TOKEN, { ...OPTIONS, fetchImpl });
+    const result = await fetchExerciseCatalogFacets(TOKEN, {}, { ...OPTIONS, fetchImpl });
 
     expect(result).toEqual({ kind: "error", message: "invalid_response" });
   });
@@ -341,7 +403,7 @@ describe("fetchExerciseCatalogFacets", () => {
       .fn()
       .mockResolvedValue(jsonResponse(200, [{ value: "chest", count: 12 }]));
 
-    const result = await fetchExerciseCatalogFacets(TOKEN, { ...OPTIONS, fetchImpl });
+    const result = await fetchExerciseCatalogFacets(TOKEN, {}, { ...OPTIONS, fetchImpl });
 
     expect(result).toEqual({ kind: "error", message: "invalid_response" });
   });
@@ -349,7 +411,7 @@ describe("fetchExerciseCatalogFacets", () => {
   it("returns the API error code on a non-2xx response", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(403, { error: "forbidden" }));
 
-    const result = await fetchExerciseCatalogFacets(TOKEN, { ...OPTIONS, fetchImpl });
+    const result = await fetchExerciseCatalogFacets(TOKEN, {}, { ...OPTIONS, fetchImpl });
 
     expect(result).toEqual({ kind: "error", message: "forbidden" });
   });
@@ -357,7 +419,7 @@ describe("fetchExerciseCatalogFacets", () => {
   it("falls back to a generic code when the error body carries none", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(500, {}));
 
-    const result = await fetchExerciseCatalogFacets(TOKEN, { ...OPTIONS, fetchImpl });
+    const result = await fetchExerciseCatalogFacets(TOKEN, {}, { ...OPTIONS, fetchImpl });
 
     expect(result).toEqual({ kind: "error", message: "fetch_exercise_facets_failed" });
   });
@@ -365,7 +427,7 @@ describe("fetchExerciseCatalogFacets", () => {
   it("returns api_unreachable when fetch throws", async () => {
     const fetchImpl = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
 
-    const result = await fetchExerciseCatalogFacets(TOKEN, { ...OPTIONS, fetchImpl });
+    const result = await fetchExerciseCatalogFacets(TOKEN, {}, { ...OPTIONS, fetchImpl });
 
     expect(result).toEqual({ kind: "error", message: "api_unreachable" });
   });
@@ -373,7 +435,7 @@ describe("fetchExerciseCatalogFacets", () => {
   it("returns invalid_response when the body is not an object", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, null));
 
-    const result = await fetchExerciseCatalogFacets(TOKEN, { ...OPTIONS, fetchImpl });
+    const result = await fetchExerciseCatalogFacets(TOKEN, {}, { ...OPTIONS, fetchImpl });
 
     expect(result).toEqual({ kind: "error", message: "invalid_response" });
   });

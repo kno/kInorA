@@ -35,20 +35,26 @@ export const MAX_EXERCISE_OFFSET = 100_000;
  */
 export type RawExerciseLibraryParams = Record<string, string | string[] | undefined>;
 
+/** The three facet groups that accept more than one selected value. */
+const MULTI_KEYS = new Set(["bodyPart", "equipment", "target"]);
+
 /** The library's URL-driven state, after normalisation. */
 export interface ExerciseLibraryParams {
   title?: string;
   search?: string;
-  bodyPart?: string;
-  equipment?: string;
-  target?: string;
+  bodyPart?: string[];
+  equipment?: string[];
+  target?: string[];
   offset?: string;
   /**
    * Any other parameter present on the URL. It is normalised like the rest,
    * but only the ALLOW-LISTED ones (see `CARRIED_KEYS`) are reflected back into
    * the library's own links and hidden fields.
+   *
+   * Widened to `string | string[]` so the three multi-value facet keys above
+   * remain assignable through this index signature too.
    */
-  [key: string]: string | undefined;
+  [key: string]: string | string[] | undefined;
 }
 
 /**
@@ -71,9 +77,10 @@ const LIBRARY_KEYS = ["title", "search", "bodyPart", "equipment", "target"] as c
 const CARRIED_KEYS = ["lang"] as const;
 
 /**
- * Collapse one raw parameter to a single string, taking the first NON-BLANK
- * value when the key repeats — the same hardening `parseOffset` applies to
- * `?offset=`.
+ * Collapse one raw SINGLE-VALUE parameter (`search`, `title`, `offset`, and
+ * anything else outside `MULTI_KEYS`) to a single string, taking the first
+ * NON-BLANK value when the key repeats — the same hardening `parseOffset`
+ * applies to `?offset=`.
  *
  * Blank-first matters: `?search=&search=press` reaches the page as
  * `["", "press"]`, and returning `raw[0]` there dropped the filter and answered
@@ -89,12 +96,33 @@ function firstValue(raw: string | string[] | undefined): string | undefined {
 }
 
 /**
+ * Every non-blank, de-duplicated value of a MULTI-VALUE parameter
+ * (`bodyPart`, `equipment`, `target`), in URL order.
+ *
+ * Repeat-tolerant by design, unlike `firstValue`: a facet group is additive
+ * (OR within the group), so `?bodyPart=chest&bodyPart=cardio` must keep BOTH
+ * values rather than collapsing to the first one. Blanks are still skipped —
+ * `?bodyPart=&bodyPart=chest` behaves exactly like the single-value path, so
+ * the #343 HTTP 500 shape cannot return through either.
+ */
+function allValues(raw: string | string[] | undefined): string[] {
+  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+  const out: string[] = [];
+  for (const entry of list) {
+    const trimmed = typeof entry === "string" ? entry.trim() : "";
+    if (trimmed && !out.includes(trimmed)) out.push(trimmed);
+  }
+  return out;
+}
+
+/**
  * Normalise `searchParams` at the boundary where the page reads them.
  *
  * Two jobs, both of which stop a hand-written URL from breaking the page:
- *  - a repeated key becomes its first NON-BLANK value, so nothing downstream
- *    ever gets an array where it expects a string, and `?search=&search=press`
- *    still filters; and
+ *  - a repeated key becomes its first NON-BLANK value for single-value
+ *    fields, or every non-blank de-duplicated value for the three facet
+ *    fields, so nothing downstream ever gets an array where it expects a
+ *    string or a string where it expects a list; and
  *  - a value the API would REJECT is clamped or dropped, so the page degrades
  *    to an ordinary (possibly empty) result instead of the "library
  *    unavailable" card. A genuine API failure still renders that card.
@@ -105,19 +133,31 @@ export function normalizeLibraryParams(raw: RawExerciseLibraryParams): ExerciseL
   const params: ExerciseLibraryParams = {};
 
   for (const [key, value] of Object.entries(raw)) {
+    if (MULTI_KEYS.has(key)) continue;
     const single = firstValue(value)?.trim();
     if (single) params[key] = single;
   }
 
+  for (const key of MULTI_KEYS) {
+    const values = allValues(raw[key]);
+    if (values.length > 0) params[key] = values;
+  }
+
   // The API caps free-text search; a longer term would 400.
-  if (params.search && params.search.length > MAX_EXERCISE_SEARCH_LENGTH) {
+  if (typeof params.search === "string" && params.search.length > MAX_EXERCISE_SEARCH_LENGTH) {
     params.search = params.search.slice(0, MAX_EXERCISE_SEARCH_LENGTH);
   }
 
   // `bodyPart` is an API ENUM (lowercase). An unknown value — `Chest`, say —
-  // is not a filter that matches nothing, it is a 400; drop it instead.
-  if (params.bodyPart && !(EXERCISE_BODY_PARTS as readonly string[]).includes(params.bodyPart)) {
-    delete params.bodyPart;
+  // is not a filter that matches nothing, it is a 400; filter it out of the
+  // selection rather than sending it. If none of the selected values survive,
+  // the key is omitted entirely (unconstrained), same as if it were absent.
+  if (Array.isArray(params.bodyPart)) {
+    const known = params.bodyPart.filter((value) =>
+      (EXERCISE_BODY_PARTS as readonly string[]).includes(value),
+    );
+    if (known.length > 0) params.bodyPart = known;
+    else delete params.bodyPart;
   }
 
   return params;
@@ -132,8 +172,13 @@ function activeEntries(
   const entries: [string, string][] = [];
 
   for (const key of LIBRARY_KEYS) {
+    if (skip.has(key)) continue;
     const value = params[key];
-    if (value && !skip.has(key)) entries.push([key, value]);
+    if (MULTI_KEYS.has(key)) {
+      for (const single of (value as string[] | undefined) ?? []) entries.push([key, single]);
+    } else if (typeof value === "string" && value) {
+      entries.push([key, value]);
+    }
   }
 
   // Then the ALLOW-LISTED extras the library does not own but must carry, so
@@ -141,7 +186,7 @@ function activeEntries(
   // Deliberately not "every remaining key": see CARRIED_KEYS.
   for (const key of CARRIED_KEYS) {
     const value = params[key];
-    if (value && !skip.has(key)) entries.push([key, value]);
+    if (!skip.has(key) && typeof value === "string" && value) entries.push([key, value]);
   }
 
   return entries;
@@ -152,33 +197,44 @@ function activeEntries(
  * fields.
  *
  * Everything currently active EXCEPT:
- *  - `search`, which the text input itself contributes; and
+ *  - `search`, which the text input itself contributes;
  *  - `offset`, because a new search must land on page 1 rather than stranding
- *    the reader on page 3 of a smaller result set.
+ *    the reader on page 3 of a smaller result set; and
+ *  - `bodyPart`/`equipment`/`target`, because the facet checkboxes now live
+ *    INSIDE this same `<form>` (design §7) and contribute those themselves —
+ *    duplicating them as hidden fields would submit a stale value alongside
+ *    the live one.
  *
- * Blank values are dropped so the form never emits `?bodyPart=`.
+ * Returns REPEATED-KEY-SAFE `[key, value][]` pairs rather than a `Record`.
+ * `Object.fromEntries` silently keeps only the LAST of repeated keys, which is
+ * exactly the trap this shape avoids — see `carriedFilterParams` for the
+ * multi-value case this return type exists to protect.
  */
 export function preservedSearchParams(
   params: ExerciseLibraryParams
-): Record<string, string> {
-  return Object.fromEntries(activeEntries(params, ["search", "offset"]));
+): [string, string][] {
+  return activeEntries(params, ["search", "offset", "bodyPart", "equipment", "target"]);
 }
 
 /**
- * The query parameters a FILTER LINK must carry, as a base to mutate.
+ * The query parameters the CLEAR-FILTERS LINK must carry, as a base to
+ * mutate.
  *
- * Everything currently active EXCEPT `offset`, because toggling a filter
+ * Everything currently active EXCEPT `offset`, because clearing the filters
  * changes the result set and must land on page 1.
  *
- * Unlike {@link preservedSearchParams} this KEEPS `search`: a chip narrows the
- * current view rather than replacing it, and the chip's `href` is a complete
- * destination URL rather than a form the search box also contributes to.
+ * Unlike {@link preservedSearchParams} this KEEPS `search` AND the facet
+ * fields: the clear-filters `href` is a complete destination URL, not a form
+ * other controls also contribute to.
  *
- * It exists so the chips can carry a server-rendered `href` and therefore
- * navigate WITHOUT JavaScript, exactly like the search form does.
+ * Returns `[key, value][]` — REPEATED per value for `bodyPart`/`equipment`/
+ * `target` — because `Object.fromEntries(...)` would silently collapse a
+ * multi-select facet to its LAST selected value. The return-type change from
+ * `Record<string,string>` forces every call site to be revisited by the
+ * compiler, which is the point.
  */
-export function carriedFilterParams(params: ExerciseLibraryParams): Record<string, string> {
-  return Object.fromEntries(activeEntries(params, ["offset"]));
+export function carriedFilterParams(params: ExerciseLibraryParams): [string, string][] {
+  return activeEntries(params, ["offset"]);
 }
 
 /**

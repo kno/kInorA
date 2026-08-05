@@ -217,20 +217,32 @@ describe("ExercisesPage — library grid", () => {
     expect(listExerciseCatalogAction).toHaveBeenCalledWith(
       expect.objectContaining({
         search: "press",
-        bodyPart: "chest",
-        equipment: "barbell",
-        target: "pectorals",
+        bodyPart: ["chest"],
+        equipment: ["barbell"],
+        target: ["pectorals"],
       }),
     );
   });
 
-  it("survives a REPEATED query parameter, applying its first value", async () => {
+  it("survives a REPEATED single-value query parameter, applying its first value", async () => {
     // The App Router delivers `?search=press&search=squat` as an array. The
     // page used to hand that straight to the catalog client, whose `.trim()`
     // threw OUTSIDE the action's try/catch — the whole route answered 500.
     const page = await ExercisesPage({
       searchParams: Promise.resolve({
         search: ["press", "squat"],
+      }),
+    });
+
+    expect(listExerciseCatalogAction).toHaveBeenCalledWith(
+      expect.objectContaining({ search: "press" }),
+    );
+    expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-grid")).toBeDefined();
+  });
+
+  it("forwards EVERY repeated facet value — the whole point of additive filtering", async () => {
+    const page = await ExercisesPage({
+      searchParams: Promise.resolve({
         bodyPart: ["chest", "back"],
         equipment: ["barbell", "cable"],
         target: ["abs", "lats"],
@@ -239,10 +251,9 @@ describe("ExercisesPage — library grid", () => {
 
     expect(listExerciseCatalogAction).toHaveBeenCalledWith(
       expect.objectContaining({
-        search: "press",
-        bodyPart: "chest",
-        equipment: "barbell",
-        target: "abs",
+        bodyPart: ["chest", "back"],
+        equipment: ["barbell", "cable"],
+        target: ["abs", "lats"],
       }),
     );
     expect(findFirst(page, (el) => el.props?.["data-testid"] === "exercise-library-grid")).toBeDefined();
@@ -253,6 +264,14 @@ describe("ExercisesPage — library grid", () => {
 
     expect(listExerciseCatalogAction).toHaveBeenCalledWith(
       expect.objectContaining({ bodyPart: undefined }),
+    );
+  });
+
+  it("keeps only the enum-valid values among several selected bodyParts", async () => {
+    await ExercisesPage({ searchParams: Promise.resolve({ bodyPart: ["Chest", "back"] }) });
+
+    expect(listExerciseCatalogAction).toHaveBeenCalledWith(
+      expect.objectContaining({ bodyPart: ["back"] }),
     );
   });
 
@@ -334,7 +353,28 @@ describe("ExercisesPage — library grid", () => {
     });
 
     const controls = findFirst(page, (el) => Boolean(el.props?.facets));
-    expect(controls?.props?.carried).toEqual({ search: "press", bodyPart: "chest" });
+    expect(controls?.props?.carried).toEqual([
+      ["search", "press"],
+      ["bodyPart", "chest"],
+    ]);
+  });
+
+  it("scopes the facets request to the active filters, so counts stay result-scoped", async () => {
+    // Design §2/§3: the equipment/target facets must be tallied against
+    // exercises matching the OTHER active filters, not the whole catalog.
+    await ExercisesPage({
+      searchParams: Promise.resolve({ bodyPart: ["cardio", "chest"], search: "press" }),
+    });
+
+    expect(getExerciseCatalogFacetsAction).toHaveBeenCalledWith(
+      expect.objectContaining({ bodyPart: ["cardio", "chest"], search: "press" }),
+    );
+  });
+
+  it("requests whole-catalog facets when no filter is active", async () => {
+    await ExercisesPage({ searchParams: Promise.resolve({}) });
+
+    expect(getExerciseCatalogFacetsAction).toHaveBeenCalledWith({});
   });
 
   it("renders the attribution block (licensing obligation, both views)", async () => {

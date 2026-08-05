@@ -67,6 +67,9 @@ export default async function ExercisesPage({ searchParams }: ExercisesPageProps
   const exerciseTitle = detailResult?.kind === "ok" ? detailResult.detail.exerciseTitle : undefined;
 
   const offset = parseOffset(params.offset);
+  // The facets request carries the SAME active filters as the list request
+  // (minus pagination), so its counts stay scoped to the current result set
+  // rather than the whole catalog (design §2/§3).
   const [listResult, facetsResult] = await Promise.all([
     listExerciseCatalogAction({
       search,
@@ -76,7 +79,7 @@ export default async function ExercisesPage({ searchParams }: ExercisesPageProps
       limit: EXERCISE_PAGE_SIZE,
       offset,
     }),
-    getExerciseCatalogFacetsAction(),
+    getExerciseCatalogFacetsAction({ search, bodyPart, equipment, target }),
   ]);
 
   const facets: ExerciseLibraryFacets =
