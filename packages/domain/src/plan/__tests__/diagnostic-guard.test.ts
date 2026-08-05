@@ -142,7 +142,7 @@ describe("assertNoDiagnosticLanguage — rejects diagnostic attribution phrases"
     expect(() => assertNoDiagnosticLanguage(program)).toThrow();
   });
 
-  it('throws when substitutionNote contains "your chronic condition" attribution', () => {
+  it('throws when a second exercise\'s notes contain "your chronic condition" attribution', () => {
     const program = makeProgram({
       weeklySessions: [
         {
@@ -154,7 +154,7 @@ describe("assertNoDiagnosticLanguage — rejects diagnostic attribution phrases"
               sets: 3,
               reps: "10",
               restSeconds: 60,
-              substitutionNote: "Your chronic condition means you cannot do bench press.",
+              notes: "Your chronic condition means you cannot do bench press.",
             },
           ],
         },

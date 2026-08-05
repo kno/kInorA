@@ -24,7 +24,6 @@ export interface WorkoutExercise {
   reps: string;
   restSeconds: number;
   notes?: string;
-  substitutionNote?: string;
 }
 
 export interface WorkoutSession {

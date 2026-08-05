@@ -311,11 +311,6 @@ export function DayDetailPanel({
                       {exercise.notes && (
                         <span className={styles.exerciseNote}>{exercise.notes}</span>
                       )}
-                      {exercise.substitutionNote && (
-                        <span className={styles.exerciseSubstitution}>
-                          {exercise.substitutionNote}
-                        </span>
-                      )}
                     </div>
                   </td>
                   <td>{exercise.sets}</td>
