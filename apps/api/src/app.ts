@@ -483,7 +483,7 @@ export async function buildApp(
   const chatEntitlement = new ChatEntitlement(billingStateReader);
   const chatExtractor: PlanSpecExtractor =
     chatExtractorOverride ??
-    new PlanSpecExtractionAdapter(configRepo, buildExtractionModelFactory());
+    new PlanSpecExtractionAdapter(configRepo, buildExtractionModelFactory(), aiTracingDeps);
   // 13-v1.1-interactive-voice-chat (A2): speech-to-text for the voice companion.
   // PRODUCTION uses the real OpenAI-audio adapter (whisper-1); like every other
   // adapter it reads the dedicated OPENAI_API_KEY at CALL time, so the app boots
