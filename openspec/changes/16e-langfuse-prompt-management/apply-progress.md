@@ -453,3 +453,37 @@ the B1-scoped shapes:
   B2 must NOT branch until B1's PR merges.
 - Production Langfuse credential validity remains unexercised for B1 specifically — B1 has NO remote
   fetch path yet (that is B2), so this is unaffected by B1 and stays exactly as A1/A2 left it.
+
+### Orchestrator ruling and independent byte-identity proof (B1)
+
+**Budget ruling: 724 is the number that governs; no B1a/B1b split is needed.** The 800-line budget
+exists to protect reviewer attention. A generated `.snap` file is not read line by line during
+review — it is an assertion artifact, regenerated mechanically — so its 481 lines do not consume
+review attention proportionally to hand-authored code. B1 ships as one PR.
+
+**The in-branch "byte-identical" tests could not prove byte-identity, and the snapshots as committed
+do not either.** Both `.snap` files were written in the GREEN commits (`14012e3`, `d1b7252`), i.e.
+AFTER the refactor, so they freeze the POST-refactor output. And the in-branch assertion compares
+`renderTemplate(TEMPLATE, buildXPromptVariables(...))` against `buildXPrompt(...)`, which after the
+refactor IS that same render — a tautology. This is not the executor's error: once the old function
+is gone, there is nothing left in-tree to compare against.
+
+**Independently proven by the orchestrator instead.** The pre-refactor `prompt.ts` and
+`extraction-prompt.ts` were materialized from `main` (`git show main:<path>`) into the same directory
+so every relative import resolved unchanged, and a temporary suite asserted equality across:
+
+- 11 plan-prompt cases — bare, no equipment, with limitations, with memory, memory requiring
+  sanitization, `allowedExercises` empty, `allowedExercises` present, each of the three
+  `intensityBias` values, and all of them combined.
+- 4 chat-context cases × both chat prompts, comparing `mask(newOutput, limitationTermsOf(input))`
+  against the legacy output (the legacy builders masked internally; the new ones do not, so masked
+  new output is the correct comparand).
+
+Result: **19/19 passed — the refactor is byte-identical.** The temporary files were then deleted and
+are deliberately NOT committed: they depend on vendored copies of superseded code that would rot.
+With equality now established, the committed snapshots become a valid FORWARD drift guard — they
+freeze output that is proven equal to pre-refactor behaviour.
+
+**Convention for later slices:** a refactor claiming byte-identity must capture the baseline BEFORE
+the refactor lands (write the snapshot in the RED commit, while the old implementation is still the
+one producing it), or the claim cannot be verified afterwards from the tree alone.
