@@ -50,6 +50,8 @@ beforeEach(() => {
   mockInvoke.mockResolvedValue(mockProgram);
   delete process.env["LANGFUSE_BASEURL"];
   delete process.env["LANGFUSE_HOST"];
+  delete process.env["LANGFUSE_PUBLIC_KEY"];
+  delete process.env["LANGFUSE_SECRET_KEY"];
 });
 
 // ---------------------------------------------------------------------------
@@ -132,21 +134,45 @@ describe("safe observability metadata", () => {
     );
   });
 
-  it("does not attach callbacks to raw model output", async () => {
-    const sensitiveOutput = "User has osteoporosis";
-    mockInvoke.mockResolvedValueOnce({
-      weeklySessions: [{ day: 1, title: sensitiveOutput, exercises: [] }],
-      limitationWarnings: [],
-    });
+  it("attaches the injected tracing handler", async () => {
+    const fakeHandler = { name: "langfuse", flushAsync: vi.fn() };
+    const adapters = buildAdapters({ handler: fakeHandler });
+    const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
+
+    await adapter.generate(baseSpec);
+
+    const config = mockInvoke.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(config).toEqual(
+      expect.objectContaining({ callbacks: [fakeHandler] }),
+    );
+  });
+
+  it("omits the callbacks key entirely when no handler is injected (byte-identical no-handler config)", async () => {
     const adapters = buildAdapters();
     const adapter = adapters["openrouter"]!("openai/gpt-4o-mini");
 
-    await expect(adapter.generate(baseSpec)).resolves.toEqual({
-      weeklySessions: [{ day: 1, title: sensitiveOutput, exercises: [] }],
-      limitationWarnings: [],
-    });
-    expect(mockInvoke.mock.calls[0]?.[1]).toEqual(
-      expect.not.objectContaining({ callbacks: expect.anything() }),
-    );
+    await adapter.generate(baseSpec);
+
+    const config = mockInvoke.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(config).not.toHaveProperty("callbacks");
+  });
+});
+
+describe("masking invariant on trace payloads", () => {
+  it("masks a known limitation in the invoke input and it never reaches the resolved program via JSON.stringify", async () => {
+    const adapters = buildAdapters();
+    const adapter = adapters["openai"]!("gpt-4o-mini");
+
+    const specWithLimitation = {
+      ...baseSpec,
+      limitations: [{ text: "osteoporosis", isWarning: true }],
+    };
+
+    const resolvedProgram = await adapter.generate(specWithLimitation);
+
+    const invokeInput = mockInvoke.mock.calls[0]?.[0] as string;
+    expect(invokeInput).toContain("[REDACTED]");
+    expect(invokeInput).not.toContain("osteoporosis");
+    expect(JSON.stringify([invokeInput, resolvedProgram])).not.toContain("osteoporosis");
   });
 });

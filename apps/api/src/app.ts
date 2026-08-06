@@ -21,6 +21,10 @@ import { PlanGenerationService } from "./ai/generation-service.js";
 import { warnIfAiConfigMissing } from "./ai/openrouter-generator.js";
 import { DynamicPlanGenerator } from "./ai/dynamic-generator.js";
 import { buildAdapters } from "./ai/adapter-factory.js";
+import {
+  buildLangfuseCallbackHandler,
+  flushLangfuseHandlerOnClose,
+} from "./ai/langfuse-handler.js";
 import { adminAiConfigRoutes } from "./routes/admin-ai-config.js";
 import { adminTierOverrideRoutes } from "./routes/admin-tier-override.js";
 import { TierOverrideAdminRepository } from "./db/repositories/tier-override-admin.js";
@@ -129,7 +133,8 @@ export interface BuildAppOptions {
   socialAuthService?: SocialAuthService;
   /**
    * Injectable PlanGenerator for tests.
-   * Defaults to OpenRouterPlanGenerator in production.
+   * Defaults to DynamicPlanGenerator (over the adapter-factory provider map)
+   * in production.
    * Pass a MockPlanGenerator to avoid LLM calls in tests.
    */
   planGenerator?: PlanGenerator;
@@ -221,9 +226,9 @@ export interface BuildAppOptions {
  * planGenerator for injecting a mock in tests (avoids LLM calls).
  *
  * In production, called from index.ts which creates all dependencies.
- * OpenRouterPlanGenerator is constructed lazily — it does NOT require
- * OPENROUTER_API_KEY at construction time (only at generate() call time),
- * so the API starts cleanly even when AI env vars are unset.
+ * Every provider adapter built by `buildAdapters()` is constructed lazily —
+ * none require their API key at construction time (only at generate() call
+ * time), so the API starts cleanly even when AI env vars are unset.
  */
 export async function buildApp(
   dbOrOptions?: Database | BuildAppOptions,
@@ -376,7 +381,24 @@ export async function buildApp(
   }
   const registry = wsRegistry ?? new WsRegistry();
   const configRepo = new AiProviderConfigRepository(database);
-  const generator = planGenerator ?? new DynamicPlanGenerator(configRepo, buildAdapters());
+  // langfuse-prompt-management (slice A1) — built ONCE per app instance and
+  // injected into every attachment site (here, `invokeChain`'s choke point;
+  // slice A2 extends this to the extraction adapter). `null` when Langfuse
+  // credentials are absent or construction fails: the generate path stays
+  // byte-identical to today, no `callbacks` key is ever added.
+  const langfuseHandler = buildLangfuseCallbackHandler({
+    warn: (message) => app.log.warn(message),
+  });
+  const aiTracingDeps = { handler: langfuseHandler };
+  const generator =
+    planGenerator ?? new DynamicPlanGenerator(configRepo, buildAdapters(aiTracingDeps));
+  // Best-effort flush on shutdown: never throws, never blocks Fastify's close
+  // sequence. See `flushLangfuseHandlerOnClose` for the swallow semantics.
+  app.addHook("onClose", async () => {
+    await flushLangfuseHandlerOnClose(langfuseHandler, (payload, message) =>
+      app.log.warn(payload, message),
+    );
+  });
   const workoutPlanRepo = new WorkoutPlanRepository(database);
   const workoutSessionRepo = new WorkoutSessionRepository(database);
   const planSpecRepo = new PlanSpecRepository(database);

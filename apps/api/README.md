@@ -30,10 +30,13 @@ These variables are required for the OpenRouter LLM adapter and Langfuse observa
 | `LANGFUSE_PUBLIC_KEY` | Yes (prod) | Langfuse project public key for LLM call tracing. |
 | `LANGFUSE_SECRET_KEY` | Yes (prod) | Langfuse project secret key. |
 | `LANGFUSE_HOST` | Yes (prod) | Langfuse host URL (e.g. `https://cloud.langfuse.com` for Langfuse Cloud, or your self-hosted instance). |
+| `LANGFUSE_BASEURL` | No | SDK-conventional alias for the Langfuse host, for local dev. Precedence: `LANGFUSE_BASEURL ?? LANGFUSE_HOST` — when both are set, `LANGFUSE_BASEURL` wins. Production sets only `LANGFUSE_HOST`; that value is passed explicitly as `baseUrl`, never relying on the SDK's implicit environment pickup. |
 
 **Note on `OPENROUTER_MODEL`**: The OpenRouter adapter uses `.withStructuredOutput` with `method: "jsonSchema"`. The chosen model must support JSON-schema mode structured output. If unsure, prefer models from the OpenAI family (e.g. `openai/gpt-4o-mini`) or verify via the [OpenRouter model list](https://openrouter.ai/models).
 
 **Privacy note**: `PlanSpec.limitations` (health context) is masked with `[REDACTED]` before the prompt reaches Langfuse. Raw limitation text never appears in traces.
+
+**Tracing (langfuse-prompt-management)**: a Langfuse `CallbackHandler` is constructed once per app instance, only when both `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are present. Absent or invalid credentials never fail a request — plan generation and chat succeed with the same prompt output either way, and a construction/emission/flush failure is reported as exactly one secret-free warn line (reason code + error name only, never a credential or prompt body).
 
 ### AI provider admin (09-ai-provider-admin) — operator-managed, optional
 
