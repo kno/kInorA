@@ -74,3 +74,28 @@ export function buildLangfuseCallbackHandler(opts?: {
     return null;
   }
 }
+
+/**
+ * Best-effort flush of a Langfuse handler on app shutdown: never throws,
+ * never blocks Fastify's close sequence. A flush failure is not surfaced
+ * anywhere beyond a warn line — losing the last few buffered traces on
+ * shutdown is an acceptable cost. No-ops when `handler` is `null`.
+ *
+ * @param handler Nullable tracing handler to flush.
+ * @param warn    Secret-free warn sink, called at most once, with the same
+ *   `(payload, message)` shape Fastify's/pino's `logger.warn` uses.
+ */
+export async function flushLangfuseHandlerOnClose(
+  handler: TracingHandler | null,
+  warn: (payload: { errName: string }, message: string) => void
+): Promise<void> {
+  if (!handler) return;
+  try {
+    await handler.flushAsync();
+  } catch (error) {
+    warn(
+      { errName: error instanceof Error ? error.name : "UnknownError" },
+      "[langfuse-handler] flushAsync failed on shutdown"
+    );
+  }
+}

@@ -10,9 +10,8 @@ vi.mock("langfuse-langchain", () => ({
   CallbackHandler: mockCallbackHandlerCtor,
 }));
 
-const { buildLangfuseCallbackHandler, resolveLangfuseBaseUrl } = await import(
-  "../langfuse-handler.js"
-);
+const { buildLangfuseCallbackHandler, resolveLangfuseBaseUrl, flushLangfuseHandlerOnClose } =
+  await import("../langfuse-handler.js");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -113,5 +112,46 @@ describe("buildLangfuseCallbackHandler — baseUrl wiring", () => {
     });
     const [params] = mockCallbackHandlerCtor.mock.calls[0] as [Record<string, unknown>];
     expect(params).not.toHaveProperty("baseUrl");
+  });
+});
+
+describe("flushLangfuseHandlerOnClose", () => {
+  it("swallows a flushAsync rejection and warns with errName only (no secrets)", async () => {
+    const handler = {
+      name: "fake",
+      flushAsync: vi.fn().mockRejectedValue(new Error("boom")),
+    };
+    const warn = vi.fn();
+
+    await expect(flushLangfuseHandlerOnClose(handler, warn)).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [payload, message] = warn.mock.calls[0] as [Record<string, unknown>, string];
+    expect(Object.keys(payload)).toEqual(["errName"]);
+    expect(typeof payload["errName"]).toBe("string");
+    expect(payload).not.toHaveProperty("message");
+    expect(payload).not.toHaveProperty("stack");
+    expect(message).toBe("[langfuse-handler] flushAsync failed on shutdown");
+  });
+
+  it("resolves without warning when flushAsync succeeds", async () => {
+    const handler = {
+      name: "fake",
+      flushAsync: vi.fn().mockResolvedValue(undefined),
+    };
+    const warn = vi.fn();
+
+    await expect(flushLangfuseHandlerOnClose(handler, warn)).resolves.toBeUndefined();
+
+    expect(handler.flushAsync).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("no-ops when handler is null", async () => {
+    const warn = vi.fn();
+
+    await expect(flushLangfuseHandlerOnClose(null, warn)).resolves.toBeUndefined();
+
+    expect(warn).not.toHaveBeenCalled();
   });
 });

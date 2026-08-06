@@ -21,7 +21,10 @@ import { PlanGenerationService } from "./ai/generation-service.js";
 import { warnIfAiConfigMissing } from "./ai/openrouter-generator.js";
 import { DynamicPlanGenerator } from "./ai/dynamic-generator.js";
 import { buildAdapters } from "./ai/adapter-factory.js";
-import { buildLangfuseCallbackHandler } from "./ai/langfuse-handler.js";
+import {
+  buildLangfuseCallbackHandler,
+  flushLangfuseHandlerOnClose,
+} from "./ai/langfuse-handler.js";
 import { adminAiConfigRoutes } from "./routes/admin-ai-config.js";
 import { adminTierOverrideRoutes } from "./routes/admin-tier-override.js";
 import { TierOverrideAdminRepository } from "./db/repositories/tier-override-admin.js";
@@ -390,18 +393,11 @@ export async function buildApp(
   const generator =
     planGenerator ?? new DynamicPlanGenerator(configRepo, buildAdapters(aiTracingDeps));
   // Best-effort flush on shutdown: never throws, never blocks Fastify's close
-  // sequence. A flush failure is not surfaced anywhere beyond a warn line —
-  // losing the last few buffered traces on shutdown is an acceptable cost.
+  // sequence. See `flushLangfuseHandlerOnClose` for the swallow semantics.
   app.addHook("onClose", async () => {
-    if (!langfuseHandler) return;
-    try {
-      await langfuseHandler.flushAsync();
-    } catch (error) {
-      app.log.warn(
-        { errName: error instanceof Error ? error.name : "UnknownError" },
-        "[langfuse-handler] flushAsync failed on shutdown",
-      );
-    }
+    await flushLangfuseHandlerOnClose(langfuseHandler, (payload, message) =>
+      app.log.warn(payload, message),
+    );
   });
   const workoutPlanRepo = new WorkoutPlanRepository(database);
   const workoutSessionRepo = new WorkoutSessionRepository(database);
