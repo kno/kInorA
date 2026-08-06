@@ -53,12 +53,17 @@ export function promptStep(): Runnable<string, string> {
  * UNTOUCHED — this function never throws.
  */
 export function linkStructuredChain<
-  T extends { invoke: (input: string, options?: Record<string, unknown>) => Promise<unknown> },
+  T extends { invoke: (input: string, options: Record<string, unknown>) => Promise<unknown> },
 >(structured: T): PromptLinkedChain<T | Runnable<string, unknown>> {
   if (structured == null || !RunnableSequence.isRunnableSequence(structured)) {
     return { chain: structured, linked: false };
   }
-  const chain = RunnableSequence.from([promptStep(), ...structured.steps]);
+  // `RunnableSequence.from`'s tuple signature ([first, ...middle, last])
+  // requires a statically-known last element, which a runtime-length spread
+  // of `structured.steps` can never provide — cast to the shape its own
+  // implementation actually accepts (`_coerceToRunnable` over each element).
+  const steps = [promptStep(), ...structured.steps] as unknown as Parameters<typeof RunnableSequence.from>[0];
+  const chain = RunnableSequence.from(steps);
   return { chain, linked: true };
 }
 
