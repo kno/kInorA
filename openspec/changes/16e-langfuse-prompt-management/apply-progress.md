@@ -628,3 +628,170 @@ branch — see "Open items" below.
   be re-run on the rebased B2b tree before it is pushed; do not carry over the original branch's
   numbers, they included B2a's since-superseded commits.
 - B2a's own PR must merge before B2b can branch (`stacked-to-main`).
+
+## Slice B2b — Remote Prompt Source: ResolvePrompt + Call-Site Wiring + Compose/README
+
+**Status: DONE.** All B2.7–B2.20 in `tasks.md` are complete.
+
+- Prerequisite state confirmed before branching: B2a's PR #372 was MERGED to `main` as squash commit
+  `a5a55d2`, and `main` was pulled fresh before rebasing.
+- **This branch is a REBASE, not a fresh branch.** The original 13-commit `feat/langfuse-remote-prompt-source`
+  branch (built before the B2/B2a split was decided) was rebased via `git rebase --onto main 47bd638
+  feat/langfuse-remote-prompt-source` — dropping the 6 commits now superseded by B2a and replaying
+  only the 7 B2b-scoped commits onto the fresh `main`. This is NOT a re-implementation: the commits'
+  content (diffs, messages) is unchanged, only their base moved.
+- Plus one NEW commit added on top of the rebased 7, closing a coverage gap the orchestrator
+  identified before pushing (see "Coverage gap closed" below) — 8 commits total on this branch.
+- PR: opened against `main` (see the PR URL reported alongside this record), referencing #366 as
+  `Part of #366` (NOT `Closes`/`Fixes`/`Resolves` — B2b is not the end of the chain; slice C still
+  follows, and a closing keyword on an earlier slice's PR had already auto-closed #366 prematurely
+  once, which the orchestrator had to reopen). Open, NOT merged.
+
+### Task-by-task (tasks.md B2.7–B2.20)
+
+- [x] B2.7 — RED: `prompt-provider.test.ts` — warm cache → 0 gateway calls on repeat; cold-cache
+  burst of 5 concurrent `execute()` calls → exactly 1 `fetchPrompt` call, every caller gets the same
+  resolved template.
+- [x] B2.8 — RED: each failure class → local text + `source: "fallback"` + correct reason code
+  passed to the injected `warn` sink: generic `Error` → `fetch_failed`; `PromptNotFoundError` (B2a) →
+  `prompt_not_found`; non-string payload → `payload_not_string` (via `validateRemoteTemplate`, B2a);
+  malformed marker surviving to render → `unresolved_marker_after_render` (via
+  `checkRenderedTemplate`, B2a).
+- [x] B2.9 — RED: `gateway === null` → `no_credentials` reason, `fetchPrompt` never called.
+- [x] B2.10 — RED: fallback cached too — a sustained failure makes exactly 1 upstream attempt across
+  3 calls within one TTL window.
+- [x] B2.11 — RED: `resolvePromptCacheTtlMs` — unset → 60000; valid positive → honored; `"abc"`/`"0"`/
+  `"-5"` → default, no throw (5 cases).
+- [x] B2.12 — GREEN: `apps/api/src/ai/prompt-provider.ts` — `ResolvePrompt` class, mirroring
+  `ResolveBillingPricing` exactly: injectable `cacheTtlMs`/`now`/`warn`, a `Map`-keyed `pending`
+  promise PER PROMPT NAME (three prompts share one instance, per design's "Provider granularity"
+  decision), `execute(def, variables)` running fetch → `validateRemoteTemplate` → `renderTemplate` →
+  `checkRenderedTemplate` → fallback, in that order, first failure wins; `resolvePromptCacheTtlMs(env)`.
+- [x] B2.13 — RED: `docker-compose-env-forward.test.ts` — asserts `docker-compose.yml`'s api
+  `environment:` block lists `LANGFUSE_PROMPT_CACHE_TTL_MS`. **Independently verified this test is
+  load-bearing** (per the orchestrator's explicit instruction): deleted the line locally, watched the
+  test go RED, restored the line, watched it go GREEN again — the test does NOT pass unconditionally.
+- [x] B2.14 — GREEN: added `LANGFUSE_PROMPT_CACHE_TTL_MS: ${LANGFUSE_PROMPT_CACHE_TTL_MS:-60000}` to
+  `docker-compose.yml`'s api `environment:` block, with a comment in the file's existing
+  forwarding-gotcha style (references the PR #254 precedent already documented for STRIPE_*/VOICE_*/
+  DEEPGRAM_*).
+- [x] B2.15 — RED: local-vs-remote equivalence — fake gateway returns `DEF.localTemplate` verbatim →
+  `execute()` text is byte-identical to `renderTemplate(DEF.localTemplate, VARS)`, with
+  `source: "langfuse"`.
+- [x] B2.16 — GREEN: wired `ResolvePrompt` into `invokeChain` (`adapter-factory.ts`) and both
+  `PlanSpecExtractionAdapter` passes (`extraction-adapter.ts`) via `AiTracingDeps.prompts?`. Each call
+  resolves through `deps.prompts` when injected (else the local builder directly, `promptSource:
+  "fallback"`), masks the resolved text exactly where B1 left the masking, and attaches
+  `promptSource` to the trace metadata on EVERY call — never omitted, satisfying B2.19's own
+  requirement one task early.
+- [x] B2.17 — GREEN: `app.ts` builds `buildLangfusePromptGateway()` + one `ResolvePrompt` instance
+  alongside A1's handler, threading `resolvePromptCacheTtlMs(process.env)` and a warn sink wired to
+  `app.log.warn`; both are added to the SAME `aiTracingDeps` object already passed to
+  `buildAdapters()`/`PlanSpecExtractionAdapter`'s constructor.
+- [x] B2.18 — Documented `LANGFUSE_PROMPT_CACHE_TTL_MS` (default, forwarding requirement) and the
+  remote prompt source's steady-state behavior (three prompt names, `production` label, fallback
+  guarantee) in `apps/api/README.md`.
+- [x] B2.19 — REFACTOR: confirmed by construction (B2.16) — `promptSource` is computed with a
+  `"fallback"` default BEFORE any conditional branch and only overwritten when
+  `deps.prompts.execute(...)` actually returns `source: "langfuse"`, so there is no code path that
+  omits it.
+- [x] B2.20 — Verify: all gates green (see Gate Evidence below); no network call in any new test
+  (fake gateway + injected `now` throughout, confirmed by grep — no `fetch`/`http` import added to
+  any test file in this slice).
+
+### Coverage gap closed (orchestrator-directed, added before push)
+
+The orchestrator asked, before this PR was opened: "with the provider wired, does plan generation
+still succeed with NO Langfuse credentials at all, and is that path actually covered by a test?"
+`prompt-provider.test.ts` already proved `new ResolvePrompt(null)` falls back correctly **in
+isolation**, but nothing exercised that exact object wired through `deps.prompts` at the actual
+`invokeChain`/`extraction-adapter.ts` call sites — the precise shape `app.ts` always builds in
+production when `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are absent (`buildLangfusePromptGateway()`
+returns `null`, but a `ResolvePrompt` instance is still always constructed and injected). Two tests
+were added (one commit, no production code change — this documents/proves already-correct behavior
+rather than introducing new behavior, so it is not a RED/GREEN pair):
+
+- `adapter-factory.test.ts`: `new ResolvePrompt(null)` wired via `buildAdapters({ prompts })` → plan
+  generation still returns the mock program, with `promptSource: "fallback"` and the byte-identical
+  local prompt.
+- `extraction-adapter.test.ts`: the same `ResolvePrompt(null)` wired via `buildAdapter(spec, { prompts })`
+  → both `streamReply` and `extract` succeed, `promptSource: "fallback"` on both passes.
+
+Both tests' stderr output shows the exact `[prompt-provider] kinora-plan-generation: no_credentials`
+/ `kinora-chat-reply: no_credentials` / `kinora-chat-extraction: no_credentials` warn lines, proving
+the fallback path is genuinely exercised end-to-end, not merely asserted.
+
+### Files created
+
+- `apps/api/src/ai/prompt-provider.ts` — `ResolvePrompt`, `ResolvePromptOptions`,
+  `resolvePromptCacheTtlMs`.
+- `apps/api/src/ai/__tests__/prompt-provider.test.ts`.
+- `apps/api/src/ai/__tests__/docker-compose-env-forward.test.ts`.
+
+### Files modified
+
+- `apps/api/src/ai/langfuse-handler.ts` — `AiTracingDeps` gains `prompts?: ResolvePrompt`.
+- `apps/api/src/ai/adapter-factory.ts` — `invokeChain` resolves the prompt through `deps.prompts` when
+  injected (imports `buildPlanPromptVariables`/`PLAN_PROMPT_DEFINITION` from `prompt.ts`); attaches
+  `promptSource` to `traceMetadata`.
+- `apps/api/src/ai/extraction-adapter.ts` — both `streamReply`/`extract` mirror the same resolution
+  (imports `buildReplyPromptVariables`/`REPLY_PROMPT_DEFINITION`/`buildExtractionPromptVariables`/
+  `EXTRACTION_PROMPT_DEFINITION` from `extraction-prompt.ts`); attaches `promptSource` to `metadata`.
+- `apps/api/src/app.ts` — builds `langfusePromptGateway` + `resolvePrompt` once, alongside the A1
+  handler; `aiTracingDeps` now carries both `handler` and `prompts`.
+- `apps/api/src/ai/__tests__/adapter-factory.test.ts` — new `promptSource` attribution cases +
+  the no-credentials production-path case (see above).
+- `apps/api/src/ai/__tests__/extraction-adapter.test.ts` — **updated the two PRE-EXISTING exact-equality
+  metadata assertions** (from slice A2/B1, at what were lines 333/339) to expect `promptSource:
+  "fallback"` — they construct `buildAdapter(spec)` with NO `deps.prompts` injected, so the new
+  `promptSource` field's default value is what they must now assert; plus new `promptSource`
+  attribution cases + the no-credentials production-path case.
+- `docker-compose.yml` — `LANGFUSE_PROMPT_CACHE_TTL_MS` forwarded in the api service's `environment:`.
+- `apps/api/README.md` — documents the env var + the remote prompt source's steady-state behavior.
+- `openspec/changes/16e-langfuse-prompt-management/tasks.md` — B2.7–B2.20 marked `[x]`.
+
+### Interface/signature conformance to design.md
+
+- `ResolvePrompt`, `ResolvePromptOptions`, `resolvePromptCacheTtlMs` — exact match to design's
+  `## Interfaces / Contracts` block.
+- **One scope deviation from the literal task text, explicitly assigned, not accidental:** B2.16's
+  literal wording says to attach `promptName`/`promptVersion`/`promptLabel` "only when `source ===
+  'langfuse'`" alongside `promptSource`. The assigning instructions for this slice explicitly scoped
+  those three fields — plus `metadata.langfusePrompt` and the version handle — to slice **C** only,
+  stating "Attach `promptSource: 'langfuse' | 'fallback'` to the trace metadata in this slice — the
+  version handle and `langfusePrompt` are C." B2b therefore ships `promptSource` alone. This satisfies
+  every B2-scoped spec scenario for "Trace Attribution to Prompt Source and Version" (which only
+  requires `promptSource` plus "linkage identifying the specific prompt version" — deferred to C's
+  native SDK linkage, not flat scalar fields C explicitly owns).
+- Flat-sequence prompt linking, `metadata.langfusePrompt`, and the version handle — untouched, per the
+  assigned "Do NOT touch in B2" boundary.
+
+### What B2b deliberately left for slice C
+
+- No native SDK prompt-version linkage (`prompt-linked-chain.ts`, flat-sequence decomposition,
+  `linkStructuredChain`/`linkStreamingModel`), no `promptName`/`promptVersion`/`promptLabel` scalar
+  fields, no `metadata.langfusePrompt`. All slice C scope, untouched here.
+
+### Gate Evidence (measured on the REBASED B2b tree, after the no-credentials coverage-gap commit)
+
+- `pnpm -r test` — apps/api: 169 test files, 2020 passed, 116 skipped (30/30 passing in the two files
+  touched by the coverage-gap commit, confirmed individually); apps/web: 155 test files, 1640 passed;
+  apps/mobile: 53 test files, 467 passed; all packages (contracts/domain/i18n/exercise-catalog) green.
+  All green, no failures, exit 0.
+- `pnpm --filter api test:coverage` — 169 test files, 2020 passed, 116 skipped, exit 0. Functions
+  coverage **88.43%** (gate 85%).
+- `pnpm type-check` — all 7 workspace projects, Done, no errors.
+- `pnpm build` — deps-guard ✅, ui-api-guard ✅ (48 client files scanned, no violations), architecture
+  (0 dependency violations across 2009 modules / 6016 dependencies) ✅, architecture negative guard ✅,
+  every package/app build Done, exit 0.
+- `git diff --stat main...HEAD -- . ':!openspec'` — **589 changed lines** (589 insertions(+), 17
+  deletions(-)) across 11 files. Well under the 800-line budget, and consistent with the ~562-line
+  forecast made before the rebase (the +27-line delta is the no-credentials coverage-gap commit).
+- Compose-forward test load-bearing check: deleted `LANGFUSE_PROMPT_CACHE_TTL_MS` from
+  `docker-compose.yml` locally, ran `docker-compose-env-forward.test.ts` alone → FAILED as expected;
+  restored the line, ran again → PASSED. Confirms the test is not a false-positive tautology.
+
+### Open items
+
+- B2b's PR must merge before slice C can branch (`stacked-to-main`).
+- Slice C (native prompt-version linkage) is the only remaining slice in this change.
