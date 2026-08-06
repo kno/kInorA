@@ -1,0 +1,76 @@
+import { CallbackHandler } from "langfuse-langchain";
+
+/**
+ * Structural port over the Langfuse `CallbackHandler`, so no test ever needs
+ * the real class. Any object shaped like this (including a fake in tests)
+ * satisfies it.
+ */
+export interface TracingHandler {
+  readonly name: string;
+  flushAsync(): Promise<unknown>;
+}
+
+/**
+ * Shared injection bag threaded into both tracing attachment sites
+ * (`invokeChain` in `adapter-factory.ts` and `PlanSpecExtractionAdapter`'s
+ * `streamReply`/`extract`). `handler` ships in this slice; a later slice adds
+ * `prompts` for the remote prompt-source use case.
+ */
+export interface AiTracingDeps {
+  handler?: TracingHandler | null;
+}
+
+/**
+ * Resolve the Langfuse base URL with precedence `LANGFUSE_BASEURL ??
+ * LANGFUSE_HOST`. The JS SDK reads `LANGFUSE_BASEURL` implicitly, but
+ * production only forwards `LANGFUSE_HOST` (`docker-compose.yml`) — relying
+ * on implicit SDK pickup would silently ignore the configured production
+ * host. Returns `undefined` when neither is set, so the SDK falls back to
+ * its own default rather than receiving an explicit empty value.
+ */
+export function resolveLangfuseBaseUrl(
+  env: Record<string, string | undefined>
+): string | undefined {
+  return env["LANGFUSE_BASEURL"] ?? env["LANGFUSE_HOST"];
+}
+
+/**
+ * Build a Langfuse `CallbackHandler`, or `null` when either credential is
+ * absent or construction fails.
+ *
+ * Safe by construction: this function NEVER throws. A construction failure
+ * (invalid credentials, transport misconfiguration) is caught and reported
+ * through the injected `warn` sink with a reason code and the error's
+ * `name` only — never a credential, never a template/prompt body.
+ *
+ * @param opts.env  Env bag to read credentials/base URL from (default `process.env`).
+ * @param opts.warn Secret-free warn sink, called at most once per construction
+ *   attempt (default `console.warn`).
+ */
+export function buildLangfuseCallbackHandler(opts?: {
+  env?: Record<string, string | undefined>;
+  warn?: (errorName: string) => void;
+}): TracingHandler | null {
+  const env = opts?.env ?? process.env;
+  const warn = opts?.warn ?? ((message: string) => console.warn(message));
+
+  const publicKey = env["LANGFUSE_PUBLIC_KEY"];
+  const secretKey = env["LANGFUSE_SECRET_KEY"];
+  if (!publicKey || !secretKey) {
+    return null;
+  }
+
+  const baseUrl = resolveLangfuseBaseUrl(env);
+
+  try {
+    return new CallbackHandler({
+      publicKey,
+      secretKey,
+      ...(baseUrl ? { baseUrl } : {}),
+    }) as TracingHandler;
+  } catch (error) {
+    const errorName = error instanceof Error ? error.name : "UnknownError";
+    warn(`[langfuse-handler] construction failed: ${errorName}`);
+    return null;
+  }
+}
