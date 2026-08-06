@@ -6,6 +6,8 @@ import type { MemoryRetrievalEntitlementPort } from "./memory-retriever.js";
 import type { WsRegistry } from "../ws/registry.js";
 import type { ObservabilityLogger } from "../observability/event-logger.js";
 import { mask } from "./mask.js";
+import { capVocabularyForPrompt, resolveExerciseVocabulary } from "./exercise-vocabulary.js";
+import { resolveProgramCatalogIds } from "./catalog-resolution.js";
 import { assertPlanSpecShape } from "../plan/boundary.js";
 import {
   injectLimitationWarnings,
@@ -50,8 +52,9 @@ export class PlanSpecShapeError extends Error {
  * 3. Create a "generating" row in WorkoutPlanRepository and return { planId, status }
  *    IMMEDIATELY to the caller — the LLM call is fire-and-forget.
  * 4. Background task (unhandled rejection is caught → markFailed):
- *    generator.generate → normalizeProgramReps → injectLimitationWarnings
- *    → assertNoDiagnosticLanguage → markReady.
+ *    resolveExerciseVocabulary → generator.generate → normalizeProgramReps
+ *    → injectLimitationWarnings → assertNoDiagnosticLanguage
+ *    → resolveProgramCatalogIds → markReady.
  *    On ANY error → markFailed.
  *
  * Stuck-generating strategy: MANUAL REGENERATE ONLY.
@@ -189,8 +192,16 @@ export class PlanGenerationService {
    * notify failure is swallowed (fire-and-forget-safe).
    *
    * Logs ONLY: planId, tenantId, planSpecId, error.name, error.message, error.stack.
-   * NEVER logs: spec content, limitations, program content, exercise names, or any
-   * health/plan data. This is a hard privacy invariant.
+   * NEVER logs: spec content, limitations, program content, or any health/plan
+   * data. This is a hard privacy invariant.
+   *
+   * ONE deliberate exception, added by #352 slice B: the `generation.
+   * exercise_unresolved` event carries the prescribed exercise NAME. An exercise
+   * name is a movement label chosen by the model from a public catalog's
+   * vocabulary — it is not user-authored text and reveals nothing about the
+   * person, unlike a limitation ("bad knee") or a memory. Without it the event
+   * is a bare counter that cannot be acted on. Nothing else about the program
+   * (sets, reps, notes, session titles) is recorded.
    */
   private async runGenerationTask(
     tenantId: string,
@@ -204,7 +215,16 @@ export class PlanGenerationService {
     console.info("[generation-service] generation started", { planId, tenantId });
 
     try {
-      const generationInput = await this.attachMemoryContext(tenantId, userId, planId, spec);
+      const withMemory = await this.attachMemoryContext(tenantId, userId, planId, spec);
+      // #352 slice B: the vocabulary is derived once and used twice — as the
+      // closed list in the prompt, and as the allow-list the generated names are
+      // resolved against afterwards. Deriving it in one place is what makes
+      // "what we asked for" and "what we accept" provably the same set.
+      const vocabulary = this.buildVocabulary(tenantId, planId, planSpecId, spec);
+      const generationInput = {
+        ...withMemory,
+        allowedExercises: vocabulary.promptNames,
+      };
       // generate → post-process → guard → persist
       const rawProgram = await this.generator.generate(generationInput);
       const normalized = normalizeProgramReps(rawProgram);
@@ -221,7 +241,18 @@ export class PlanGenerationService {
       );
       assertNoDiagnosticLanguage(withWarnings);
 
-      const result = await this.planRepo.markReady(tenantId, planId, withWarnings);
+      // #352 slice B: link to the catalog LAST, so the id is attached to the
+      // exact program that gets persisted and no later transform can drop it.
+      // A miss never fails the plan — see catalog-resolution.ts.
+      const linked = this.linkToCatalog(
+        tenantId,
+        planId,
+        planSpecId,
+        withWarnings,
+        vocabulary.allowedIds
+      );
+
+      const result = await this.planRepo.markReady(tenantId, planId, linked);
       if (!result) {
         // markReady updated 0 rows (tenant mismatch or race — should not happen
         // normally, but log so stuck-generating is traceable).
@@ -301,6 +332,99 @@ export class PlanGenerationService {
         // Swallow notify failures — a broken WS must not abort error recovery.
       }
     }
+  }
+
+  /**
+   * Derives the user's exercise vocabulary and the capped subset the prompt can
+   * afford, recording BOTH reductions rather than letting either happen quietly.
+   *
+   * The two are reported separately because they mean different things:
+   * `ignoredEquipment` is a wizard answer that bought the user nothing (worth
+   * fixing in the mapping table), while `droppedCount` is our own prompt budget
+   * (worth watching, but by design).
+   */
+  private buildVocabulary(
+    tenantId: string,
+    planId: string,
+    planSpecId: string,
+    spec: import("@kinora/contracts").PlanSpec
+  ): { promptNames: string[]; allowedIds: ReadonlySet<string> } {
+    const { exercises, ignoredEquipment } = resolveExerciseVocabulary(spec.equipment);
+    const capped = capVocabularyForPrompt(exercises);
+
+    // Scalars and ids only. Counts, not the vocabulary itself — the list is
+    // large and derivable from the spec, so logging it would be volume without
+    // information. `ignoredEquipment` is a wizard enum, never user prose.
+    this.observability?.recordEvent({
+      tenantId,
+      level: capped.droppedCount > 0 || ignoredEquipment.length > 0 ? "warn" : "info",
+      event: "generation.vocabulary",
+      metadata: {
+        planId,
+        planSpecId,
+        vocabularySize: exercises.length,
+        promptSize: capped.exercises.length,
+        droppedCount: capped.droppedCount,
+        ignoredEquipment: ignoredEquipment.join(",") || null,
+      },
+    });
+
+    return {
+      promptNames: capped.exercises.map((record) => record.name),
+      allowedIds: new Set(exercises.map((record) => record.id)),
+    };
+  }
+
+  /**
+   * Attaches catalog ids to a finished program and reports every exercise the
+   * catalog could not account for.
+   *
+   * One event per miss, carrying the exercise NAME: unlike a limitation or a
+   * memory, a prescribed exercise name is not user content, and the name is the
+   * only thing that makes the miss actionable — a count alone cannot tell us
+   * whether the model is inventing movements or merely spelling them our way.
+   */
+  private linkToCatalog(
+    tenantId: string,
+    planId: string,
+    planSpecId: string,
+    program: import("@kinora/contracts").WorkoutProgram,
+    allowedIds: ReadonlySet<string>
+  ): import("@kinora/contracts").WorkoutProgram {
+    const { program: linked, resolvedCount, unresolved } = resolveProgramCatalogIds(
+      program,
+      allowedIds
+    );
+
+    for (const miss of unresolved) {
+      this.observability?.recordEvent({
+        tenantId,
+        level: "warn",
+        event: "generation.exercise_unresolved",
+        outcome: miss.reason,
+        metadata: {
+          planId,
+          planSpecId,
+          exerciseName: miss.name,
+          day: miss.day,
+          exerciseIndex: miss.index,
+        },
+      });
+    }
+
+    this.observability?.recordEvent({
+      tenantId,
+      level: "info",
+      event: "generation.catalog_resolution",
+      metadata: {
+        planId,
+        planSpecId,
+        resolvedCount,
+        unresolvedCount: unresolved.length,
+      },
+    });
+
+    return linked;
   }
 
   private async attachMemoryContext(
