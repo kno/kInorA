@@ -10,6 +10,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   KNOWN_EQUIPMENT_VALUES,
+  PROMPT_VOCABULARY_CAP,
+  capVocabularyForPrompt,
   resolveExerciseVocabulary,
 } from "../exercise-vocabulary.js";
 
@@ -172,5 +174,78 @@ describe("resolveExerciseVocabulary — robustness on the generation path", () =
       "resistance_bands",
     ]).exercises.length;
     expect(fullGym).toBeGreaterThan(bodyweightOnly);
+  });
+});
+
+describe("capVocabularyForPrompt — the prompt budget", () => {
+  const fullGym = [
+    "barbell",
+    "dumbbells",
+    "cable_machine",
+    "smith_machine",
+    "leg_press",
+    "bench",
+    "pull_up_bar",
+    "kettlebell",
+    "resistance_bands",
+  ];
+
+  it("leaves a vocabulary that already fits untouched", () => {
+    const { exercises } = resolveExerciseVocabulary(["kettlebell"]);
+    const capped = capVocabularyForPrompt(exercises, 10_000);
+    expect(capped.exercises).toEqual(exercises);
+    expect(capped.droppedCount).toBe(0);
+  });
+
+  it("caps an oversized vocabulary and reports exactly what it dropped", () => {
+    const { exercises } = resolveExerciseVocabulary(fullGym);
+    expect(exercises.length).toBeGreaterThan(PROMPT_VOCABULARY_CAP);
+
+    const capped = capVocabularyForPrompt(exercises);
+    expect(capped.exercises).toHaveLength(PROMPT_VOCABULARY_CAP);
+    expect(capped.droppedCount).toBe(exercises.length - PROMPT_VOCABULARY_CAP);
+  });
+
+  it("keeps every body part the user could train", () => {
+    // The whole point of round-robining instead of slicing: the catalog is
+    // alphabetical, so a head-truncated list stops around "d" and contains no
+    // squat, row or press at all.
+    const { exercises } = resolveExerciseVocabulary(fullGym);
+    const capped = capVocabularyForPrompt(exercises);
+
+    const all = new Set(exercises.map((record) => record.bodyPart));
+    const kept = new Set(capped.exercises.map((record) => record.bodyPart));
+    expect(kept).toEqual(all);
+  });
+
+  it("keeps every piece of equipment the user owns represented", () => {
+    const { exercises } = resolveExerciseVocabulary(fullGym);
+    const capped = capVocabularyForPrompt(exercises);
+
+    const all = new Set(exercises.map((record) => record.equipment));
+    const kept = new Set(capped.exercises.map((record) => record.equipment));
+    expect(kept).toEqual(all);
+  });
+
+  it("is deterministic — the same spec must always produce the same prompt", () => {
+    const { exercises } = resolveExerciseVocabulary(fullGym);
+    const first = capVocabularyForPrompt(exercises).exercises.map((record) => record.id);
+    const second = capVocabularyForPrompt(exercises).exercises.map((record) => record.id);
+    expect(first).toEqual(second);
+  });
+
+  it("never emits a duplicate", () => {
+    const { exercises } = resolveExerciseVocabulary(fullGym);
+    const ids = capVocabularyForPrompt(exercises).exercises.map((record) => record.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("terminates on a zero or negative cap instead of looping", () => {
+    const { exercises } = resolveExerciseVocabulary(["kettlebell"]);
+    expect(capVocabularyForPrompt(exercises, 0)).toEqual({
+      exercises: [],
+      droppedCount: exercises.length,
+    });
+    expect(capVocabularyForPrompt(exercises, -5).exercises).toEqual([]);
   });
 });

@@ -163,3 +163,74 @@ export function resolveExerciseVocabulary(
 
   return { exercises, ignoredEquipment };
 }
+
+/**
+ * How many exercise names the generation prompt may carry.
+ *
+ * The full vocabulary is 280 names for a bodyweight-only user and 1,202 for
+ * someone who ticked every box — roughly 34 KB of prompt, paid on every
+ * generation, which is metered. 400 is where the two curves cross: a program is
+ * 3-6 sessions of ~6 exercises, so 400 candidates is already an order of
+ * magnitude more variety than any single plan can use, while costing ~11 KB.
+ *
+ * The cap is a BUDGET, not a filter: an exercise dropped here is still valid
+ * for the user's equipment, so {@link resolveExerciseVocabulary}'s full list —
+ * not this subset — is what a generated name is later resolved against.
+ */
+export const PROMPT_VOCABULARY_CAP = 400;
+
+/**
+ * Deterministically reduces a vocabulary to at most `cap` records for the prompt.
+ *
+ * Truncating the head of the list would be catastrophic rather than merely
+ * lossy: the catalog is sorted alphabetically by name, so `slice(0, 400)` stops
+ * around the letter "d" and hands the model a vocabulary with no squat, no row,
+ * no plank and no press. Instead this round-robins over
+ * `bodyPart × equipment` buckets, so every body part the user can train and
+ * every piece of equipment they own keeps proportional representation, and only
+ * the tail of the largest buckets is dropped.
+ *
+ * Deterministic on two axes, both required so the same spec always yields the
+ * same prompt: buckets are visited in first-appearance (catalog) order, and
+ * records within a bucket keep catalog order.
+ */
+export function capVocabularyForPrompt(
+  exercises: readonly ExerciseCatalogRecord[],
+  cap: number = PROMPT_VOCABULARY_CAP,
+): { exercises: ExerciseCatalogRecord[]; droppedCount: number } {
+  if (cap <= 0) {
+    return { exercises: [], droppedCount: exercises.length };
+  }
+  if (exercises.length <= cap) {
+    return { exercises: [...exercises], droppedCount: 0 };
+  }
+
+  const buckets = new Map<string, ExerciseCatalogRecord[]>();
+  for (const record of exercises) {
+    const key = `${record.bodyPart} ${record.equipment}`;
+    const bucket = buckets.get(key);
+    if (bucket) {
+      bucket.push(record);
+    } else {
+      buckets.set(key, [record]);
+    }
+  }
+
+  const ordered = [...buckets.values()];
+  const kept: ExerciseCatalogRecord[] = [];
+  for (let round = 0; kept.length < cap; round++) {
+    let placedThisRound = false;
+    for (const bucket of ordered) {
+      const record = bucket[round];
+      if (record === undefined) continue;
+      kept.push(record);
+      placedThisRound = true;
+      if (kept.length === cap) break;
+    }
+    // Every bucket is exhausted — impossible given the length check above, but
+    // an unconditional loop over a shrinking source is how infinite loops ship.
+    if (!placedThisRound) break;
+  }
+
+  return { exercises: kept, droppedCount: exercises.length - kept.length };
+}
