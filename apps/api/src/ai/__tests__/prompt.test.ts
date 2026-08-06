@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildPlanPrompt } from "../prompt.js";
+import { buildPlanPrompt, PLAN_PROMPT_TEMPLATE, buildPlanPromptVariables } from "../prompt.js";
+import { renderTemplate } from "../prompt-template.js";
 import type { PlanSpec } from "@kinora/contracts";
 
 // Diagnostic patterns mirrored from @kinora/domain assertNoDiagnosticLanguage
@@ -266,5 +267,61 @@ describe("buildPlanPrompt — closed exercise vocabulary (#352 slice B)", () => 
     for (const pattern of DIAGNOSTIC_PATTERNS) {
       expect(pattern.test(prompt), pattern.source).toBe(false);
     }
+  });
+});
+
+// langfuse-prompt-management, slice B1 — the renderer split must be a pure
+// refactor: rendering the exported template over the exported variables
+// producer must be BYTE-IDENTICAL to `buildPlanPrompt`'s own output, across
+// every branch the builder has (memory on/off, vocabulary on/off, every
+// intensityBias value). `toMatchSnapshot()` additionally freezes today's exact
+// wording against future accidental drift.
+describe("renderTemplate(PLAN_PROMPT_TEMPLATE, buildPlanPromptVariables(spec)) — byte-identical to buildPlanPrompt", () => {
+  function rendered(spec: PlanSpec): string {
+    return renderTemplate(PLAN_PROMPT_TEMPLATE, buildPlanPromptVariables(spec)).trim();
+  }
+
+  it("matches with no memory context", () => {
+    expect(rendered(baseSpec)).toBe(buildPlanPrompt(baseSpec));
+    expect(rendered(baseSpec)).toMatchSnapshot();
+  });
+
+  it("matches with memory context", () => {
+    const spec: PlanSpec = { ...baseSpec, memoryContext: ["Prefers morning workouts"] };
+    expect(rendered(spec)).toBe(buildPlanPrompt(spec));
+    expect(rendered(spec)).toMatchSnapshot();
+  });
+
+  it("matches with allowedExercises empty", () => {
+    const spec: PlanSpec = { ...baseSpec, allowedExercises: [] };
+    expect(rendered(spec)).toBe(buildPlanPrompt(spec));
+    expect(rendered(spec)).toMatchSnapshot();
+  });
+
+  it("matches with allowedExercises non-empty", () => {
+    const spec: PlanSpec = {
+      ...baseSpec,
+      allowedExercises: ["push-up", "barbell full squat", "dumbbell row"],
+    };
+    expect(rendered(spec)).toBe(buildPlanPrompt(spec));
+    expect(rendered(spec)).toMatchSnapshot();
+  });
+
+  it("matches for each intensityBias value: reduce", () => {
+    const spec: PlanSpec = { ...baseSpec, intensityBias: "reduce" };
+    expect(rendered(spec)).toBe(buildPlanPrompt(spec));
+    expect(rendered(spec)).toMatchSnapshot();
+  });
+
+  it("matches for each intensityBias value: increase", () => {
+    const spec: PlanSpec = { ...baseSpec, intensityBias: "increase" };
+    expect(rendered(spec)).toBe(buildPlanPrompt(spec));
+    expect(rendered(spec)).toMatchSnapshot();
+  });
+
+  it("matches for each intensityBias value: maintain", () => {
+    const spec: PlanSpec = { ...baseSpec, intensityBias: "maintain" };
+    expect(rendered(spec)).toBe(buildPlanPrompt(spec));
+    expect(rendered(spec)).toMatchSnapshot();
   });
 });

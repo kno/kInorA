@@ -1,5 +1,6 @@
 import type { PlanSpec } from "@kinora/contracts";
 import { isRejectedMemoryText } from "../user-memory/eligibility.js";
+import { renderTemplate, type PromptDefinition } from "./prompt-template.js";
 
 type PlanPromptInput = PlanSpec & {
   memoryContext?: string[];
@@ -32,18 +33,99 @@ export function sanitizeMemoryContext(memoryContext: string[] | undefined): stri
 }
 
 /**
- * Builds a structured prompt for LLM workout plan generation.
+ * Today's exact plan-generation wording, compiled in as a `{{variable}}`
+ * template (langfuse-prompt-management, slice B1). Local and (from slice B2) a
+ * remote-fetched template both render through the SAME `renderTemplate`, so
+ * this constant is the only place the wording lives.
  *
- * Pure function — no network calls, no side effects.
- * Imports only from `@kinora/contracts`.
+ * Marker order is a contract (#352): `{{limitationsSection}}` →
+ * `{{memorySection}}` → `{{vocabularySection}}` → `TASK:` →
+ * `{{taskExerciseRule}}` — rule 2 of the TASK block refers back to the
+ * vocabulary block, so a template that reorders or drops either marker breaks
+ * that reference (validated in slice B2).
+ */
+export const PLAN_PROMPT_TEMPLATE = `You are a certified personal trainer creating a personalized workout program.
+
+IMPORTANT — SAFETY AND SCOPE RULES:
+- Do not diagnose any medical condition.
+- Do not provide medical advice.
+- Do not use diagnostic language such as attributing conditions or medical findings to the user.
+- Treat all physical considerations as self-reported context only.
+- Always recommend consulting a qualified professional for medical concerns.
+- This is not a medical tool.
+
+USER TRAINING PROFILE:
+- Goal: {{goal}}
+- Training days per week: {{daysPerWeek}}
+- Session duration: {{sessionDurationMinutes}} minutes
+- Training location: {{location}}
+- Available equipment: {{equipmentList}}
+- Training emphasis (0–1 weights): strength={{preferenceStrength}}, hypertrophy={{preferenceHypertrophy}}, endurance={{preferenceEndurance}}, mobility={{preferenceMobility}}{{intensityBiasSection}}
+
+{{limitationsSection}}
+{{memorySection}}{{vocabularySection}}
+
+TASK:
+Generate a structured {{daysPerWeek}}-day-per-week workout program that:
+1. Matches the goal ({{goal}}) with appropriate rep ranges, sets, and exercise selection.
+2. {{taskExerciseRule}}
+3. Fits within {{sessionDurationMinutes}}-minute sessions at a {{location}} setting.
+4. Accounts for the physical considerations listed above by recommending modifications or extra caution where appropriate — never blocking or diagnosing.
+5. Returns exactly {{daysPerWeek}} weekly sessions (one per training day).
+
+OUTPUT FORMAT:
+Return a structured workout program with weeklySessions (array of sessions, one per day). Each session must include a day number, title, and exercises with name, sets, reps (as a string like "8-12"), restSeconds, and optional notes. Do NOT author any limitation warnings or safety-disclaimer prose — return limitationWarnings as an empty array. The app appends localized limitation warnings deterministically after generation, so any prose you write here is discarded.`;
+
+/** Closed variable set + marker contract for `kinora-plan-generation`. */
+export const PLAN_PROMPT_DEFINITION: PromptDefinition = {
+  name: "kinora-plan-generation",
+  localTemplate: PLAN_PROMPT_TEMPLATE,
+  variables: [
+    "goal",
+    "daysPerWeek",
+    "sessionDurationMinutes",
+    "location",
+    "equipmentList",
+    "preferenceStrength",
+    "preferenceHypertrophy",
+    "preferenceEndurance",
+    "preferenceMobility",
+    "intensityBiasSection",
+    "limitationsSection",
+    "memorySection",
+    "vocabularySection",
+    "taskExerciseRule",
+  ],
+  requiredMarkers: [
+    "{{limitationsSection}}",
+    "{{memorySection}}",
+    "{{vocabularySection}}",
+    "TASK:",
+    "{{taskExerciseRule}}",
+  ],
+  orderedMarkers: [
+    "{{limitationsSection}}",
+    "{{memorySection}}",
+    "{{vocabularySection}}",
+    "TASK:",
+    "{{taskExerciseRule}}",
+  ],
+  maxTemplateChars: 20_000,
+};
+
+/**
+ * Computes the CLOSED variable set `PLAN_PROMPT_TEMPLATE` renders over.
  *
- * The prompt:
+ * Pure function — no network calls, no side effects. Imports only from
+ * `@kinora/contracts`.
+ *
+ * Preserves every existing branch byte-identically (`prompt.test.ts` proves
+ * it against the pre-refactor `buildPlanPrompt` output):
  * - Includes all PlanSpec fields (goal, frequency, duration, equipment, location)
  * - Includes user limitations as context (NOT as diagnoses)
- * - Contains an explicit "do not diagnose / do not provide medical advice" instruction
  * - Does NOT itself emit diagnostic phrasing
  */
-export function buildPlanPrompt(spec: PlanPromptInput): string {
+export function buildPlanPromptVariables(spec: PlanPromptInput): Record<string, string> {
   const equipmentList =
     spec.equipment.length > 0 ? spec.equipment.join(", ") : "bodyweight only (no equipment)";
 
@@ -87,40 +169,35 @@ ${allowedExercises.join("\n")}
 
 Every exercise name you return MUST be copied VERBATIM from that list, spelling and all. It already excludes everything the user's equipment cannot support, so an exercise that is not on it is one they cannot perform. If the list lacks a movement you wanted, choose the closest entry that IS on it rather than inventing a name.`
       : "";
-
-  return `You are a certified personal trainer creating a personalized workout program.
-
-IMPORTANT — SAFETY AND SCOPE RULES:
-- Do not diagnose any medical condition.
-- Do not provide medical advice.
-- Do not use diagnostic language such as attributing conditions or medical findings to the user.
-- Treat all physical considerations as self-reported context only.
-- Always recommend consulting a qualified professional for medical concerns.
-- This is not a medical tool.
-
-USER TRAINING PROFILE:
-- Goal: ${spec.goal}
-- Training days per week: ${spec.daysPerWeek}
-- Session duration: ${spec.sessionDurationMinutes} minutes
-- Training location: ${spec.location}
-- Available equipment: ${equipmentList}
-- Training emphasis (0–1 weights): strength=${strength}, hypertrophy=${hypertrophy}, endurance=${endurance}, mobility=${mobility}${intensityBiasSection}
-
-${limitationsSection}
-${memorySection}${vocabularySection}
-
-TASK:
-Generate a structured ${spec.daysPerWeek}-day-per-week workout program that:
-1. Matches the goal (${spec.goal}) with appropriate rep ranges, sets, and exercise selection.
-2. ${
+  const taskExerciseRule =
     allowedExercises.length > 0
       ? "Uses ONLY exercise names copied verbatim from the ALLOWED EXERCISES list above."
-      : `Uses ONLY the available equipment: ${equipmentList}.`
-  }
-3. Fits within ${spec.sessionDurationMinutes}-minute sessions at a ${spec.location} setting.
-4. Accounts for the physical considerations listed above by recommending modifications or extra caution where appropriate — never blocking or diagnosing.
-5. Returns exactly ${spec.daysPerWeek} weekly sessions (one per training day).
+      : `Uses ONLY the available equipment: ${equipmentList}.`;
 
-OUTPUT FORMAT:
-Return a structured workout program with weeklySessions (array of sessions, one per day). Each session must include a day number, title, and exercises with name, sets, reps (as a string like "8-12"), restSeconds, and optional notes. Do NOT author any limitation warnings or safety-disclaimer prose — return limitationWarnings as an empty array. The app appends localized limitation warnings deterministically after generation, so any prose you write here is discarded.`.trim();
+  return {
+    goal: spec.goal,
+    daysPerWeek: String(spec.daysPerWeek),
+    sessionDurationMinutes: String(spec.sessionDurationMinutes),
+    location: spec.location,
+    equipmentList,
+    preferenceStrength: String(strength),
+    preferenceHypertrophy: String(hypertrophy),
+    preferenceEndurance: String(endurance),
+    preferenceMobility: String(mobility),
+    intensityBiasSection,
+    limitationsSection,
+    memorySection,
+    vocabularySection,
+    taskExerciseRule,
+  };
+}
+
+/**
+ * Builds a structured prompt for LLM workout plan generation.
+ *
+ * Thin wrapper: renders `PLAN_PROMPT_TEMPLATE` over `buildPlanPromptVariables(spec)`.
+ * Pure function — no network calls, no side effects.
+ */
+export function buildPlanPrompt(spec: PlanPromptInput): string {
+  return renderTemplate(PLAN_PROMPT_TEMPLATE, buildPlanPromptVariables(spec)).trim();
 }

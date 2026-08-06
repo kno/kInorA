@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { buildReplyPrompt, buildExtractionPrompt } from "../extraction-prompt.js";
+import {
+  buildReplyPrompt,
+  buildExtractionPrompt,
+  REPLY_PROMPT_TEMPLATE,
+  EXTRACTION_PROMPT_TEMPLATE,
+  buildReplyPromptVariables,
+  buildExtractionPromptVariables,
+} from "../extraction-prompt.js";
+import { renderTemplate } from "../prompt-template.js";
 import type { ChatExtractInput } from "../extraction-port.js";
 
 const baseInput: ChatExtractInput = {
@@ -20,29 +28,10 @@ describe("buildReplyPrompt (Pass 1 — conversational prose)", () => {
     expect(prompt).toContain("I want to build muscle four days a week");
   });
 
-  it("masks limitation/health text from the current draft via mask()", () => {
-    const prompt = buildReplyPrompt(baseInput);
-    expect(prompt).not.toContain("lower back pain");
-    expect(prompt).toContain("[REDACTED]");
-  });
-
-  it("masks a KNOWN limitation term even when the user repeats it in this turn's message", () => {
-    const prompt = buildReplyPrompt({
-      ...baseInput,
-      message: "I still have lower back pain so keep it light",
-    });
-    expect(prompt).not.toContain("lower back pain");
-    expect(prompt).toContain("[REDACTED]");
-  });
-
-  it("does NOT mask a first-mention health/limitation phrase (accurate, not a bug)", () => {
-    const prompt = buildReplyPrompt({
-      message: "I have lower back pain, build muscle 4 days",
-      currentDraft: {},
-    });
-    expect(prompt).toContain("lower back pain");
-    expect(prompt).not.toContain("[REDACTED]");
-  });
+  // Masking of known limitation terms MOVED to `extraction-adapter.test.ts`
+  // (langfuse-prompt-management, slice B1) — `buildReplyPrompt` now returns
+  // UNMASKED text; the call-site masking added in A2 is what actually reaches
+  // the model/callback, so that is where the masking assertions belong.
 
   it("redacts unsafe memory context via sanitizeMemoryContext", () => {
     const prompt = buildReplyPrompt({
@@ -141,28 +130,10 @@ describe("buildExtractionPrompt (Pass 2 — seeded with the assistant reply)", (
     expect(prompt.toLowerCase()).toMatch(/consistent/);
   });
 
-  it("masks limitation/health text from the current draft via mask()", () => {
-    const prompt = buildExtractionPrompt(baseInput, REPLY);
-    expect(prompt).not.toContain("lower back pain");
-    expect(prompt).toContain("[REDACTED]");
-  });
-
-  it("masks a KNOWN limitation term even if it appears inside the assistant reply", () => {
-    // The seeded reply is part of the assembled prompt and MUST be scrubbed of
-    // already-known limitation terms just like the rest of the prompt.
-    const prompt = buildExtractionPrompt(baseInput, "Given your lower back pain, let's keep it light.");
-    expect(prompt).not.toContain("lower back pain");
-    expect(prompt).toContain("[REDACTED]");
-  });
-
-  it("does NOT mask a first-mention health/limitation phrase (accurate, not a bug)", () => {
-    const prompt = buildExtractionPrompt(
-      { message: "I have lower back pain, build muscle 4 days", currentDraft: {} },
-      "Understood.",
-    );
-    expect(prompt).toContain("lower back pain");
-    expect(prompt).not.toContain("[REDACTED]");
-  });
+  // Masking of known limitation terms (including inside the seeded reply)
+  // MOVED to `extraction-adapter.test.ts` (langfuse-prompt-management, slice
+  // B1) — `buildExtractionPrompt` now returns UNMASKED text; the call-site
+  // masking added in A2 is what actually reaches the model/callback.
 
   it("redacts unsafe memory context via sanitizeMemoryContext", () => {
     const prompt = buildExtractionPrompt(
@@ -200,5 +171,68 @@ describe("buildExtractionPrompt (Pass 2 — seeded with the assistant reply)", (
     expect(prompt.toLowerCase()).toMatch(
       /do not diagnose|do not provide medical advice|not a medical|no medical/,
     );
+  });
+});
+
+// langfuse-prompt-management, slice B1 — the renderer split must be a pure
+// refactor: rendering the exported template over the exported variables
+// producer must be BYTE-IDENTICAL to the builder's own output. `toMatchSnapshot()`
+// additionally freezes today's exact wording against future accidental drift.
+describe("renderTemplate(REPLY_PROMPT_TEMPLATE, buildReplyPromptVariables(input)) — byte-identical to buildReplyPrompt", () => {
+  it("matches for the base input", () => {
+    const rendered = renderTemplate(REPLY_PROMPT_TEMPLATE, buildReplyPromptVariables(baseInput)).trim();
+    expect(rendered).toBe(buildReplyPrompt(baseInput));
+    expect(rendered).toMatchSnapshot();
+  });
+
+  it("matches with an empty draft and no missing fields", () => {
+    const input: ChatExtractInput = { message: "help me get fit", currentDraft: {} };
+    const rendered = renderTemplate(REPLY_PROMPT_TEMPLATE, buildReplyPromptVariables(input)).trim();
+    expect(rendered).toBe(buildReplyPrompt(input));
+    expect(rendered).toMatchSnapshot();
+  });
+
+  it("matches with memory context", () => {
+    const input: ChatExtractInput = {
+      ...baseInput,
+      memoryContext: ["Prefers morning workouts"],
+    };
+    const rendered = renderTemplate(REPLY_PROMPT_TEMPLATE, buildReplyPromptVariables(input)).trim();
+    expect(rendered).toBe(buildReplyPrompt(input));
+    expect(rendered).toMatchSnapshot();
+  });
+});
+
+describe("renderTemplate(EXTRACTION_PROMPT_TEMPLATE, buildExtractionPromptVariables(input, reply)) — byte-identical to buildExtractionPrompt", () => {
+  it("matches for the base input", () => {
+    const rendered = renderTemplate(
+      EXTRACTION_PROMPT_TEMPLATE,
+      buildExtractionPromptVariables(baseInput, REPLY),
+    ).trim();
+    expect(rendered).toBe(buildExtractionPrompt(baseInput, REPLY));
+    expect(rendered).toMatchSnapshot();
+  });
+
+  it("matches with an empty draft and no missing fields", () => {
+    const input: ChatExtractInput = { message: "help me get fit", currentDraft: {} };
+    const rendered = renderTemplate(
+      EXTRACTION_PROMPT_TEMPLATE,
+      buildExtractionPromptVariables(input, "Sure!"),
+    ).trim();
+    expect(rendered).toBe(buildExtractionPrompt(input, "Sure!"));
+    expect(rendered).toMatchSnapshot();
+  });
+
+  it("matches with memory context", () => {
+    const input: ChatExtractInput = {
+      ...baseInput,
+      memoryContext: ["Prefers morning workouts"],
+    };
+    const rendered = renderTemplate(
+      EXTRACTION_PROMPT_TEMPLATE,
+      buildExtractionPromptVariables(input, REPLY),
+    ).trim();
+    expect(rendered).toBe(buildExtractionPrompt(input, REPLY));
+    expect(rendered).toMatchSnapshot();
   });
 });

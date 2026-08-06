@@ -4,7 +4,8 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { PlanSpecDraftSchema } from "@kinora/contracts";
 import type { PlanSpecDraft } from "@kinora/contracts";
 import type { ChatExtractInput, PlanSpecExtractor } from "./extraction-port.js";
-import { buildReplyPrompt, buildExtractionPrompt } from "./extraction-prompt.js";
+import { buildReplyPrompt, buildExtractionPrompt, limitationTermsOf } from "./extraction-prompt.js";
+import { mask } from "./mask.js";
 import type { DynamicConfigRepo } from "./dynamic-generator.js";
 import type { AiTracingDeps, TracingHandler } from "./langfuse-handler.js";
 
@@ -39,13 +40,16 @@ import type { AiTracingDeps, TracingHandler } from "./langfuse-handler.js";
  * read from the DB config on EVERY call and a fresh model is built via the
  * injected factory. Tests inject a deterministic fake factory — no network.
  *
- * OBSERVABILITY / MASKING (langfuse-prompt-management, slice A2): the prompts
- * handed to the model are `buildReplyPrompt()` / `buildExtractionPrompt()`
- * output, which mask ALL already-known limitation/health terms via `mask()`
- * (a first-mention phrase is unavoidably present — it is the minimal exposure
- * the feature needs, see `extraction-prompt.ts`). Superseded: this used to
- * say NO callback handler is ever attached here — that rationale is
- * deliberately overridden now, mirroring `invokeChain`'s A1 wiring exactly.
+ * OBSERVABILITY / MASKING (langfuse-prompt-management, slice B1): `buildReplyPrompt()` /
+ * `buildExtractionPrompt()` now return UNMASKED text — masking runs HERE, on
+ * the rendered string, via `mask(prompt, limitationTermsOf(input))` at both
+ * call sites, exactly mirroring `invokeChain`'s A1 wiring for the plan prompt.
+ * This is the ONLY masking point for the chat path (one masking rule, no path
+ * where a template can bypass it). All already-known limitation/health terms
+ * are scrubbed (a first-mention phrase is unavoidably present — it is the
+ * minimal exposure the feature needs, see `extraction-prompt.ts`). Superseded:
+ * this used to say NO callback handler is ever attached here — that rationale
+ * is deliberately overridden now, mirroring `invokeChain`'s A1 wiring exactly.
  * An optional `deps.handler` (the same injectable Langfuse tracing handler
  * built once in `app.ts`) is attached conditionally at BOTH passes —
  * `...(handler ? { callbacks: [handler] } : {})` — so the no-handler call
@@ -194,9 +198,9 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
   async *streamReply(input: ChatExtractInput, signal: AbortSignal): AsyncIterable<string> {
     if (signal.aborted) return;
     const { model, metadata } = await this.resolve();
-    // buildReplyPrompt masks all KNOWN limitation terms before the model
-    // (and hence any observability) sees them.
-    const prompt = buildReplyPrompt(input);
+    // mask() runs on the RENDERED string before the model (and hence any
+    // observability) sees it — buildReplyPrompt itself returns unmasked text.
+    const prompt = mask(buildReplyPrompt(input), limitationTermsOf(input));
     // `signal` is threaded into the LangChain call options so an external abort
     // — a wall-clock timeout OR client disconnect firing mid-turn — cancels this
     // in-flight streaming round-trip instead of blocking on the provider.
@@ -227,9 +231,10 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
   ): Promise<PlanSpecDraft> {
     const { model, metadata } = await this.resolve();
     // The Pass-2 prompt is SEEDED with Pass 1's reply so the extraction is
-    // consistent with what the assistant just told the user. Masking still
-    // scrubs known limitation terms everywhere, including inside the reply.
-    const prompt = buildExtractionPrompt(input, assistantReply);
+    // consistent with what the assistant just told the user. mask() runs on
+    // the RENDERED string and scrubs known limitation terms everywhere,
+    // including inside the seeded reply.
+    const prompt = mask(buildExtractionPrompt(input, assistantReply), limitationTermsOf(input));
     const chain = model.withStructuredOutput(PlanSpecDraftSchema, { method: "jsonSchema" });
     // Forward `signal` into the LangChain call options (the same `{ signal }`
     // shape `.stream()` accepts) so an external abort — a wall-clock timeout OR

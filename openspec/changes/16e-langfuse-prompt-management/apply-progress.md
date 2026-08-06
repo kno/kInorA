@@ -258,3 +258,232 @@ just wasn't reflected in this file at the time A1 went idle. See the Slice A2 se
 - Production Langfuse credential validity for the CHAT path specifically remains unexercised until
   A2 deploys — same deploy-safe posture A1 documented: either a real trace or one secret-free
   auth-failure log line, no behavioural change either way.
+
+## Slice B1 — Renderer + Template Split + Masking Relocation
+
+**Status: DONE.** All B1.1–B1.11 tasks in `tasks.md` are complete; none deferred, none left unchecked.
+
+- Prerequisite state confirmed before branching: A2's PR #370 was MERGED to `main` as squash commit
+  `d132d99`, and `main` was pulled fresh before branching (`stacked-to-main`, no child branch off an
+  unmerged parent).
+- Branch: `feat/langfuse-prompt-renderer` (from `main`).
+- PR: opened against `main` (see the PR URL reported alongside this record). `chain_strategy:
+  stacked-to-main`. Open, NOT merged. Do not merge from this file's authority; the orchestrator owns
+  the review/merge lifecycle.
+- 5 work-unit commits on the branch, RED separated from GREEN throughout:
+  1. RED — `prompt-template.test.ts` (renderer unit tests), confirmed failing (module did not exist).
+  2. GREEN — `apps/api/src/ai/prompt-template.ts` created (`renderTemplate`, `templateVariablesOf`,
+     `PromptDefinition`, `TEMPLATE_MARKER_OPEN`).
+  3. RED — byte-identical/snapshot tests added to `prompt.test.ts` referencing
+     `PLAN_PROMPT_TEMPLATE`/`buildPlanPromptVariables` (did not exist yet), confirmed failing (7/47
+     new cases red, existing 40 still green).
+  4. GREEN — `prompt.ts` split: `PLAN_PROMPT_TEMPLATE`, `PLAN_PROMPT_DEFINITION`,
+     `buildPlanPromptVariables(spec)`; `buildPlanPrompt` becomes the thin `renderTemplate` wrapper.
+     All 47 tests pass, 7 snapshots written.
+  5. RED — byte-identical/snapshot tests added to `extraction-prompt.test.ts` referencing
+     `REPLY_PROMPT_TEMPLATE`/`EXTRACTION_PROMPT_TEMPLATE`/`buildReplyPromptVariables`/
+     `buildExtractionPromptVariables` (did not exist yet), confirmed failing (6/33 new cases red).
+  6. GREEN (combined, see note below) — `extraction-prompt.ts` split into templates + variables
+     producers; `mask()` removed from both chat builders; `extraction-adapter.ts` now masks the
+     rendered string at both call sites (`streamReply`, `extract`); the in-builder masking assertions
+     moved from `extraction-prompt.test.ts` to a new
+     `describe("PlanSpecExtractionAdapter masking relocation (langfuse-prompt-management, slice B1)")`
+     block in `extraction-adapter.test.ts`.
+
+**Deviation from the strict per-substep RED/GREEN convention, documented rather than silently
+accepted:** commit 6 combines B1.7 (template extraction, still masked) and B1.8/B1.9 (mask
+relocation) into one GREEN commit, instead of three separate commits. Reason: the byte-identical
+test design in `extraction-prompt.test.ts` (commit 5's RED) compares raw `renderTemplate(...)`
+output — with NO mask applied inside the test helper — against `buildReplyPrompt`/
+`buildExtractionPrompt`'s own output. That equality only holds once the builders themselves stop
+masking, so an intermediate "template split, still masked" GREEN state would have made those exact
+RED tests fail for the wrong reason (a masking mismatch, not a missing export) and then pass a
+second time after an unrelated follow-up commit — a confusing, not more auditable, git history. The
+"still masked" intermediate state was manually verified transiently during implementation (confirmed
+it reproduces byte-identical output before mask relocation) but never committed on its own. RED
+(commit 5) and GREEN (commit 6) remain properly separated; only B1.7/B1.8/B1.9's internal boundary is
+collapsed.
+
+### Task-by-task (tasks.md B1.1–B1.11)
+
+- [x] B1.1 — RED: `prompt-template.test.ts` (9 cases: substitution, repeated variable, empty-string
+  variable, unknown marker left intact, no-marker template, purity, `templateVariablesOf` extraction,
+  `TEMPLATE_MARKER_OPEN` literal). Confirmed failing (module not found) before B1.2.
+- [x] B1.2 — GREEN: `apps/api/src/ai/prompt-template.ts` — `renderTemplate` (split/join per variable,
+  literal, never throws), `templateVariablesOf` (regex-based, first-seen order, de-duplicated),
+  `PromptDefinition` interface (exact shape from design's Interfaces/Contracts block),
+  `TEMPLATE_MARKER_OPEN = "{{"`.
+- [x] B1.3 — RED: 7 byte-identical/snapshot cases added to `prompt.test.ts` (no memory / with memory /
+  `allowedExercises` empty / non-empty / `intensityBias` reduce/increase/maintain). Confirmed failing
+  before B1.4 (`buildPlanPromptVariables`/`PLAN_PROMPT_TEMPLATE` did not exist).
+- [x] B1.4 — GREEN: `PLAN_PROMPT_TEMPLATE` extracted verbatim (including the em dash in "SAFETY AND
+  SCOPE RULES" and the en dash in "0–1 weights"); `buildPlanPromptVariables(spec)` computes the exact
+  same 14 values the old inline builder computed (`equipmentList`, `limitationsSection`,
+  `intensityBiasSection`, `memorySection`, `vocabularySection`, `taskExerciseRule`, plus the 8 scalar
+  fields); `PLAN_PROMPT_DEFINITION` matches design's variable/marker table exactly; `buildPlanPrompt`
+  is now `renderTemplate(PLAN_PROMPT_TEMPLATE, buildPlanPromptVariables(spec)).trim()`.
+- [x] B1.5 — `toMatchSnapshot()` added to all 7 B1.3 cases; 7 snapshots written on first GREEN run.
+- [x] B1.6 — RED: 6 byte-identical/snapshot cases added to `extraction-prompt.test.ts` (reply: base /
+  empty draft / memory; extraction: base / empty draft / memory). Confirmed failing before B1.7/B1.9
+  (both the missing exports AND, transiently, the masking mismatch described above).
+- [x] B1.7 — GREEN: `REPLY_PROMPT_TEMPLATE`/`EXTRACTION_PROMPT_TEMPLATE` +
+  `REPLY_PROMPT_DEFINITION`/`EXTRACTION_PROMPT_DEFINITION` extracted verbatim in
+  `extraction-prompt.ts`; `buildReplyPromptVariables`/`buildExtractionPromptVariables` added;
+  `limitationTermsOf` exported (was file-private).
+- [x] B1.8 — RED (folded into commit 5, see deviation note): the byte-identical tests assert the
+  UNMASKED renderer output equals the builder's own output, which is only true once masking is
+  removed from the builder — this IS the masking-relocation RED signal for this slice.
+- [x] B1.9 — GREEN: `mask(...)` removed from inside `buildReplyPrompt`/`buildExtractionPrompt` (both
+  now return `renderTemplate(...).trim()` with no masking); grepped for other callers before removing
+  — `extraction-adapter.ts` is the ONLY caller of either function outside tests, confirmed via
+  `grep -rn "buildReplyPrompt\|buildExtractionPrompt" apps/api/src`; `extraction-adapter.ts` updated
+  to `mask(buildReplyPrompt(input), limitationTermsOf(input))` /
+  `mask(buildExtractionPrompt(input, assistantReply), limitationTermsOf(input))` at its two call
+  sites, mirroring `invokeChain`'s A1 masking idiom exactly.
+- [x] B1.10 — REFACTOR: confirmed via `grep -rn "mask(" apps/api/src` (excluding tests/mask.ts itself)
+  that the LLM-trace-payload masking now runs at exactly two files/three call sites total:
+  `adapter-factory.ts`'s `invokeChain` (plan prompt) and `extraction-adapter.ts`'s `streamReply` +
+  `extract` (both chat prompts). `generation-service.ts:504`'s `mask(...)` call is a PRE-EXISTING,
+  unrelated usage (memory-retrieval query text, not a trace payload) and is out of this slice's scope
+  — not counted against the "two invocation sites" design claim, which is specifically about the
+  three LLM-prompt/trace-payload masking points A1/A2/B1 designed for.
+- [x] B1.11 — Verify: all gates green (see Gate Evidence below); `prompt.test.ts` (47 tests) and
+  `extraction-prompt.test.ts` (27 tests, 6 relocated to `extraction-adapter.test.ts`) content
+  assertions unchanged and passing.
+
+### Files created
+
+- `apps/api/src/ai/prompt-template.ts` — `renderTemplate`, `templateVariablesOf`, `PromptDefinition`,
+  `TEMPLATE_MARKER_OPEN`.
+- `apps/api/src/ai/__tests__/prompt-template.test.ts`.
+- `apps/api/src/ai/__tests__/__snapshots__/prompt.test.ts.snap` (7 snapshots).
+- `apps/api/src/ai/__tests__/__snapshots__/extraction-prompt.test.ts.snap` (6 snapshots).
+
+### Files modified
+
+- `apps/api/src/ai/prompt.ts` — `PLAN_PROMPT_TEMPLATE`, `PLAN_PROMPT_DEFINITION`,
+  `buildPlanPromptVariables(spec)` exported; `buildPlanPrompt` is now the thin render wrapper.
+- `apps/api/src/ai/extraction-prompt.ts` — `REPLY_PROMPT_TEMPLATE`/`EXTRACTION_PROMPT_TEMPLATE` +
+  their `PromptDefinition`s + `buildReplyPromptVariables`/`buildExtractionPromptVariables` added;
+  `limitationTermsOf` exported; `mask` import removed (no longer used in this file);
+  `buildReplyPrompt`/`buildExtractionPrompt` now return UNMASKED text; file-level docstring rewritten
+  to describe the new masking-relocation contract.
+- `apps/api/src/ai/extraction-adapter.ts` — imports `limitationTermsOf` + `mask`; both `streamReply`
+  and `extract` now wrap their prompt in `mask(..., limitationTermsOf(input))`; class-level docstring
+  rewritten to describe the B1 masking relocation (supersedes the A2-era docstring, which described
+  masking as already happening inside the builders).
+- `apps/api/src/ai/__tests__/prompt.test.ts` — 7 new byte-identical/snapshot cases added; all existing
+  content assertions untouched.
+- `apps/api/src/ai/__tests__/extraction-prompt.test.ts` — 6 new byte-identical/snapshot cases added;
+  6 masking-specific assertions REMOVED (moved to `extraction-adapter.test.ts`); the
+  `sanitizeMemoryContext`-specific assertions (which check literal `[REDACTED]` inserted by
+  `sanitizeMemoryContext`, unrelated to `mask()`) were KEPT — they are unaffected by the masking
+  relocation since that redaction happens in the variables producer, not via `mask()`.
+- `apps/api/src/ai/__tests__/extraction-adapter.test.ts` — new
+  `describe("PlanSpecExtractionAdapter masking relocation (langfuse-prompt-management, slice B1)")`
+  block with 4 cases: known-limitation masked in both passes; known term masked even when repeated in
+  the user's message; known term masked even inside the seeded assistant reply; first-mention phrase
+  NOT masked in either pass (accurate, not a bug).
+- `openspec/changes/16e-langfuse-prompt-management/tasks.md` — B1.1–B1.11 marked `[x]`.
+
+### Interface/signature conformance to design.md
+
+No deviation from `design.md`'s `## Interfaces / Contracts` section or the variable-sets table for
+the B1-scoped shapes:
+
+- `PromptDefinition`, `renderTemplate`, `templateVariablesOf`, `TEMPLATE_MARKER_OPEN` — exact match.
+- `PLAN_PROMPT_DEFINITION`/`REPLY_PROMPT_DEFINITION`/`EXTRACTION_PROMPT_DEFINITION` — variable sets,
+  `requiredMarkers`, and `orderedMarkers` match the design's variable-sets table exactly, including
+  the marker ORDER contract (`{{limitationsSection}}` → `{{memorySection}}` →
+  `{{vocabularySection}}` → `TASK:` → `{{taskExerciseRule}}` for the plan prompt) that B2's validation
+  algorithm will check.
+- The #352 closed-vocabulary contract preserved exactly: `vocabularySection` and `taskExerciseRule`
+  both emit `""`/the free-text rule when `allowedExercises` is empty, and the block + back-reference
+  together when non-empty — proven byte-identical by the B1.3 snapshot tests, not just asserted.
+- Whitespace contract preserved: `{{memorySection}}{{vocabularySection}}` remain adjacent with NO
+  separator in the template; each section carries its own leading newlines when non-empty.
+- Non-ASCII characters preserved verbatim (em dash, en dash) — confirmed by the byte-identical tests
+  passing without a normalizing editor having touched them.
+- `mask` now runs at exactly two invocation sites (`invokeChain`, `extraction-adapter.ts`'s two call
+  sites) for all three prompts, per design's "Where `mask` runs" architecture decision.
+
+### What B1 deliberately left for later slices
+
+- No `RemoteTemplateSchema`, no `validateRemoteTemplate`, no `LangfusePromptGateway`, no
+  `ResolvePrompt`, no `promptSource`/`promptLinked` attribution, no `prompt-linked-chain.ts`. All of
+  that is B2/C scope, untouched here.
+- `docker-compose.yml` untouched (B2 scope).
+- The plan-generation masking call site (`adapter-factory.ts`'s `invokeChain`) was NOT modified — it
+  already masked at the call site since A1; B1 only changed how `buildPlanPrompt` itself is composed
+  internally (template + variables producer), not where it is invoked or masked.
+
+### Gate Evidence
+
+- `pnpm -r test` — apps/api: 164 test files, 1983 passed, 116 skipped; apps/web: 155 test files, 1640
+  passed; apps/mobile: 53 test files, 467 passed; packages (contracts/domain/i18n/exercise-catalog)
+  all green. All green, no failures, exit 0.
+- `pnpm --filter api test:coverage` — 164 test files, 1983 passed, 116 skipped, exit 0. Functions
+  coverage **88.19%** (gate 85%), up slightly from A2's post-slice baseline of 88.1% (new pure
+  functions in `prompt-template.ts`/`prompt.ts`/`extraction-prompt.ts` are fully covered by the
+  byte-identical + unit tests).
+- `pnpm type-check` — all 7 workspace projects, Done, no errors.
+- `pnpm build` — deps-guard ✅, ui-api-guard ✅ (48 client files scanned, no violations), architecture
+  (0 dependency violations across 2000 modules / 5983 dependencies) ✅, architecture negative guard
+  ✅, every package/app `tsc`/`next build` Done, exit 0.
+- `git diff --stat main...HEAD` — **724 changed lines** (569 insertions + 155 deletions) across the 8
+  hand-authored source/test files, EXCLUDING the two generated `.snap` snapshot files (481 lines,
+  auto-written by `toMatchSnapshot()`, not hand-authored diff). Including the snapshots the raw stat
+  is 1205 changed lines. 724 is under the 800-line budget; the review workload forecast's own
+  estimate (~730) assumed generated snapshot content would not count toward the budget the same way
+  hand-authored diff does — consistent with how A1 excluded the `openspec/` planning-artifact commit
+  from its own reported total. **Flagging this explicitly for the orchestrator/reviewer to confirm**:
+  if snapshot lines ARE meant to count, the raw total (1205) exceeds 800 and this slice may need the
+  B1a/B1b split the design already named as the fallback seam. No further split was performed
+  pre-emptively per the team-lead's explicit instruction ("Do not pre-split unless review actually
+  flags it").
+
+### Open items
+
+- **Budget measurement ambiguity (see Gate Evidence above)** — the orchestrator/reviewer must confirm
+  whether the ~730-line forecast (and the 800-line budget itself) is meant to include or exclude
+  generated snapshot file content before deciding whether this PR needs the B1a/B1b split. This
+  executor did NOT pre-split, per explicit instruction.
+- A2's PR #370 was merged to `main` as squash commit `d132d99` before B1 branched — confirmed via
+  `git log` at branch time. `stacked-to-main` was respected: B1 branched from freshly-pulled `main`.
+  B2 must NOT branch until B1's PR merges.
+- Production Langfuse credential validity remains unexercised for B1 specifically — B1 has NO remote
+  fetch path yet (that is B2), so this is unaffected by B1 and stays exactly as A1/A2 left it.
+
+### Orchestrator ruling and independent byte-identity proof (B1)
+
+**Budget ruling: 724 is the number that governs; no B1a/B1b split is needed.** The 800-line budget
+exists to protect reviewer attention. A generated `.snap` file is not read line by line during
+review — it is an assertion artifact, regenerated mechanically — so its 481 lines do not consume
+review attention proportionally to hand-authored code. B1 ships as one PR.
+
+**The in-branch "byte-identical" tests could not prove byte-identity, and the snapshots as committed
+do not either.** Both `.snap` files were written in the GREEN commits (`14012e3`, `d1b7252`), i.e.
+AFTER the refactor, so they freeze the POST-refactor output. And the in-branch assertion compares
+`renderTemplate(TEMPLATE, buildXPromptVariables(...))` against `buildXPrompt(...)`, which after the
+refactor IS that same render — a tautology. This is not the executor's error: once the old function
+is gone, there is nothing left in-tree to compare against.
+
+**Independently proven by the orchestrator instead.** The pre-refactor `prompt.ts` and
+`extraction-prompt.ts` were materialized from `main` (`git show main:<path>`) into the same directory
+so every relative import resolved unchanged, and a temporary suite asserted equality across:
+
+- 11 plan-prompt cases — bare, no equipment, with limitations, with memory, memory requiring
+  sanitization, `allowedExercises` empty, `allowedExercises` present, each of the three
+  `intensityBias` values, and all of them combined.
+- 4 chat-context cases × both chat prompts, comparing `mask(newOutput, limitationTermsOf(input))`
+  against the legacy output (the legacy builders masked internally; the new ones do not, so masked
+  new output is the correct comparand).
+
+Result: **19/19 passed — the refactor is byte-identical.** The temporary files were then deleted and
+are deliberately NOT committed: they depend on vendored copies of superseded code that would rot.
+With equality now established, the committed snapshots become a valid FORWARD drift guard — they
+freeze output that is proven equal to pre-refactor behaviour.
+
+**Convention for later slices:** a refactor claiming byte-identity must capture the baseline BEFORE
+the refactor lands (write the snapshot in the RED commit, while the old implementation is still the
+one producing it), or the claim cannot be verified afterwards from the tree alone.
