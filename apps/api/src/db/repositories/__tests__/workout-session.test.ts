@@ -2137,4 +2137,96 @@ describe("WorkoutSessionRepository", () => {
       expect(detail.recentSets).toHaveLength(1);
     });
   });
+
+  /**
+   * #352 slice A — the technique link on a tracked session.
+   *
+   * `session_exercises` stores only the free-text `title`, and deliberately
+   * gains no column for this: the id is derived inside
+   * `mapWorkoutSessionRecord`, the ONE mapping every session read path goes
+   * through. These tests go through `findById` (the tracker's read) because
+   * that is what proves the wiring, not just the resolver — which has its own
+   * tests in `packages/exercise-catalog`.
+   *
+   * The ids are the shipped dataset's real ones, so a dataset re-import that
+   * moves them fails here rather than silently pointing users at the wrong
+   * animation.
+   */
+  describe("catalog technique link (#352 slice A)", () => {
+    const PUSH_UP_ID = "0662";
+
+    function createFindByIdDb(titles: string[]) {
+      const rows = titles.map((title, index) => ({
+        id: `exercise-${index}`,
+        workoutSessionId: SESSION_ID,
+        exerciseIndex: index,
+        title,
+        restSeconds: 60,
+        notes: null,
+      }));
+
+      return createQueuedSelectDb(
+        new Map<object, unknown[][]>([
+          [workoutSessions, [[sessionRow]]],
+          [sessionExercises, [rows]],
+          [setRecords, [[]]],
+        ])
+      ).select;
+    }
+
+    it("exposes the catalog id of a title the catalog knows", async () => {
+      const repo = new WorkoutSessionRepository({
+        select: createFindByIdDb(["Push-Ups"]),
+      } as never);
+
+      const session = await repo.findById(TENANT_A, USER_A, SESSION_ID);
+
+      expect(session?.exercises[0]?.catalogExerciseId).toBe(PUSH_UP_ID);
+    });
+
+    it("leaves catalogExerciseId undefined for a title the catalog does not know", async () => {
+      const repo = new WorkoutSessionRepository({
+        select: createFindByIdDb(["Totally Invented Movement"]),
+      } as never);
+
+      const session = await repo.findById(TENANT_A, USER_A, SESSION_ID);
+
+      // The UI degrades on exactly this: no id means no link at all.
+      expect(session?.exercises[0]?.catalogExerciseId).toBeUndefined();
+    });
+
+    it("never rewrites the stored title to the catalog's spelling", async () => {
+      // The catalog record is named "push-up"; the prescription said
+      // "Push-Ups". The snapshot is what the user was told to do and must
+      // survive the link being added beside it.
+      const repo = new WorkoutSessionRepository({
+        select: createFindByIdDb(["Push-Ups", "Totally Invented Movement"]),
+      } as never);
+
+      const session = await repo.findById(TENANT_A, USER_A, SESSION_ID);
+
+      expect(session?.exercises.map((exercise) => exercise.title)).toEqual([
+        "Push-Ups",
+        "Totally Invented Movement",
+      ]);
+    });
+
+    it("resolves each exercise of a session independently", async () => {
+      const repo = new WorkoutSessionRepository({
+        select: createFindByIdDb([
+          "Push-Ups",
+          "Totally Invented Movement",
+          "Dumbbell Bench Press",
+        ]),
+      } as never);
+
+      const session = await repo.findById(TENANT_A, USER_A, SESSION_ID);
+
+      expect(session?.exercises.map((exercise) => exercise.catalogExerciseId)).toEqual([
+        PUSH_UP_ID,
+        undefined,
+        "0289",
+      ]);
+    });
+  });
 });

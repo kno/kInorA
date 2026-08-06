@@ -859,6 +859,10 @@
         "description": "We could not reach the exercise library. Please try again in a moment."
       }
     },
+    "technique": {
+      "link": "Technique",
+      "linkA11y": "See the technique for {exercise}"
+    },
     "attribution": {
       "heading": "Media and data attribution",
       "media": "Exercise demonstration media is © Gym visual. It remains the property of Gym visual and its use is governed by their Terms and Conditions of Use.",

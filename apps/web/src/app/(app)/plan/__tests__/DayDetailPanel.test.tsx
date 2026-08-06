@@ -623,3 +623,89 @@ describe("DayDetailPanel — real weekly day-state + navigation (09c-v1 Slice 4b
     expect(new Set(glyphs).size).toBe(2);
   });
 });
+
+/**
+ * #352 slice A — the catalog technique link in the day detail panel.
+ *
+ * `catalogId` arrives on the exercise already resolved SERVER-SIDE (persisted
+ * at generation from slice B, or derived on read for older plans) — the panel
+ * is a client island and never matches names itself. So these tests drive the
+ * two shapes the server can send and assert the panel's only job: render the
+ * link, or render nothing at all.
+ */
+describe("DayDetailPanel — catalog technique link (#352 slice A)", () => {
+  /** Day 1 with one linked and one unlinked exercise, the realistic mix. */
+  const mixedSessions: WorkoutSession[] = [
+    {
+      day: 1,
+      title: "Push Day",
+      exercises: [
+        { name: "Push-Ups", sets: 3, reps: "12", restSeconds: 60, catalogId: "0662" },
+        { name: "Totally Invented Movement", sets: 3, reps: "10", restSeconds: 60 },
+      ],
+    },
+  ];
+
+  function openDay1(sessionsToRender: WorkoutSession[]) {
+    renderWithIntl(<DayDetailPanel sessions={sessionsToRender} />);
+    fireEvent.click(screen.getByRole("button", { name: "Day 1" }));
+  }
+
+  it("links a resolved exercise to its catalog page", () => {
+    openDay1(mixedSessions);
+
+    const links = screen.getAllByTestId("exercise-technique-link");
+    expect(links).toHaveLength(1);
+    expect(links[0]!.getAttribute("href")).toBe("/exercises/0662");
+    // A real anchor with an href — keyboard-reachable without extra handlers.
+    expect(links[0]!.tagName).toBe("A");
+  });
+
+  it("renders NOTHING for an unresolved exercise, not an empty link", () => {
+    openDay1([
+      {
+        day: 1,
+        title: "Push Day",
+        exercises: [
+          { name: "Totally Invented Movement", sets: 3, reps: "10", restSeconds: 60 },
+        ],
+      },
+    ]);
+
+    expect(screen.queryByTestId("exercise-technique-link")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("uses the catalogId the server sent rather than anything derived from the name", () => {
+    // The name would resolve elsewhere; the server-set id wins, because it was
+    // resolved with equipment context the browser does not have.
+    openDay1([
+      {
+        day: 1,
+        title: "Push Day",
+        exercises: [
+          { name: "Push-Ups", sets: 3, reps: "12", restSeconds: 60, catalogId: "0289" },
+        ],
+      },
+    ]);
+
+    expect(
+      screen.getByTestId("exercise-technique-link").getAttribute("href"),
+    ).toBe("/exercises/0289");
+  });
+
+  it("names the exercise in the link's accessible name so repeated links stay distinguishable", () => {
+    openDay1(mixedSessions);
+
+    expect(
+      screen.getByRole("link", { name: "See the technique for Push-Ups" }),
+    ).toBeDefined();
+  });
+
+  it("shows every prescribed name verbatim, linked or not", () => {
+    openDay1(mixedSessions);
+
+    expect(screen.getByText("Push-Ups")).toBeDefined();
+    expect(screen.getByText("Totally Invented Movement")).toBeDefined();
+  });
+});

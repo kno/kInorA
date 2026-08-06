@@ -55,6 +55,10 @@ export function ExerciseCard({
   onSetCompleted,
 }: ExerciseCardProps) {
   const t = useTranslations("tracker");
+  // The technique link's copy is shared with the plan view and the library, so
+  // it lives in the `exercises` catalogue rather than being duplicated under
+  // `tracker` — one wording, translated once.
+  const tExercises = useTranslations("exercises");
   const [weight, setWeight] = useState(() => seedFromSet(activeSet).weight);
   const [reps, setReps] = useState(() => seedFromSet(activeSet).reps);
   const [rpeInput, setRpeInput] = useState(() => seedFromSet(activeSet).rpe);
@@ -103,6 +107,27 @@ export function ExerciseCard({
         <div>
           <p className={styles.eyebrow}>{t("currentExercise")}</p>
           <h2 className={styles.exerciseName}>{activeExercise?.title ?? "—"}</h2>
+          {/* Technique link (#352 slice A) — the "how do I do this?" moment
+              happens mid-set, so it sits directly under the exercise name.
+              `catalogExerciseId` is derived SERVER-SIDE from the stored
+              `title` (the tracker persists no catalog id and the browser has
+              no catalog), and the title above is left exactly as prescribed.
+              When the title resolves to nothing this renders NOTHING — no
+              disabled link, no placeholder, no reserved row. The accessible
+              name carries the exercise so the link is distinguishable when
+              read out of context. */}
+          {activeExercise?.catalogExerciseId && (
+            <a
+              className={styles.exerciseTechniqueLink}
+              href={`/exercises/${activeExercise.catalogExerciseId}`}
+              data-testid="exercise-technique-link"
+              aria-label={tExercises("technique.linkA11y", {
+                exercise: activeExercise.title,
+              })}
+            >
+              {tExercises("technique.link")}
+            </a>
+          )}
         </div>
         <span className={styles.targetPill}>{targetPill}</span>
       </div>

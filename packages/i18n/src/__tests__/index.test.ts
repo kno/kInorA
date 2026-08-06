@@ -193,7 +193,11 @@ describe("@kinora/i18n package assembly", () => {
     // +4 `exercises.history.{empty,error}.*` — "View my history" navigates
     // whether or not the exercise was ever logged, so the target page must
     // answer in both cases instead of rendering nothing at all.
-    expect(nonBillingKeys).toHaveLength(755);
+    // +2 `exercises.technique.*` (#352 slice A) — the technique link rendered
+    // beside a plan/tracker exercise. Two keys, not one: the visible label is
+    // the same short word on every row, so the link also needs an accessible
+    // name that says WHICH exercise it opens.
+    expect(nonBillingKeys).toHaveLength(757);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
