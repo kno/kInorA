@@ -6,7 +6,7 @@ import type { PlanSpecDraft } from "@kinora/contracts";
 import type { ChatExtractInput, PlanSpecExtractor } from "./extraction-port.js";
 import { buildReplyPrompt, buildExtractionPrompt } from "./extraction-prompt.js";
 import type { DynamicConfigRepo } from "./dynamic-generator.js";
-import type { AiTracingDeps } from "./langfuse-handler.js";
+import type { AiTracingDeps, TracingHandler } from "./langfuse-handler.js";
 
 /**
  * LangChain-backed extraction adapter for the conversational create-plan turn
@@ -76,8 +76,17 @@ export interface ExtractionChatModel {
   ): { invoke(input: string, options?: Record<string, unknown>): Promise<unknown> };
 }
 
-/** Call options forwarded to the model — abort + safe (masked) observability metadata. */
-export interface ExtractionCallOptions {
+/**
+ * Call options forwarded to the model — abort + safe (masked) observability
+ * metadata.
+ *
+ * A `type` alias, NOT an `interface`, on purpose: TypeScript grants an implicit
+ * index signature to object type aliases but never to interfaces, so only this
+ * form stays assignable to `ExtractionChatModel`'s loose
+ * `Record<string, unknown>` parameter. Declaring it as an interface forces
+ * every call site back to an unchecked inline literal.
+ */
+export type ExtractionCallOptions = {
   signal?: AbortSignal;
   runName?: string;
   metadata?: Record<string, unknown>;
@@ -85,8 +94,8 @@ export interface ExtractionCallOptions {
    * Present only when a tracing handler is injected (langfuse-prompt-management,
    * slice A2), attached with the same conditional spread `invokeChain` uses.
    */
-  callbacks?: unknown[];
-}
+  callbacks?: TracingHandler[];
+};
 
 /** Builds a chat model for a resolved provider/model config. Injected for testability. */
 export type ExtractionModelFactory = (config: { provider: string; model: string }) => ExtractionChatModel;
@@ -192,12 +201,18 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
     // — a wall-clock timeout OR client disconnect firing mid-turn — cancels this
     // in-flight streaming round-trip instead of blocking on the provider.
     const handler = this.deps?.handler;
-    const stream = await model.stream(prompt, {
+    // Annotated, NOT passed as an inline literal: `ExtractionChatModel`'s own
+    // parameter is a loose `Record<string, unknown>` for provider
+    // assignability, so this annotation is the only thing that still
+    // type-checks the option names on our side of the boundary. A silent typo
+    // here would drop `signal` and leave an aborted turn running.
+    const callOptions: ExtractionCallOptions = {
       signal,
       runName: RUN_NAME,
       metadata,
       ...(handler ? { callbacks: [handler] } : {}),
-    });
+    };
+    const stream = await model.stream(prompt, callOptions);
     for await (const chunk of stream) {
       if (signal.aborted) return;
       const text = chunkText(chunk.content);
@@ -222,12 +237,14 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
     // structured-output round-trip instead of the caller blocking until the
     // provider responds.
     const handler = this.deps?.handler;
-    const raw = await chain.invoke(prompt, {
+    // Annotated for the same reason as Pass 1 — see `streamReply`.
+    const callOptions: ExtractionCallOptions = {
       signal,
       runName: RUN_NAME,
       metadata,
       ...(handler ? { callbacks: [handler] } : {}),
-    });
+    };
+    const raw = await chain.invoke(prompt, callOptions);
     // Re-parse at the boundary: never trust the model to honor the allow-list.
     // A forbidden key (preferenceScores/confirmed) or bad value is stripped/rejected here.
     return PlanSpecDraftSchema.parse(raw);
