@@ -20,7 +20,7 @@ vi.mock("../../TrackerPanel.module.css", () => ({
   default: new Proxy({}, { get: (_t, k) => String(k) }),
 }));
 
-function makeExercise(): SessionExerciseRecord {
+function makeExercise(overrides?: Partial<SessionExerciseRecord>): SessionExerciseRecord {
   return {
     id: "ex-1",
     workoutSessionId: "sess-1",
@@ -28,6 +28,7 @@ function makeExercise(): SessionExerciseRecord {
     title: "Bench Press",
     restSeconds: 90,
     setRecords: [],
+    ...overrides,
   };
 }
 
@@ -46,13 +47,14 @@ function makeSet(overrides?: Partial<SetRecordDTO>): SetRecordDTO {
 function renderCard(props?: {
   activeSet?: SetRecordDTO;
   canRecord?: boolean;
+  activeExercise?: SessionExerciseRecord;
 }) {
   const onRecordSet = vi.fn().mockResolvedValue(undefined);
   const onSetCompleted = vi.fn();
   const activeSet = props?.activeSet ?? makeSet();
   const view = renderWithIntl(
     <ExerciseCard
-      activeExercise={makeExercise()}
+      activeExercise={props?.activeExercise ?? makeExercise()}
       activeSet={activeSet}
       currentSetNumber={1}
       totalSetsInExercise={1}
@@ -221,5 +223,62 @@ describe("ExerciseCard — granular load step (#253)", () => {
     expect((inc() as HTMLButtonElement).disabled).toBe(true);
     expect((stepOption(0.5) as HTMLButtonElement).disabled).toBe(true);
     expect((stepOption(5) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+/**
+ * #352 slice A — the mid-set "how do I do this?" link.
+ *
+ * `catalogExerciseId` is resolved server-side; the card only decides whether
+ * to render. The load-bearing case is the NEGATIVE one: most historical
+ * titles resolve to nothing, so an unresolved exercise must produce no node
+ * at all — not an inert link, not an empty element holding space.
+ */
+describe("ExerciseCard — catalog technique link (#352 slice A)", () => {
+  const techniqueLink = () => screen.queryByTestId("exercise-technique-link");
+
+  it("links to the exercise's catalog page when the title resolved", () => {
+    renderCard({
+      activeExercise: makeExercise({ title: "Push-Ups", catalogExerciseId: "0662" }),
+    });
+
+    const link = techniqueLink();
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute("href")).toBe("/exercises/0662");
+    // A real anchor with an href is keyboard-reachable by default; assert the
+    // tag rather than trusting the test id alone.
+    expect(link?.tagName).toBe("A");
+  });
+
+  it("names the exercise in the link's accessible name, not a bare 'Technique'", () => {
+    renderCard({
+      activeExercise: makeExercise({ title: "Push-Ups", catalogExerciseId: "0662" }),
+    });
+
+    expect(
+      screen.getByRole("link", { name: "See the technique for Push-Ups" }),
+    ).toBeDefined();
+  });
+
+  it("renders NOTHING when the title resolved to no catalog entry", () => {
+    renderCard({ activeExercise: makeExercise({ title: "Totally Invented Movement" }) });
+
+    expect(techniqueLink()).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("shows the prescribed title verbatim, linked or not", () => {
+    const { unmount } = renderCard({
+      activeExercise: makeExercise({ title: "Push-Ups", catalogExerciseId: "0662" }),
+    });
+    // The catalog record is named "push-up"; the tracker must still say what
+    // was prescribed.
+    expect(screen.getByRole("heading", { name: "Push-Ups" })).toBeDefined();
+    unmount();
+
+    renderCard({ activeExercise: makeExercise({ title: "Totally Invented Movement" }) });
+    expect(
+      screen.getByRole("heading", { name: "Totally Invented Movement" }),
+    ).toBeDefined();
   });
 });

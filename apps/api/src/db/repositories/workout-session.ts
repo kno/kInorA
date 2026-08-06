@@ -6,6 +6,7 @@ import {
   defaultPlanName,
   extractCompletedSetRpeValues,
 } from "@kinora/domain";
+import { resolveExerciseIdByName } from "@kinora/exercise-catalog";
 import { classifyExerciseMuscleGroup } from "../muscle-classifier.js";
 import {
   addUtcDays as domainAddUtcDays,
@@ -1568,6 +1569,14 @@ function mapWorkoutSessionRecord(
       title: exerciseRow.title,
       restSeconds: exerciseRow.restSeconds,
       notes: exerciseRow.notes ?? undefined,
+      // #352 slice A — technique link, derived here and nowhere else. This is
+      // the ONE mapping every session read path goes through (tracker,
+      // dashboard, RPE fold, weekly rollup, history, client dashboard), so
+      // resolving once here covers all of them and cannot drift between them.
+      // `title` is passed through untouched above: the link is added BESIDE
+      // the snapshot, never in place of it. Unresolvable titles yield
+      // `undefined`, which the UI must render as nothing at all.
+      catalogExerciseId: resolveExerciseIdByName(exerciseRow.title),
       setRecords: (setsByExerciseId.get(exerciseRow.id) ?? [])
         .slice()
         .sort((left, right) => left.setIndex - right.setIndex),

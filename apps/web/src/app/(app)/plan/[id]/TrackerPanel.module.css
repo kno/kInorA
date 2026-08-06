@@ -249,6 +249,18 @@
   margin-top: 8px;
 }
 
+/* Technique link (#352 slice A). `inline-block` in the title column so it takes
+   only its own width; it is the last element in that column, so an unresolved
+   exercise (no link rendered) leaves the surrounding layout identical. */
+.exerciseTechniqueLink {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 .targetPill {
   align-self: flex-start;
   white-space: nowrap;

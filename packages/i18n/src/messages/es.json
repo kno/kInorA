@@ -859,6 +859,10 @@
         "description": "No hemos podido acceder a la biblioteca de ejercicios. Inténtalo de nuevo en un momento."
       }
     },
+    "technique": {
+      "link": "Técnica",
+      "linkA11y": "Ver la técnica de {exercise}"
+    },
     "attribution": {
       "heading": "Atribución de medios y datos",
       "media": "Los medios de demostración de los ejercicios son © Gym visual. Siguen siendo propiedad de Gym visual y su uso se rige por sus Términos y Condiciones de Uso.",

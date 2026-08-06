@@ -76,6 +76,20 @@ export interface SessionExerciseRecord {
   title: string;
   restSeconds: number;
   notes?: string;
+  /**
+   * Exercise-catalog id this row's `title` resolves to (#352 slice A), or
+   * absent when it resolves to nothing.
+   *
+   * DERIVED AT READ TIME, never stored: `session_exercises` has no such column
+   * and deliberately gains none. The row's `title` is a snapshot of what was
+   * prescribed, so persisting a resolution would freeze a guess taken with
+   * whatever catalog and matcher happened to be deployed that day; deriving it
+   * on every read means a better catalog or matcher improves every historical
+   * session at once, and a wrong link can be withdrawn by fixing the resolver.
+   *
+   * Consumers MUST degrade silently when it is absent — no link, no placeholder.
+   */
+  catalogExerciseId?: string;
   setRecords: SetRecordDTO[];
 }
 

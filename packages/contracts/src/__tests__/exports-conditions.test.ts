@@ -94,6 +94,10 @@ describe("@kinora/contracts export conditions (source-condition convention)", ()
       title: string;
       restSeconds: number;
       notes?: string;
+      // Read-time technique link (#352 slice A) — derived from `title`, never
+      // a stored column, and optional so an unresolved exercise is absent
+      // rather than null.
+      catalogExerciseId?: string;
       setRecords: SetRecordDTO[];
     }>();
 

@@ -8,6 +8,7 @@ import {
   assertPlanSpecShape,
   PLAN_NAME_MAX_LENGTH,
 } from "../plan/boundary.js";
+import { withCatalogLinks } from "../plan/catalog-links.js";
 import { derivePreferenceScores } from "@kinora/domain";
 import { mergePlanSpecDraft } from "@kinora/domain/plan";
 import type { MergePlanSpecDraftResult } from "@kinora/domain/plan";
@@ -934,7 +935,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         return reply.code(200).send({
           id: plan.id,
           status: plan.status,
-          program: plan.programJson ?? undefined,
+          program: withCatalogLinks(plan.programJson ?? undefined),
           specId: plan.planSpecId,
           name: plan.name,
         });
@@ -1127,10 +1128,15 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       // Do NOT return the raw DB row — its field names (programJson/planSpecId)
       // differ from the client contract and it carries internal columns
       // (tenantId/userId/errorMessage) that must not leak to the client.
+      //
+      // #352 slice A: `withCatalogLinks` adds the technique link for plans
+      // generated before slice B started persisting `catalogId`. It only ever
+      // ADDS ids — the stored program and every exercise `name` are untouched —
+      // so the web can render the link and a miss stays silently unlinked.
       return reply.code(200).send({
         id: plan.id,
         status: plan.status,
-        program: plan.programJson ?? undefined,
+        program: withCatalogLinks(plan.programJson ?? undefined),
         specId: plan.planSpecId,
         name: plan.name,
       });
@@ -1161,7 +1167,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       return reply.code(200).send({
         id: plan.id,
         status: plan.status,
-        program: plan.programJson ?? undefined,
+        program: withCatalogLinks(plan.programJson ?? undefined),
         specId: plan.planSpecId,
         name: plan.name,
       });
