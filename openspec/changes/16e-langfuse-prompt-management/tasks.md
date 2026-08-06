@@ -273,47 +273,53 @@ Trace Attribution to Prompt Source and Version (the `promptSource` half); Prompt
       options key
 - [x] B2.6 GREEN: create `apps/api/src/ai/langfuse-prompt-gateway.ts` — SDK adapter,
       `buildLangfusePromptGateway()` → port `|` `null`, hardcoded `PROMPT_FETCH_TIMEOUT_MS = 3000`
-- [ ] B2.7 RED: `prompt-provider.test.ts` (template: `billing-pricing.test.ts`) — warm cache → 0
+- [x] B2.7 RED: `prompt-provider.test.ts` (template: `billing-pricing.test.ts`) — warm cache → 0
       gateway calls; cold-cache burst of N concurrent `execute()` → exactly 1 `fetchPrompt` call,
       every concurrent caller gets the same resolved template
-- [ ] B2.8 RED: each failure class (network, auth, missing prompt, malformed template) → local text +
+- [x] B2.8 RED: each failure class (network, auth, missing prompt, malformed template) → local text +
       `source: "fallback"` + the correct reason code passed to the injected `warn` sink
-- [ ] B2.9 RED: `gateway === null` (no credentials) → `no_credentials` reason with no gateway call at
+- [x] B2.9 RED: `gateway === null` (no credentials) → `no_credentials` reason with no gateway call at
       all — confirms the tested steady state while the three prompts don't yet exist in Langfuse
       under `production`
-- [ ] B2.10 RED: fallback is cached too — a second call within the same TTL window makes 0 further
+- [x] B2.10 RED: fallback is cached too — a second call within the same TTL window makes 0 further
       gateway calls even though the first call failed; TTL expiry retries after the window elapses
-- [ ] B2.11 RED: `resolvePromptCacheTtlMs(env)` — unset → 60000 default; valid positive integer →
+- [x] B2.11 RED: `resolvePromptCacheTtlMs(env)` — unset → 60000 default; valid positive integer →
       honored; unparseable string (e.g. `"abc"`) → default, no throw; `0` → default, no throw;
       negative (e.g. `-5`) → default, no throw
-- [ ] B2.12 GREEN: create `apps/api/src/ai/prompt-provider.ts` — `ResolvePrompt` class (gateway,
+- [x] B2.12 GREEN: create `apps/api/src/ai/prompt-provider.ts` — `ResolvePrompt` class (gateway,
       `{ cacheTtlMs?, now?, warn? }`), `execute(def, variables)` → fetch → zod validate → render →
       post-render check → fallback, single `pending` promise per prompt name coalescing a cold-cache
       burst (mirrors `ResolveBillingPricing`, `billing-pricing.ts:69-136`); export
       `resolvePromptCacheTtlMs(env)`
-- [ ] B2.13 RED: compose-forward test — read `docker-compose.yml` in-test, assert the api service's
+- [x] B2.13 RED: compose-forward test — read `docker-compose.yml` in-test, assert the api service's
       `environment:` block lists `LANGFUSE_PROMPT_CACHE_TTL_MS` (mirrors the existing env-forwarding
       guard style; PR #254 gotcha)
-- [ ] B2.14 GREEN: add `LANGFUSE_PROMPT_CACHE_TTL_MS: ${LANGFUSE_PROMPT_CACHE_TTL_MS:-60000}` to
+- [x] B2.14 GREEN: add `LANGFUSE_PROMPT_CACHE_TTL_MS: ${LANGFUSE_PROMPT_CACHE_TTL_MS:-60000}` to
       `docker-compose.yml`'s api `environment:` block with the forwarding-gotcha comment in house
       style
-- [ ] B2.15 RED: local-vs-remote equivalence — fake gateway returns EXACTLY `PLAN_PROMPT_TEMPLATE` →
+- [x] B2.15 RED: local-vs-remote equivalence — fake gateway returns EXACTLY `PLAN_PROMPT_TEMPLATE` →
       `execute()` text is byte-identical to the local path, with `source: "langfuse"`
-- [ ] B2.16 GREEN: wire `ResolvePrompt` into `invokeChain` (`adapter-factory.ts`) and
+- [x] B2.16 GREEN: wire `ResolvePrompt` into `invokeChain` (`adapter-factory.ts`) and
       `PlanSpecExtractionAdapter` (`streamReply`/`extract`) via the shared `AiTracingDeps.prompts?`
       field; resolve prompt → mask rendered text (B1's call-site masking, unchanged) → attach
-      `promptSource` (+ `promptName`/`promptVersion`/`promptLabel` only when `source === "langfuse"`)
-      to invoke/stream metadata
-- [ ] B2.17 GREEN: build the gateway + `ResolvePrompt` once in `app.ts` alongside A1's handler; pass
+      `promptSource` to invoke/stream metadata. **Deviation from the literal text above:**
+      `promptName`/`promptVersion`/`promptLabel` are NOT attached in this slice — the assigning
+      instructions scoped those (plus `metadata.langfusePrompt` and the version handle) to slice C
+      only; B2 ships `promptSource` alone, which is what every B2 spec scenario for "Trace
+      Attribution to Prompt Source and Version" requires.
+- [x] B2.17 GREEN: build the gateway + `ResolvePrompt` once in `app.ts` alongside A1's handler; pass
       through the same `deps` bag
-- [ ] B2.18 Document `LANGFUSE_PROMPT_CACHE_TTL_MS`, the three prompt names
+- [x] B2.18 Document `LANGFUSE_PROMPT_CACHE_TTL_MS`, the three prompt names
       (`kinora-plan-generation`, `kinora-chat-reply`, `kinora-chat-extraction`) and the `production`
       label in `apps/api/README.md`
-- [ ] B2.19 REFACTOR: confirm attribution is NEVER attached without a source marker — B2 ships
+- [x] B2.19 REFACTOR: confirm attribution is NEVER attached without a source marker — B2 ships
       `promptSource` on every call, satisfying the design's "never let a remote-sourced trace exist
       without a source marker, not even for one slice" split
-- [ ] B2.20 Verify: `pnpm --filter api test` green; `pnpm --filter api test:coverage` green at 85%
+- [x] B2.20 Verify: `pnpm --filter api test` green; `pnpm --filter api test:coverage` green at 85%
       functions threshold; no network call in any new test (fake gateway + injected `now` throughout)
+
+**B2b status: DONE.** All B2.7–B2.20 tasks complete; see apply-progress.md's B2b section for the
+rebase history, gate evidence, and the added no-credentials production-path coverage.
 
 **B2 split (orchestrator decision, review-measured): B2.1–B2.6 shipped as slice B2a** (PR against
 `main`, branch `feat/langfuse-prompt-gateway`, branched at commit `47bd638` of the original combined

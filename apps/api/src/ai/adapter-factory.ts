@@ -4,7 +4,7 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { WorkoutProgramSchema } from "@kinora/contracts";
 import type { PlanSpec, WorkoutProgram } from "@kinora/contracts";
 import type { PlanGenerator } from "./port.js";
-import { buildPlanPrompt } from "./prompt.js";
+import { buildPlanPrompt, buildPlanPromptVariables, PLAN_PROMPT_DEFINITION } from "./prompt.js";
 import { mask } from "./mask.js";
 import type { AdapterFactoryMap } from "./dynamic-generator.js";
 import type { AiTracingDeps } from "./langfuse-handler.js";
@@ -41,6 +41,15 @@ const OPENCODE_GO_BASE_URL = "https://opencode.ai/zen/go/v1";
  * limitation terms. The handler is injected via `deps.handler` and attached
  * conditionally, so the no-handler invoke config stays byte-identical to
  * today's when tracing is off.
+ *
+ * Prompt resolution (langfuse-prompt-management, slice B2): when `deps.prompts`
+ * (a `ResolvePrompt`) is injected, the prompt is resolved through it — a
+ * validated Langfuse template, or the compiled-in local template on ANY
+ * failure class — and `promptSource` ("langfuse" | "fallback") is attached to
+ * the trace metadata on EVERY call, never omitted. With no `deps.prompts`
+ * (e.g. existing tests that construct `buildAdapters()` bare), the local
+ * template is used directly and `promptSource` is "fallback", matching the
+ * behaviour a `no_credentials` resolution would produce.
  */
 async function invokeChain(
   chain: { invoke(input: string, options: Record<string, unknown>): Promise<unknown> },
@@ -48,14 +57,25 @@ async function invokeChain(
   metadata: InvokeChainMetadata,
   deps?: AiTracingDeps
 ): Promise<WorkoutProgram> {
+  const limitationTerms = spec.limitations.map((l) => l.text);
+
+  let rawPrompt: string;
+  let promptSource: "langfuse" | "fallback" = "fallback";
+  if (deps?.prompts) {
+    const resolution = await deps.prompts.execute(PLAN_PROMPT_DEFINITION, buildPlanPromptVariables(spec));
+    rawPrompt = resolution.text;
+    promptSource = resolution.source;
+  } else {
+    rawPrompt = buildPlanPrompt(spec);
+  }
+  const maskedPrompt = mask(rawPrompt, limitationTerms);
+
   const traceMetadata = {
     feature: "plan-generation",
     provider: metadata.provider,
     model: metadata.model,
+    promptSource,
   };
-  const rawPrompt = buildPlanPrompt(spec);
-  const limitationTerms = spec.limitations.map((l) => l.text);
-  const maskedPrompt = mask(rawPrompt, limitationTerms);
 
   const handler = deps?.handler;
   const raw = await chain.invoke(maskedPrompt, {

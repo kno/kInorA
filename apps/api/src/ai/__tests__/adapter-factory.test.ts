@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { WorkoutProgram } from "@kinora/contracts";
+import { ResolvePrompt } from "../prompt-provider.js";
+import type { LangfusePromptGateway } from "../prompt-source-port.js";
+import { PLAN_PROMPT_TEMPLATE, buildPlanPrompt } from "../prompt.js";
 
 // ---------------------------------------------------------------------------
 // Mock @langchain/openai — hoisted before any import of production code
@@ -174,5 +177,69 @@ describe("masking invariant on trace payloads", () => {
     expect(invokeInput).toContain("[REDACTED]");
     expect(invokeInput).not.toContain("osteoporosis");
     expect(JSON.stringify([invokeInput, resolvedProgram])).not.toContain("osteoporosis");
+  });
+});
+
+describe("prompt-source attribution (langfuse-prompt-management, slice B2)", () => {
+  it("attaches promptSource: fallback and uses the local template when no prompts dep is injected", async () => {
+    const adapters = buildAdapters();
+    const adapter = adapters["openai"]!("gpt-4o-mini");
+
+    await adapter.generate(baseSpec);
+
+    const config = mockInvoke.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(config).toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ promptSource: "fallback" }),
+      })
+    );
+    const invokeInput = mockInvoke.mock.calls[0]?.[0] as string;
+    expect(invokeInput).toBe(buildPlanPrompt(baseSpec));
+  });
+
+  it("resolves the prompt through deps.prompts and attaches promptSource: langfuse on a successful remote fetch", async () => {
+    const gateway: LangfusePromptGateway = {
+      fetchPrompt: vi.fn(async () => ({ template: PLAN_PROMPT_TEMPLATE, version: 5 })),
+    };
+    const prompts = new ResolvePrompt(gateway);
+    const adapters = buildAdapters({ prompts });
+    const adapter = adapters["openai"]!("gpt-4o-mini");
+
+    await adapter.generate(baseSpec);
+
+    const config = mockInvoke.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(config).toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ promptSource: "langfuse" }),
+      })
+    );
+    // The remote template is byte-identical to the local one and there are
+    // no limitations to mask, so the rendered/invoked text is unchanged.
+    const invokeInput = mockInvoke.mock.calls[0]?.[0] as string;
+    expect(invokeInput).toBe(buildPlanPrompt(baseSpec));
+  });
+
+  it("plan generation succeeds with the LOCAL template when a real ResolvePrompt is wired but no Langfuse credentials are configured (production no-credentials shape)", async () => {
+    // Mirrors app.ts's actual production wiring: a real ResolvePrompt instance
+    // is ALWAYS constructed and injected via deps.prompts, but its gateway is
+    // null when LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY are absent
+    // (buildLangfusePromptGateway() returns null). This is the exact shape
+    // the proposal's non-negotiable protects: an unreachable/absent prompt
+    // service must never fail a generation.
+    const prompts = new ResolvePrompt(null);
+    const adapters = buildAdapters({ prompts });
+    const adapter = adapters["openai"]!("gpt-4o-mini");
+
+    const program = await adapter.generate(baseSpec);
+
+    expect(program).toEqual(mockProgram);
+    const config = mockInvoke.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(config).toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ promptSource: "fallback" }),
+      })
+    );
+    const invokeInput = mockInvoke.mock.calls[0]?.[0] as string;
+    expect(invokeInput).toBe(buildPlanPrompt(baseSpec));
   });
 });

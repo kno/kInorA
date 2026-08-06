@@ -1,4 +1,5 @@
 import { CallbackHandler } from "langfuse-langchain";
+import type { ResolvePrompt } from "./prompt-provider.js";
 
 /**
  * Structural port over the Langfuse `CallbackHandler`, so no test ever needs
@@ -13,11 +14,13 @@ export interface TracingHandler {
 /**
  * Shared injection bag threaded into both tracing attachment sites
  * (`invokeChain` in `adapter-factory.ts` and `PlanSpecExtractionAdapter`'s
- * `streamReply`/`extract`). `handler` ships in this slice; a later slice adds
- * `prompts` for the remote prompt-source use case.
+ * `streamReply`/`extract`). `handler` shipped in slice A1; `prompts` (slice
+ * B2) resolves each call's prompt through Langfuse with a mandatory local
+ * fallback, attributing `promptSource` on the trace metadata.
  */
 export interface AiTracingDeps {
   handler?: TracingHandler | null;
+  prompts?: ResolvePrompt;
 }
 
 /**

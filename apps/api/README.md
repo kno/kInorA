@@ -31,12 +31,15 @@ These variables are required for the OpenRouter LLM adapter and Langfuse observa
 | `LANGFUSE_SECRET_KEY` | Yes (prod) | Langfuse project secret key. |
 | `LANGFUSE_HOST` | Yes (prod) | Langfuse host URL (e.g. `https://cloud.langfuse.com` for Langfuse Cloud, or your self-hosted instance). |
 | `LANGFUSE_BASEURL` | No | SDK-conventional alias for the Langfuse host, for local dev. Precedence: `LANGFUSE_BASEURL ?? LANGFUSE_HOST` — when both are set, `LANGFUSE_BASEURL` wins. Production sets only `LANGFUSE_HOST`; that value is passed explicitly as `baseUrl`, never relying on the SDK's implicit environment pickup. |
+| `LANGFUSE_PROMPT_CACHE_TTL_MS` | No | In-process cache TTL (milliseconds) for the remote prompt provider. Default `60000` (60s) when unset, unparseable, or non-positive — never throws at startup. **Must be forwarded in `docker-compose.yml`'s api `environment:` block** (compose only injects vars listed there; a missing forward silently keeps the container on the built-in default, the same class of bug PR #254 shipped for Stripe). |
 
 **Note on `OPENROUTER_MODEL`**: The OpenRouter adapter uses `.withStructuredOutput` with `method: "jsonSchema"`. The chosen model must support JSON-schema mode structured output. If unsure, prefer models from the OpenAI family (e.g. `openai/gpt-4o-mini`) or verify via the [OpenRouter model list](https://openrouter.ai/models).
 
 **Privacy note**: `PlanSpec.limitations` (health context) is masked with `[REDACTED]` before the prompt reaches Langfuse. Raw limitation text never appears in traces.
 
 **Tracing (langfuse-prompt-management)**: a Langfuse `CallbackHandler` is constructed once per app instance, only when both `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are present. Absent or invalid credentials never fail a request — plan generation and chat succeed with the same prompt output either way, and a construction/emission/flush failure is reported as exactly one secret-free warn line (reason code + error name only, never a credential or prompt body).
+
+**Remote prompt source (langfuse-prompt-management, slice B2)**: the three prompts — `kinora-plan-generation`, `kinora-chat-reply`, `kinora-chat-extraction` — are resolved at runtime from Langfuse under the fixed `production` label (see `LANGFUSE_PROMPT_CACHE_TTL_MS` above for the cache window). Promoting a new version to `production` in the Langfuse UI is the only gate; no env var, deploy, or code change is needed. A fetch failure, missing prompt, or a template that fails boundary validation (unknown variable, missing/relocated required marker, or an unresolved `{{` after rendering) always falls back to the compiled-in local template — plan generation and chat never fail because Langfuse was unreachable. Every trace carries `promptSource: "langfuse" | "fallback"`. Until the three prompts exist in the Langfuse project under `production`, the served behaviour is the local template with reason `prompt_not_found` — a valid, tested steady state, not a bug.
 
 ### AI provider admin (09-ai-provider-admin) — operator-managed, optional
 

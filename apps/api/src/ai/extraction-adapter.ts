@@ -4,7 +4,15 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { PlanSpecDraftSchema } from "@kinora/contracts";
 import type { PlanSpecDraft } from "@kinora/contracts";
 import type { ChatExtractInput, PlanSpecExtractor } from "./extraction-port.js";
-import { buildReplyPrompt, buildExtractionPrompt, limitationTermsOf } from "./extraction-prompt.js";
+import {
+  buildReplyPrompt,
+  buildExtractionPrompt,
+  buildReplyPromptVariables,
+  buildExtractionPromptVariables,
+  limitationTermsOf,
+  REPLY_PROMPT_DEFINITION,
+  EXTRACTION_PROMPT_DEFINITION,
+} from "./extraction-prompt.js";
 import { mask } from "./mask.js";
 import type { DynamicConfigRepo } from "./dynamic-generator.js";
 import type { AiTracingDeps, TracingHandler } from "./langfuse-handler.js";
@@ -198,9 +206,24 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
   async *streamReply(input: ChatExtractInput, signal: AbortSignal): AsyncIterable<string> {
     if (signal.aborted) return;
     const { model, metadata } = await this.resolve();
-    // mask() runs on the RENDERED string before the model (and hence any
-    // observability) sees it — buildReplyPrompt itself returns unmasked text.
-    const prompt = mask(buildReplyPrompt(input), limitationTermsOf(input));
+    // Prompt resolution (langfuse-prompt-management, slice B2): resolves
+    // through `deps.prompts` when injected (validated remote template, or the
+    // local one on any failure class); falls back to the local builder
+    // directly otherwise. mask() then runs on the RENDERED string before the
+    // model (and hence any observability) sees it.
+    let rawPrompt: string;
+    let promptSource: "langfuse" | "fallback" = "fallback";
+    if (this.deps?.prompts) {
+      const resolution = await this.deps.prompts.execute(
+        REPLY_PROMPT_DEFINITION,
+        buildReplyPromptVariables(input),
+      );
+      rawPrompt = resolution.text;
+      promptSource = resolution.source;
+    } else {
+      rawPrompt = buildReplyPrompt(input);
+    }
+    const prompt = mask(rawPrompt, limitationTermsOf(input));
     // `signal` is threaded into the LangChain call options so an external abort
     // — a wall-clock timeout OR client disconnect firing mid-turn — cancels this
     // in-flight streaming round-trip instead of blocking on the provider.
@@ -213,7 +236,7 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
     const callOptions: ExtractionCallOptions = {
       signal,
       runName: RUN_NAME,
-      metadata,
+      metadata: { ...metadata, promptSource },
       ...(handler ? { callbacks: [handler] } : {}),
     };
     const stream = await model.stream(prompt, callOptions);
@@ -231,10 +254,24 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
   ): Promise<PlanSpecDraft> {
     const { model, metadata } = await this.resolve();
     // The Pass-2 prompt is SEEDED with Pass 1's reply so the extraction is
-    // consistent with what the assistant just told the user. mask() runs on
-    // the RENDERED string and scrubs known limitation terms everywhere,
-    // including inside the seeded reply.
-    const prompt = mask(buildExtractionPrompt(input, assistantReply), limitationTermsOf(input));
+    // consistent with what the assistant just told the user. Prompt
+    // resolution mirrors `streamReply` (slice B2): resolves through
+    // `deps.prompts` when injected, else the local builder directly. mask()
+    // runs on the RENDERED string and scrubs known limitation terms
+    // everywhere, including inside the seeded reply.
+    let rawPrompt: string;
+    let promptSource: "langfuse" | "fallback" = "fallback";
+    if (this.deps?.prompts) {
+      const resolution = await this.deps.prompts.execute(
+        EXTRACTION_PROMPT_DEFINITION,
+        buildExtractionPromptVariables(input, assistantReply),
+      );
+      rawPrompt = resolution.text;
+      promptSource = resolution.source;
+    } else {
+      rawPrompt = buildExtractionPrompt(input, assistantReply);
+    }
+    const prompt = mask(rawPrompt, limitationTermsOf(input));
     const chain = model.withStructuredOutput(PlanSpecDraftSchema, { method: "jsonSchema" });
     // Forward `signal` into the LangChain call options (the same `{ signal }`
     // shape `.stream()` accepts) so an external abort — a wall-clock timeout OR
@@ -246,7 +283,7 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
     const callOptions: ExtractionCallOptions = {
       signal,
       runName: RUN_NAME,
-      metadata,
+      metadata: { ...metadata, promptSource },
       ...(handler ? { callbacks: [handler] } : {}),
     };
     const raw = await chain.invoke(prompt, callOptions);
