@@ -487,3 +487,37 @@ freeze output that is proven equal to pre-refactor behaviour.
 **Convention for later slices:** a refactor claiming byte-identity must capture the baseline BEFORE
 the refactor lands (write the snapshot in the RED commit, while the old implementation is still the
 one producing it), or the claim cannot be verified afterwards from the tree alone.
+
+## Slice B2a — port + gateway + validation (branch `feat/langfuse-prompt-gateway`)
+
+**Why B2 was split.** The combined B2 slice measured **956 hand-authored changed lines** against the
+800-line review budget (~20% over), with no generated content to discount as B1 had. Under the
+session's cached `delivery_strategy: auto-chain` this splits automatically — no `size:exception` was
+requested and no user decision was needed. The cut is the seam `design.md` and `tasks.md` already
+named, at existing commit boundary `47bd638`:
+
+- **B2a** (this PR) — `remote-template-validation.ts`, `prompt-source-port.ts`,
+  `langfuse-prompt-gateway.ts` + their tests: **411 changed lines**.
+- **B2b** (next) — `prompt-provider.ts`, call-site wiring in `adapter-factory.ts` /
+  `extraction-adapter.ts` / `app.ts`, the `LANGFUSE_PROMPT_CACHE_TTL_MS` compose forward, README:
+  ~562 changed lines. B2b imports B2a's types, so under `stacked-to-main` it branches only after
+  B2a merges.
+
+Tasks B2.1–B2.6 complete. B2.7–B2.19 belong to B2b.
+
+**Behaviour is unchanged by B2a.** The port, gateway and validator all land, but nothing calls them:
+no remote fetch happens until B2b wires `ResolvePrompt` into the two call sites. That is deliberate —
+it keeps this PR reviewable as pure additive surface with no runtime risk.
+
+**One design refinement made while implementing.** The design's validation algorithm listed five
+ordered steps ending in a post-render residual-`{{` sweep. Step 5 cannot live in
+`validateRemoteTemplate`: it needs the RENDERED output, which does not exist until the template is
+rendered with real variable values. It is therefore a separate exported
+`checkRenderedTemplate(rendered)`, called by `ResolvePrompt` after `renderTemplate` in B2b. The
+reason code (`unresolved_marker_after_render`) and the fail-closed behaviour are unchanged. Its
+purpose is worth stating: it catches a malformed marker (stray whitespace inside the braces) that
+`templateVariablesOf` does not recognise as a variable reference, so it passes the closed-set check
+and is never substituted.
+
+`no_credentials`, `fetch_failed` and `prompt_not_found` stay provider-level reasons assigned by
+`ResolvePrompt` when the gateway fails before a payload reaches the validator.
