@@ -308,6 +308,29 @@ export function DayDetailPanel({
                   <td>
                     <div className={styles.exerciseName}>
                       <span>{exercise.name}</span>
+                      {/* Technique link (#352 slice A). `catalogId` is resolved
+                          SERVER-SIDE (persisted at generation, or derived on
+                          read for pre-slice-B plans) — the browser never
+                          matches names, because only the API depends on
+                          `@kinora/exercise-catalog`. An unresolved exercise
+                          renders NOTHING here: no link, no placeholder, no
+                          reserved space. The prescribed `name` above is the
+                          snapshot and is never replaced by the catalog's
+                          spelling. The accessible name repeats the exercise so
+                          a screen-reader user scanning links does not hear
+                          "Technique" N times with no way to tell them apart. */}
+                      {exercise.catalogId && (
+                        <a
+                          className={styles.exerciseTechniqueLink}
+                          href={`/exercises/${exercise.catalogId}`}
+                          data-testid="exercise-technique-link"
+                          aria-label={t("exercises.technique.linkA11y", {
+                            exercise: exercise.name,
+                          })}
+                        >
+                          {t("exercises.technique.link")}
+                        </a>
+                      )}
                       {exercise.notes && (
                         <span className={styles.exerciseNote}>{exercise.notes}</span>
                       )}
