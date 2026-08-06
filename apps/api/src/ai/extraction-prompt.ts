@@ -1,6 +1,6 @@
 import type { ChatExtractInput } from "./extraction-port.js";
-import { mask } from "./mask.js";
 import { sanitizeMemoryContext } from "./prompt.js";
+import { renderTemplate, type PromptDefinition } from "./prompt-template.js";
 
 /**
  * Builds the prompts for one conversational create-plan turn
@@ -12,34 +12,40 @@ import { sanitizeMemoryContext } from "./prompt.js";
  *   prompt seeded with Pass 1's reply so the extracted wizard fields are
  *   CONSISTENT with what the assistant just told the user.
  *
- * Pure functions — no network, no side effects. Both mirror `buildPlanPrompt`'s
- * masking call shape, but the guarantee they provide is NARROWER — see below.
+ * Pure functions — no network, no side effects. Both return UNMASKED text
+ * (langfuse-prompt-management, slice B1): masking moved OUT of these builders
+ * and now runs on the RENDERED string at the invocation site
+ * (`extraction-adapter.ts`), exactly as `invokeChain` already does for the
+ * plan prompt — one masking rule, no path where a template can bypass it.
  *
- * ACCURATE masking guarantee (do NOT overstate this):
+ * ACCURATE masking guarantee (do NOT overstate this — enforced by the CALLER,
+ * not by these functions):
  * - Limitation/health terms ALREADY KNOWN in `currentDraft.limitations` are
- *   redacted from the WHOLE assembled prompt via `mask()` — this also scrubs
- *   a repeat of the SAME known term if the user mentions it again this turn,
- *   AND (for Pass 2) any occurrence inside the seeded `assistantReply`.
+ *   redacted from the WHOLE assembled prompt via `mask(text, limitationTermsOf(input))`
+ *   at the call site — this also scrubs a repeat of the SAME known term if the
+ *   user mentions it again this turn, AND (for Pass 2) any occurrence inside
+ *   the seeded `assistantReply`.
  * - A user's NEWLY INTRODUCED (first-mention) health/limitation text in
- *   `message` is NOT masked here and is necessarily visible to the model this
+ *   `message` is NOT masked and is necessarily visible to the model this
  *   turn — extraction cannot read a field it cannot see. This is unavoidable
  *   and intentional, not a leak: raw health text reaching the LLM call for a
  *   first mention is the expected, minimal necessary exposure for the feature
  *   to work.
  * - Approved memory context is scrubbed of prompt-injection / medical-advice
- *   patterns via `sanitizeMemoryContext()` before inclusion.
+ *   patterns via `sanitizeMemoryContext()` before inclusion (unaffected by the
+ *   masking relocation — it runs in the variables producer, not the renderer).
  *
  * The DURABLE privacy guarantees for chat/extraction live elsewhere, not in
  * these functions:
  * (a) chat transcripts are NEVER embedded into the vector store (raw-transcript
  *     embedding is out of scope for this feature entirely);
  * (b) observability/tracing (Langfuse) masking for the LLM calls is enforced by
- *     the extraction adapter (`extraction-adapter.ts`), which masks
- *     health/limitation text in its trace metadata/inputs the same way
- *     `invokeChain` does for plan generation, even though the model input
- *     necessarily contains a first-mention phrase these functions cannot redact;
+ *     the extraction adapter (`extraction-adapter.ts`), which masks the
+ *     RENDERED text before it reaches the model/callback, even though that
+ *     text necessarily contains a first-mention phrase this masking cannot redact;
  * (c) `buildPlanPrompt` (plan GENERATION, a separate call after promote/confirm)
- *     masks the full, by-then-known limitations list before generation.
+ *     is masked at its own call site (`adapter-factory.ts`'s `invokeChain`)
+ *     with the full, by-then-known limitations list before generation.
  */
 
 /** Internal-context sections shared by both passes (draft/missing/memory). */
@@ -92,22 +98,15 @@ function buildContextSections(input: ChatExtractInput): {
 }
 
 /** Known limitation terms to mask from the assembled prompt for BOTH passes. */
-function limitationTermsOf(input: ChatExtractInput): string[] {
+export function limitationTermsOf(input: ChatExtractInput): string[] {
   return (input.currentDraft.limitations ?? []).map((l) => l.text);
 }
 
 /**
- * Pass 1 — the CONVERSATIONAL prompt. Streams the assistant's natural-language
- * reply token-by-token. The CURRENT DRAFT / STILL MISSING blocks are INTERNAL
- * context so the assistant knows what to ask about; the reply itself MUST be
- * plain prose (NOT JSON, no `assistantMessage` field — this call is not
- * structured).
+ * Today's exact Pass-1 (conversational reply) wording, compiled in as a
+ * `{{variable}}` template (langfuse-prompt-management, slice B1).
  */
-export function buildReplyPrompt(input: ChatExtractInput): string {
-  const { message } = input;
-  const { knownSection, missingSection, memorySection } = buildContextSections(input);
-
-  const rawPrompt = `You are a fitness plan assistant helping a user describe a workout plan through conversation.
+export const REPLY_PROMPT_TEMPLATE = `You are a fitness plan assistant helping a user describe a workout plan through conversation.
 
 IMPORTANT — SAFETY AND SCOPE RULES:
 - Do not diagnose any medical condition.
@@ -127,31 +126,28 @@ CONVERSATION STYLE:
 TASK:
 Reply to the user with a single natural-language message (plain prose only — no JSON, no field names, no headings). Follow ALL the CONVERSATION STYLE rules above. Whatever concrete value you propose or state in your reply (for example a specific number of training days or session length), be consistent with it for the rest of the turn.
 
-${knownSection}
+{{knownSection}}
 
-${missingSection}
+{{missingSection}}
 
 USER MESSAGE:
-${message}${memorySection}`.trim();
+{{message}}{{memorySection}}`;
 
-  // Masks only ALREADY-KNOWN limitation terms (see docstring above) — a
-  // first-mention health phrase in `message` is NOT covered by this call and
-  // reaches the returned prompt verbatim; that phrase is what the assistant
-  // needs to see to respond sensibly on this turn.
-  return mask(rawPrompt, limitationTermsOf(input));
-}
+/** Closed variable set + marker contract for `kinora-chat-reply`. */
+export const REPLY_PROMPT_DEFINITION: PromptDefinition = {
+  name: "kinora-chat-reply",
+  localTemplate: REPLY_PROMPT_TEMPLATE,
+  variables: ["knownSection", "missingSection", "message", "memorySection"],
+  requiredMarkers: ["{{knownSection}}", "{{missingSection}}", "{{message}}", "{{memorySection}}"],
+  orderedMarkers: ["{{knownSection}}", "{{missingSection}}", "{{message}}"],
+  maxTemplateChars: 20_000,
+};
 
 /**
- * Pass 2 — the EXTRACTION prompt, seeded with Pass 1's `assistantReply`. Asks
- * the model to extract ONLY the wizard input fields, and to keep them CONSISTENT
- * with the whole conversation INCLUDING any concrete value the assistant just
- * proposed/stated in its reply — so the committed draft matches the reply.
+ * Today's exact Pass-2 (extraction) wording, compiled in as a `{{variable}}`
+ * template (langfuse-prompt-management, slice B1).
  */
-export function buildExtractionPrompt(input: ChatExtractInput, assistantReply: string): string {
-  const { message } = input;
-  const { knownSection, missingSection, memorySection } = buildContextSections(input);
-
-  const rawPrompt = `You are a fitness plan assistant extracting structured plan-spec fields from a conversation.
+export const EXTRACTION_PROMPT_TEMPLATE = `You are a fitness plan assistant extracting structured plan-spec fields from a conversation.
 
 IMPORTANT — SAFETY AND SCOPE RULES:
 - Do not diagnose any medical condition.
@@ -171,20 +167,84 @@ From the conversation below, extract ONLY these wizard input fields (leave a fie
 Extract values CONSISTENT with the WHOLE conversation, INCLUDING any concrete value the assistant proposed or stated in its reply below — so the extracted draft matches what the assistant just told the user (e.g. if the assistant recommended "3 days a week", extract daysPerWeek = 3).
 NEVER infer preferenceScores or confirmed — those are derived and controlled server-side.
 
-${knownSection}
+{{knownSection}}
 
-${missingSection}
+{{missingSection}}
 
 ASSISTANT REPLY (you just told the user this — extract values CONSISTENT with it):
-${assistantReply}
+{{assistantReply}}
 
 USER MESSAGE:
-${message}${memorySection}`.trim();
+{{message}}{{memorySection}}`;
 
-  // Masks ALL already-known limitation terms across the WHOLE assembled prompt,
-  // including any occurrence inside the seeded `assistantReply`. A first-mention
-  // health phrase in `message` is NOT covered (see docstring) and reaches the
-  // returned prompt verbatim; that phrase is what the extractor needs to see to
-  // populate `limitations` on this turn.
-  return mask(rawPrompt, limitationTermsOf(input));
+/** Closed variable set + marker contract for `kinora-chat-extraction`. */
+export const EXTRACTION_PROMPT_DEFINITION: PromptDefinition = {
+  name: "kinora-chat-extraction",
+  localTemplate: EXTRACTION_PROMPT_TEMPLATE,
+  variables: ["knownSection", "missingSection", "assistantReply", "message", "memorySection"],
+  requiredMarkers: [
+    "{{knownSection}}",
+    "{{missingSection}}",
+    "{{assistantReply}}",
+    "{{message}}",
+    "{{memorySection}}",
+  ],
+  orderedMarkers: ["{{knownSection}}", "{{missingSection}}", "{{assistantReply}}", "{{message}}"],
+  maxTemplateChars: 20_000,
+};
+
+/** Computes the CLOSED variable set `REPLY_PROMPT_TEMPLATE` renders over. */
+export function buildReplyPromptVariables(input: ChatExtractInput): Record<string, string> {
+  const { message } = input;
+  const { knownSection, missingSection, memorySection } = buildContextSections(input);
+  return { knownSection, missingSection, message, memorySection };
+}
+
+/** Computes the CLOSED variable set `EXTRACTION_PROMPT_TEMPLATE` renders over. */
+export function buildExtractionPromptVariables(
+  input: ChatExtractInput,
+  assistantReply: string,
+): Record<string, string> {
+  const { message } = input;
+  const { knownSection, missingSection, memorySection } = buildContextSections(input);
+  return { knownSection, missingSection, assistantReply, message, memorySection };
+}
+
+/**
+ * Pass 1 — the CONVERSATIONAL prompt. Streams the assistant's natural-language
+ * reply token-by-token. The CURRENT DRAFT / STILL MISSING blocks are INTERNAL
+ * context so the assistant knows what to ask about; the reply itself MUST be
+ * plain prose (NOT JSON, no `assistantMessage` field — this call is not
+ * structured).
+ *
+ * Thin wrapper: renders `REPLY_PROMPT_TEMPLATE` over `buildReplyPromptVariables(input)`.
+ *
+ * Returns UNMASKED text (langfuse-prompt-management, slice B1 — masking
+ * relocated to the invocation site in `extraction-adapter.ts`, mirroring
+ * `invokeChain`'s A1 wiring, so there is exactly one masking rule with no
+ * path where a template can bypass it). Callers MUST mask the returned text
+ * with `mask(text, limitationTermsOf(input))` before it reaches a model or an
+ * observability callback.
+ */
+export function buildReplyPrompt(input: ChatExtractInput): string {
+  return renderTemplate(REPLY_PROMPT_TEMPLATE, buildReplyPromptVariables(input)).trim();
+}
+
+/**
+ * Pass 2 — the EXTRACTION prompt, seeded with Pass 1's `assistantReply`. Asks
+ * the model to extract ONLY the wizard input fields, and to keep them CONSISTENT
+ * with the whole conversation INCLUDING any concrete value the assistant just
+ * proposed/stated in its reply — so the committed draft matches the reply.
+ *
+ * Thin wrapper: renders `EXTRACTION_PROMPT_TEMPLATE` over
+ * `buildExtractionPromptVariables(input, assistantReply)`.
+ *
+ * Returns UNMASKED text — see `buildReplyPrompt`'s docstring; the same
+ * relocation applies here, including the seeded `assistantReply`.
+ */
+export function buildExtractionPrompt(input: ChatExtractInput, assistantReply: string): string {
+  return renderTemplate(
+    EXTRACTION_PROMPT_TEMPLATE,
+    buildExtractionPromptVariables(input, assistantReply),
+  ).trim();
 }
