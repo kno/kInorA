@@ -78,23 +78,21 @@ describe.skipIf(!hasDb)("AdminStatsRepository (real Postgres)", () => {
 
   async function newTenant(
     name: string,
-    options: { isTest?: boolean } = {},
   ): Promise<string> {
     const [t] = await db
       .insert(tenants)
-      .values({ name, isTest: options.isTest ?? false })
+      .values({ name })
       .returning({ id: tenants.id });
     return t!.id;
   }
 
   async function newUser(
-    options: { createdAt?: Date; isTest?: boolean } = {},
+    options: { createdAt?: Date } = {},
   ): Promise<string> {
     const [u] = await db
       .insert(users)
       .values({
         email: `stats-${Date.now()}-${Math.random()}@example.com`,
-        isTest: options.isTest ?? false,
         ...(options.createdAt ? { createdAt: options.createdAt } : {}),
       })
       .returning({ id: users.id });
@@ -346,51 +344,6 @@ describe.skipIf(!hasDb)("AdminStatsRepository (real Postgres)", () => {
     );
   });
 
-  it("EXCLUDES a synthetic account from the funnel — the whole cohort is invisible", async () => {
-    // THE test for #353. Every other number on this page is only as trustworthy
-    // as this filter: production and CI register into the same schema, so a
-    // funnel that counts test accounts is not a slightly noisy funnel, it is a
-    // meaningless one. Seeded as a signup that walks the ENTIRE funnel — plan,
-    // first workout, second workout inside 7 days — so if the filter is dropped
-    // it moves every step at once, in the same cohort week, and the exact
-    // equality below fails loudly.
-    const week = weekOf(NOW, 1);
-    const before = await funnelWeek(week);
-
-    const testTenant = await newTenant("stats-funnel-synthetic", { isTest: true });
-    const testUser = await newUser({ createdAt: week.signupAt, isTest: true });
-    await seedFunnelUser({
-      tenantId: testTenant,
-      userId: testUser,
-      completedAt: [addDays(week.signupAt, 1), addDays(week.signupAt, 3)],
-    });
-
-    const after = await funnelWeek(week);
-    expect(after).toEqual(before);
-  });
-
-  it("excludes a REAL user who belongs to a synthetic tenant (the flag is on the tenant, not the user)", async () => {
-    // The other half of the exclusion: fixtures routinely attach an unflagged
-    // user to a seeded organisation. Counting it would let synthetic data back
-    // in through the side door.
-    const week = weekOf(NOW, 2);
-    const before = await funnelWeek(week);
-
-    const testTenant = await newTenant("stats-funnel-synthetic-tenant", { isTest: true });
-    const unflaggedUser = await newUser({ createdAt: week.signupAt, isTest: false });
-    await db
-      .insert(memberships)
-      .values({ tenantId: testTenant, userId: unflaggedUser, role: "owner", status: "active" });
-    await seedFunnelUser({
-      tenantId: testTenant,
-      userId: unflaggedUser,
-      completedAt: [addDays(week.signupAt, 1)],
-    });
-
-    const after = await funnelWeek(week);
-    expect(after).toEqual(before);
-  });
-
   it("walks a real B2C cohort through every funnel step with exact counts", async () => {
     // A dedicated signup week nobody else seeds into, so the cohort row is
     // exactly what this test put there — the shared-database lower-bound
@@ -398,17 +351,17 @@ describe.skipIf(!hasDb)("AdminStatsRepository (real Postgres)", () => {
     // where the interesting failures are steps counting too MANY users.
     const week = weekOf(NOW, 3);
     const before = await funnelWeek(week);
-    const tenantId = await newTenant("stats-funnel-b2c", { isTest: false });
+    const tenantId = await newTenant("stats-funnel-b2c");
 
     // 1. Signed up, nothing else.
-    await newUser({ createdAt: week.signupAt, isTest: false });
+    await newUser({ createdAt: week.signupAt });
 
     // 2. Created a plan, never trained.
-    const planOnly = await newUser({ createdAt: week.signupAt, isTest: false });
+    const planOnly = await newUser({ createdAt: week.signupAt });
     await seedFunnelUser({ tenantId, userId: planOnly, completedAt: [] });
 
     // 3. One workout only — reaches the first-workout step, not the second.
-    const oneWorkout = await newUser({ createdAt: week.signupAt, isTest: false });
+    const oneWorkout = await newUser({ createdAt: week.signupAt });
     await seedFunnelUser({
       tenantId,
       userId: oneWorkout,
@@ -418,7 +371,7 @@ describe.skipIf(!hasDb)("AdminStatsRepository (real Postgres)", () => {
     // 4. A second workout, but on day 12 — OUTSIDE the 7-day rule, so it must
     //    stop at the first-workout step. This is the case a naive
     //    `count(sessions) >= 2` gets wrong.
-    const lateSecond = await newUser({ createdAt: week.signupAt, isTest: false });
+    const lateSecond = await newUser({ createdAt: week.signupAt });
     await seedFunnelUser({
       tenantId,
       userId: lateSecond,
@@ -427,7 +380,7 @@ describe.skipIf(!hasDb)("AdminStatsRepository (real Postgres)", () => {
 
     // 5. The full journey: second workout inside 7 days, then still training in
     //    week 2 (day 9) and week 4 (day 23).
-    const retained = await newUser({ createdAt: week.signupAt, isTest: false });
+    const retained = await newUser({ createdAt: week.signupAt });
     await seedFunnelUser({
       tenantId,
       userId: retained,
@@ -453,9 +406,9 @@ describe.skipIf(!hasDb)("AdminStatsRepository (real Postgres)", () => {
   it("segments a trainer-sponsored user out of the B2C cohort", async () => {
     const week = weekOf(NOW, 4);
     const before = await funnelWeek(week);
-    const tenantId = await newTenant("stats-funnel-trainer", { isTest: false });
+    const tenantId = await newTenant("stats-funnel-trainer");
 
-    const b2c = await newUser({ createdAt: week.signupAt, isTest: false });
+    const b2c = await newUser({ createdAt: week.signupAt });
     await seedFunnelUser({
       tenantId,
       userId: b2c,
@@ -465,8 +418,8 @@ describe.skipIf(!hasDb)("AdminStatsRepository (real Postgres)", () => {
     // Same journey, but reachable through trainer_client_assignments: it must
     // land in trainerSponsoredSignups and touch NO funnel step, or a handful of
     // B2B clients would swing the B2C ratios (issue #353).
-    const trainer = await newUser({ createdAt: week.signupAt, isTest: false });
-    const client = await newUser({ createdAt: week.signupAt, isTest: false });
+    const trainer = await newUser({ createdAt: week.signupAt });
+    const client = await newUser({ createdAt: week.signupAt });
     await db.insert(trainerClientAssignments).values({
       tenantId,
       trainerUserId: trainer,
@@ -495,9 +448,9 @@ describe.skipIf(!hasDb)("AdminStatsRepository (real Postgres)", () => {
   it("counts an active session older than the threshold as abandoned, and a fresh one as not", async () => {
     const before = await repo.getPlatformStats(NOW);
     const week = weekOf(NOW, 5);
-    const tenantId = await newTenant("stats-funnel-abandoned", { isTest: false });
+    const tenantId = await newTenant("stats-funnel-abandoned");
 
-    const stale = await newUser({ createdAt: week.signupAt, isTest: false });
+    const stale = await newUser({ createdAt: week.signupAt });
     const stalePlan = await seedFunnelUser({ tenantId, userId: stale, completedAt: [] });
     await db.insert(workoutSessions).values({
       tenantId,
@@ -510,7 +463,7 @@ describe.skipIf(!hasDb)("AdminStatsRepository (real Postgres)", () => {
     });
 
     // Started an hour ago: a real workout in progress, not an abandoned one.
-    const fresh = await newUser({ createdAt: week.signupAt, isTest: false });
+    const fresh = await newUser({ createdAt: week.signupAt });
     const freshPlan = await seedFunnelUser({ tenantId, userId: fresh, completedAt: [] });
     await db.insert(workoutSessions).values({
       tenantId,

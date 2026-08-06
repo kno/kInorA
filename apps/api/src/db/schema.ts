@@ -161,21 +161,6 @@ export const billingAuditActionEnum = pgEnum("billing_audit_action", [
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  /**
-   * Synthetic-account marker (#353). Analytics MUST exclude these rows or the
-   * numbers are meaningless: automated tests register thousands of throwaway
-   * tenants against the same database the product uses, and there was no way to
-   * tell them apart — no flag, no email-domain convention, no exclusion list.
-   *
-   * It is a persisted column rather than an inferred email/name heuristic
-   * because the heuristic is exactly what keeps being wrong: `@kinora.test` is
-   * a convention some suites follow and others do not, and a hand-created
-   * account can look synthetic while being real.
-   *
-   * Defaults to false so the honest failure mode is "a test account leaks into
-   * the numbers and someone notices", not "a real account silently disappears".
-   */
-  isTest: boolean("is_test").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -187,16 +172,6 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   isAdmin: boolean("is_admin").notNull().default(false),
-  /**
-   * Synthetic-account marker (#353) — see `tenants.isTest` for the rationale.
-   *
-   * Carried on BOTH tables because they are marked at different moments: a
-   * registration provisions a tenant and a user together, but seeded fixtures
-   * routinely attach extra users to an existing tenant (and, less often, an
-   * extra tenant to an existing user). Flagging only one side would let the
-   * other half of the pair back into the funnel.
-   */
-  isTest: boolean("is_test").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

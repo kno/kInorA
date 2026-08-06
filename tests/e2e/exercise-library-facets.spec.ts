@@ -1,5 +1,4 @@
 import { expect, test, type Page } from "@playwright/test";
-import { closeSeedPool, markAccountAsTestByEmail } from "./helpers/billing-seed";
 
 /**
  * Exercise-library multi-select facets — soft-navigation regression proof
@@ -37,14 +36,11 @@ const CHEST_OR_CARDIO = "192";
 /** Register a fresh user via the real API and put its session in the browser. */
 async function signIn(page: Page): Promise<void> {
   const unique = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-  const email = `e2e+facets-345-${unique}@kinora.test`;
   const res = await page.request.post(`${API_BASE}/auth/register`, {
-    data: { email, password: "Sup3rSecret!pw" },
+    data: { email: `e2e+facets-345-${unique}@kinora.test`, password: "Sup3rSecret!pw" },
   });
   expect(res.ok(), "registration should succeed").toBeTruthy();
   const { token } = (await res.json()) as { token: string };
-  // Keep this throwaway account out of the retention funnel (#353).
-  await markAccountAsTestByEmail(email);
   // Scoped to the origin the browser is actually on, which the caller has
   // already navigated to — the suite's baseURL is not importable here.
   await page.context().addCookies([
@@ -64,12 +60,6 @@ function chip(page: Page, field: string, value: string) {
 }
 
 test.describe("Exercise library multi-select facets (#345)", () => {
-  // `markAccountAsTestByEmail` opens the shared seed pool; close it so the
-  // Playwright worker can exit.
-  test.afterAll(async () => {
-    await closeSeedPool();
-  });
-
   test.beforeEach(async ({ page }) => {
     await page.goto("/exercises");
     await signIn(page);

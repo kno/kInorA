@@ -76,23 +76,6 @@ function startOfIsoWeekUtc(date: Date): Date {
   return monday;
 }
 
-/**
- * The "this is a real account" predicate, applied to `users` (#353).
- *
- * Both halves matter. `users.is_test` catches an account created directly by a
- * fixture, and the NOT EXISTS catches a user attached to a synthetic TENANT —
- * a seeded member of a test organisation is test data even if the user row
- * itself was never flagged. Written against `users` so the funnel query and the
- * abandoned-session count can share one definition; the two drifting apart is
- * exactly how a test-account filter stops being trustworthy.
- */
-const REAL_ACCOUNT_ONLY = sql`${users.isTest} = false and not exists (
-      select 1
-      from ${memberships} m
-      join ${tenants} t on t.id = m.tenant_id
-      where m.user_id = ${users.id} and t.is_test = true
-    )`;
-
 /** A zero-filled funnel step set, used as the seed of the totals reduce. */
 function emptyRetentionSteps(): RetentionFunnelSteps {
   return {
@@ -372,7 +355,7 @@ export class AdminStatsRepository
           isNotNull(workoutSessions.completedAt),
         ),
       )
-      .where(and(gte(users.createdAt, windowStart), REAL_ACCOUNT_ONLY))
+      .where(gte(users.createdAt, windowStart))
       .groupBy(users.id, users.createdAt)
       .as("per_user");
 
@@ -409,7 +392,6 @@ export class AdminStatsRepository
           eq(workoutSessions.status, "active"),
           gte(workoutSessions.startedAt, windowStart),
           lt(workoutSessions.startedAt, abandonedBefore),
-          REAL_ACCOUNT_ONLY,
         ),
       );
 
