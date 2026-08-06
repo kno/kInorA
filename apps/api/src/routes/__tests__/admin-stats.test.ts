@@ -45,6 +45,42 @@ const SAMPLE_STATS: PlatformStats = {
     },
   },
   observability: { errors24h: 1, events24h: 20 },
+  retention: {
+    windowWeeks: 12,
+    abandonedSessionThresholdHours: 24,
+    abandonedSessions: 3,
+    cohorts: [
+      {
+        weekStart: "2026-07-27",
+        signups: 4,
+        createdPlan: 3,
+        completedFirstWorkout: 2,
+        completedSecondWorkoutWithin7d: 1,
+        activeWeek2: 0,
+        activeWeek4: 0,
+        trainerSponsoredSignups: 1,
+      },
+      {
+        weekStart: "2026-07-20",
+        signups: 6,
+        createdPlan: 5,
+        completedFirstWorkout: 4,
+        completedSecondWorkoutWithin7d: 2,
+        activeWeek2: 2,
+        activeWeek4: 1,
+        trainerSponsoredSignups: 0,
+      },
+    ],
+    totals: {
+      signups: 10,
+      createdPlan: 8,
+      completedFirstWorkout: 6,
+      completedSecondWorkoutWithin7d: 3,
+      activeWeek2: 2,
+      activeWeek4: 1,
+      trainerSponsoredSignups: 1,
+    },
+  },
 };
 
 function buildRepo(
@@ -104,5 +140,48 @@ describe("GET /admin/stats", () => {
     expect(repo.getPlatformStats).toHaveBeenCalledTimes(1);
     const body = res.json() as PlatformStats;
     expect(body).toEqual(SAMPLE_STATS);
+  });
+
+  it("serialises the retention funnel with per-cohort absolute counts, newest week first", async () => {
+    app = await buildTestApp(buildRepo(ADMIN_USER_ROW));
+    const res = await app.inject({
+      method: "GET",
+      url: "/admin/stats",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+    const body = res.json() as PlatformStats;
+
+    expect(body.retention.cohorts.map((c) => c.weekStart)).toEqual([
+      "2026-07-27",
+      "2026-07-20",
+    ]);
+    // Absolute counts survive the wire — the UI needs the denominator, not a
+    // pre-computed ratio (#353).
+    expect(body.retention.cohorts[0]).toMatchObject({ signups: 4, createdPlan: 3 });
+    expect(body.retention.totals.signups).toBe(10);
+    expect(body.retention.abandonedSessionThresholdHours).toBe(24);
+  });
+
+  it("keeps every funnel step within its own denominator", async () => {
+    app = await buildTestApp(buildRepo(ADMIN_USER_ROW));
+    const res = await app.inject({
+      method: "GET",
+      url: "/admin/stats",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+    const body = res.json() as PlatformStats;
+
+    // The steps nest, so a ratio computed from any adjacent pair can never
+    // exceed 100%. Asserted on the serialised payload because that is what the
+    // web mirror consumes.
+    for (const steps of [...body.retention.cohorts, body.retention.totals]) {
+      expect(steps.createdPlan).toBeLessThanOrEqual(steps.signups);
+      expect(steps.completedFirstWorkout).toBeLessThanOrEqual(steps.createdPlan);
+      expect(steps.completedSecondWorkoutWithin7d).toBeLessThanOrEqual(
+        steps.completedFirstWorkout,
+      );
+      expect(steps.activeWeek2).toBeLessThanOrEqual(steps.completedSecondWorkoutWithin7d);
+      expect(steps.activeWeek4).toBeLessThanOrEqual(steps.completedSecondWorkoutWithin7d);
+    }
   });
 });

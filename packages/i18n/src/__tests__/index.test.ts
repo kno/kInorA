@@ -506,14 +506,21 @@ describe("@kinora/i18n package assembly", () => {
 
     const flat = flattenMessages(catalogs.en);
     const keys = Object.keys(flat).filter((key) => key.startsWith("platformStats."));
-    // title, description, error (3) + sections x6 + metrics x3 + roles x3 +
-    // tiers x4 + billing x4 + usage x5 + observability x2 = 30 keys for the
-    // /admin/stats platform-statistics panel.
-    expect(keys).toHaveLength(30);
+    // title, description, error (3) + sections x7 + metrics x3 + roles x3 +
+    // tiers x4 + billing x4 + usage x5 + retention x12 + observability x2 = 43
+    // keys for the /admin/stats platform-statistics panel (retention funnel
+    // added by GH #353).
+    expect(keys).toHaveLength(43);
     expect(flat["platformStats.title"]).toBeTruthy();
     expect(flattenMessages(catalogs.es)["platformStats.title"]).toBeTruthy();
     expect(flat["platformStats.billing.effectiveTier"]).toBeTruthy();
     expect(flat["platformStats.observability.errors24h"]).toBeTruthy();
+    // The funnel copy renders a count AND its denominator; the parity check
+    // above already proved both locales carry the same ICU arguments.
+    expect(flat["platformStats.retention.ofCount"]).toBe("{value} of {total}");
+    expect(flattenMessages(catalogs.es)["platformStats.retention.ofCount"]).toBe(
+      "{value} de {total}",
+    );
   });
 
   it("the brandingStudio namespace is present with EN+ES parity (16a-v3-gym-white-label — Branding Studio)", () => {

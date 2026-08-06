@@ -1595,7 +1595,22 @@
       "memberships": "Membresías activas",
       "billing": "Facturación",
       "usage": "Uso del periodo actual",
+      "retention": "Embudo de retención",
       "observability": "Observabilidad (últimas 24 horas)"
+    },
+    "retention": {
+      "window": "Agrupado por semana de registro, últimas {weeks} semanas. Las cohortes más recientes aún no han tenido tiempo de alcanzar la semana 2 ni la semana 4.",
+      "totals": "Todas las cohortes de la ventana",
+      "weekOf": "Semana del {date}",
+      "ofCount": "{value} de {total}",
+      "signups": "Registros (B2C)",
+      "createdPlan": "Han creado un plan",
+      "completedFirstWorkout": "Han completado un primer entrenamiento",
+      "completedSecondWorkout": "Han completado un segundo entrenamiento en 7 días",
+      "activeWeek2": "Siguen entrenando en la semana 2",
+      "activeWeek4": "Siguen entrenando en la semana 4",
+      "trainerSponsored": "Registros con entrenador asignado (se contabilizan aparte)",
+      "abandonedSessions": "Entrenamientos abandonados (abiertos más de {hours} h)"
     },
     "metrics": {
       "total": "Total",

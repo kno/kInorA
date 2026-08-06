@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import type { PlatformStats } from "./stats-constants";
+import type { PlatformStats, RetentionFunnelSteps } from "./stats-constants";
 
 /**
  * Read-only platform-statistics view (GH #309). A client component (mirrors
@@ -33,6 +33,77 @@ export function StatsView({ stats }: { stats: PlatformStats }) {
           {t(`tiers.${tier}`)}: <strong>{tally[tier]}</strong>
         </li>
       ))}
+    </ul>
+  );
+
+  /**
+   * One funnel step, ALWAYS rendered as "value of denominator" (#353).
+   *
+   * The denominator is not decoration and is not optional: "75%" and "3 of 4"
+   * are the same ratio but not the same claim, and this page exists so
+   * prioritisation calls stop being made on the first one. The percentage is
+   * shown too, but only ever beside its n.
+   */
+  const funnelStep = (
+    label: string,
+    value: number,
+    denominator: number,
+    testId: string,
+  ) => (
+    <li data-testid={testId}>
+      <span className="kin-muted">{label}</span>{" "}
+      <strong>{t("retention.ofCount", { value, total: denominator })}</strong>
+      {denominator > 0 ? (
+        <span className="kin-muted">
+          {" "}
+          ({Math.round((value / denominator) * 100)}%)
+        </span>
+      ) : null}
+    </li>
+  );
+
+  const funnelSteps = (steps: RetentionFunnelSteps, testIdPrefix: string) => (
+    <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: "0.25rem" }}>
+      {/* The top of the funnel has no denominator above it, so it is a plain
+          count rather than a ratio against itself. */}
+      <li data-testid={`${testIdPrefix}-signups`}>
+        <span className="kin-muted">{t("retention.signups")}</span>{" "}
+        <strong>{steps.signups}</strong>
+      </li>
+      {funnelStep(
+        t("retention.createdPlan"),
+        steps.createdPlan,
+        steps.signups,
+        `${testIdPrefix}-created-plan`,
+      )}
+      {funnelStep(
+        t("retention.completedFirstWorkout"),
+        steps.completedFirstWorkout,
+        steps.createdPlan,
+        `${testIdPrefix}-first-workout`,
+      )}
+      {funnelStep(
+        t("retention.completedSecondWorkout"),
+        steps.completedSecondWorkoutWithin7d,
+        steps.completedFirstWorkout,
+        `${testIdPrefix}-second-workout`,
+      )}
+      {funnelStep(
+        t("retention.activeWeek2"),
+        steps.activeWeek2,
+        steps.completedSecondWorkoutWithin7d,
+        `${testIdPrefix}-week2`,
+      )}
+      {funnelStep(
+        t("retention.activeWeek4"),
+        steps.activeWeek4,
+        steps.completedSecondWorkoutWithin7d,
+        `${testIdPrefix}-week4`,
+      )}
+      <li data-testid={`${testIdPrefix}-trainer-sponsored`}>
+        <span className="kin-muted">{t("retention.trainerSponsored")}</span>{" "}
+        <strong>{steps.trainerSponsoredSignups}</strong>
+      </li>
     </ul>
   );
 
@@ -103,6 +174,38 @@ export function StatsView({ stats }: { stats: PlatformStats }) {
             stats.usage.byFeature.memory_retrieval,
             "usage-memory-retrieval",
           )}
+        </div>
+      </section>
+
+      <section aria-labelledby="stats-retention">
+        <h2 id="stats-retention">{t("sections.retention")}</h2>
+        <p className="kin-muted" data-testid="retention-window">
+          {t("retention.window", { weeks: stats.retention.windowWeeks })}
+        </p>
+        <div style={{ display: "grid", gap: "0.75rem" }}>
+          <div className="kin-card" data-testid="retention-totals">
+            <span className="kin-muted">{t("retention.totals")}</span>
+            {funnelSteps(stats.retention.totals, "retention-totals")}
+          </div>
+          {metric(
+            t("retention.abandonedSessions", {
+              hours: stats.retention.abandonedSessionThresholdHours,
+            }),
+            stats.retention.abandonedSessions,
+            "retention-abandoned-sessions",
+          )}
+          {stats.retention.cohorts.map((cohort) => (
+            <div
+              className="kin-card"
+              key={cohort.weekStart}
+              data-testid={`retention-cohort-${cohort.weekStart}`}
+            >
+              <span className="kin-muted">
+                {t("retention.weekOf", { date: cohort.weekStart })}
+              </span>
+              {funnelSteps(cohort, `retention-${cohort.weekStart}`)}
+            </div>
+          ))}
         </div>
       </section>
 
