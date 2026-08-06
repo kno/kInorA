@@ -20,6 +20,42 @@ const STATS: PlatformStats = {
     byFeature: { plan_generation: 30, plan_regeneration: 5, memory_write: 12, memory_retrieval: 8 },
   },
   observability: { errors24h: 1, events24h: 20 },
+  retention: {
+    windowWeeks: 12,
+    abandonedSessionThresholdHours: 24,
+    abandonedSessions: 3,
+    cohorts: [
+      {
+        weekStart: "2026-07-27",
+        signups: 4,
+        createdPlan: 3,
+        completedFirstWorkout: 2,
+        completedSecondWorkoutWithin7d: 1,
+        activeWeek2: 0,
+        activeWeek4: 0,
+        trainerSponsoredSignups: 1,
+      },
+      {
+        weekStart: "2026-07-20",
+        signups: 6,
+        createdPlan: 5,
+        completedFirstWorkout: 4,
+        completedSecondWorkoutWithin7d: 2,
+        activeWeek2: 2,
+        activeWeek4: 1,
+        trainerSponsoredSignups: 0,
+      },
+    ],
+    totals: {
+      signups: 10,
+      createdPlan: 8,
+      completedFirstWorkout: 6,
+      completedSecondWorkoutWithin7d: 3,
+      activeWeek2: 2,
+      activeWeek4: 1,
+      trainerSponsoredSignups: 1,
+    },
+  },
 };
 
 describe("StatsView", () => {
@@ -57,5 +93,59 @@ describe("StatsView", () => {
     expect(within(screen.getByTestId("usage-memory-retrieval")).getByText("8")).toBeDefined();
     expect(within(screen.getByTestId("obs-errors24h")).getByText("1")).toBeDefined();
     expect(within(screen.getByTestId("obs-events24h")).getByText("20")).toBeDefined();
+  });
+
+  it("renders every retention step as an absolute count WITH its denominator, never a bare percentage", () => {
+    renderWithIntl(<StatsView stats={STATS} />);
+    const totals = screen.getByTestId("retention-totals");
+
+    // The whole point of #353: "8 of 10", not "80%". If a step ever renders the
+    // ratio alone, this fails.
+    expect(within(totals).getByTestId("retention-totals-created-plan").textContent).toContain(
+      "8 of 10",
+    );
+    expect(
+      within(totals).getByTestId("retention-totals-first-workout").textContent,
+    ).toContain("6 of 8");
+    expect(
+      within(totals).getByTestId("retention-totals-second-workout").textContent,
+    ).toContain("3 of 6");
+    expect(within(totals).getByTestId("retention-totals-week2").textContent).toContain("2 of 3");
+    expect(within(totals).getByTestId("retention-totals-week4").textContent).toContain("1 of 3");
+  });
+
+  it("renders one card per signup-week cohort, newest first, with its own denominators", () => {
+    renderWithIntl(<StatsView stats={STATS} />);
+    const newest = screen.getByTestId("retention-cohort-2026-07-27");
+    expect(newest.textContent).toContain("2026-07-27");
+    expect(
+      within(newest).getByTestId("retention-2026-07-27-created-plan").textContent,
+    ).toContain("3 of 4");
+    // A cohort too young to have reached week 4 shows 0 against its real
+    // denominator rather than an empty or absent row.
+    expect(within(newest).getByTestId("retention-2026-07-27-week4").textContent).toContain(
+      "0 of 1",
+    );
+
+    const older = screen.getByTestId("retention-cohort-2026-07-20");
+    expect(within(older).getByTestId("retention-2026-07-20-week2").textContent).toContain(
+      "2 of 2",
+    );
+  });
+
+  it("reports trainer-sponsored signups as a separate segment and the abandoned-session count", () => {
+    renderWithIntl(<StatsView stats={STATS} />);
+    // Trainer-sponsored users are counted apart so they cannot inflate the B2C
+    // cohort: totals.signups is 10 while one trainer-sponsored signup exists.
+    expect(
+      within(screen.getByTestId("retention-totals")).getByTestId(
+        "retention-totals-trainer-sponsored",
+      ).textContent,
+    ).toContain("1");
+    expect(within(screen.getByTestId("retention-totals-signups")).getByText("10")).toBeDefined();
+    expect(
+      within(screen.getByTestId("retention-abandoned-sessions")).getByText("3"),
+    ).toBeDefined();
+    expect(screen.getByTestId("retention-window").textContent).toContain("12");
   });
 });

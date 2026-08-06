@@ -18,6 +18,32 @@ const SAMPLE: PlatformStats = {
     byFeature: { plan_generation: 30, plan_regeneration: 5, memory_write: 12, memory_retrieval: 8 },
   },
   observability: { errors24h: 1, events24h: 20 },
+  retention: {
+    windowWeeks: 12,
+    abandonedSessionThresholdHours: 24,
+    abandonedSessions: 3,
+    cohorts: [
+      {
+        weekStart: "2026-07-27",
+        signups: 4,
+        createdPlan: 3,
+        completedFirstWorkout: 2,
+        completedSecondWorkoutWithin7d: 1,
+        activeWeek2: 0,
+        activeWeek4: 0,
+        trainerSponsoredSignups: 1,
+      },
+    ],
+    totals: {
+      signups: 4,
+      createdPlan: 3,
+      completedFirstWorkout: 2,
+      completedSecondWorkoutWithin7d: 1,
+      activeWeek2: 0,
+      activeWeek4: 0,
+      trainerSponsoredSignups: 1,
+    },
+  },
 };
 
 function buildFetch(status: number, body: unknown) {
