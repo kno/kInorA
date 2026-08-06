@@ -6,7 +6,7 @@ import type { PlanSpecDraft } from "@kinora/contracts";
 import type { ChatExtractInput, PlanSpecExtractor } from "./extraction-port.js";
 import { buildReplyPrompt, buildExtractionPrompt } from "./extraction-prompt.js";
 import type { DynamicConfigRepo } from "./dynamic-generator.js";
-import type { AiTracingDeps, TracingHandler } from "./langfuse-handler.js";
+import type { AiTracingDeps } from "./langfuse-handler.js";
 
 /**
  * LangChain-backed extraction adapter for the conversational create-plan turn
@@ -61,14 +61,19 @@ import type { AiTracingDeps, TracingHandler } from "./langfuse-handler.js";
  * `withStructuredOutput(...).invoke()` for Pass 2.
  */
 export interface ExtractionChatModel {
+  // `options` is a loose `Record<string, unknown>` (mirroring `invokeChain`'s
+  // `chain.invoke` parameter in `adapter-factory.ts`) rather than the stricter
+  // `ExtractionCallOptions`, so real provider classes (whose own call-options
+  // types declare `callbacks?: Callbacks` from `@langchain/core`) stay
+  // structurally assignable to this interface without importing that type here.
   stream(
     input: string,
-    options?: ExtractionCallOptions,
+    options?: Record<string, unknown>,
   ): Promise<AsyncIterable<{ content: unknown }>>;
   withStructuredOutput(
     schema: unknown,
     opts: { method: string },
-  ): { invoke(input: string, options?: ExtractionCallOptions): Promise<unknown> };
+  ): { invoke(input: string, options?: Record<string, unknown>): Promise<unknown> };
 }
 
 /** Call options forwarded to the model — abort + safe (masked) observability metadata. */
@@ -76,8 +81,11 @@ export interface ExtractionCallOptions {
   signal?: AbortSignal;
   runName?: string;
   metadata?: Record<string, unknown>;
-  /** Present only when a tracing handler is injected (langfuse-prompt-management, slice A2). */
-  callbacks?: TracingHandler[];
+  /**
+   * Present only when a tracing handler is injected (langfuse-prompt-management,
+   * slice A2), attached with the same conditional spread `invokeChain` uses.
+   */
+  callbacks?: unknown[];
 }
 
 /** Builds a chat model for a resolved provider/model config. Injected for testability. */
