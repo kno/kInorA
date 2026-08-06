@@ -376,6 +376,26 @@ describe("PlanSpecExtractionAdapter prompt-source attribution (langfuse-prompt-m
 
     expect(invokeCalls[0]?.options?.metadata).toMatchObject({ promptSource: "langfuse" });
   });
+
+  it("both passes succeed with the LOCAL template when a real ResolvePrompt is wired but no Langfuse credentials are configured (production no-credentials shape)", async () => {
+    // Mirrors app.ts's actual production wiring: a real ResolvePrompt is
+    // ALWAYS constructed and injected, but its gateway is null when Langfuse
+    // credentials are absent. A chat turn must succeed exactly as before.
+    const prompts = new ResolvePrompt(null);
+    const { adapter, streamCalls, invokeCalls } = buildAdapter(
+      { tokens: ["hi"], extracted: { goal: "strength" } },
+      { prompts },
+    );
+    const controller = new AbortController();
+
+    let assistantReply = "";
+    for await (const tok of adapter.streamReply(input(), controller.signal)) assistantReply += tok;
+    const draft = await adapter.extract(input(), assistantReply);
+
+    expect(draft.goal).toBe("strength");
+    expect(streamCalls[0]?.options?.metadata).toMatchObject({ promptSource: "fallback" });
+    expect(invokeCalls[0]?.options?.metadata).toMatchObject({ promptSource: "fallback" });
+  });
 });
 
 describe("PlanSpecExtractionAdapter masking relocation (langfuse-prompt-management, slice B1)", () => {
