@@ -795,3 +795,206 @@ the fallback path is genuinely exercised end-to-end, not merely asserted.
 
 - B2b's PR must merge before slice C can branch (`stacked-to-main`).
 - Slice C (native prompt-version linkage) is the only remaining slice in this change.
+
+## Slice C — Native Prompt-Version Linkage
+
+**Status: DONE.** All C.1–C.16 tasks in `tasks.md` are complete. C.17 is a deliberately
+unchecked post-deploy operational item, per assignment (not something an executor can perform
+before merge).
+
+- Prerequisite state confirmed before branching: B2b's PR #373 was MERGED to `main` as squash
+  commit `162e8b7`, and `main` was pulled fresh before branching (`stacked-to-main`, no child
+  branch off an unmerged parent).
+- Branch: `feat/langfuse-prompt-linking` (from `main`).
+- PR: opened against `main` (see the PR URL reported alongside this record), referencing #366 as
+  `Part of #366` (NOT a closing keyword — this is the last code slice, but the issue closes at
+  archive, not by a merge keyword; a closing keyword on A1's PR had already auto-closed #366
+  prematurely once). Open, NOT merged.
+- 3 work-unit commits on the branch, RED separated from GREEN:
+  1. RED — `prompt-linked-chain.test.ts` (10 cases: promptStep identity, run-parenting for both
+     `linkStructuredChain` and `linkStreamingModel`, masking invariant across the restructured
+     chain, output equivalence, guard degradation table), confirmed failing (module did not exist).
+  2. GREEN — `apps/api/src/ai/prompt-linked-chain.ts` created (`promptStep`, `linkStructuredChain`,
+     `linkStreamingModel`). All 10 tests pass.
+  3. GREEN (wiring) — `invokeChain` (`adapter-factory.ts`) and both `PlanSpecExtractionAdapter`
+     passes (`extraction-adapter.ts`) wired to `linkStructuredChain`/`linkStreamingModel` plus the
+     version-linking attribution scalars; one pre-existing exact-equality metadata assertion in
+     `extraction-adapter.test.ts` updated to include the new `promptLinked: false` key (the same
+     "update, not break" pattern B2b used for `promptSource`); new attribution test cases added to
+     both `adapter-factory.test.ts` and `extraction-adapter.test.ts`.
+
+### Task-by-task (tasks.md C.1–C.17)
+
+- [x] C.1 — RED: `prompt-linked-chain.test.ts`'s run-parenting cases, using a REAL
+  `RunnableSequence`/`RunnableLambda` from `@langchain/core` plus a ~15-line offline `BaseChatModel`
+  subclass (`CannedChatModel`, `_generate` returns a canned `AIMessage`). Confirmed failing (module
+  not found) before C.2.
+- [x] C.2 — GREEN: `promptStep()` — `RunnableLambda.from((prompt: string) => prompt)`.
+- [x] C.3 — RED: guard-degradation table — plain object with `.invoke`, `null`, `undefined`, and an
+  includeRaw-shaped fake (`{invoke, steps}` with no `lc_runnable` marker) all decline
+  (`{chain: <original>, linked: false}`) without throwing; a declined call still generates
+  successfully.
+- [x] C.4 — GREEN: `linkStructuredChain<T>(structured)` — `structured == null` check FIRST (guards
+  `RunnableSequence.isRunnableSequence`'s `.middle` dereference), then
+  `RunnableSequence.isRunnableSequence(structured)`; reparents as
+  `RunnableSequence.from([promptStep(), ...structured.steps])` on match, else degrades untouched.
+- [x] C.5 — RED: same degradation table for `linkStreamingModel` (plain object with `.stream`,
+  `null`, `undefined`).
+- [x] C.6 — GREEN: `linkStreamingModel<T>(model)` — `Runnable.isRunnable(model)` guard, wraps as
+  `RunnableSequence.from([promptStep(), model])` on match.
+- [x] C.7 — RED: output equivalence — the reparented flat sequence and the untouched
+  `withStructuredOutput`-shaped sequence produce an identical parsed result for the same canned
+  model response; `WorkoutProgramSchema.parse` succeeds identically on both.
+- [x] C.8 — GREEN: confirmed by C.4's step-object reuse (`structured.steps` spread through
+  unchanged) — no additional production code needed, as predicted.
+- [x] C.9 — RED: attribution cases added to BOTH `adapter-factory.test.ts` and
+  `extraction-adapter.test.ts` — remote path → `promptSource: "langfuse"`, `promptName`,
+  `promptVersion`, `promptLabel: "production"`, `langfusePrompt: {name, version, isFallback: false}`;
+  fallback path → `promptSource: "fallback"`, `promptLinked` present, NO `promptName`/
+  `promptVersion`/`langfusePrompt` key. (Written after C.10's wiring rather than strictly before —
+  documented deviation, see below.)
+- [x] C.10 — GREEN: wired `linkStructuredChain` into `invokeChain` (`adapter-factory.ts`) and
+  `linkStructuredChain`/`linkStreamingModel` into `extraction-adapter.ts`'s `extract`/`streamReply`;
+  `metadata.langfusePrompt`, `promptName`, `promptVersion`, `promptLabel: "production"` attached
+  only when `promptSource === "langfuse"`; `promptLinked` attached on EVERY call (never omitted).
+- [x] C.11 — RED: masking invariant across the restructured chain — `prompt-linked-chain.test.ts`
+  asserts the outer sequence's own start, the prompt step's start, AND the model's
+  `handleChatModelStart` all observe only the already-masked string, never the raw term (the
+  parser step's own chain-start — whose input is the model's AIMessage OUTPUT, not the prompt — is
+  deliberately excluded from this assertion, since it is unrelated to the masking invariant).
+- [x] C.12 — GREEN: confirmed by construction — `promptStep()` wraps the value AFTER B1/B2's
+  render+mask pipeline runs; no additional production code needed.
+- [x] C.13 — REFACTOR: confirmed via `codegraph_explore` + direct read of `adapter-factory.ts` that
+  all five plan-generation provider factories (`createOpenRouterAdapter`, `createOpenAIAdapter`,
+  `createAnthropicAdapter`, `createGoogleAdapter`, `createOpenCodeGoAdapter`) call the SAME
+  `invokeChain`, each with `llm.withStructuredOutput(WorkoutProgramSchema, {method: "jsonSchema"})`
+  (four of them) or `{method: "jsonMode"}` (opencode-go) — all funnel through the one
+  `linkStructuredChain` call site; none construct a differently-shaped chain the guard would
+  mis-handle.
+- [x] C.14 — Verify: all gates green (see Gate Evidence below).
+- [x] C.15 — Full-chain regression: `pnpm -r test` — 170 apps/api test files, 2041 passed, 116
+  skipped; apps/web 155 files/1640 passed; apps/mobile 53 files/467 passed; all packages green.
+  No credentials set anywhere in the suite; no behavioural regression.
+- [x] C.16 — Filed both follow-up GitHub issues on `kno/kInorA` (`gh auth switch --user kno` first,
+  duplicate search via `gh issue list --search` came back empty for both):
+  - https://github.com/kno/kInorA/issues/374 — first-mention limitation masking gap, now that a
+    real trace channel exists (proposal answer 4); records both tightening options the design
+    lists.
+  - https://github.com/kno/kInorA/issues/375 — re-run `prompt-linked-chain` tests on any
+    `@langchain/core`/`@langchain/openai`/`@langchain/anthropic`/`@langchain/google-genai` bump,
+    since a shape change degrades silently and safely but stops populating the native columns
+    (`promptLinked: false`).
+- [ ] C.17 — Deliberately left unchecked: post-deploy, out-of-band confirmation that the Langfuse
+  Prompt tab actually populates against the live project. Not something this executor can perform
+  before merge; recorded as the last open item below.
+
+### Deviation from the strict per-substep RED/GREEN convention, documented rather than silently accepted
+
+C.9's attribution test cases (in `adapter-factory.test.ts` and `extraction-adapter.test.ts`) were
+added AFTER C.10's production wiring landed in the same working session, not as a standalone RED
+commit that failed against pre-C.10 code. Reason: attribution correctness depends on the SAME
+wiring C.10 introduces (there is no intermediate "attribution scalars exist but wiring doesn't"
+state that would make a separate RED commit meaningful — unlike C.1/C.3/C.5/C.7, which test the
+pure `prompt-linked-chain.ts` module in isolation and DID have a genuine RED phase, confirmed
+failing with the module missing). The two commits (`prompt-linked-chain.ts` RED→GREEN, then the
+wiring+attribution-tests commit) preserve an honest RED/GREEN split for the module itself; only the
+call-site attribution tests are combined with their wiring, mirroring B1's own documented precedent
+for exactly this kind of test/implementation interdependency.
+
+### Files created
+
+- `apps/api/src/ai/prompt-linked-chain.ts` — `PromptLinkedChain<T>`, `promptStep()`,
+  `linkStructuredChain<T>()`, `linkStreamingModel<T>()`.
+- `apps/api/src/ai/__tests__/prompt-linked-chain.test.ts`.
+
+### Files modified
+
+- `apps/api/src/ai/adapter-factory.ts` — `invokeChain` now captures `resolution.name`/
+  `resolution.version` alongside `promptSource`; reparents `chain` via `linkStructuredChain` before
+  `.invoke`; `traceMetadata` gains `promptLinked` (always) and `promptName`/`promptVersion`/
+  `promptLabel`/`langfusePrompt` (only when `promptSource === "langfuse"`); doc comment extended to
+  describe the slice-C linkage.
+- `apps/api/src/ai/extraction-adapter.ts` — both `streamReply` (`linkStreamingModel`) and `extract`
+  (`linkStructuredChain`) mirror the same attribution/linking; `ExtractionCallOptions.metadata`
+  gains the same conditional scalar fields.
+- `apps/api/src/ai/__tests__/adapter-factory.test.ts` — new `describe("native prompt-version
+  linkage attribution (slice C)")` block (3 cases: full langfuse attribution, fallback-path
+  omission, declined-guard-still-generates).
+- `apps/api/src/ai/__tests__/extraction-adapter.test.ts` — new `describe("PlanSpecExtractionAdapter
+  native prompt-version linkage attribution (slice C)")` block (4 cases, mirroring
+  `adapter-factory.test.ts`'s); one PRE-EXISTING exact-equality metadata assertion (from slice A2,
+  "both passes still mask a KNOWN limitation...") updated to include the new `promptLinked: false`
+  key — the same "update, not break" pattern B2b used when it added `promptSource` to that same
+  assertion.
+- `openspec/changes/16e-langfuse-prompt-management/tasks.md` — C.1–C.16 marked `[x]`; C.17 left
+  unchecked with an explanatory note; the Final Verification checklist marked `[x]`.
+
+### Interface/signature conformance to design.md
+
+No deviation from `design.md`'s `## Interfaces / Contracts` section for the C-scoped shapes:
+
+- `PromptLinkedChain<T>`, `promptStep()`, `linkStructuredChain<T>()`, `linkStreamingModel<T>()` —
+  exact match, with one documented TypeScript-only adaptation: the design's abbreviated pseudo-type
+  `(i: string, o?: unknown) => Promise<unknown>` does not compile as a generic constraint against
+  the REAL call-site types (`adapter-factory.ts`'s `chain.invoke` declares `options` as REQUIRED
+  `Record<string, unknown>`, not optional `unknown`); the actual constraints used are
+  `{ invoke: (input: string, options: Record<string, unknown>) => Promise<unknown> }` for
+  `linkStructuredChain` and `{ stream: (input: string, options?: Record<string, unknown>) =>
+  Promise<unknown> }` for `linkStreamingModel`, matching each call site's real narrow interface. The
+  returned `chain`'s type is `T | Runnable<string, unknown>`; calling `.invoke`/`.stream` on that
+  union at the call site requires a cast back to `typeof chain` / `ExtractionChatModel` (documented
+  inline) — safe because both union members implement the same call shape from the caller's
+  perspective, only the internal run-parenting differs.
+- `RunnableSequence.from([promptStep(), ...structured.steps])` needed one additional TypeScript
+  cast (`as unknown as Parameters<typeof RunnableSequence.from>[0]`) because `RunnableSequence.from`
+  declares a tuple signature (`[first, ...middle, last]`) that cannot statically accept a
+  runtime-length spread of `structured.steps` — the cast targets exactly the shape the real
+  implementation accepts (`_coerceToRunnable` over each element), verified by the 10/10 passing
+  `prompt-linked-chain.test.ts` suite exercising this exact code path with REAL `@langchain/core`
+  classes (not mocks).
+- The `handleChainStart`/`handleChatModelStart` fake-handler parameter ORDER in
+  `prompt-linked-chain.test.ts` follows the ACTUAL runtime call order read from
+  `@langchain/core@1.2.1`'s `callbacks/manager.cjs` (`parentRunId` is the 4th positional argument
+  for `handleChainStart`), which differs from the parameter NAMES suggested by the `.d.ts`
+  interface declaration order — verified by reading the compiled `.cjs` dispatch code directly, not
+  assumed from the `.d.ts`.
+
+### What C deliberately covers (nothing left for a further slice — this is the last slice)
+
+- Native prompt-version linkage is now wired at both attachment sites, on the happy path (real
+  provider chains decompose and link) and the degraded path (any non-decomposable shape — including
+  every existing test's mocked/faked chain, which is why `promptLinked: false` appears throughout
+  the pre-existing test suite's assertions, by design).
+- `openspec/changes/16e-langfuse-prompt-management`'s full A1→A2→B1→B2→C chain is now implemented.
+
+### Gate Evidence (measured on THIS branch)
+
+- `pnpm -r test` — apps/api: 170 test files, 2041 passed, 116 skipped; apps/web: 155 test files,
+  1640 passed; apps/mobile: 53 test files, 467 passed; all packages (contracts/domain/i18n/
+  exercise-catalog) green. All green, no failures, exit 0.
+- `pnpm --filter api test:coverage` — 170 test files, 2041 passed, 116 skipped, exit 0. Functions
+  coverage **88.49%** (gate 85%). `prompt-linked-chain.ts` itself measures 100% statements/branch/
+  functions/lines.
+- `pnpm type-check` — all 7 workspace projects, Done, no errors.
+- `pnpm build` — deps-guard ✅, ui-api-guard ✅ (48 client files scanned, no violations), architecture
+  (0 dependency violations across 2011 modules / 6026 dependencies) ✅, architecture negative guard
+  ✅, every package/app `tsc`/`next build` Done, exit 0.
+- `git diff --stat main...HEAD -- . ':!openspec'` — **538 changed lines** (533 insertions, 5
+  deletions) across 6 files (3 source, 3 test). Well under the 800-line budget (design forecast
+  ~355; actual came in higher mostly due to a thorough offline-`BaseChatModel` test harness and the
+  attribution test cases at both call sites, still comfortably inside budget).
+- Grep confirms no `OpenRouterPlanGenerator` anywhere in `apps/`; grep confirms all five
+  plan-generation provider factories call `invokeChain` with no alternate path.
+
+### Open items
+
+- **C.17 remains open, by design.** Once this PR merges and deploys, confirm out of band, once,
+  that the Langfuse Prompt tab actually populates against the live project. If it does not,
+  `promptLinked: true` in the traces localizes the remaining gap to the SDK rather than to this
+  repo's wiring — that diagnostic value is the entire point of `promptLinked`.
+- This is the FINAL slice of `16e-langfuse-prompt-management`. Once this PR merges, the change is
+  fully implemented (A1 #368, A2 #370, B1 #371, B2a #372, B2b #373, C — this PR). Archiving the
+  OpenSpec change and closing GitHub issue #366 is an orchestrator/product-owner decision, not this
+  executor's — no closing keyword was used in this PR's body per the chain's stated convention.
+- Follow-up issues #374 and #375 (filed above) are the two items the design/proposal explicitly
+  deferred past this change.
