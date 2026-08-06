@@ -81,6 +81,13 @@ services:
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
       LANGFUSE_HOST: ${LANGFUSE_HOST}
+      # langfuse-prompt-management: minimum cache TTL (ms) for the remote
+      # prompt provider, default 60s. MUST be forwarded here — compose only
+      # injects vars listed under environment: (same forwarding gotcha as
+      # STRIPE_*/VOICE_*/DEEPGRAM_* above); without it a VPS .env override
+      # would be silently ignored and the provider would always fall back to
+      # its built-in 60-second default regardless of what operators set.
+      LANGFUSE_PROMPT_CACHE_TTL_MS: ${LANGFUSE_PROMPT_CACHE_TTL_MS:-60000}
       # 11b billing (Stripe). MUST be forwarded into the container — the api reads
       # them at call time; without these the Stripe gateway is unconfigured and
       # the whole billing flow (checkout/portal/webhook) fails closed in prod
