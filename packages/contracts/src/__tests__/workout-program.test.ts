@@ -50,7 +50,14 @@ describe("WorkoutExercise (08-v1-ai-plan-generation)", () => {
       reps: string;
       restSeconds: number;
       notes?: string;
+      catalogId?: string;
     }>();
+  });
+
+  it("carries an optional server-set catalogId (#352 slice B)", () => {
+    expectTypeOf<WorkoutExercise>()
+      .toHaveProperty("catalogId")
+      .toMatchTypeOf<string | undefined>();
   });
 });
 
@@ -118,6 +125,30 @@ const validProgram = {
 };
 
 describe("WorkoutProgramSchema (08-v1-ai-plan-generation)", () => {
+  it("does NOT expose catalogId to the model (#352 slice B, #357 regression)", () => {
+    // This schema is handed to .withStructuredOutput(), so every optional
+    // string in it is a field the model will happily invent a value for —
+    // that is exactly how #357's substitutionNote junk got shipped. catalogId
+    // is server-set AFTER this parse, so it must be stripped here.
+    const withCatalogId = {
+      ...validProgram,
+      weeklySessions: [
+        {
+          day: 1,
+          title: "Upper Body",
+          exercises: [
+            { name: "Bench Press", sets: 4, reps: "8-12", restSeconds: 90, catalogId: "0025" },
+          ],
+        },
+      ],
+    };
+
+    const result = WorkoutProgramSchema.safeParse(withCatalogId);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.weeklySessions[0]?.exercises[0]).not.toHaveProperty("catalogId");
+  });
+
   it("parses a well-formed WorkoutProgram without errors", () => {
     const result = WorkoutProgramSchema.safeParse(validProgram);
     expect(result.success).toBe(true);

@@ -222,3 +222,49 @@ describe("buildPlanPrompt", () => {
     },
   );
 });
+
+describe("buildPlanPrompt — closed exercise vocabulary (#352 slice B)", () => {
+  it("omits the section entirely when no vocabulary is supplied", () => {
+    // Back-compat: a caller with no catalog to offer must fall back to
+    // free-text generation, not to an empty list that forbids everything.
+    const prompt = buildPlanPrompt(baseSpec);
+    expect(prompt).not.toContain("ALLOWED EXERCISES");
+    expect(prompt).toContain("2. Uses ONLY the available equipment: barbell, dumbbells.");
+  });
+
+  it("omits the section when the vocabulary is empty", () => {
+    const prompt = buildPlanPrompt({ ...baseSpec, allowedExercises: [] });
+    expect(prompt).not.toContain("ALLOWED EXERCISES");
+  });
+
+  it("lists every allowed name, one per line, with its size", () => {
+    const prompt = buildPlanPrompt({
+      ...baseSpec,
+      allowedExercises: ["push-up", "barbell full squat", "dumbbell row"],
+    });
+
+    expect(prompt).toContain("ALLOWED EXERCISES — CLOSED VOCABULARY (3 entries):");
+    expect(prompt).toContain("push-up\nbarbell full squat\ndumbbell row");
+  });
+
+  it("instructs the model to copy names verbatim and re-points task rule 2", () => {
+    const prompt = buildPlanPrompt({ ...baseSpec, allowedExercises: ["push-up"] });
+
+    expect(prompt).toContain("MUST be copied VERBATIM from that list");
+    expect(prompt).toContain(
+      "2. Uses ONLY exercise names copied verbatim from the ALLOWED EXERCISES list above.",
+    );
+  });
+
+  it("puts the vocabulary before the task so the constraint is read first", () => {
+    const prompt = buildPlanPrompt({ ...baseSpec, allowedExercises: ["push-up"] });
+    expect(prompt.indexOf("ALLOWED EXERCISES")).toBeLessThan(prompt.indexOf("TASK:"));
+  });
+
+  it("emits no diagnostic language with a vocabulary attached", () => {
+    const prompt = buildPlanPrompt({ ...baseSpec, allowedExercises: ["push-up", "burpee"] });
+    for (const pattern of DIAGNOSTIC_PATTERNS) {
+      expect(pattern.test(prompt), pattern.source).toBe(false);
+    }
+  });
+});

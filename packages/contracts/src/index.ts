@@ -24,6 +24,22 @@ export interface WorkoutExercise {
   reps: string;
   restSeconds: number;
   notes?: string;
+  /**
+   * Exercise-catalog id this exercise was resolved to (#352 slice B), or absent
+   * when the prescribed `name` matched no catalog record.
+   *
+   * SERVER-SET ONLY, and deliberately absent from `WorkoutExerciseSchema`. That
+   * schema is what `.withStructuredOutput(...)` hands the model, and #357 was
+   * caused by exactly this shape: an optional undescribed string there is an
+   * invitation the model accepts, filling it with plausible junk. The server
+   * writes this field AFTER the structured-output parse, so the model never
+   * sees it and can never author it.
+   *
+   * `name` remains the authoritative snapshot of what the user was prescribed
+   * and is NEVER rewritten to the catalog's spelling — the catalog may change,
+   * the prescription may not.
+   */
+  catalogId?: string;
 }
 
 export interface WorkoutSession {
