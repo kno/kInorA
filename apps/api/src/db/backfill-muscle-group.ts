@@ -1,3 +1,21 @@
+/**
+ * STALE SINCE #352 SLICE C — READ BEFORE RUNNING `reclassify`.
+ *
+ * This script still derives muscle groups with `classifyExerciseMuscleGroup`,
+ * the keyword matcher on free-text titles. The session write path no longer
+ * does: it prefers the catalog's own `target` (see `catalog-muscle-group.ts`),
+ * which disagrees with the classifier on 142 of the 1,250 catalog records that
+ * have a mapped target — close-grip bench is triceps, not chest.
+ *
+ * So `reclassify` would REVERT rows written by the new derivation to the old,
+ * worse answer. `fill` (null rows only) is comparatively safe but still writes
+ * classifier answers where the catalog has a better one.
+ *
+ * It is deliberately left on the old classifier: repointing it is the
+ * historical backfill that #352 says must be a separate, explicit decision,
+ * because it shifts the muscle distribution of users who already have stats.
+ * Make that decision before touching this file, not while running it.
+ */
 import { config } from "dotenv";
 import { and, asc, gt, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { dirname, resolve } from "node:path";
