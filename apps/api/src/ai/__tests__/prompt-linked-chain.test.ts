@@ -38,15 +38,18 @@ function fakeCallbackHandler() {
   const events: RecordedEvent[] = [];
   return {
     events,
+    // NOTE: the runtime call order (`CallbackManager.handleChainStart` in
+    // `@langchain/core/callbacks/manager.js`) is
+    // `(chain, inputs, runId, parentRunId, tags, metadata, runType, runName, extra)`
+    // — `parentRunId` is the 4th positional argument, NOT where the handler
+    // interface's own `.d.ts` parameter names would suggest.
     handleChainStart(
       _chain: unknown,
       inputs: unknown,
       runId: string,
-      _runType?: string,
+      parentRunId: string | undefined,
       _tags?: string[],
       metadata?: Record<string, unknown>,
-      _runName?: string,
-      parentRunId?: string,
     ) {
       events.push({ event: "chain", runId, parentRunId, metadata, payload: inputs });
     },
@@ -123,31 +126,49 @@ describe("run-parenting (slice C)", () => {
 });
 
 describe("masking invariant across the restructured chain (slice C)", () => {
-  it("every run in the reparented sequence observes only the already-rendered, already-masked prompt string", async () => {
+  it("the outer sequence, the prompt step, and the model all observe only the already-rendered, already-masked prompt string — never the raw term", async () => {
     const model = new CannedChatModel("ok");
     const parser = RunnableLambda.from((message: AIMessage) => String(message.content));
     const structured = RunnableSequence.from([model, parser]);
     const { chain } = linkStructuredChain(structured);
 
     const maskedPrompt = "User context: [REDACTED] before training.";
-    const observed: unknown[] = [];
+    const chainInputs: unknown[] = [];
+    const modelMessages: unknown[] = [];
     const handler = {
       handleChainStart(_chain: unknown, inputs: unknown) {
-        observed.push(inputs);
+        chainInputs.push(inputs);
       },
       handleChatModelStart(_llm: unknown, messages: unknown) {
-        observed.push(messages);
+        modelMessages.push(messages);
       },
     };
 
     await chain.invoke(maskedPrompt, { callbacks: [handler] });
 
-    expect(observed.length).toBeGreaterThan(0);
-    for (const payload of observed) {
-      const serialized = JSON.stringify(payload);
+    // The outer sequence's own start AND the prompt step's start both carry
+    // the invoke input verbatim, wrapped as `{ input: <string> }` by
+    // `RunnableLambda`'s tracing — both must be the masked string, never the
+    // raw term. The parser step ALSO fires handleChainStart, but its input is
+    // the model's AIMessage output, not the prompt, so it is deliberately
+    // excluded by filtering to the string-input-shaped chain starts.
+    const promptStringInputs = chainInputs.filter(
+      (inputs): inputs is { input: string } =>
+        typeof inputs === "object" && inputs !== null && typeof (inputs as { input?: unknown }).input === "string",
+    );
+    expect(promptStringInputs.length).toBeGreaterThanOrEqual(2);
+    for (const inputs of promptStringInputs) {
+      const serialized = JSON.stringify(inputs);
       expect(serialized).toContain("[REDACTED]");
       expect(serialized).not.toContain("osteoporosis");
     }
+
+    // The model's own handleChatModelStart carries the prompt as the message
+    // content it actually receives.
+    expect(modelMessages.length).toBe(1);
+    const modelSerialized = JSON.stringify(modelMessages[0]);
+    expect(modelSerialized).toContain("[REDACTED]");
+    expect(modelSerialized).not.toContain("osteoporosis");
   });
 });
 
