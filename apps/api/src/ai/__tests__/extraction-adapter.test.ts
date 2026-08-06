@@ -8,6 +8,9 @@ import {
 } from "../extraction-adapter.js";
 import type { ChatExtractInput } from "../extraction-port.js";
 import type { AiTracingDeps, TracingHandler } from "../langfuse-handler.js";
+import { ResolvePrompt } from "../prompt-provider.js";
+import type { LangfusePromptGateway } from "../prompt-source-port.js";
+import { REPLY_PROMPT_TEMPLATE, EXTRACTION_PROMPT_TEMPLATE } from "../extraction-prompt.js";
 
 // --- Fake chat model -------------------------------------------------------
 //
@@ -334,13 +337,44 @@ describe("PlanSpecExtractionAdapter tracing attachment (langfuse-prompt-manageme
       feature: "plan-chat-extraction",
       provider: "openrouter",
       model: "openai/gpt-4o-mini",
+      promptSource: "fallback",
     });
     expect(invokeCalls[0]?.options?.runName).toBe("plan-chat-extraction");
     expect(invokeCalls[0]?.options?.metadata).toEqual({
       feature: "plan-chat-extraction",
       provider: "openrouter",
       model: "openai/gpt-4o-mini",
+      promptSource: "fallback",
     });
+  });
+});
+
+describe("PlanSpecExtractionAdapter prompt-source attribution (langfuse-prompt-management, slice B2)", () => {
+  it("streamReply resolves the prompt through deps.prompts and attaches promptSource: langfuse on a successful remote fetch", async () => {
+    const gateway: LangfusePromptGateway = {
+      fetchPrompt: vi.fn(async () => ({ template: REPLY_PROMPT_TEMPLATE, version: 4 })),
+    };
+    const prompts = new ResolvePrompt(gateway);
+    const { adapter, streamCalls } = buildAdapter({ tokens: ["ok"], extracted: {} }, { prompts });
+    const controller = new AbortController();
+
+    // eslint-disable-next-line no-empty
+    for await (const _ of adapter.streamReply(input(), controller.signal)) {
+    }
+
+    expect(streamCalls[0]?.options?.metadata).toMatchObject({ promptSource: "langfuse" });
+  });
+
+  it("extract resolves the prompt through deps.prompts and attaches promptSource: langfuse on a successful remote fetch", async () => {
+    const gateway: LangfusePromptGateway = {
+      fetchPrompt: vi.fn(async () => ({ template: EXTRACTION_PROMPT_TEMPLATE, version: 4 })),
+    };
+    const prompts = new ResolvePrompt(gateway);
+    const { adapter, invokeCalls } = buildAdapter({ tokens: [], extracted: {} }, { prompts });
+
+    await adapter.extract(input(), "reply");
+
+    expect(invokeCalls[0]?.options?.metadata).toMatchObject({ promptSource: "langfuse" });
   });
 });
 
