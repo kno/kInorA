@@ -251,27 +251,27 @@ Compose; Remote Prompt Fetch With Mandatory Local Fallback; TTL Cache With Concu
 Coalescing; Fallback Result Is Cached Too; Untrusted Remote Template Validation Fails Closed;
 Trace Attribution to Prompt Source and Version (the `promptSource` half); Prompt Tests Run Offline.
 
-- [ ] B2.1 RED: `remote-template-validation.test.ts` — table-driven, one case per
+- [x] B2.1 RED: `remote-template-validation.test.ts` — table-driven, one case per
       `PromptRejectionReason`: `payload_not_string`, `payload_empty`, `payload_too_large`;
       `unknown_variable` (`{{nope}}`); `missing_required_placeholder` (vocabulary placeholder
       dropped); `marker_order_violated` (vocabulary block moved AFTER `TASK:` — rejected whole, NOT
       repaired); `unresolved_marker_after_render`
-- [ ] B2.2 GREEN: create `apps/api/src/ai/remote-template-validation.ts` — `RemoteTemplateSchema`
+- [x] B2.2 GREEN: create `apps/api/src/ai/remote-template-validation.ts` — `RemoteTemplateSchema`
       (zod: `z.string().min(1).max(def.maxTemplateChars)`), `validateRemoteTemplate(def, payload)` →
       `{ ok: true, template } | { ok: false, reason }`, `PromptRejectionReason` union; validation
       order per design (payload shape → unknown variable → required markers present → marker order
       strictly increasing via `indexOf` → post-render `{{` sweep), first failure wins
-- [ ] B2.3 RED: `prompt-source-port.test.ts` (if the port needs its own test) or fold into B2.5 —
+- [x] B2.3 RED: `prompt-source-port.test.ts` (if the port needs its own test) or fold into B2.5 —
       confirm `LangfusePromptGateway.fetchPrompt(name, label)` shape: `Promise<{ template: unknown;
       version: number }>`
-- [ ] B2.4 GREEN: create `apps/api/src/ai/prompt-source-port.ts` — `LangfusePromptGateway` interface,
+- [x] B2.4 GREEN: create `apps/api/src/ai/prompt-source-port.ts` — `LangfusePromptGateway` interface,
       `PromptResolution` type (`{ text, source: "langfuse" | "fallback", name?, version? }`)
-- [ ] B2.5 RED: gateway adapter test — `buildLangfusePromptGateway()` returns `null` with no
+- [x] B2.5 RED: gateway adapter test — `buildLangfusePromptGateway()` returns `null` with no
       credentials; with a mocked `Langfuse` client (re-exported by `langfuse-langchain`, no new
       dependency), calls `getPrompt(name, version, { label: "production", cacheTtlSeconds: 0,
       fetchTimeoutMs: 3000 })` — note `version` is the verified 2nd POSITIONAL SDK arg, not an
       options key
-- [ ] B2.6 GREEN: create `apps/api/src/ai/langfuse-prompt-gateway.ts` — SDK adapter,
+- [x] B2.6 GREEN: create `apps/api/src/ai/langfuse-prompt-gateway.ts` — SDK adapter,
       `buildLangfusePromptGateway()` → port `|` `null`, hardcoded `PROMPT_FETCH_TIMEOUT_MS = 3000`
 - [ ] B2.7 RED: `prompt-provider.test.ts` (template: `billing-pricing.test.ts`) — warm cache → 0
       gateway calls; cold-cache burst of N concurrent `execute()` → exactly 1 `fetchPrompt` call,
@@ -314,6 +314,13 @@ Trace Attribution to Prompt Source and Version (the `promptSource` half); Prompt
       without a source marker, not even for one slice" split
 - [ ] B2.20 Verify: `pnpm --filter api test` green; `pnpm --filter api test:coverage` green at 85%
       functions threshold; no network call in any new test (fake gateway + injected `now` throughout)
+
+**B2 split (orchestrator decision, review-measured): B2.1–B2.6 shipped as slice B2a** (PR against
+`main`, branch `feat/langfuse-prompt-gateway`, branched at commit `47bd638` of the original combined
+B2 branch). The combined B2 slice measured 956 hand-authored changed lines against the 800-line
+budget; B2a (port + gateway + validation) measures 411, comfortably under. **B2.7–B2.20 remain B2b**,
+held on `feat/langfuse-remote-prompt-source` pending B2a's merge (`stacked-to-main` forbids a child
+branch off an unmerged parent) — see apply-progress.md's B2a section for the full record.
 
 ## Phase C: Native Prompt-Version Linkage
 
