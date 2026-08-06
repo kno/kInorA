@@ -26,6 +26,73 @@ export type TierTally = Record<BillingTier, number>;
 export type FeatureTally = Record<BillingFeature, number>;
 
 /**
+ * One signup-week cohort's walk through the create-plan → second-workout funnel
+ * (#353).
+ *
+ * Every step is an ABSOLUTE COUNT, and the count that is its denominator is
+ * present on the same object — `signups` for `createdPlan`, `createdPlan` for
+ * `completedFirstWorkout`, and so on down the chain. Nothing here is a ratio.
+ * That is deliberate: a percentage on its own reads as a fact ("75% convert")
+ * when the underlying reality may be three users out of four, and the whole
+ * point of this funnel is to stop making product calls on numbers that sound
+ * sturdier than they are. Any percentage is the renderer's job, next to its n.
+ *
+ * The counts NEST: each step is a subset of the one above it, so a step can
+ * never exceed its denominator.
+ */
+export interface RetentionFunnelSteps {
+  /**
+   * B2C users who signed up in this week — the top of the funnel and the
+   * denominator for `createdPlan`. Excludes synthetic accounts and
+   * trainer-sponsored users (the latter are counted in
+   * `trainerSponsoredSignups` instead).
+   */
+  signups: number;
+  /** Of `signups`: how many have at least one `workout_plans` row. */
+  createdPlan: number;
+  /** Of `createdPlan`: how many completed at least one workout. */
+  completedFirstWorkout: number;
+  /** Of `completedFirstWorkout`: how many completed a SECOND within 7 days of the first. */
+  completedSecondWorkoutWithin7d: number;
+  /** Of `completedSecondWorkoutWithin7d`: how many completed a workout on days 7–14 after signup. */
+  activeWeek2: number;
+  /** Of `completedSecondWorkoutWithin7d`: how many completed a workout on days 21–28 after signup. */
+  activeWeek4: number;
+  /**
+   * Users who signed up this week and are reachable through
+   * `trainer_client_assignments`. Reported as a SEPARATE segment and never
+   * included in `signups`: a trainer-sponsored client did not choose the
+   * product the way a B2C signup did, and with essentially no B2B usage yet
+   * even a handful of them would swing the B2C ratios.
+   */
+  trainerSponsoredSignups: number;
+}
+
+/** A `RetentionFunnelSteps` labelled with the signup week it covers. */
+export interface RetentionFunnelCohort extends RetentionFunnelSteps {
+  /** UTC ISO date of the Monday that starts this signup week. */
+  weekStart: string;
+}
+
+/** The create-plan → second-workout retention funnel (#353). */
+export interface RetentionFunnel {
+  /** How many signup weeks the window covers (the newest cohorts cannot have week-4 data yet). */
+  windowWeeks: number;
+  /** Hours an `active` session may stay open before it is counted as abandoned. */
+  abandonedSessionThresholdHours: number;
+  /**
+   * `active` sessions older than the threshold across the whole window: workouts
+   * that were started and never closed. Counted apart from the funnel because
+   * they are neither a completion nor a non-start.
+   */
+  abandonedSessions: number;
+  /** Most recent signup week first. */
+  cohorts: RetentionFunnelCohort[];
+  /** The same steps summed across every cohort in the window. */
+  totals: RetentionFunnelSteps;
+}
+
+/**
  * The platform-wide aggregate snapshot. Every field is a scalar count or a
  * small enum-keyed tally — never a per-row record.
  */
@@ -52,6 +119,8 @@ export interface PlatformStats {
     byFeature: FeatureTally;
   };
   observability: { errors24h: number; events24h: number };
+  /** Create-plan → second-workout retention, cohorted by signup week (#353). */
+  retention: RetentionFunnel;
 }
 
 /**

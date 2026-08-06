@@ -7,6 +7,8 @@ import {
   closeSeedPool,
   currentPeriod,
   demoteToMember,
+  markAccountAsTest,
+  markAccountAsTestByEmail,
   seedAdherencePlan,
   seedEndedSubscription,
   seedExpiredTrial,
@@ -19,6 +21,8 @@ export {
   closeSeedPool,
   currentPeriod,
   demoteToMember,
+  markAccountAsTest,
+  markAccountAsTestByEmail,
   seedAdherencePlan,
   seedEndedSubscription,
   seedExpiredTrial,
@@ -53,6 +57,12 @@ export interface RegisteredTenant {
  * token PLUS the identifiers needed to seed its tenant. The registering user is
  * the tenant OWNER (see AuthService.register → provisionTenantForUser), so the
  * returned tenant renders the owner-only invoice/portal surfaces until demoted.
+ *
+ * The new account is marked SYNTHETIC (#353) immediately after registration, so
+ * the thousands of throwaway sign-ups an e2e suite produces never reach the
+ * retention funnel. It happens here rather than in each spec because a spec
+ * that forgets is silently wrong: the account looks like a real one, and the
+ * only symptom is a funnel that quietly stops meaning anything.
  */
 export async function registerTenant(page: Page): Promise<RegisteredTenant> {
   const unique = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
@@ -69,6 +79,7 @@ export async function registerTenant(page: Page): Promise<RegisteredTenant> {
   expect(body.token, "register should return a session token").toBeTruthy();
   expect(body.tenant?.id, "register should return the tenant id").toBeTruthy();
   expect(body.user?.id, "register should return the user id").toBeTruthy();
+  await markAccountAsTest({ tenantId: body.tenant.id, userId: body.user.id });
   return { token: body.token, tenantId: body.tenant.id, userId: body.user.id, email };
 }
 

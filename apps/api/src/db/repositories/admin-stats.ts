@@ -1,4 +1,4 @@
-import { and, eq, gt, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, isNotNull, lt, lte, sql } from "drizzle-orm";
 import type { BillingTier } from "@kinora/contracts";
 import type { Database } from "../client.js";
 import {
@@ -8,12 +8,18 @@ import {
   tenantBillingStates,
   tenantQuotaCounters,
   tenants,
+  trainerClientAssignments,
   users,
+  workoutPlans,
+  workoutSessions,
 } from "../schema.js";
 import type {
   AdminStatsRouteRepo,
   FeatureTally,
   PlatformStats,
+  RetentionFunnel,
+  RetentionFunnelCohort,
+  RetentionFunnelSteps,
   TierTally,
 } from "../../routes/admin-stats.js";
 import {
@@ -24,6 +30,81 @@ import { currentBillingPeriod } from "../../billing/plan-limits.js";
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
+
+/**
+ * How long a `workout_sessions` row may sit in `status = 'active'` before the
+ * funnel treats it as ABANDONED rather than in progress (#353).
+ *
+ * The table records no abandonment: a workout that is closed becomes
+ * `completed`, and a workout the user simply walked away from stays `active`
+ * forever. Without a cut-off, "sessions in progress" grows monotonically and
+ * means nothing. 24h is the smallest threshold that cannot mistake a real
+ * workout for an abandoned one — nobody trains for a day straight, and the
+ * single-active-session-per-user index means a stale row also blocks the user's
+ * next workout, so a genuinely long-running session is not a case worth
+ * protecting.
+ *
+ * Exported and named so the number is reviewable in one place instead of being
+ * an unexplained interval buried in a query.
+ */
+export const ABANDONED_SESSION_THRESHOLD_HOURS = 24;
+
+/**
+ * How many signup weeks the retention funnel reports (#353).
+ *
+ * Bounded because this runs against production data on an admin page render,
+ * and because cohorts older than a quarter describe a product that no longer
+ * exists. Note the trade-off the window forces: the newest cohorts have not
+ * lived long enough to have week-2 or week-4 data yet, so their late-stage
+ * counts are legitimately zero rather than a drop-off. The absolute counts make
+ * that readable; a percentage would not.
+ */
+export const RETENTION_FUNNEL_WINDOW_WEEKS = 12;
+
+/**
+ * The Monday 00:00 UTC that starts `date`'s week — the same boundary Postgres
+ * `date_trunc('week', ...)` uses (ISO weeks start Monday). Computed here rather
+ * than in SQL so the window's oldest cohort is a WHOLE week: a mid-week lower
+ * bound would silently truncate it and make the oldest bar look like a cliff.
+ */
+function startOfIsoWeekUtc(date: Date): Date {
+  const monday = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
+  // getUTCDay(): 0 = Sunday. Shift so Monday = 0.
+  monday.setUTCDate(monday.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+  return monday;
+}
+
+/**
+ * The "this is a real account" predicate, applied to `users` (#353).
+ *
+ * Both halves matter. `users.is_test` catches an account created directly by a
+ * fixture, and the NOT EXISTS catches a user attached to a synthetic TENANT —
+ * a seeded member of a test organisation is test data even if the user row
+ * itself was never flagged. Written against `users` so the funnel query and the
+ * abandoned-session count can share one definition; the two drifting apart is
+ * exactly how a test-account filter stops being trustworthy.
+ */
+const REAL_ACCOUNT_ONLY = sql`${users.isTest} = false and not exists (
+      select 1
+      from ${memberships} m
+      join ${tenants} t on t.id = m.tenant_id
+      where m.user_id = ${users.id} and t.is_test = true
+    )`;
+
+/** A zero-filled funnel step set, used as the seed of the totals reduce. */
+function emptyRetentionSteps(): RetentionFunnelSteps {
+  return {
+    signups: 0,
+    createdPlan: 0,
+    completedFirstWorkout: 0,
+    completedSecondWorkoutWithin7d: 0,
+    activeWeek2: 0,
+    activeWeek4: 0,
+    trainerSponsoredSignups: 0,
+  };
+}
 
 /** A zero-filled per-tier tally (all four billing tiers present). */
 function emptyTierTally(): TierTally {
@@ -205,6 +286,154 @@ export class AdminStatsRepository
         errors24h: obsCounts?.errors24h ?? 0,
         events24h: obsCounts?.events24h ?? 0,
       },
+      retention: await this.getRetentionFunnel(now),
+    };
+  }
+
+  /**
+   * The create-plan → second-workout retention funnel, cohorted by signup week
+   * (#353).
+   *
+   * Computed entirely from tables the product already writes — no new
+   * instrumentation — so it answers retroactively for every account that
+   * already exists.
+   *
+   * SHAPE: two bounded queries, never N+1. The first flattens each qualifying
+   * user into ONE row of booleans/timestamps (a subquery), then aggregates
+   * those rows per cohort week with `count(*) filter (...)`. Doing the
+   * per-user reduction in SQL is what keeps the result set to one row per
+   * WEEK instead of one per user, which also means no user-identifying data
+   * ever leaves the database — the same privacy invariant the rest of this
+   * class holds.
+   *
+   * WHY THE SESSION JOIN IS THE ONLY JOIN: `has a plan` and `is
+   * trainer-sponsored` are EXISTS subqueries rather than joins on purpose.
+   * Left-joining `workout_plans` alongside `workout_sessions` would multiply
+   * each session row by each plan row, and the duplicated timestamps would
+   * corrupt the "second completed workout" ordinal — a user with two plans and
+   * one workout would appear to have trained twice.
+   */
+  private async getRetentionFunnel(now: Date): Promise<RetentionFunnel> {
+    const windowStart = new Date(
+      startOfIsoWeekUtc(now).getTime() - (RETENTION_FUNNEL_WINDOW_WEEKS - 1) * 7 * DAY_MS,
+    );
+    const abandonedBefore = new Date(
+      now.getTime() - ABANDONED_SESSION_THRESHOLD_HOURS * HOUR_MS,
+    );
+
+    // One row per qualifying user. `array_agg(... order by ...)[2]` is the
+    // second-oldest completion: Postgres has no nth-value aggregate, and a
+    // window function would need a second pass over the same rows.
+    const perUser = this.db
+      .select({
+        cohortWeek:
+          sql<string>`to_char(date_trunc('week', ${users.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`.as(
+            "cohort_week",
+          ),
+        trainerSponsored:
+          sql<boolean>`exists (select 1 from ${trainerClientAssignments} tca where tca.client_user_id = ${users.id})`.as(
+            "trainer_sponsored",
+          ),
+        hasPlan:
+          sql<boolean>`exists (select 1 from ${workoutPlans} wp where wp.user_id = ${users.id})`.as(
+            "has_plan",
+          ),
+        firstCompletedAt: sql<string | null>`min(${workoutSessions.completedAt})`.as(
+          "first_completed_at",
+        ),
+        secondCompletedAt:
+          sql<string | null>`(array_agg(${workoutSessions.completedAt} order by ${workoutSessions.completedAt}))[2]`.as(
+            "second_completed_at",
+          ),
+        // "Still training in week N" is measured against SIGNUP, not against the
+        // first workout: the question is whether the product held on to the
+        // person, and a user who starts training three weeks late has already
+        // been lost and recovered.
+        trainedWeek2:
+          sql<boolean>`bool_or(${workoutSessions.completedAt} >= ${users.createdAt} + interval '7 days' and ${workoutSessions.completedAt} < ${users.createdAt} + interval '14 days')`.as(
+            "trained_week2",
+          ),
+        trainedWeek4:
+          sql<boolean>`bool_or(${workoutSessions.completedAt} >= ${users.createdAt} + interval '21 days' and ${workoutSessions.completedAt} < ${users.createdAt} + interval '28 days')`.as(
+            "trained_week4",
+          ),
+      })
+      .from(users)
+      // LEFT so a user with no workouts still contributes a cohort row — those
+      // users are the drop-off this funnel exists to measure. `completed_at is
+      // not null` is belt-and-braces next to `status = 'completed'`: a null
+      // would sort last and never reach the [2] ordinal, but it would still
+      // make `min()` lie about the first workout if the pair ever diverged.
+      .leftJoin(
+        workoutSessions,
+        and(
+          eq(workoutSessions.userId, users.id),
+          eq(workoutSessions.status, "completed"),
+          isNotNull(workoutSessions.completedAt),
+        ),
+      )
+      .where(and(gte(users.createdAt, windowStart), REAL_ACCOUNT_ONLY))
+      .groupBy(users.id, users.createdAt)
+      .as("per_user");
+
+    // Each predicate EXTENDS the previous one, so the steps are structurally
+    // nested and a later step can never out-count its own denominator.
+    const isB2c = sql`not ${perUser.trainerSponsored}`;
+    const reachedPlan = sql`${isB2c} and ${perUser.hasPlan}`;
+    const reachedFirstWorkout = sql`${reachedPlan} and ${perUser.firstCompletedAt} is not null`;
+    const reachedSecondWorkout = sql`${reachedFirstWorkout}
+      and ${perUser.secondCompletedAt} is not null
+      and ${perUser.secondCompletedAt} <= ${perUser.firstCompletedAt} + interval '7 days'`;
+
+    const cohortRows = await this.db
+      .select({
+        weekStart: perUser.cohortWeek,
+        signups: sql<number>`count(*) filter (where ${isB2c})::int`,
+        createdPlan: sql<number>`count(*) filter (where ${reachedPlan})::int`,
+        completedFirstWorkout: sql<number>`count(*) filter (where ${reachedFirstWorkout})::int`,
+        completedSecondWorkoutWithin7d: sql<number>`count(*) filter (where ${reachedSecondWorkout})::int`,
+        activeWeek2: sql<number>`count(*) filter (where ${reachedSecondWorkout} and ${perUser.trainedWeek2})::int`,
+        activeWeek4: sql<number>`count(*) filter (where ${reachedSecondWorkout} and ${perUser.trainedWeek4})::int`,
+        trainerSponsoredSignups: sql<number>`count(*) filter (where ${perUser.trainerSponsored})::int`,
+      })
+      .from(perUser)
+      .groupBy(perUser.cohortWeek)
+      .orderBy(desc(perUser.cohortWeek));
+
+    const [abandoned] = await this.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(workoutSessions)
+      .innerJoin(users, eq(users.id, workoutSessions.userId))
+      .where(
+        and(
+          eq(workoutSessions.status, "active"),
+          gte(workoutSessions.startedAt, windowStart),
+          lt(workoutSessions.startedAt, abandonedBefore),
+          REAL_ACCOUNT_ONLY,
+        ),
+      );
+
+    // Totals are summed in memory rather than re-queried with a second GROUP
+    // BY: the cohort list is at most RETENTION_FUNNEL_WINDOW_WEEKS long, and a
+    // separate query could disagree with the rows above under concurrent writes.
+    const cohorts: RetentionFunnelCohort[] = cohortRows;
+    const totals = cohorts.reduce<RetentionFunnelSteps>((acc, cohort) => {
+      acc.signups += cohort.signups;
+      acc.createdPlan += cohort.createdPlan;
+      acc.completedFirstWorkout += cohort.completedFirstWorkout;
+      acc.completedSecondWorkoutWithin7d += cohort.completedSecondWorkoutWithin7d;
+      acc.activeWeek2 += cohort.activeWeek2;
+      acc.activeWeek4 += cohort.activeWeek4;
+      acc.trainerSponsoredSignups += cohort.trainerSponsoredSignups;
+      return acc;
+    }, emptyRetentionSteps());
+
+    return {
+      windowWeeks: RETENTION_FUNNEL_WINDOW_WEEKS,
+      abandonedSessionThresholdHours: ABANDONED_SESSION_THRESHOLD_HOURS,
+      abandonedSessions: abandoned?.total ?? 0,
+      cohorts,
+      totals,
     };
   }
 }

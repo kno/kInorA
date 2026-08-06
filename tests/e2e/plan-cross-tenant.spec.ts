@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { closeSeedPool, markAccountAsTestByEmail } from "./helpers/billing-seed";
 
 /**
  * Cross-tenant draft isolation — real-DB regression proof (07-v1-plan-wizard).
@@ -29,10 +30,18 @@ async function registerViaApi(page: Page): Promise<string> {
   expect(res.ok(), "registration should succeed").toBeTruthy();
   const body = (await res.json()) as { token: string };
   expect(body.token, "register should return a session token").toBeTruthy();
+  // Keep this throwaway account out of the retention funnel (#353).
+  await markAccountAsTestByEmail(email);
   return body.token;
 }
 
 test.describe("Plan draft cross-tenant isolation (07)", () => {
+  // `markAccountAsTestByEmail` opens the shared seed pool; close it so the
+  // Playwright worker can exit.
+  test.afterAll(async () => {
+    await closeSeedPool();
+  });
+
   test("a different tenant cannot read or promote another tenant's draft", async ({
     page,
   }) => {

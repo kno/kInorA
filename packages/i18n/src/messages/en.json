@@ -1595,7 +1595,22 @@
       "memberships": "Active memberships",
       "billing": "Billing",
       "usage": "Usage this period",
+      "retention": "Retention funnel",
       "observability": "Observability (last 24 hours)"
+    },
+    "retention": {
+      "window": "Cohorted by signup week, last {weeks} weeks. The most recent cohorts have not had time to reach week 2 or week 4 yet.",
+      "totals": "All cohorts in the window",
+      "weekOf": "Week of {date}",
+      "ofCount": "{value} of {total}",
+      "signups": "Signed up (B2C)",
+      "createdPlan": "Created a plan",
+      "completedFirstWorkout": "Completed a first workout",
+      "completedSecondWorkout": "Completed a second workout within 7 days",
+      "activeWeek2": "Still training in week 2",
+      "activeWeek4": "Still training in week 4",
+      "trainerSponsored": "Trainer-sponsored signups (counted separately)",
+      "abandonedSessions": "Abandoned workouts (open for more than {hours}h)"
     },
     "metrics": {
       "total": "Total",

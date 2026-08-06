@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { closeSeedPool, markAccountAsTestByEmail } from "./helpers/billing-seed";
 
 /**
  * Authenticated AppShell navigation (issue #18).
@@ -63,10 +64,20 @@ async function registerFreshUser(page: import("@playwright/test").Page) {
     "sign-up should set the kinora_session cookie",
   ).toBe(true);
 
+  // Keep this throwaway account out of the retention funnel (#353). Marked by
+  // email because a UI sign-up hands back a cookie, never the ids.
+  await markAccountAsTestByEmail(email);
+
   return { email, password };
 }
 
 test.describe("Authenticated AppShell navigation (#18)", () => {
+  // `markAccountAsTestByEmail` opens the shared seed pool; close it so the
+  // Playwright worker can exit.
+  test.afterAll(async () => {
+    await closeSeedPool();
+  });
+
   test("desktop sidebar navigates and highlights the active route", async ({
     page,
   }) => {
