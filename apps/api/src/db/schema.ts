@@ -714,8 +714,9 @@ export const workoutSessions = pgTable(
  * notes) are copied from the workout plan and never mutated afterward; that
  * is the true immutable *what-happened* record. `muscle_group` is different:
  * it is a computed label *about* the row — a deterministic function of
- * `title` produced by `classifyExerciseMuscleGroup` (09c-v1
- * progress-dashboard-stats, Slice 1b) — carries no user-logged information,
+ * `title` produced by `deriveExerciseMuscleGroup` (09c-v1
+ * progress-dashboard-stats, Slice 1b; catalog taxonomy added in #352 slice C)
+ * — carries no user-logged information,
  * and can be recomputed at any time. Populating it at write time or via the
  * idempotent backfill therefore does not violate the snapshot invariant. See
  * design.md "Immutable-table carve-out".
