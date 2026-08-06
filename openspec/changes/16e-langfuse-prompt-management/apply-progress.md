@@ -488,6 +488,147 @@ freeze output that is proven equal to pre-refactor behaviour.
 the refactor lands (write the snapshot in the RED commit, while the old implementation is still the
 one producing it), or the claim cannot be verified afterwards from the tree alone.
 
+## Slice B2a — Remote Prompt Source: Port + Gateway + Validation
+
+**Status: DONE.** B2.1–B2.6 in `tasks.md` are complete. B2.7–B2.20 are **B2b**, not started on this
+branch — see "Open items" below.
+
+- Prerequisite state confirmed before branching: B1's PR was MERGED to `main` as squash commit
+  `835ca73`, and `main` was pulled fresh before branching (`stacked-to-main`, no child branch off an
+  unmerged parent).
+- **B2 was originally implemented as one 13-commit branch** (`feat/langfuse-remote-prompt-source`,
+  from `main`) covering the full B2.1–B2.19 scope. Its real diff measured **956 hand-authored changed
+  lines** (`git diff --stat main...HEAD -- . ':!openspec'`) against the 800-line budget — no generated
+  snapshot content to exclude this time (unlike B1), so the full total counts. The orchestrator ruled:
+  split at the existing commit boundary the design already named (B2a = port + gateway + validation;
+  B2b = `ResolvePrompt` + call-site wiring + compose/README), per the collected `delivery_strategy:
+  auto-chain` (split automatically on budget risk, no `size:exception` request, no user prompt needed).
+- **B2a branch**: `feat/langfuse-prompt-gateway`, created via `git branch feat/langfuse-prompt-gateway
+  47bd638` — i.e. branched from the combined branch's own history at the exact commit where the
+  gateway's GREEN commit landed, so it carries precisely the 6 RED/GREEN commits below and nothing
+  from B2b. PR against `main`, referencing #366, stating it is slice B2a after #368/#370/#371 and that
+  B2b depends on it. Open, NOT merged. Do not merge from this file's authority.
+- 6 commits, RED separated from GREEN throughout, in this order:
+  1. RED — `remote-template-validation.test.ts` (10 cases, one per `PromptRejectionReason` this
+     module owns, plus `checkRenderedTemplate`/`RemoteTemplateSchema` coverage), confirmed failing
+     (module did not exist).
+  2. GREEN — `apps/api/src/ai/remote-template-validation.ts` created.
+  3. RED — `prompt-source-port.test.ts` (`PromptNotFoundError` — the one runtime symbol this port
+     module owns), confirmed failing.
+  4. GREEN — `apps/api/src/ai/prompt-source-port.ts` created.
+  5. RED — `langfuse-prompt-gateway.test.ts` (5 cases: null with no credentials, correct SDK call
+     shape incl. verified 2nd-positional `version` arg, no explicit `baseUrl` when unset, 404→
+     `PromptNotFoundError` mapping, other failures rethrown unchanged), confirmed failing.
+  6. GREEN — `apps/api/src/ai/langfuse-prompt-gateway.ts` created.
+
+### Task-by-task (tasks.md B2.1–B2.6)
+
+- [x] B2.1 — RED: table-driven `remote-template-validation.test.ts` — one case per
+  `PromptRejectionReason` this module owns (`payload_not_string`, `payload_empty`,
+  `payload_too_large`, `unknown_variable`, `missing_required_placeholder`, `marker_order_violated`
+  with an explicit "rejected whole, not repaired" assertion, `unresolved_marker_after_render`), plus
+  an accept case and a `RemoteTemplateSchema` size-cap case. Confirmed failing (module not found).
+- [x] B2.2 — GREEN: `RemoteTemplateSchema(def)` (zod `z.string().min(1).max(def.maxTemplateChars)`),
+  `validateRemoteTemplate(def, payload)` implementing steps 1–4 of the design's ordered algorithm
+  (payload shape → unknown variable → required markers present → marker order strictly increasing),
+  first failure wins. Step 5 (post-render `{{` sweep) is deliberately NOT inside
+  `validateRemoteTemplate` — see "Interface/signature conformance" below for why — and ships as a
+  separate exported `checkRenderedTemplate(rendered)` in the SAME file, covered by the SAME test file.
+- [x] B2.3 — RED: `prompt-source-port.test.ts` — one case, since `LangfusePromptGateway`/
+  `PromptResolution` are structural interfaces with no runtime behavior to test; `PromptNotFoundError`
+  is the one runtime symbol this module owns. Confirmed failing (module not found).
+- [x] B2.4 — GREEN: `apps/api/src/ai/prompt-source-port.ts` — `LangfusePromptGateway` interface,
+  `PromptResolution` type, and `PromptNotFoundError` (a named error class the gateway throws on a
+  404, so `ResolvePrompt` — B2b — can distinguish it from a generic fetch failure without inspecting
+  the real SDK's error shape).
+- [x] B2.5 — RED: `langfuse-prompt-gateway.test.ts` — null with no credentials (both missing-key
+  cases); constructs `Langfuse` with the resolved `baseUrl` and calls `getPrompt(name, undefined,
+  { label, cacheTtlSeconds: 0, fetchTimeoutMs })` — version as the verified 2nd POSITIONAL arg;
+  omits `baseUrl` when neither `LANGFUSE_BASEURL` nor `LANGFUSE_HOST` is set; normalizes a 404 HTTP
+  fetch error into `PromptNotFoundError`; rethrows any other failure (network/auth) unchanged.
+  Confirmed failing (module not found).
+- [x] B2.6 — GREEN: `apps/api/src/ai/langfuse-prompt-gateway.ts` — `buildLangfusePromptGateway()` →
+  port `|` `null` (mirrors `buildLangfuseCallbackHandler`'s safe-by-construction null-on-no-credentials
+  pattern), `PROMPT_FETCH_TIMEOUT_MS = 3000` hardcoded (no second env var, per design decision), and
+  the 404→`PromptNotFoundError` normalization read directly off the installed `langfuse-core`
+  `LangfuseFetchHttpError` shape (`.response.status`) verified in `design.md`'s SDK verification table.
+
+### Files created
+
+- `apps/api/src/ai/remote-template-validation.ts` — `RemoteTemplateSchema`, `validateRemoteTemplate`,
+  `checkRenderedTemplate`, `PromptRejectionReason`, `TemplateValidationResult`.
+- `apps/api/src/ai/__tests__/remote-template-validation.test.ts`.
+- `apps/api/src/ai/prompt-source-port.ts` — `LangfusePromptGateway`, `PromptResolution`,
+  `PromptNotFoundError`.
+- `apps/api/src/ai/__tests__/prompt-source-port.test.ts`.
+- `apps/api/src/ai/langfuse-prompt-gateway.ts` — `buildLangfusePromptGateway()`,
+  `PROMPT_FETCH_TIMEOUT_MS`.
+- `apps/api/src/ai/__tests__/langfuse-prompt-gateway.test.ts`.
+
+### Interface/signature conformance to design.md
+
+- `RemoteTemplateSchema`, `PromptRejectionReason`, `LangfusePromptGateway`, `PromptResolution` — exact
+  match to design's `## Interfaces / Contracts` block.
+- **One placement decision, not a deviation:** design's `## Interfaces / Contracts` shows
+  `validateRemoteTemplate(def, payload)` with no `variables` parameter, so it cannot itself perform
+  the design's validation-algorithm step 5 (post-render `{{` sweep), which requires the ACTUAL
+  rendered output — only producible once real variable values are available. B2a therefore splits the
+  five-step algorithm across two functions in the SAME file: `validateRemoteTemplate` (steps 1–4,
+  pre-render) and a new `checkRenderedTemplate(rendered)` (step 5, post-render). `ResolvePrompt`
+  (B2b) calls `renderTemplate` then `checkRenderedTemplate` after `validateRemoteTemplate` passes.
+  This keeps all ten `PromptRejectionReason` cases table-driven in one test file per tasks.md's B2.1
+  list, without inventing a signature the design never specified.
+- `PromptNotFoundError` is a B2a-introduced symbol not named in design's Interfaces block. It exists
+  to let `langfuse-prompt-gateway.ts` (B2a) and `prompt-provider.ts`'s `ResolvePrompt` (B2b) agree on
+  how a missing-prompt failure is distinguished from a generic fetch failure, without `ResolvePrompt`
+  needing to inspect the real Langfuse SDK's `LangfuseFetchHttpError`/`.response.status` shape
+  directly — that inspection is fully contained in the gateway adapter, exactly where the design's
+  File Changes table says the SDK-specific logic belongs.
+- `getPrompt(name, undefined, { label, cacheTtlSeconds: 0, fetchTimeoutMs })` — no `type` key passed;
+  omitting it resolves to the SDK's `type?: "text"` overload (verified against the installed
+  `langfuse-core@3.38.20` `.d.ts`), matching the design's exact call spec.
+
+### What B2a deliberately left for B2b
+
+- No `ResolvePrompt`, no `resolvePromptCacheTtlMs`, no TTL cache, no burst coalescing, no fallback
+  caching. Nothing calls `LangfusePromptGateway.fetchPrompt` yet — the gateway and validator exist but
+  are UNWIRED. Behaviour is therefore completely unchanged from before this slice: no remote fetch
+  ever happens, because nothing in the request path constructs or calls a `LangfusePromptGateway`.
+- No `AiTracingDeps.prompts` field, no wiring at `invokeChain`/`extraction-adapter.ts`/`app.ts`, no
+  `promptSource` metadata attribution, no `docker-compose.yml`/README changes. All B2b.
+- Confirmed NOT dead code by the architecture/build gates: `remote-template-validation.ts` is imported
+  by its own test only (B2b will import it from `prompt-provider.ts`); `prompt-source-port.ts`'s types
+  are imported by `langfuse-prompt-gateway.ts` (real, non-test usage) and its test; the dependency-
+  cruiser architecture guard (`pnpm build`'s `architecture` step) reports 0 violations with these
+  three new files present, so nothing here trips an unused-export or layering rule. TypeScript's
+  `noUnusedLocals`/`noUnusedParameters` (if enabled) would flag a truly dead export at `tsc --noEmit`
+  time, and that gate is green — see Gate Evidence below.
+
+### Gate Evidence (B2a-only tree, re-measured on THIS branch — NOT carried over from the combined B2 branch)
+
+- `pnpm -r test` — apps/api: 167 test files, 1999 passed, 116 skipped; apps/web: 155 test files, 1640
+  passed; apps/mobile: 53 test files, 467 passed; packages (contracts/domain/i18n/exercise-catalog)
+  all green. All green, no failures.
+- `pnpm --filter api test:coverage` — 167 test files, 1999 passed, 116 skipped, exit 0. Functions
+  coverage **88.03%** (gate 85%).
+- `pnpm type-check` — all 7 workspace projects, Done, no errors.
+- `pnpm build` — deps-guard ✅, ui-api-guard ✅ (48 client files scanned, no violations), architecture
+  (0 dependency violations across 2006 modules / 5996 dependencies) ✅, architecture negative guard ✅,
+  every package/app build Done, exit 0.
+- `git diff --stat main...HEAD -- . ':!openspec'` — **411 changed lines** (411 insertions, 0
+  deletions) across the 6 new files (3 source, 3 test) — well under the 800-line budget.
+
+### Open items
+
+- **B2b is held, NOT started on a pushed branch yet.** `feat/langfuse-remote-prompt-source` (the
+  original 13-commit branch) still exists locally with all 13 commits; once B2a's PR merges to
+  `main`, that branch must be REBASED onto the updated `main` so it contains only the B2b-scoped
+  commits (`prompt-provider.ts` + its tests, the promptSource wiring at all three call sites +
+  `app.ts`, the compose forward, the README docs) — not re-created from scratch. All four gates must
+  be re-run on the rebased B2b tree before it is pushed; do not carry over the original branch's
+  numbers, they included B2a's since-superseded commits.
+- B2a's own PR must merge before B2b can branch (`stacked-to-main`).
+
 ## Slice B2a — port + gateway + validation (branch `feat/langfuse-prompt-gateway`)
 
 **Why B2 was split.** The combined B2 slice measured **956 hand-authored changed lines** against the
