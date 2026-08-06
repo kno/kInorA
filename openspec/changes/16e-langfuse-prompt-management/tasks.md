@@ -196,38 +196,38 @@ Invariant on Trace Payloads (relocation half); Prompt Tests Run Offline.
 prompt only: `prompt.ts` + renderer + its tests) and B1b (the two chat prompts + the `mask`
 relocation). Do not pre-split unless review actually flags it.
 
-- [ ] B1.1 RED: `prompt-template.test.ts` — substitution, repeated variable, empty-string variable,
+- [x] B1.1 RED: `prompt-template.test.ts` — substitution, repeated variable, empty-string variable,
       unknown `{{x}}` left intact (so validation step 5 catches it later), no-variable template (pure,
       no I/O)
-- [ ] B1.2 GREEN: create `apps/api/src/ai/prompt-template.ts` — `renderTemplate(template, variables)`,
+- [x] B1.2 GREEN: create `apps/api/src/ai/prompt-template.ts` — `renderTemplate(template, variables)`,
       `templateVariablesOf(template)`, `PromptDefinition` interface (`name`, `localTemplate`,
       `variables`, `requiredMarkers`, `orderedMarkers`, `maxTemplateChars: 20_000`),
       `TEMPLATE_MARKER_OPEN`
-- [ ] B1.3 RED: byte-identical snapshot — `renderTemplate(PLAN_PROMPT_TEMPLATE,
+- [x] B1.3 RED: byte-identical snapshot — `renderTemplate(PLAN_PROMPT_TEMPLATE,
       buildPlanPromptVariables(spec))` `===` the pre-refactor `buildPlanPrompt(spec)` output, across:
       no memory / with memory / `allowedExercises` empty / non-empty / each `intensityBias` value
-- [ ] B1.4 GREEN: extract `PLAN_PROMPT_TEMPLATE` as an exported constant capturing today's exact
+- [x] B1.4 GREEN: extract `PLAN_PROMPT_TEMPLATE` as an exported constant capturing today's exact
       wording in `apps/api/src/ai/prompt.ts`; add `buildPlanPromptVariables(spec)` and
       `PLAN_PROMPT_DEFINITION` (variables/markers per design's variable-sets table); `buildPlanPrompt`
       becomes the local-template wrapper over `renderTemplate` — preserve the #352 ordering contract
       (`{{limitationsSection}}` → `{{memorySection}}` → `{{vocabularySection}}` → `TASK:` →
       `{{taskExerciseRule}}`)
-- [ ] B1.5 Plus `toMatchSnapshot()` on B1.3's cases to freeze wording against future drift
-- [ ] B1.6 RED: same byte-identical + snapshot pair for `buildReplyPrompt` (`REPLY_PROMPT_TEMPLATE`)
+- [x] B1.5 Plus `toMatchSnapshot()` on B1.3's cases to freeze wording against future drift
+- [x] B1.6 RED: same byte-identical + snapshot pair for `buildReplyPrompt` (`REPLY_PROMPT_TEMPLATE`)
       and `buildExtractionPrompt` (`EXTRACTION_PROMPT_TEMPLATE`) against
       `extraction-prompt.test.ts`'s existing content assertions, which must stay green unchanged
-- [ ] B1.7 GREEN: extract `REPLY_PROMPT_TEMPLATE`/`EXTRACTION_PROMPT_TEMPLATE` +
+- [x] B1.7 GREEN: extract `REPLY_PROMPT_TEMPLATE`/`EXTRACTION_PROMPT_TEMPLATE` +
       `REPLY_PROMPT_DEFINITION`/`EXTRACTION_PROMPT_DEFINITION` in
       `apps/api/src/ai/extraction-prompt.ts`; export `limitationTermsOf`
-- [ ] B1.8 RED: masking relocation — `buildReplyPrompt`/`buildExtractionPrompt` now return UNMASKED
+- [x] B1.8 RED: masking relocation — `buildReplyPrompt`/`buildExtractionPrompt` now return UNMASKED
       text (move the existing in-builder masking assertions OUT to `extraction-adapter.test.ts`,
       proving A2's call-site masking is what actually reaches the model/callback)
-- [ ] B1.9 GREEN: remove the `mask(...)` call from inside both chat builders; the call-site masking
+- [x] B1.9 GREEN: remove the `mask(...)` call from inside both chat builders; the call-site masking
       added in A2 already covers the now-unmasked output — confirm no other caller of
       `buildReplyPrompt`/`buildExtractionPrompt` relied on the in-builder masking (grep before removing)
-- [ ] B1.10 REFACTOR: confirm `mask` now runs at exactly two invocation sites total (`invokeChain`,
+- [x] B1.10 REFACTOR: confirm `mask` now runs at exactly two invocation sites total (`invokeChain`,
       extraction-adapter) for all three prompts — the masking-payload test surface designed in A1/A2
-- [ ] B1.11 Verify: `pnpm --filter api test` green; `pnpm --filter api test:coverage` green at 85%
+- [x] B1.11 Verify: `pnpm --filter api test` green; `pnpm --filter api test:coverage` green at 85%
       functions threshold; existing `prompt.test.ts`/`extraction-prompt.test.ts` content assertions
       still pass unchanged
 
