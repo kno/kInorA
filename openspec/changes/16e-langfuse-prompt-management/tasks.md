@@ -160,21 +160,25 @@ changes.
 Satisfies: Safe-By-Construction Tracing Handler (extended to chat); Masking Invariant on Trace
 Payloads (chat half); Prompt Tests Run Offline.
 
-- [ ] A2.1 RED: `extraction-adapter.test.ts` — `streamReply` passes `callbacks: [handler]` when a
+- [x] A2.1 RED: `extraction-adapter.test.ts` — `streamReply` passes `callbacks: [handler]` when a
       handler is injected via the third constructor arg, and omits the `callbacks` key entirely when
       not (existing fake `ExtractionChatModel` records call options)
-- [ ] A2.2 RED: same two cases for `extract`
-- [ ] A2.3 RED: both payloads masked for a KNOWN limitation (extends A1.8's harness style to the two
+- [x] A2.2 RED: same two cases for `extract`
+- [x] A2.3 RED: both payloads masked for a KNOWN limitation (extends A1.8's harness style to the two
       chat call sites); `signal`/`runName`/`metadata` unchanged by the new `deps` arg
-- [ ] A2.4 GREEN: add third constructor arg `deps?: AiTracingDeps` to
+- [x] A2.4 GREEN: add third constructor arg `deps?: AiTracingDeps` to
       `apps/api/src/ai/extraction-adapter.ts`; apply the conditional `callbacks` spread at both
       `streamReply` and `extract`; rewrite the stale masking/observability docstring at lines ~41-49
-- [ ] A2.5 GREEN: wire the same handler instance from `app.ts` into `PlanSpecExtractionAdapter`'s
+- [x] A2.5 GREEN: wire the same handler instance from `app.ts` into `PlanSpecExtractionAdapter`'s
       constructor call site
-- [ ] A2.6 REFACTOR: confirm `invokeChain` and the extraction adapter now share the identical
+- [x] A2.6 REFACTOR: confirm `invokeChain` and the extraction adapter now share the identical
       conditional-spread idiom (no divergence between the two attachment sites)
-- [ ] A2.7 Verify: `pnpm --filter api test` green; `pnpm --filter api test:coverage` green; no
+- [x] A2.7 Verify: `pnpm --filter api test` green; `pnpm --filter api test:coverage` green; no
       regression in `app.test.ts` or route suites with no credentials set (handler is `null`)
+
+**A2 status: DONE.** PR: https://github.com/kno/kInorA/pull/370 (branch
+`feat/langfuse-extraction-adapter-tracing`, from `main`, not yet merged). All A2 tasks complete;
+gates green (see apply-progress topic key for exact evidence). Not started: B1, B2, C.
 
 ## Phase B1: Shared Renderer + Template Extraction
 
