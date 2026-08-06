@@ -343,3 +343,78 @@ describe("PlanSpecExtractionAdapter tracing attachment (langfuse-prompt-manageme
     });
   });
 });
+
+describe("PlanSpecExtractionAdapter masking relocation (langfuse-prompt-management, slice B1)", () => {
+  // `buildReplyPrompt`/`buildExtractionPrompt` now return UNMASKED text; these
+  // assertions MOVED here from `extraction-prompt.test.ts` to prove the
+  // call-site `mask()` in `extraction-adapter.ts` is what actually reaches
+  // the model, mirroring `invokeChain`'s masking for the plan prompt.
+
+  it("masks a KNOWN limitation term from the current draft in both passes", async () => {
+    const { adapter, streamCalls, invokeCalls } = buildAdapter({
+      tokens: ["ok"],
+      extracted: { goal: "strength" },
+    });
+    const controller = new AbortController();
+    const draftInput = input({
+      message: "let's build a plan",
+      currentDraft: { limitations: [{ text: "lower back pain", isWarning: true }] },
+    });
+
+    let assistantReply = "";
+    for await (const tok of adapter.streamReply(draftInput, controller.signal)) assistantReply += tok;
+    await adapter.extract(draftInput, assistantReply);
+
+    expect(streamCalls[0]?.input).not.toContain("lower back pain");
+    expect(streamCalls[0]?.input).toContain("[REDACTED]");
+    expect(invokeCalls[0]?.input).not.toContain("lower back pain");
+    expect(invokeCalls[0]?.input).toContain("[REDACTED]");
+  });
+
+  it("masks a KNOWN limitation term even when the user repeats it in this turn's message (streamReply)", async () => {
+    const { adapter, streamCalls } = buildAdapter({ tokens: ["ok"], extracted: {} });
+    const controller = new AbortController();
+    const draftInput = input({
+      message: "I still have lower back pain so keep it light",
+      currentDraft: { limitations: [{ text: "lower back pain", isWarning: true }] },
+    });
+
+    for await (const _tok of adapter.streamReply(draftInput, controller.signal)) {
+      /* drain */
+    }
+
+    expect(streamCalls[0]?.input).not.toContain("lower back pain");
+    expect(streamCalls[0]?.input).toContain("[REDACTED]");
+  });
+
+  it("masks a KNOWN limitation term even when it appears inside the seeded assistant reply (extract)", async () => {
+    const { adapter, invokeCalls } = buildAdapter({ tokens: [], extracted: {} });
+    const draftInput = input({
+      currentDraft: { limitations: [{ text: "lower back pain", isWarning: true }] },
+    });
+
+    await adapter.extract(draftInput, "Given your lower back pain, let's keep it light.");
+
+    expect(invokeCalls[0]?.input).not.toContain("lower back pain");
+    expect(invokeCalls[0]?.input).toContain("[REDACTED]");
+  });
+
+  it("does NOT mask a first-mention health/limitation phrase in either pass (accurate, not a bug)", async () => {
+    const { adapter, streamCalls, invokeCalls } = buildAdapter({ tokens: ["ok"], extracted: {} });
+    const controller = new AbortController();
+    const draftInput = input({
+      message: "I have lower back pain, build muscle 4 days",
+      currentDraft: {},
+    });
+
+    for await (const _tok of adapter.streamReply(draftInput, controller.signal)) {
+      /* drain */
+    }
+    await adapter.extract(draftInput, "Understood.");
+
+    expect(streamCalls[0]?.input).toContain("lower back pain");
+    expect(streamCalls[0]?.input).not.toContain("[REDACTED]");
+    expect(invokeCalls[0]?.input).toContain("lower back pain");
+    expect(invokeCalls[0]?.input).not.toContain("[REDACTED]");
+  });
+});
