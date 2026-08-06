@@ -100,51 +100,55 @@ with no code change; deleting `OpenRouterPlanGenerator` is independent and does 
 Satisfies: Safe-By-Construction Tracing Handler; Langfuse Base URL Resolution; Masking Invariant on
 Trace Payloads (input half); No Untraced Duplicate Prompt Path Remains; Prompt Tests Run Offline.
 
-- [ ] A1.1 Pre-flight: grep confirms no test outside `apps/api/src/ai/__tests__/openrouter-generator.test.ts`
+- [x] A1.1 Pre-flight: grep confirms no test outside `apps/api/src/ai/__tests__/openrouter-generator.test.ts`
       constructs `OpenRouterPlanGenerator` (design Open Question, `app.ts:21` imports only
       `warnIfAiConfigMissing`)
-- [ ] A1.2 RED: `langfuse-handler.test.ts` — `buildLangfuseCallbackHandler()` returns `null` when
+- [x] A1.2 RED: `langfuse-handler.test.ts` — `buildLangfuseCallbackHandler()` returns `null` when
       either `LANGFUSE_PUBLIC_KEY` or `LANGFUSE_SECRET_KEY` is missing from injected `env`
-- [ ] A1.3 RED: returns `null` (+ exactly one warn call) when construction throws — hoisted
+- [x] A1.3 RED: returns `null` (+ exactly one warn call) when construction throws — hoisted
       `vi.mock("langfuse-langchain")` with a throwing/recording constructor, no real client, no
       network, no credentials
-- [ ] A1.4 RED: `baseUrl` precedence `LANGFUSE_BASEURL ?? LANGFUSE_HOST` — only `LANGFUSE_HOST` set
+- [x] A1.4 RED: `baseUrl` precedence `LANGFUSE_BASEURL ?? LANGFUSE_HOST` — only `LANGFUSE_HOST` set
       (current production shape); both set (BASEURL wins); neither set → no explicit `baseUrl` key
       passed to the constructor
-- [ ] A1.5 GREEN: create `apps/api/src/ai/langfuse-handler.ts` — `TracingHandler` interface
+- [x] A1.5 GREEN: create `apps/api/src/ai/langfuse-handler.ts` — `TracingHandler` interface
       (`{ readonly name: string; flushAsync(): Promise<unknown> }`), `resolveLangfuseBaseUrl(env)`,
       `buildLangfuseCallbackHandler(opts?: { env?, warn? })` → handler `|` `null`, try/catch around
       construction, warn sink carries reason code + `error.name` only, never a credential
-- [ ] A1.6 RED: `adapter-factory.test.ts:135-151` **inverted** — rename to "attaches the injected
+- [x] A1.6 RED: `adapter-factory.test.ts:135-151` **inverted** — rename to "attaches the injected
       tracing handler"; `buildAdapters({ handler })` → `mockInvoke.mock.calls[0][1]` DOES contain
       `callbacks: [handler]`; a second case with `buildAdapters()` (no deps) asserts the config still
       has NO `callbacks` key; `beforeEach` additionally deletes `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`
-- [ ] A1.7 GREEN: `buildAdapters(deps?: AiTracingDeps)` in `apps/api/src/ai/adapter-factory.ts` —
+- [x] A1.7 GREEN: `buildAdapters(deps?: AiTracingDeps)` in `apps/api/src/ai/adapter-factory.ts` —
       `invokeChain` spreads `...(handler ? { callbacks: [handler] } : {})` conditionally so the
       no-handler config is byte-identical to today's; rewrite the superseded "no callback attached"
       comment at `adapter-factory.ts:28-35` to document why A1 supersedes it (masked input, schema-shaped
       output, masking test) rather than deleting the reasoning
-- [ ] A1.8 RED: masking-payload test — `limitations: [{ text: "osteoporosis" }]`; assert the invoke
+- [x] A1.8 RED: masking-payload test — `limitations: [{ text: "osteoporosis" }]`; assert the invoke
       input contains `[REDACTED]` and NOT `osteoporosis`, AND `JSON.stringify([invokeInput,
       resolvedProgram])` does not contain the raw term (extends the existing fake-chain harness)
-- [ ] A1.9 GREEN: confirmed passing via A1.7's conditional-spread wiring — masking already runs at the
+- [x] A1.9 GREEN: confirmed passing via A1.7's conditional-spread wiring — masking already runs at the
       `invokeChain` call site before `.invoke`; no additional production code needed for this test
       beyond A1.7 (document if it turns out otherwise)
-- [ ] A1.10 RED: delete `apps/api/src/ai/__tests__/openrouter-generator.test.ts` first, confirm the
+- [x] A1.10 RED: delete `apps/api/src/ai/__tests__/openrouter-generator.test.ts` first, confirm the
       suite fails to resolve the module it deleted-tested (i.e. confirm the file is really gone from
       the run, not skipped)
-- [ ] A1.11 GREEN: delete `OpenRouterPlanGenerator` from `apps/api/src/ai/openrouter-generator.ts`;
+- [x] A1.11 GREEN: delete `OpenRouterPlanGenerator` from `apps/api/src/ai/openrouter-generator.ts`;
       keep `warnIfAiConfigMissing`; drop now-unused imports; confirm
       `apps/api/src/ai/__tests__/startup-warning.test.ts` still covers `warnIfAiConfigMissing`
-- [ ] A1.12 GREEN: wire `buildLangfuseCallbackHandler()` once in `apps/api/src/app.ts`, pass `deps` to
+- [x] A1.12 GREEN: wire `buildLangfuseCallbackHandler()` once in `apps/api/src/app.ts`, pass `deps` to
       `buildAdapters`; register a Fastify `onClose` hook calling `handler.flushAsync()` best-effort
       (never throws, never blocks shutdown); fix the stale Langfuse-related comments at `app.ts:132`
       and `app.ts:224`
-- [ ] A1.13 Document `LANGFUSE_BASEURL`/`LANGFUSE_HOST` precedence in `apps/api/README.md`
-- [ ] A1.14 REFACTOR: re-read `adapter-factory.ts` diff for dead code / stale comments; confirm the
+- [x] A1.13 Document `LANGFUSE_BASEURL`/`LANGFUSE_HOST` precedence in `apps/api/README.md`
+- [x] A1.14 REFACTOR: re-read `adapter-factory.ts` diff for dead code / stale comments; confirm the
       no-handler invoke config is byte-identical (assert via A1.6's second case)
-- [ ] A1.15 Verify: `pnpm --filter api test` green; `pnpm --filter api test:coverage` green at the
+- [x] A1.15 Verify: `pnpm --filter api test` green; `pnpm --filter api test:coverage` green at the
       85% functions threshold; `pnpm --filter api exec tsc --noEmit` clean
+
+**A1 status: DONE.** PR: https://github.com/kno/kInorA/pull/368 (branch
+`feat/langfuse-tracing-handler`, from `main`, not yet merged). All A1 tasks complete; gates green
+(see apply-progress topic key for exact evidence). Not started: A2, B1, B2, C.
 
 ## Phase A2: Extraction-Adapter Tracing
 
