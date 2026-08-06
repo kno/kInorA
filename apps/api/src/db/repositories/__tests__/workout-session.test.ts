@@ -415,6 +415,8 @@ describe("WorkoutSessionRepository", () => {
     it("classifies each exercise's muscle_group at write time via classifyExerciseMuscleGroup (09c-v1 Slice 1b)", async () => {
       // Bench Press -> chest (bare "bench press"); Chest Supported Row -> back
       // (bare "row"), matching the fixtures already used across this file.
+      // Neither title resolves to a catalog record, so #352 slice C leaves this
+      // path exactly as it was: the classifier is still what answers.
       const { db, insert } = createStartDb();
       const repo = new WorkoutSessionRepository(db as never);
 
@@ -467,6 +469,62 @@ describe("WorkoutSessionRepository", () => {
       };
       expect(exercisesInsert.values).toHaveBeenCalledWith([
         expect.objectContaining({ title: "Farmer's Carry", muscleGroup: null }),
+      ]);
+    });
+
+    it("takes muscle_group from the catalog's taxonomy when the title resolves (#352 slice C)", async () => {
+      // Both titles resolve to a catalog record, and for both the catalog
+      // DISAGREES with the keyword classifier — which is the entire point:
+      //   "Barbell Close-Grip Bench Press" -> catalog target `triceps`;
+      //      the classifier sees "bench press" and says `chest`.
+      //   "Hyperextension"                 -> catalog target `spine` -> back;
+      //      the classifier has no keyword for it and says `null`.
+      // The prescribed titles are asserted verbatim alongside the groups: the
+      // snapshot must never be rewritten to the catalog's spelling.
+      const catalogProgram: WorkoutProgram = {
+        weeklySessions: [
+          {
+            day: 1,
+            title: "Push",
+            exercises: [
+              { name: "Barbell Close-Grip Bench Press", sets: 3, reps: "6-8", restSeconds: 120 },
+              { name: "Hyperextension", sets: 3, reps: "12", restSeconds: 60 },
+            ],
+          },
+        ],
+        limitationWarnings: [],
+      };
+      const select = createQueuedSelectDb(
+        new Map<object, unknown[][]>([
+          [workoutSessions, [[]]],
+          [workoutPlans, [[{ ...readyPlanRow, programJson: catalogProgram }]]],
+        ]),
+      ).select;
+      const insert = vi.fn().mockImplementation((table: object) => ({
+        values: vi.fn().mockImplementation(() => {
+          if (table === workoutSessions) return { returning: vi.fn().mockResolvedValue([sessionRow]) };
+          if (table === sessionExercises) return { returning: vi.fn().mockResolvedValue([]) };
+          if (table === setRecords) return { returning: vi.fn().mockResolvedValue([]) };
+          throw new Error(`Unexpected insert table: ${String(table)}`);
+        }),
+      }));
+      const tx = { insert, select };
+      const transaction = vi
+        .fn()
+        .mockImplementation(async (cb: (db: typeof tx) => Promise<unknown>) => cb(tx));
+      const repo = new WorkoutSessionRepository({ select, transaction } as never);
+
+      await repo.startSession(TENANT_A, USER_A, PLAN_ID, 1);
+
+      const exercisesInsert = insert.mock.results[1]!.value as {
+        values: ReturnType<typeof vi.fn>;
+      };
+      expect(exercisesInsert.values).toHaveBeenCalledWith([
+        expect.objectContaining({
+          title: "Barbell Close-Grip Bench Press",
+          muscleGroup: "triceps",
+        }),
+        expect.objectContaining({ title: "Hyperextension", muscleGroup: "back" }),
       ]);
     });
   });

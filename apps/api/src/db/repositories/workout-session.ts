@@ -7,7 +7,7 @@ import {
   extractCompletedSetRpeValues,
 } from "@kinora/domain";
 import { resolveExerciseIdByName } from "@kinora/exercise-catalog";
-import { classifyExerciseMuscleGroup } from "../muscle-classifier.js";
+import { deriveExerciseMuscleGroup } from "../catalog-muscle-group.js";
 import {
   addUtcDays as domainAddUtcDays,
   computeAdherence,
@@ -86,9 +86,12 @@ interface SessionExerciseRow {
   notes: string | null;
   /**
    * Derived muscle-group classification (09c-v1 Slice 1b). Populated at
-   * write time via `classifyExerciseMuscleGroup`; `null` when the title is
-   * unmapped. Read directly by `getStatsRange` (Slice 3b) for the
-   * muscle-group distribution — not surfaced on `SessionExerciseRecord`.
+   * write time via `deriveExerciseMuscleGroup` — the catalog's `target` when
+   * the exercise resolves, `classifyExerciseMuscleGroup` when it does not
+   * (#352 slice C); `null` when neither has an answer. Read directly by
+   * `getStatsRange` (Slice 3b) for the muscle-group distribution — not
+   * surfaced on `SessionExerciseRecord`. Rows written before #352 slice C
+   * keep their classifier-derived value: there is no backfill.
    */
   muscleGroup: string | null | undefined;
 }
@@ -1500,7 +1503,12 @@ export class WorkoutSessionRepository {
           title: exercise.name,
           restSeconds: exercise.restSeconds,
           notes: combineExerciseNotes(exercise),
-          muscleGroup: classifyExerciseMuscleGroup(exercise.name),
+          // #352 slice C — the catalog's own `target` when the exercise
+          // resolves to a record, the keyword classifier only when it does
+          // not. `title` above is the prescription snapshot and is written
+          // verbatim either way; this derivation reads it and never rewrites
+          // it. Historical rows are deliberately left alone (no backfill).
+          muscleGroup: deriveExerciseMuscleGroup(exercise),
         }))
       )
       .returning();
