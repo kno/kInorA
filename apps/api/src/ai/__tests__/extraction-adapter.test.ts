@@ -7,6 +7,7 @@ import {
   type ExtractionModelFactory,
 } from "../extraction-adapter.js";
 import type { ChatExtractInput } from "../extraction-port.js";
+import type { AiTracingDeps, TracingHandler } from "../langfuse-handler.js";
 
 // --- Fake chat model -------------------------------------------------------
 //
@@ -88,13 +89,19 @@ function fakeModel(spec: FakeModelSpec) {
   return { model, streamCalls, invokeCalls, structuredArgs };
 }
 
-function buildAdapter(spec: FakeModelSpec) {
+function buildAdapter(spec: FakeModelSpec, deps?: AiTracingDeps) {
   const fake = fakeModel(spec);
   const factory: ExtractionModelFactory = vi.fn(() => fake.model);
   const configRepo = { getActive: vi.fn().mockResolvedValue(null) };
-  const adapter = new PlanSpecExtractionAdapter(configRepo, factory);
+  const adapter = new PlanSpecExtractionAdapter(configRepo, factory, deps);
   return { adapter, ...fake, factory, configRepo };
 }
+
+/** Minimal fake satisfying `TracingHandler` — no real Langfuse client. */
+const FAKE_HANDLER: TracingHandler = {
+  name: "fake-handler",
+  flushAsync: () => Promise.resolve(),
+};
 
 const EMPTY_DRAFT: PlanSpecDraft = {};
 
@@ -269,5 +276,70 @@ describe("PlanSpecExtractionAdapter (real two-pass adapter, fake model)", () => 
     const meta = streamCalls[0]?.options?.metadata as Record<string, unknown> | undefined;
     expect(meta?.["provider"]).toBe("anthropic");
     expect(meta?.["feature"]).toBe("plan-chat-extraction");
+  });
+});
+
+describe("PlanSpecExtractionAdapter tracing attachment (langfuse-prompt-management, slice A2)", () => {
+  it("streamReply attaches the injected handler and omits the callbacks key entirely when none is injected", async () => {
+    const withHandler = buildAdapter({ tokens: ["hi"], extracted: {} }, { handler: FAKE_HANDLER });
+    const controller1 = new AbortController();
+    // eslint-disable-next-line no-empty
+    for await (const _ of withHandler.adapter.streamReply(input(), controller1.signal)) {
+    }
+    expect(withHandler.streamCalls[0]?.options?.callbacks).toEqual([FAKE_HANDLER]);
+
+    const withoutHandler = buildAdapter({ tokens: ["hi"], extracted: {} });
+    const controller2 = new AbortController();
+    // eslint-disable-next-line no-empty
+    for await (const _ of withoutHandler.adapter.streamReply(input(), controller2.signal)) {
+    }
+    expect(withoutHandler.streamCalls[0]?.options).not.toHaveProperty("callbacks");
+  });
+
+  it("extract attaches the injected handler and omits the callbacks key entirely when none is injected", async () => {
+    const withHandler = buildAdapter({ tokens: [], extracted: {} }, { handler: FAKE_HANDLER });
+    await withHandler.adapter.extract(input(), "reply");
+    expect(withHandler.invokeCalls[0]?.options?.callbacks).toEqual([FAKE_HANDLER]);
+
+    const withoutHandler = buildAdapter({ tokens: [], extracted: {} });
+    await withoutHandler.adapter.extract(input(), "reply");
+    expect(withoutHandler.invokeCalls[0]?.options).not.toHaveProperty("callbacks");
+  });
+
+  it("both passes still mask a KNOWN limitation while leaving signal/runName/metadata unchanged by the new deps arg", async () => {
+    const HEALTH = "chronic tendinitis";
+    const { adapter, streamCalls, invokeCalls } = buildAdapter(
+      { tokens: ["ok"], extracted: { goal: "strength" } },
+      { handler: FAKE_HANDLER },
+    );
+    const controller = new AbortController();
+
+    const draftInput = input({
+      message: "let's keep going",
+      currentDraft: { limitations: [{ text: HEALTH, isWarning: true }] },
+    });
+
+    let assistantReply = "";
+    for await (const tok of adapter.streamReply(draftInput, controller.signal)) assistantReply += tok;
+    await adapter.extract(draftInput, assistantReply);
+
+    expect(streamCalls[0]?.input).toContain("[REDACTED]");
+    expect(streamCalls[0]?.input).not.toContain(HEALTH);
+    expect(invokeCalls[0]?.input).toContain("[REDACTED]");
+    expect(invokeCalls[0]?.input).not.toContain(HEALTH);
+
+    expect(streamCalls[0]?.options?.signal).toBe(controller.signal);
+    expect(streamCalls[0]?.options?.runName).toBe("plan-chat-extraction");
+    expect(streamCalls[0]?.options?.metadata).toEqual({
+      feature: "plan-chat-extraction",
+      provider: "openrouter",
+      model: "openai/gpt-4o-mini",
+    });
+    expect(invokeCalls[0]?.options?.runName).toBe("plan-chat-extraction");
+    expect(invokeCalls[0]?.options?.metadata).toEqual({
+      feature: "plan-chat-extraction",
+      provider: "openrouter",
+      model: "openai/gpt-4o-mini",
+    });
   });
 });
