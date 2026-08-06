@@ -25,6 +25,8 @@ import {
   buildLangfuseCallbackHandler,
   flushLangfuseHandlerOnClose,
 } from "./ai/langfuse-handler.js";
+import { buildLangfusePromptGateway } from "./ai/langfuse-prompt-gateway.js";
+import { ResolvePrompt, resolvePromptCacheTtlMs } from "./ai/prompt-provider.js";
 import { adminAiConfigRoutes } from "./routes/admin-ai-config.js";
 import { adminTierOverrideRoutes } from "./routes/admin-tier-override.js";
 import { TierOverrideAdminRepository } from "./db/repositories/tier-override-admin.js";
@@ -389,7 +391,22 @@ export async function buildApp(
   const langfuseHandler = buildLangfuseCallbackHandler({
     warn: (message) => app.log.warn(message),
   });
-  const aiTracingDeps = { handler: langfuseHandler };
+  // langfuse-prompt-management (slice B2) — built ONCE alongside the tracing
+  // handler and threaded through the SAME `aiTracingDeps` bag. `gateway` is
+  // `null` when Langfuse credentials are absent or construction fails, in
+  // which case `ResolvePrompt` always falls back to the compiled-in local
+  // template with reason `no_credentials` — no remote fetch is ever
+  // attempted, and generation/chat are unaffected either way.
+  const langfusePromptGateway = buildLangfusePromptGateway();
+  const resolvePrompt = new ResolvePrompt(langfusePromptGateway, {
+    cacheTtlMs: resolvePromptCacheTtlMs(process.env),
+    warn: (reason, promptName, errorName) =>
+      app.log.warn(
+        { reason, promptName, errorName },
+        "[prompt-provider] falling back to the compiled-in local template",
+      ),
+  });
+  const aiTracingDeps = { handler: langfuseHandler, prompts: resolvePrompt };
   const generator =
     planGenerator ?? new DynamicPlanGenerator(configRepo, buildAdapters(aiTracingDeps));
   // Best-effort flush on shutdown: never throws, never blocks Fastify's close
