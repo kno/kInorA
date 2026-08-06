@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { buildReplyPrompt, buildExtractionPrompt } from "../extraction-prompt.js";
+import {
+  buildReplyPrompt,
+  buildExtractionPrompt,
+  REPLY_PROMPT_TEMPLATE,
+  EXTRACTION_PROMPT_TEMPLATE,
+  buildReplyPromptVariables,
+  buildExtractionPromptVariables,
+} from "../extraction-prompt.js";
+import { renderTemplate } from "../prompt-template.js";
 import type { ChatExtractInput } from "../extraction-port.js";
 
 const baseInput: ChatExtractInput = {
@@ -200,5 +208,68 @@ describe("buildExtractionPrompt (Pass 2 — seeded with the assistant reply)", (
     expect(prompt.toLowerCase()).toMatch(
       /do not diagnose|do not provide medical advice|not a medical|no medical/,
     );
+  });
+});
+
+// langfuse-prompt-management, slice B1 — the renderer split must be a pure
+// refactor: rendering the exported template over the exported variables
+// producer must be BYTE-IDENTICAL to the builder's own output. `toMatchSnapshot()`
+// additionally freezes today's exact wording against future accidental drift.
+describe("renderTemplate(REPLY_PROMPT_TEMPLATE, buildReplyPromptVariables(input)) — byte-identical to buildReplyPrompt", () => {
+  it("matches for the base input", () => {
+    const rendered = renderTemplate(REPLY_PROMPT_TEMPLATE, buildReplyPromptVariables(baseInput)).trim();
+    expect(rendered).toBe(buildReplyPrompt(baseInput));
+    expect(rendered).toMatchSnapshot();
+  });
+
+  it("matches with an empty draft and no missing fields", () => {
+    const input: ChatExtractInput = { message: "help me get fit", currentDraft: {} };
+    const rendered = renderTemplate(REPLY_PROMPT_TEMPLATE, buildReplyPromptVariables(input)).trim();
+    expect(rendered).toBe(buildReplyPrompt(input));
+    expect(rendered).toMatchSnapshot();
+  });
+
+  it("matches with memory context", () => {
+    const input: ChatExtractInput = {
+      ...baseInput,
+      memoryContext: ["Prefers morning workouts"],
+    };
+    const rendered = renderTemplate(REPLY_PROMPT_TEMPLATE, buildReplyPromptVariables(input)).trim();
+    expect(rendered).toBe(buildReplyPrompt(input));
+    expect(rendered).toMatchSnapshot();
+  });
+});
+
+describe("renderTemplate(EXTRACTION_PROMPT_TEMPLATE, buildExtractionPromptVariables(input, reply)) — byte-identical to buildExtractionPrompt", () => {
+  it("matches for the base input", () => {
+    const rendered = renderTemplate(
+      EXTRACTION_PROMPT_TEMPLATE,
+      buildExtractionPromptVariables(baseInput, REPLY),
+    ).trim();
+    expect(rendered).toBe(buildExtractionPrompt(baseInput, REPLY));
+    expect(rendered).toMatchSnapshot();
+  });
+
+  it("matches with an empty draft and no missing fields", () => {
+    const input: ChatExtractInput = { message: "help me get fit", currentDraft: {} };
+    const rendered = renderTemplate(
+      EXTRACTION_PROMPT_TEMPLATE,
+      buildExtractionPromptVariables(input, "Sure!"),
+    ).trim();
+    expect(rendered).toBe(buildExtractionPrompt(input, "Sure!"));
+    expect(rendered).toMatchSnapshot();
+  });
+
+  it("matches with memory context", () => {
+    const input: ChatExtractInput = {
+      ...baseInput,
+      memoryContext: ["Prefers morning workouts"],
+    };
+    const rendered = renderTemplate(
+      EXTRACTION_PROMPT_TEMPLATE,
+      buildExtractionPromptVariables(input, REPLY),
+    ).trim();
+    expect(rendered).toBe(buildExtractionPrompt(input, REPLY));
+    expect(rendered).toMatchSnapshot();
   });
 });
