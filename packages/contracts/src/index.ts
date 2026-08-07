@@ -234,16 +234,29 @@ export type TrainingLocation = "home" | "gym" | "outdoor";
 export type ExperienceLevel = "beginner" | "intermediate" | "advanced";
 
 /**
+ * Self-described sex/gender (17c-profile-body-metrics). ONE merged field,
+ * one consumer: plan generation. `prefer_not_to_say` is a positive enum
+ * member, distinct from `null` — `null` means "never asked", this means
+ * "asked and declined". Both degrade identically downstream.
+ */
+export type SelfDescribedSex = "female" | "male" | "non_binary" | "other" | "prefer_not_to_say";
+
+/**
  * User profile DTO (10a-user-profile).
  * `name` is always present (NOT NULL, provisioned on registration from the
  * email prefix). `goal` and `experienceLevel` are nullable; NULL means
  * "not chosen yet", distinct from any default value.
+ *
+ * `selfDescribedSex` and `heightCm` (17c-profile-body-metrics) follow the
+ * same nullable/additive contract. `heightCm` is centimetres, SI only.
  */
 export interface UserProfile {
   userId: string;
   name: string;
   goal: PlanGoal | null;
   experienceLevel: ExperienceLevel | null;
+  selfDescribedSex: SelfDescribedSex | null;
+  heightCm: number | null;
 }
 
 /**
