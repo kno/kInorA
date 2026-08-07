@@ -60,6 +60,13 @@ export const messages = defineMessages({
   conflictWithScope: { id: "mobileTracker.conflict.withScope" },
   conflictWithPlan: { id: "mobileTracker.conflict.withPlan" },
   conflictGeneric: { id: "mobileTracker.conflict.generic" },
+  // 17b scope A — Resume/Discard actions on the conflict state.
+  conflictResume: { id: "mobileTracker.conflict.resume" },
+  conflictDiscard: { id: "mobileTracker.conflict.discard" },
+  conflictDiscardConfirm: { id: "mobileTracker.conflict.discardConfirm" },
+  conflictDiscardConfirmYes: { id: "mobileTracker.conflict.discardConfirmYes" },
+  conflictDiscardCancel: { id: "mobileTracker.conflict.discardCancel" },
+  conflictDiscardFailed: { id: "mobileTracker.conflict.discardFailed" },
   errorStart: { id: "mobileTracker.error.start" },
   errorLoad: { id: "mobileTracker.error.load" },
   errorRecord: { id: "mobileTracker.error.record" },

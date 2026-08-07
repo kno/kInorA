@@ -68,6 +68,7 @@ import { collapseQueue } from "@kinora/domain/offline";
 
 import { colors, spacing } from "../theme/tokens";
 import {
+  abandonSession,
   completeWorkoutSession,
   getWorkoutSession,
   recordWorkoutSet,
@@ -164,7 +165,16 @@ type TrackerScreenProps = {
 const DEFAULT_REST_SECONDS = 90;
 const REST_LOW_THRESHOLD = 15;
 
-type ConflictState = { activePlanName?: string; activeDay: number | null };
+type ConflictState = {
+  activePlanName?: string;
+  activeDay: number | null;
+  /**
+   * 17b scope A: the blocking session's id and start date, so the full-
+   * screen conflict state can name its date and offer Resume/Discard.
+   */
+  activeSessionId: string;
+  activeStartedAt: string;
+};
 
 type SyncNotice = "auth_required" | "dropped" | "reload_required" | undefined;
 type IdentityRevalidation = "same" | "unreachable" | "different";
@@ -205,6 +215,10 @@ export default function WorkoutTrackerScreen({
   const [loading, setLoading] = useState(true);
   const [errorKey, setErrorKey] = useState<string | undefined>();
   const [conflict, setConflict] = useState<ConflictState | undefined>();
+  // 17b scope A: one required confirmation step before Discard takes effect,
+  // and feedback when the abandon call itself fails/no-ops.
+  const [discardConfirming, setDiscardConfirming] = useState(false);
+  const [discardFailed, setDiscardFailed] = useState(false);
 
   // Stepper values for the current set.
   const [weight, setWeight] = useState(0);
@@ -518,6 +532,8 @@ export default function WorkoutTrackerScreen({
       setConflict({
         activePlanName: result.activePlanName,
         activeDay: result.activeDay ?? null,
+        activeSessionId: result.activeSessionId ?? "",
+        activeStartedAt: result.activeStartedAt ?? "",
       });
     } else {
       setErrorKey(sessionId ? "errorLoad" : "errorStart");
@@ -855,6 +871,49 @@ export default function WorkoutTrackerScreen({
 
   const goHome = useCallback(() => navigation.goBack(), [navigation]);
 
+  // 17b scope A Resume: loads the blocking session directly by id — correct
+  // for both a normal conflict and the legacy null-day case, since it never
+  // depends on re-deriving the blocking session's plan identity.
+  const handleResumeConflict = useCallback(async () => {
+    if (!conflict) return;
+    setLoading(true);
+    try {
+      const result = await getWorkoutSession(conflict.activeSessionId);
+      if (!mountedRef.current) return;
+      if (result.kind === "ok") {
+        setConflict(undefined);
+        setDiscardFailed(false);
+        setErrorKey(undefined);
+        setSession(result.session);
+      } else {
+        setErrorKey("errorLoad");
+      }
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  }, [conflict]);
+
+  // 17b scope A Discard: abandons the blocking session, then retries the
+  // ORIGINAL requested start/load. A failed/no-op abandon sets `discardFailed`
+  // and does NOT retry — the one outcome worse than a blocked start is one
+  // that silently did nothing.
+  const handleDiscardConflict = useCallback(async () => {
+    if (!conflict) return;
+    try {
+      const outcome = await abandonSession(conflict.activeSessionId);
+      if (!mountedRef.current) return;
+      if (outcome.kind !== "ok") {
+        setDiscardFailed(true);
+        return;
+      }
+      setDiscardFailed(false);
+      setConflict(undefined);
+      void loadSession();
+    } catch {
+      if (mountedRef.current) setDiscardFailed(true);
+    }
+  }, [conflict, loadSession]);
+
   /* ── Non-session states ── */
 
   if (loading) {
@@ -875,15 +934,78 @@ export default function WorkoutTrackerScreen({
         : conflict.activePlanName
           ? M.conflictWithPlan
           : M.conflictGeneric;
+    // Defensive fallback: a malformed/missing `activeStartedAt` (should never
+    // happen against the real API) must not crash ICU date formatting.
+    const parsedStartedAt = new Date(conflict.activeStartedAt);
+    const conflictDate = Number.isNaN(parsedStartedAt.getTime())
+      ? new Date()
+      : parsedStartedAt;
     return (
       <View style={[styles.centered, { paddingTop: insets.top }]}>
         <StatusBar style="light" />
         <Text style={[styles.stateText, styles.conflictText]}>
           <FormattedMessage
             {...conflictMsg}
-            values={{ planName: conflict.activePlanName, day: conflict.activeDay }}
+            values={{ planName: conflict.activePlanName, day: conflict.activeDay, date: conflictDate }}
           />
         </Text>
+        <Pressable
+          style={styles.secondaryBtn}
+          onPress={() => void handleResumeConflict()}
+          accessibilityRole="button"
+          testID="conflict-resume"
+        >
+          <Text style={styles.secondaryBtnText}>
+            <FormattedMessage {...M.conflictResume} />
+          </Text>
+        </Pressable>
+        {!discardConfirming && (
+          <Pressable
+            style={styles.secondaryBtn}
+            onPress={() => setDiscardConfirming(true)}
+            accessibilityRole="button"
+            testID="conflict-discard"
+          >
+            <Text style={styles.secondaryBtnText}>
+              <FormattedMessage {...M.conflictDiscard} />
+            </Text>
+          </Pressable>
+        )}
+        {discardConfirming && (
+          <>
+            <Text style={styles.stateText}>
+              <FormattedMessage {...M.conflictDiscardConfirm} />
+            </Text>
+            <Pressable
+              style={styles.secondaryBtn}
+              onPress={() => {
+                setDiscardConfirming(false);
+                void handleDiscardConflict();
+              }}
+              accessibilityRole="button"
+              testID="conflict-discard-confirm"
+            >
+              <Text style={styles.secondaryBtnText}>
+                <FormattedMessage {...M.conflictDiscardConfirmYes} />
+              </Text>
+            </Pressable>
+            <Pressable
+              style={styles.secondaryBtn}
+              onPress={() => setDiscardConfirming(false)}
+              accessibilityRole="button"
+              testID="conflict-discard-cancel"
+            >
+              <Text style={styles.secondaryBtnText}>
+                <FormattedMessage {...M.conflictDiscardCancel} />
+              </Text>
+            </Pressable>
+          </>
+        )}
+        {discardFailed && (
+          <Text style={[styles.stateText, styles.errorText]}>
+            <FormattedMessage {...M.conflictDiscardFailed} />
+          </Text>
+        )}
         <Pressable style={styles.secondaryBtn} onPress={goHome} accessibilityRole="button">
           <Text style={styles.secondaryBtnText}>
             <FormattedMessage {...M.backHome} />
