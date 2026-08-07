@@ -3,6 +3,7 @@ import type {
   SessionExerciseRecord,
   SetRecordDTO,
   WorkoutSessionRecord,
+  WorkoutSessionRecordStatus,
 } from "@kinora/contracts";
 import {
   computeElapsedSeconds,
@@ -17,6 +18,7 @@ import {
   ringDashoffset,
   seedFromSet,
   segmentStates,
+  sessionLifecycle,
   stepReps,
   stepWeight,
 } from "./tracker-logic";
@@ -311,6 +313,47 @@ describe("deriveTrackerView", () => {
     const v = deriveTrackerView(s);
     expect(v.currentExercise?.id).toBe("e1");
     expect(v.nextExercise?.id).toBe("e2");
+  });
+
+  it("17b REGRESSION — a fully-logged abandoned session reports isComplete FALSE, not a claimed completion that never happened", () => {
+    const s = session(
+      [exercise({ id: "e1", setRecords: [set({ id: "a", completed: true })] })],
+      { status: "abandoned" },
+    );
+    const v = deriveTrackerView(s);
+    // Today (pre-17b) this was `true` via the `currentExercise === undefined`
+    // clause — the exact falsehood 17b exists to stop.
+    expect(v.isComplete).toBe(false);
+    expect(v.currentExercise).toBeUndefined();
+  });
+
+  it("17b — isTerminal is true for completed and abandoned, false for active", () => {
+    const active = session([exercise({ id: "e1", setRecords: [set({ id: "a" })] })]);
+    expect(deriveTrackerView(active).isTerminal).toBe(false);
+
+    const completed = session(
+      [exercise({ id: "e1", setRecords: [set({ id: "a" })] })],
+      { status: "completed" },
+    );
+    expect(deriveTrackerView(completed).isTerminal).toBe(true);
+
+    const abandoned = session(
+      [exercise({ id: "e1", setRecords: [set({ id: "a" })] })],
+      { status: "abandoned" },
+    );
+    expect(deriveTrackerView(abandoned).isTerminal).toBe(true);
+  });
+});
+
+describe("sessionLifecycle (17b — the forcing function, built not inherited)", () => {
+  it("maps active -> live, completed -> completed, abandoned -> abandoned", () => {
+    expect(sessionLifecycle("active")).toBe("live");
+    expect(sessionLifecycle("completed")).toBe("completed");
+    expect(sessionLifecycle("abandoned")).toBe("abandoned");
+  });
+
+  it("throws on an unhandled status (exhaustive never-default)", () => {
+    expect(() => sessionLifecycle("unknown" as WorkoutSessionRecordStatus)).toThrow();
   });
 });
 

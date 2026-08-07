@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { WorkoutSessionRecord } from "@kinora/contracts";
+import type { WorkoutSessionRecord, WorkoutSessionRecordStatus } from "@kinora/contracts";
 import {
   allSetsDone,
   clamp,
@@ -9,6 +9,7 @@ import {
   formatMMSS,
   formatRest,
   parseLeadingInt,
+  sessionLifecycle,
 } from "../tracker-model";
 
 function session(): WorkoutSessionRecord {
@@ -123,5 +124,37 @@ describe("deriveTrackerModel", () => {
     expect(model.percent).toBe(0);
     expect(model.canRecord).toBe(false);
     expect(model.activeExercise).toBeUndefined();
+  });
+
+  it("17b — reports isTerminal true for a completed session, false for active", () => {
+    const active = deriveTrackerModel(session());
+    expect(active.isTerminal).toBe(false);
+
+    const s = session();
+    s.status = "completed";
+    const completed = deriveTrackerModel(s);
+    expect(completed.isTerminal).toBe(true);
+  });
+
+  it("17b — reports isTerminal true and isCompleted false for an abandoned session (terminal, but not a claimed completion)", () => {
+    const s = session();
+    s.status = "abandoned";
+    const model = deriveTrackerModel(s);
+
+    expect(model.isTerminal).toBe(true);
+    expect(model.isCompleted).toBe(false);
+    expect(model.canRecord).toBe(false);
+  });
+});
+
+describe("sessionLifecycle (17b — the forcing function, built not inherited)", () => {
+  it("maps active -> live, completed -> completed, abandoned -> abandoned", () => {
+    expect(sessionLifecycle("active")).toBe("live");
+    expect(sessionLifecycle("completed")).toBe("completed");
+    expect(sessionLifecycle("abandoned")).toBe("abandoned");
+  });
+
+  it("throws on an unhandled status (exhaustive never-default)", () => {
+    expect(() => sessionLifecycle("unknown" as WorkoutSessionRecordStatus)).toThrow();
   });
 });
