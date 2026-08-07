@@ -77,7 +77,8 @@ describe("@kinora/contracts export conditions (source-condition convention)", ()
     expectTypeOf<WorkoutSessionRecord>().toEqualTypeOf<{
       id: string;
       workoutPlanId: string;
-      status: "active" | "completed";
+      // status gained "abandoned" in 17b-stale-session-recovery.
+      status: "active" | "completed" | "abandoned";
       exercises: SessionExerciseRecord[];
       startedAt: string;
       completedAt?: string;

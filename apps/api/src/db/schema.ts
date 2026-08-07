@@ -664,11 +664,15 @@ export const workoutPlans = pgTable(
 );
 
 /**
- * Workout session status — active while the workout is in progress, completed once closed.
+ * Workout session status — active while the workout is in progress, completed
+ * once closed, or abandoned once auto-closed (age) or explicitly discarded by
+ * the user (17b-stale-session-recovery). Appended last to preserve existing
+ * ordinals — additive, like `billingSourceEnum`'s `"stripe"`.
  */
 export const workoutSessionStatusEnum = pgEnum("workout_session_status", [
   "active",
   "completed",
+  "abandoned",
 ]);
 
 /**

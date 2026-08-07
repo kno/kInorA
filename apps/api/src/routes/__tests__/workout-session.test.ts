@@ -57,6 +57,7 @@ function buildRepoMock(overrides: Partial<Record<keyof ReturnType<typeof buildRe
     findById: vi.fn().mockResolvedValue(activeSession),
     recordSet: vi.fn().mockResolvedValue(activeSession),
     completeSession: vi.fn().mockResolvedValue({ ...activeSession, status: "completed", completedAt: "2026-07-04T09:20:00.000Z" }),
+    abandonSession: vi.fn().mockResolvedValue({ kind: "abandoned", session: { ...activeSession, status: "abandoned" } }),
     deleteById: vi.fn().mockResolvedValue({ kind: "deleted" }),
     deleteAllByUser: vi.fn().mockResolvedValue({ kind: "deleted", deletedCount: 0 }),
     listCompletedSessions: vi.fn().mockResolvedValue([]),
@@ -257,7 +258,10 @@ describe("Workout session routes", () => {
       workoutPlanId: PLAN_ID,
       status: "active" as const,
       day: 3, // active on day 3; the caller requests day 1 → conflict.
-      startedAt: new Date("2026-07-04T08:30:00Z"),
+      // 17b: started 1h ago (relative to the real clock the route uses,
+      // since it never passes `now`) — comfortably under the 24h auto-close
+      // threshold, so this stays Branch B's conflict.
+      startedAt: new Date(Date.now() - 3600_000),
       completedAt: null,
     };
     // Scoped plan-name lookup returns the active plan's name + createdAt.
@@ -297,6 +301,8 @@ describe("Workout session routes", () => {
       error: "active_session_conflict",
       activePlanName: "Summer Cut",
       activeDay: 3,
+      activeSessionId: SESSION_ID,
+      activeStartedAt: activeSessionRow.startedAt.toISOString(),
     });
   });
 
@@ -363,6 +369,111 @@ describe("Workout session routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual(completedSession);
     expect(repo.completeSession).toHaveBeenCalledWith(TENANT_A, USER_A, SESSION_ID);
+  });
+
+  it("17b: carries autoClosedSession in the 200 body only when the outcome is 'started' and an auto-close occurred", async () => {
+    const repo = buildRepoMock({
+      startSession: vi.fn().mockResolvedValue({
+        kind: "started",
+        session: activeSession,
+        autoClosedSession: { id: "old-session", startedAt: "2026-08-02T10:00:00.000Z" },
+      }),
+    });
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/workout-sessions",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { workoutPlanId: PLAN_ID, day: 1 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      ...activeSession,
+      autoClosedSession: { id: "old-session", startedAt: "2026-08-02T10:00:00.000Z" },
+    });
+  });
+
+  it("17b: a resume never carries autoClosedSession, even if the repo somehow returned one on 'started' vs 'resumed'", async () => {
+    const repo = buildRepoMock({
+      startSession: vi.fn().mockResolvedValue({ kind: "resumed", session: activeSession }),
+    });
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/workout-sessions",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { workoutPlanId: PLAN_ID, day: 1 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(activeSession);
+    expect(response.json()).not.toHaveProperty("autoClosedSession");
+  });
+
+  describe("POST /workout-sessions/:id/abandon", () => {
+    it("returns 401 when abandon is requested without authentication", async () => {
+      app = await buildTestApp(buildRepoMock(), createCyclingAuthMockDb({ sessionRows: [], membershipRows: [] }));
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/workout-sessions/${SESSION_ID}/abandon`,
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it("returns 200 with the session record when an active session is abandoned", async () => {
+      const abandonedSession = { ...activeSession, status: "abandoned" as const };
+      const repo = buildRepoMock({
+        abandonSession: vi.fn().mockResolvedValue({ kind: "abandoned", session: abandonedSession }),
+      });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/workout-sessions/${SESSION_ID}/abandon`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual(abandonedSession);
+      expect(repo.abandonSession).toHaveBeenCalledWith(TENANT_A, USER_A, SESSION_ID);
+    });
+
+    it("returns 409 { error: 'session_not_active' } when the session is completed, not blockable", async () => {
+      const repo = buildRepoMock({
+        abandonSession: vi.fn().mockResolvedValue({ kind: "not_active" }),
+      });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/workout-sessions/${SESSION_ID}/abandon`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: "session_not_active" });
+    });
+
+    it("returns 404 { error: 'not_found' } for a nonexistent or another user's session (no existence leak)", async () => {
+      const repo = buildRepoMock({
+        abandonSession: vi.fn().mockResolvedValue({ kind: "not_found" }),
+      });
+      app = await buildTestApp(repo);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/workout-sessions/${SESSION_ID}/abandon`,
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ error: "not_found" });
+    });
   });
 
   describe("DELETE /workout-sessions/:id", () => {

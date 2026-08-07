@@ -28,8 +28,8 @@ const muscleGroupMigrationSql = readFileSync(
 );
 
 describe("workout_session_status enum", () => {
-  it("exposes the active and completed values", () => {
-    expect(workoutSessionStatusEnum.enumValues).toEqual(["active", "completed"]);
+  it("exposes the active, completed, and abandoned values (17b, additive/append-only)", () => {
+    expect(workoutSessionStatusEnum.enumValues).toEqual(["active", "completed", "abandoned"]);
   });
 });
 

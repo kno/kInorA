@@ -8,6 +8,7 @@ import type {
   SessionExerciseRecord,
   SetRecordDTO,
   WorkoutSessionRecord,
+  WorkoutSessionRecordStatus,
 } from "@kinora/contracts";
 
 export const WEIGHT_STEP = 2.5;
@@ -15,6 +16,30 @@ export const RING_RADIUS = 66;
 export const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 export type ExerciseState = "done" | "active" | "pending";
+
+export type SessionLifecycle = "live" | "completed" | "abandoned";
+
+/**
+ * The forcing function the contracts widening was assumed to provide for
+ * free (17b-stale-session-recovery) — it does not: `isCompleted` was a plain
+ * `===` equality, which compiles silently against a wider union and treats
+ * `abandoned` as live. This exhaustive switch with a `never` default makes
+ * the NEXT status value a compile error instead of another silent mislabel.
+ */
+export function sessionLifecycle(status: WorkoutSessionRecordStatus): SessionLifecycle {
+  switch (status) {
+    case "active":
+      return "live";
+    case "completed":
+      return "completed";
+    case "abandoned":
+      return "abandoned";
+    default: {
+      const exhaustive: never = status;
+      throw new Error(`unhandled session status: ${String(exhaustive)}`);
+    }
+  }
+}
 
 export interface TimelineEntry {
   id: string;
@@ -27,6 +52,14 @@ export interface TimelineEntry {
 
 export interface TrackerModel {
   isCompleted: boolean;
+  /**
+   * True for `completed` and `abandoned` (17b) — the panel uses this to
+   * suppress set-logging controls and the complete CTA. `findById` has no
+   * status filter, so a stale tracker URL can still load a terminal session;
+   * this is what keeps the UI from presenting live controls that would
+   * silently fail server-side.
+   */
+  isTerminal: boolean;
   totalExercises: number;
   activeExercise?: SessionExerciseRecord;
   resolvedIndex: number;
@@ -113,7 +146,9 @@ function exerciseState(
 export function deriveTrackerModel(session: WorkoutSessionRecord): TrackerModel {
   const exercises = session.exercises;
   const totalExercises = exercises.length;
-  const isCompleted = session.status === "completed";
+  const lifecycle = sessionLifecycle(session.status);
+  const isCompleted = lifecycle === "completed";
+  const isTerminal = lifecycle !== "live";
 
   const activeExerciseIndex = exercises.findIndex((ex) =>
     ex.setRecords.some((set) => !set.completed),
@@ -149,7 +184,7 @@ export function deriveTrackerModel(session: WorkoutSessionRecord): TrackerModel 
   const activeExerciseVolume = activeExercise ? exerciseVolume(activeExercise) : 0;
 
   const canRecord =
-    !isCompleted && !!activeExercise && !!activeSet && !allSetsDone(activeExercise);
+    !isTerminal && !!activeExercise && !!activeSet && !allSetsDone(activeExercise);
 
   const segments = exercises.map((ex, i) => ({
     id: ex.id ?? String(i),
@@ -167,6 +202,7 @@ export function deriveTrackerModel(session: WorkoutSessionRecord): TrackerModel 
 
   return {
     isCompleted,
+    isTerminal,
     totalExercises,
     activeExercise,
     resolvedIndex,
