@@ -312,9 +312,16 @@
       "soon": "Upcoming"
     },
     "start": {
-      "conflict": "You have an active session for {plan} · Day {n}. Resume or finish it before starting another.",
-      "conflict_no_day": "You have an active session for {plan}. Resume or finish it before starting another.",
-      "conflict_generic": "You already have an active workout session. Resume or finish it before starting another."
+      "conflict": "You have an active session for {plan} · Day {n}, started {date, date, medium}. Resume or finish it before starting another.",
+      "conflict_no_day": "You have an active session for {plan}, started {date, date, medium}. Resume or finish it before starting another.",
+      "conflict_generic": "You already have an active workout session, started {date, date, medium}. Resume or finish it before starting another.",
+      "autoClosed": "We closed your unfinished session from {date, date, medium}.",
+      "resume": "Resume",
+      "discard": "Discard",
+      "discardConfirm": "Discard this session? Its logged sets are kept, but it cannot be resumed.",
+      "discardConfirmYes": "Yes, discard",
+      "discardCancel": "Cancel",
+      "discardFailed": "We couldn't discard that session. Try again."
     },
     "error": {
       "title": "Connection problem",
@@ -1271,10 +1278,17 @@
       "increase": "Increase rep"
     },
     "conflict": {
-      "withScope": "You already have an active session in \"{planName}\" (Day {day}). Finish it before starting another.",
-      "withPlan": "You already have an active session in \"{planName}\". Finish it before starting another.",
-      "generic": "You already have an active session. Finish it before starting another."
+      "withScope": "You already have an active session in \"{planName}\" (Day {day}), started {date, date, medium}. Finish it before starting another.",
+      "withPlan": "You already have an active session in \"{planName}\", started {date, date, medium}. Finish it before starting another.",
+      "generic": "You already have an active session, started {date, date, medium}. Finish it before starting another.",
+      "resume": "Resume",
+      "discard": "Discard",
+      "discardConfirm": "Discard this session? Its logged sets are kept, but it cannot be resumed.",
+      "discardConfirmYes": "Yes, discard",
+      "discardCancel": "Cancel",
+      "discardFailed": "We couldn't discard that session. Try again."
     },
+    "autoClosed": "We closed your unfinished session from {date, date, medium}.",
     "retry": "Retry",
     "rpe": {
       "a11y": "RPE, optional, 0 to 10"

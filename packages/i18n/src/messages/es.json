@@ -312,9 +312,16 @@
       "soon": "Próximamente"
     },
     "start": {
-      "conflict": "Tienes una sesión activa para {plan} · Día {n}. Retómala o termínala antes de empezar otra.",
-      "conflict_no_day": "Tienes una sesión activa para {plan}. Retómala o termínala antes de empezar otra.",
-      "conflict_generic": "Ya tienes una sesión de entrenamiento activa. Retómala o termínala antes de empezar otra."
+      "conflict": "Tienes una sesión activa para {plan} · Día {n}, iniciada el {date, date, medium}. Retómala o termínala antes de empezar otra.",
+      "conflict_no_day": "Tienes una sesión activa para {plan}, iniciada el {date, date, medium}. Retómala o termínala antes de empezar otra.",
+      "conflict_generic": "Ya tienes una sesión de entrenamiento activa, iniciada el {date, date, medium}. Retómala o termínala antes de empezar otra.",
+      "autoClosed": "Cerramos tu sesión sin terminar del {date, date, medium}.",
+      "resume": "Retomar",
+      "discard": "Descartar",
+      "discardConfirm": "¿Descartar esta sesión? Sus series registradas se conservan, pero no podrá retomarse.",
+      "discardConfirmYes": "Sí, descartar",
+      "discardCancel": "Cancelar",
+      "discardFailed": "No pudimos descartar esa sesión. Vuelve a intentarlo."
     },
     "error": {
       "title": "Problema de conexión",
@@ -1271,10 +1278,17 @@
       "increase": "Aumentar repetición"
     },
     "conflict": {
-      "withScope": "Ya tienes una sesión activa en «{planName}» (Día {day}). Termínala antes de empezar otra.",
-      "withPlan": "Ya tienes una sesión activa en «{planName}». Termínala antes de empezar otra.",
-      "generic": "Ya tienes una sesión activa. Termínala antes de empezar otra."
+      "withScope": "Ya tienes una sesión activa en «{planName}» (Día {day}), iniciada el {date, date, medium}. Termínala antes de empezar otra.",
+      "withPlan": "Ya tienes una sesión activa en «{planName}», iniciada el {date, date, medium}. Termínala antes de empezar otra.",
+      "generic": "Ya tienes una sesión activa, iniciada el {date, date, medium}. Termínala antes de empezar otra.",
+      "resume": "Retomar",
+      "discard": "Descartar",
+      "discardConfirm": "¿Descartar esta sesión? Sus series registradas se conservan, pero no podrá retomarse.",
+      "discardConfirmYes": "Sí, descartar",
+      "discardCancel": "Cancelar",
+      "discardFailed": "No pudimos descartar esa sesión. Vuelve a intentarlo."
     },
+    "autoClosed": "Cerramos tu sesión sin terminar del {date, date, medium}.",
     "retry": "Reintentar",
     "rpe": {
       "a11y": "RPE, opcional, de 0 a 10"
