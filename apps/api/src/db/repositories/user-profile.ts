@@ -1,18 +1,23 @@
 import { eq } from "drizzle-orm";
 import { userProfiles } from "../schema.js";
 import type { Database } from "../client.js";
-import type { ExperienceLevel, PlanGoal } from "@kinora/contracts";
+import type { ExperienceLevel, PlanGoal, SelfDescribedSex } from "@kinora/contracts";
 
 /**
  * User profile record as read from persistence. Mirrors the `user_profiles`
  * row shape including timestamps — the lean contract `UserProfile` (no
  * timestamps) is produced by the service layer from this record.
+ *
+ * `selfDescribedSex` and `heightCm` (17c-profile-body-metrics) follow the
+ * same nullable/additive contract as `goal`/`experienceLevel`.
  */
 export interface UserProfileRecord {
   userId: string;
   name: string;
   goal: PlanGoal | null;
   experienceLevel: ExperienceLevel | null;
+  selfDescribedSex: SelfDescribedSex | null;
+  heightCm: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -20,11 +25,11 @@ export interface UserProfileRecord {
 /**
  * Data required to upsert a user profile row.
  *
- * `goal` and `experienceLevel` are nullable: `null` is a WRITE intent
- * ("the user has not chosen a goal") distinct from `undefined`, which the
- * route layer translates to "leave the stored value unchanged". The
- * repository always persists whatever it receives — partial-merge happens
- * at the route/service boundary, never here.
+ * `goal`, `experienceLevel`, `selfDescribedSex` and `heightCm` are nullable:
+ * `null` is a WRITE intent ("the user has not chosen a goal") distinct from
+ * `undefined`, which the route layer translates to "leave the stored value
+ * unchanged". The repository always persists whatever it receives —
+ * partial-merge happens at the route/service boundary, never here.
  *
  * `name` is required: the table column is NOT NULL and R2 rejects blank
  * names with 422; the repo trusts that the caller has already validated.
@@ -33,6 +38,8 @@ export interface UserProfileUpsertInput {
   name: string;
   goal: PlanGoal | null;
   experienceLevel: ExperienceLevel | null;
+  selfDescribedSex: SelfDescribedSex | null;
+  heightCm: number | null;
 }
 
 /**
@@ -80,6 +87,8 @@ export class UserProfileRepository {
         name: input.name,
         goal: input.goal,
         experienceLevel: input.experienceLevel,
+        selfDescribedSex: input.selfDescribedSex,
+        heightCm: input.heightCm,
       })
       .onConflictDoUpdate({
         target: userProfiles.userId,
@@ -87,6 +96,8 @@ export class UserProfileRepository {
           name: input.name,
           goal: input.goal,
           experienceLevel: input.experienceLevel,
+          selfDescribedSex: input.selfDescribedSex,
+          heightCm: input.heightCm,
           updatedAt: new Date(),
         },
       })
@@ -106,6 +117,8 @@ export class UserProfileRepository {
         name: input.name,
         goal: input.goal,
         experienceLevel: input.experienceLevel,
+        selfDescribedSex: input.selfDescribedSex,
+        heightCm: input.heightCm,
       })
       .onConflictDoNothing({ target: userProfiles.userId });
   }

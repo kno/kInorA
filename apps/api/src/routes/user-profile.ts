@@ -4,13 +4,14 @@ import type {
   UserProfile,
   PlanGoal,
   ExperienceLevel,
+  SelfDescribedSex,
 } from "@kinora/contracts";
 
 /**
- * Valid enum value sets — MUST mirror the `goalEnum` / `experienceLevelEnum`
- * pgEnums in `apps/api/src/db/schema.ts` and the contract types. Asserted at
- * the route boundary so invalid client input is rejected with 422 before it
- * reaches the persistence layer.
+ * Valid enum value sets — MUST mirror the `goalEnum` / `experienceLevelEnum` /
+ * `selfDescribedSexEnum` pgEnums in `apps/api/src/db/schema.ts` and the
+ * contract types. Asserted at the route boundary so invalid client input is
+ * rejected with 422 before it reaches the persistence layer.
  */
 const VALID_GOALS: readonly PlanGoal[] = [
   "strength",
@@ -23,6 +24,18 @@ const VALID_EXPERIENCE_LEVELS: readonly ExperienceLevel[] = [
   "intermediate",
   "advanced",
 ];
+const VALID_SELF_DESCRIBED_SEX: readonly SelfDescribedSex[] = [
+  "female",
+  "male",
+  "non_binary",
+  "other",
+  "prefer_not_to_say",
+];
+
+/** Height bound (17c-profile-body-metrics): rejects an obvious unit mistake
+ * (e.g. metres or weight typed into the field), not to police bodies. */
+const MIN_HEIGHT_CM = 50;
+const MAX_HEIGHT_CM = 300;
 
 /**
  * DB-shaped profile row as the route port returns it. Declared locally (not
@@ -34,6 +47,8 @@ interface UserProfileRow {
   name: string;
   goal: PlanGoal | null;
   experienceLevel: ExperienceLevel | null;
+  selfDescribedSex: SelfDescribedSex | null;
+  heightCm: number | null;
 }
 
 /**
@@ -50,11 +65,23 @@ export interface UserProfileRouteRepo {
   findProfileByUserId(userId: string): Promise<UserProfileRow | null>;
   createProfileIfMissing(
     userId: string,
-    input: { name: string; goal: PlanGoal | null; experienceLevel: ExperienceLevel | null }
+    input: {
+      name: string;
+      goal: PlanGoal | null;
+      experienceLevel: ExperienceLevel | null;
+      selfDescribedSex: SelfDescribedSex | null;
+      heightCm: number | null;
+    }
   ): Promise<void>;
   upsertProfile(
     userId: string,
-    input: { name: string; goal: PlanGoal | null; experienceLevel: ExperienceLevel | null }
+    input: {
+      name: string;
+      goal: PlanGoal | null;
+      experienceLevel: ExperienceLevel | null;
+      selfDescribedSex: SelfDescribedSex | null;
+      heightCm: number | null;
+    }
   ): Promise<UserProfileRow>;
 }
 
@@ -66,6 +93,8 @@ interface UpdateProfileBody {
   name: string;
   goal?: PlanGoal | null;
   experienceLevel?: ExperienceLevel | null;
+  selfDescribedSex?: SelfDescribedSex | null;
+  heightCm?: number | null;
 }
 
 /**
@@ -77,6 +106,8 @@ function toDTO(row: UserProfileRow): UserProfile {
     name: row.name,
     goal: row.goal,
     experienceLevel: row.experienceLevel,
+    selfDescribedSex: row.selfDescribedSex,
+    heightCm: row.heightCm,
   };
 }
 
@@ -130,6 +161,8 @@ export const userProfileRoutes: FastifyPluginAsync<UserProfileRoutesOptions> = a
         name,
         goal: null,
         experienceLevel: null,
+        selfDescribedSex: null,
+        heightCm: null,
       });
       const provisioned = await repo.findProfileByUserId(userId);
       return reply.code(200).send(toDTO(provisioned!));
@@ -172,9 +205,30 @@ export const userProfileRoutes: FastifyPluginAsync<UserProfileRoutesOptions> = a
         return reply.code(422).send({ error: "invalid_experience_level" });
       }
 
-      // Partial merge: omitted goal/experienceLevel preserve the stored values.
-      // The repo's upsert takes the FULL target state, so read the current row
-      // and fill in the gaps. `null` (explicit unset) wins over the stored value.
+      // selfDescribedSex: same three-way semantics as goal (17c PR1).
+      if (
+        body.selfDescribedSex !== undefined &&
+        body.selfDescribedSex !== null &&
+        !(VALID_SELF_DESCRIBED_SEX as readonly string[]).includes(body.selfDescribedSex)
+      ) {
+        return reply.code(422).send({ error: "invalid_self_described_sex" });
+      }
+
+      // heightCm: integer in [50, 300] when supplied (17c PR1). The bound
+      // exists to reject an obvious unit mistake, not to police bodies.
+      if (
+        body.heightCm !== undefined &&
+        body.heightCm !== null &&
+        (!Number.isInteger(body.heightCm) ||
+          body.heightCm < MIN_HEIGHT_CM ||
+          body.heightCm > MAX_HEIGHT_CM)
+      ) {
+        return reply.code(422).send({ error: "invalid_height_cm" });
+      }
+
+      // Partial merge: omitted fields preserve the stored values. The repo's
+      // upsert takes the FULL target state, so read the current row and fill
+      // in the gaps. `null` (explicit unset) wins over the stored value.
       const existing = await repo.findProfileByUserId(userId);
       const finalGoal =
         body.goal !== undefined ? body.goal : (existing?.goal ?? null);
@@ -182,11 +236,19 @@ export const userProfileRoutes: FastifyPluginAsync<UserProfileRoutesOptions> = a
         body.experienceLevel !== undefined
           ? body.experienceLevel
           : (existing?.experienceLevel ?? null);
+      const finalSelfDescribedSex =
+        body.selfDescribedSex !== undefined
+          ? body.selfDescribedSex
+          : (existing?.selfDescribedSex ?? null);
+      const finalHeightCm =
+        body.heightCm !== undefined ? body.heightCm : (existing?.heightCm ?? null);
 
       const updated = await repo.upsertProfile(userId, {
         name: body.name,
         goal: finalGoal,
         experienceLevel: finalExperienceLevel,
+        selfDescribedSex: finalSelfDescribedSex,
+        heightCm: finalHeightCm,
       });
       return reply.code(200).send(toDTO(updated));
     }

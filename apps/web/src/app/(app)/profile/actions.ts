@@ -1,7 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
-import type { PlanGoal, ExperienceLevel } from "@kinora/contracts";
+import type { PlanGoal, ExperienceLevel, SelfDescribedSex } from "@kinora/contracts";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import {
   updateUserProfile,
@@ -27,8 +27,16 @@ export async function saveProfileAction(
   name: string,
   goal: PlanGoal | null,
   experienceLevel: ExperienceLevel | null,
+  selfDescribedSex: SelfDescribedSex | null,
+  heightCm: number | null,
 ): Promise<SaveProfileResult> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
-  return updateUserProfile(token, { name, goal, experienceLevel });
+  return updateUserProfile(token, {
+    name,
+    goal,
+    experienceLevel,
+    selfDescribedSex,
+    heightCm,
+  });
 }

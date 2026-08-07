@@ -31,6 +31,8 @@ const EXISTING_PROFILE = {
   name: "Alice",
   goal: "strength" as const,
   experienceLevel: "intermediate" as const,
+  selfDescribedSex: null,
+  heightCm: null,
 };
 
 // --- Mock DB (auth plugin only: session + membership selects) ---
@@ -59,12 +61,20 @@ function buildRepo(overrides: Partial<{
       .mockImplementation(
         async (
           _userId: string,
-          input: { name: string; goal: null; experienceLevel: null }
+          input: {
+            name: string;
+            goal: null;
+            experienceLevel: null;
+            selfDescribedSex: null;
+            heightCm: null;
+          }
         ) => ({
           userId: USER_ID,
           name: input.name,
           goal: input.goal,
           experienceLevel: input.experienceLevel,
+          selfDescribedSex: input.selfDescribedSex,
+          heightCm: input.heightCm,
         })
       ),
     ...overrides,
@@ -124,6 +134,8 @@ describe("GET /user-profile", () => {
       name: "Alice",
       goal: "strength",
       experienceLevel: "intermediate",
+      selfDescribedSex: null,
+      heightCm: null,
     });
     expect(repo.findProfileByUserId).toHaveBeenCalledWith(USER_ID);
     expect(repo.upsertProfile).not.toHaveBeenCalled();
@@ -139,6 +151,8 @@ describe("GET /user-profile", () => {
           name: "alice",
           goal: null,
           experienceLevel: null,
+          selfDescribedSex: null,
+          heightCm: null,
         }),
     });
     app = await buildTestApp(repo);
@@ -154,12 +168,16 @@ describe("GET /user-profile", () => {
     expect(body.name).toBe("alice");
     expect(body.goal).toBeNull();
     expect(body.experienceLevel).toBeNull();
+    expect(body.selfDescribedSex).toBeNull();
+    expect(body.heightCm).toBeNull();
     expect(repo.findProfileByUserId).toHaveBeenCalledWith(USER_ID);
     expect(repo.findUserEmailById).toHaveBeenCalledWith(USER_ID);
     expect(repo.createProfileIfMissing).toHaveBeenCalledWith(USER_ID, {
       name: "alice",
       goal: null,
       experienceLevel: null,
+      selfDescribedSex: null,
+      heightCm: null,
     });
   });
 
@@ -275,10 +293,12 @@ describe("PUT /user-profile", () => {
       name: "Alice Smith",
       goal: "hypertrophy",
       experienceLevel: "intermediate", // preserved from existing row
+      selfDescribedSex: null, // preserved from existing row
+      heightCm: null, // preserved from existing row
     });
   });
 
-  it("partial merge: omitted goal/experienceLevel preserve the stored values", async () => {
+  it("partial merge: omitted goal/experienceLevel/selfDescribedSex/heightCm preserve the stored values", async () => {
     const repo = buildRepo();
     app = await buildTestApp(repo);
 
@@ -294,10 +314,12 @@ describe("PUT /user-profile", () => {
       name: "Alice Renamed",
       goal: "strength", // preserved
       experienceLevel: "intermediate", // preserved
+      selfDescribedSex: null, // preserved
+      heightCm: null, // preserved
     });
   });
 
-  it("partial merge: when no existing row, omitted goal/experienceLevel default to null", async () => {
+  it("partial merge: when no existing row, omitted fields default to null", async () => {
     const repo = buildRepo({
       findProfileByUserId: vi.fn().mockResolvedValue(null),
     });
@@ -315,10 +337,12 @@ describe("PUT /user-profile", () => {
       name: "New User",
       goal: null,
       experienceLevel: null,
+      selfDescribedSex: null,
+      heightCm: null,
     });
   });
 
-  it("explicit goal: null is accepted and written", async () => {
+  it("explicit goal/experienceLevel: null is accepted and written", async () => {
     const repo = buildRepo();
     app = await buildTestApp(repo);
 
@@ -334,6 +358,186 @@ describe("PUT /user-profile", () => {
       name: "Alice",
       goal: null,
       experienceLevel: null,
+      selfDescribedSex: null, // preserved
+      heightCm: null, // preserved
     });
+  });
+
+  // --- 17c PR1: selfDescribedSex + heightCm ---
+
+  it("PUT with a valid selfDescribedSex persists and round-trips", async () => {
+    const repo = buildRepo();
+    app = await buildTestApp(repo);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/user-profile",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { name: "Alice", selfDescribedSex: "female" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as UserProfile;
+    expect(body.selfDescribedSex).toBe("female");
+    expect(repo.upsertProfile).toHaveBeenCalledWith(USER_ID, {
+      name: "Alice",
+      goal: "strength",
+      experienceLevel: "intermediate",
+      selfDescribedSex: "female",
+      heightCm: null,
+    });
+  });
+
+  it("PUT with an invalid selfDescribedSex returns 422 and leaves the profile unchanged", async () => {
+    const repo = buildRepo();
+    app = await buildTestApp(repo);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/user-profile",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { name: "Alice", selfDescribedSex: "unspecified" },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toEqual({ error: "invalid_self_described_sex" });
+    expect(repo.upsertProfile).not.toHaveBeenCalled();
+  });
+
+  it("PUT with a prefer_not_to_say selfDescribedSex reads back as prefer_not_to_say, distinguishable from null", async () => {
+    const repo = buildRepo();
+    app = await buildTestApp(repo);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/user-profile",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { name: "Alice", selfDescribedSex: "prefer_not_to_say" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as UserProfile;
+    expect(body.selfDescribedSex).toBe("prefer_not_to_say");
+    expect(body.selfDescribedSex).not.toBeNull();
+  });
+
+  it("PUT selfDescribedSex: null clears a previously set value", async () => {
+    const repo = buildRepo();
+    app = await buildTestApp(repo);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/user-profile",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { name: "Alice", selfDescribedSex: null },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(repo.upsertProfile).toHaveBeenCalledWith(USER_ID, {
+      name: "Alice",
+      goal: "strength",
+      experienceLevel: "intermediate",
+      selfDescribedSex: null,
+      heightCm: null,
+    });
+  });
+
+  it("PUT with a valid heightCm persists and round-trips", async () => {
+    const repo = buildRepo();
+    app = await buildTestApp(repo);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/user-profile",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { name: "Alice", heightCm: 172 },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as UserProfile;
+    expect(body.heightCm).toBe(172);
+  });
+
+  it.each([0, -5, 1, 400])(
+    "PUT heightCm: %d returns 422 invalid_height_cm and leaves the profile unchanged",
+    async (heightCm) => {
+      const repo = buildRepo();
+      app = await buildTestApp(repo);
+
+      const res = await app.inject({
+        method: "PUT",
+        url: "/user-profile",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+        payload: { name: "Alice", heightCm },
+      });
+
+      expect(res.statusCode).toBe(422);
+      expect(res.json()).toEqual({ error: "invalid_height_cm" });
+      expect(repo.upsertProfile).not.toHaveBeenCalled();
+    },
+  );
+
+  it("PUT heightCm: null clears a previously set value", async () => {
+    const repo = buildRepo();
+    app = await buildTestApp(repo);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/user-profile",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { name: "Alice", heightCm: null },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(repo.upsertProfile).toHaveBeenCalledWith(USER_ID, {
+      name: "Alice",
+      goal: "strength",
+      experienceLevel: "intermediate",
+      selfDescribedSex: null,
+      heightCm: null,
+    });
+  });
+
+  it("PUT with selfDescribedSex/heightCm omitted preserves the existing stored values", async () => {
+    const repo = buildRepo({
+      findProfileByUserId: vi.fn().mockResolvedValue({
+        ...EXISTING_PROFILE,
+        selfDescribedSex: "other",
+        heightCm: 180,
+      }),
+    });
+    app = await buildTestApp(repo);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/user-profile",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { name: "Alice" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(repo.upsertProfile).toHaveBeenCalledWith(USER_ID, {
+      name: "Alice",
+      goal: "strength",
+      experienceLevel: "intermediate",
+      selfDescribedSex: "other",
+      heightCm: 180,
+    });
+  });
+
+  it("GET on a profile that never set either field returns null for both", async () => {
+    const repo = buildRepo();
+    app = await buildTestApp(repo);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/user-profile",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as UserProfile;
+    expect(body.selfDescribedSex).toBeNull();
+    expect(body.heightCm).toBeNull();
   });
 });

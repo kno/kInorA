@@ -121,6 +121,8 @@ describe("StepperShell", () => {
           name: "Ada",
           goal: "hypertrophy",
           experienceLevel: "advanced",
+          selfDescribedSex: null,
+          heightCm: null,
         }}
       />,
     );
@@ -166,6 +168,8 @@ describe("StepperShell", () => {
           name: "Ada",
           goal: "hypertrophy",
           experienceLevel: "advanced",
+          selfDescribedSex: null,
+          heightCm: null,
         }}
         initialPreferences={{
           userId: "user-1",

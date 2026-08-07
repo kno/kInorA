@@ -208,7 +208,11 @@ describe("@kinora/i18n package assembly", () => {
     // own count also moves by +7).
     // +1 `history.abandoned` (17b PR 3) — the read-only history label shown
     // on an abandoned session, web and mobile.
-    expect(nonBillingKeys).toHaveLength(772);
+    // +9 `profile.form.selfDescribedSex.{label,placeholder,female,male,
+    // nonBinary,other,preferNotToSay}` + `profile.form.{heightCm,
+    // heightCmPlaceholder}` (17c PR1) — the body-metric scalars on the
+    // profile form.
+    expect(nonBillingKeys).toHaveLength(781);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {

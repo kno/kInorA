@@ -1044,7 +1044,18 @@
       "saved": "Profile saved.",
       "error": "Could not save your profile. Please try again.",
       "loadError": "Could not load your profile. Please reload the page.",
-      "nameRequired": "Name is required."
+      "nameRequired": "Name is required.",
+      "selfDescribedSex": {
+        "label": "Sex/gender",
+        "placeholder": "Select an option",
+        "female": "Female",
+        "male": "Male",
+        "nonBinary": "Non-binary",
+        "other": "Other",
+        "preferNotToSay": "Prefer not to say"
+      },
+      "heightCm": "Height (cm)",
+      "heightCmPlaceholder": "e.g. 172"
     },
     "experience": {
       "beginner": "Beginner",

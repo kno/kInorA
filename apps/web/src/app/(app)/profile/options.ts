@@ -1,4 +1,4 @@
-import type { PlanGoal, ExperienceLevel } from "@kinora/contracts";
+import type { PlanGoal, ExperienceLevel, SelfDescribedSex } from "@kinora/contracts";
 
 /**
  * Static option catalogues for the profile form selects (Slice 4 of
@@ -31,4 +31,17 @@ export const EXPERIENCE_SELECT_OPTIONS: readonly ProfileSelectOption<ExperienceL
   { value: "beginner", labelKey: "profile.experience.beginner" },
   { value: "intermediate", labelKey: "profile.experience.intermediate" },
   { value: "advanced", labelKey: "profile.experience.advanced" },
+];
+
+/**
+ * Self-described sex/gender options (17c-profile-body-metrics). ONE merged
+ * field feeding plan generation. `prefer_not_to_say` is a positive, selectable
+ * option — it MUST render as a chosen value, never as an empty control.
+ */
+export const SELF_DESCRIBED_SEX_SELECT_OPTIONS: readonly ProfileSelectOption<SelfDescribedSex>[] = [
+  { value: "female", labelKey: "profile.form.selfDescribedSex.female" },
+  { value: "male", labelKey: "profile.form.selfDescribedSex.male" },
+  { value: "non_binary", labelKey: "profile.form.selfDescribedSex.nonBinary" },
+  { value: "other", labelKey: "profile.form.selfDescribedSex.other" },
+  { value: "prefer_not_to_say", labelKey: "profile.form.selfDescribedSex.preferNotToSay" },
 ];
