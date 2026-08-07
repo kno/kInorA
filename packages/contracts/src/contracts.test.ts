@@ -27,6 +27,8 @@ import type {
   PlanSpec,
   RegisterRequest,
   SelfDescribedSex,
+  CreateWeightEntryResponse,
+  WeightEntryDTO,
   SessionContext,
   SessionId,
   SessionResponse,
@@ -93,6 +95,21 @@ describe("shared contracts boundary", () => {
       experienceLevel: ExperienceLevel | null;
       selfDescribedSex: SelfDescribedSex | null;
       heightCm: number | null;
+    }>();
+  });
+
+  it("stays unchanged by the 17c bodyweight-series additions (type-only)", () => {
+    // WeightEntryDTO and CreateWeightEntryResponse are type-only additions
+    // (17c-profile-body-metrics PR2) — the runtime export list above MUST NOT
+    // grow as a result.
+    expectTypeOf<WeightEntryDTO>().toEqualTypeOf<{
+      id: string;
+      weightKg: number;
+      recordedAt: string;
+    }>();
+    expectTypeOf<CreateWeightEntryResponse>().toEqualTypeOf<{
+      entry: WeightEntryDTO;
+      wasFirstEntry: boolean;
     }>();
   });
 
