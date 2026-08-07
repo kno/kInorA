@@ -68,6 +68,14 @@ const completedSessionRow = {
   updatedAt: new Date("2026-07-04T09:20:00Z"),
 };
 
+/** 17b-stale-session-recovery: a stored `abandoned` row, `completedAt` still NULL. */
+const abandonedSessionRow = {
+  ...sessionRow,
+  status: "abandoned" as const,
+  completedAt: null,
+  updatedAt: new Date("2026-08-02T10:00:00Z"),
+};
+
 const exerciseRows = [
   {
     id: EXERCISE_1_ID,
@@ -319,16 +327,23 @@ describe("WorkoutSessionRepository", () => {
       const transaction = vi.fn();
       const repo = new WorkoutSessionRepository({ select, transaction } as never);
 
-      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 2);
+      // 17b: under the 24h threshold (1h after the active session started)
+      // so this stays Branch B's conflict rather than falling through to
+      // phase 3's auto-close.
+      const now = new Date(sessionRow.startedAt.getTime() + 3600_000);
+      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 2, now);
 
       expect(transaction).not.toHaveBeenCalled();
-      expect(result.kind).toBe("conflict");
-      if (result.kind === "conflict") {
+      expect(result?.kind).toBe("conflict");
+      if (result?.kind === "conflict") {
         expect(result.activePlanId).toBe(PLAN_ID);
         expect(result.activeDay).toBe(1);
         // F2/risk-CRITICAL: the name is honestly populated from the scoped
         // plan lookup, not left undefined.
         expect(result.activePlanName).toBe("Summer Cut");
+        // 17b: the blocking session's own id/date, for the actionable banner.
+        expect(result.activeSessionId).toBe(SESSION_ID);
+        expect(result.activeStartedAt).toBe(sessionRow.startedAt.toISOString());
       }
     });
 
@@ -345,10 +360,11 @@ describe("WorkoutSessionRepository", () => {
       const select = createQueuedSelectDb(queues).select;
       const repo = new WorkoutSessionRepository({ select, transaction: vi.fn() } as never);
 
-      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 2);
+      const now = new Date(sessionRow.startedAt.getTime() + 3600_000);
+      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 2, now);
 
-      expect(result.kind).toBe("conflict");
-      if (result.kind === "conflict") {
+      expect(result?.kind).toBe("conflict");
+      if (result?.kind === "conflict") {
         expect(result.activePlanName).toBe("Plan 2026-07-06");
       }
     });
@@ -364,11 +380,12 @@ describe("WorkoutSessionRepository", () => {
       const repo = new WorkoutSessionRepository({ select, transaction } as never);
 
       // Even requesting the SAME plan and day 1 must NOT resume a null-day row.
-      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 1);
+      const now = new Date(legacyRow.startedAt.getTime() + 3600_000);
+      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 1, now);
 
       expect(transaction).not.toHaveBeenCalled();
-      expect(result.kind).toBe("conflict");
-      if (result.kind === "conflict") {
+      expect(result?.kind).toBe("conflict");
+      if (result?.kind === "conflict") {
         expect(result.activePlanId).toBe(PLAN_ID);
         expect(result.activeDay).toBeNull();
       }
@@ -685,6 +702,24 @@ describe("WorkoutSessionRepository", () => {
       expect(nestedSqlChunks).toBeGreaterThanOrEqual(1);
     });
 
+    it("17b pinned decision 4 — rejects a set write against an abandoned session (findById's status !== 'active' guard already covers it)", async () => {
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[abandonedSessionRow]]],
+        [sessionExercises, [exerciseRows]],
+        [setRecords, [initialSetRows]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const update = vi.fn();
+      const repo = new WorkoutSessionRepository({ select, update } as never);
+
+      const result = await repo.recordSet(TENANT_A, USER_A, SESSION_ID, SET_1_ID, {
+        completed: true,
+      });
+
+      expect(result).toBeUndefined();
+      expect(update).not.toHaveBeenCalled();
+    });
+
     it("returns undefined when the set does not belong to the active session", async () => {
       const queues = new Map<object, unknown[][]>([
         [workoutSessions, [[sessionRow]]],
@@ -805,6 +840,28 @@ describe("WorkoutSessionRepository", () => {
 
       expect(result).toBeUndefined();
     });
+
+    it("17b pinned decision 1 — rejects an abandoned session and never writes completed", async () => {
+      // The WHERE status='active' guard already excludes an abandoned row (0
+      // rows updated); the recovery re-read finds it 'abandoned', which the
+      // explicit branch rejects rather than falling through into the
+      // completed check.
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[abandonedSessionRow]]],
+        [sessionExercises, [exerciseRows]],
+        [setRecords, [initialSetRows]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const returning = vi.fn().mockResolvedValue([]);
+      const where = vi.fn().mockReturnValue({ returning });
+      const set = vi.fn().mockReturnValue({ where });
+      const update = vi.fn().mockReturnValue({ set });
+      const repo = new WorkoutSessionRepository({ select, update } as never);
+
+      const result = await repo.completeSession(TENANT_A, USER_A, SESSION_ID);
+
+      expect(result).toBeUndefined();
+    });
   });
 
   describe("deleteById", () => {
@@ -890,6 +947,16 @@ describe("WorkoutSessionRepository", () => {
       const result = await repo.deleteById(TENANT_B, USER_A, SESSION_ID);
 
       expect(result).toEqual({ kind: "not_found" });
+    });
+
+    it("17b pinned decision 4 — accepts an abandoned session, never rejecting it as 'in progress'", async () => {
+      const { db, del } = buildDeleteDb({ deleteReturning: [{ id: SESSION_ID }] });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteById(TENANT_A, USER_A, SESSION_ID);
+
+      expect(result).toEqual({ kind: "deleted" });
+      expect(del).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -993,6 +1060,89 @@ describe("WorkoutSessionRepository", () => {
       const result = await repo.deleteAllByUser(TENANT_A, USER_B);
 
       expect(result).toEqual({ kind: "deleted", deletedCount: 0 });
+    });
+
+    it("17b pinned decision 4 — deletes abandoned sessions alongside completed ones", async () => {
+      const abandoned = { id: "dddddddd-0000-0000-0000-000000000098" };
+      const completed = { id: SESSION_ID };
+      const { db, del } = buildBulkDeleteDb({ deleteReturning: [abandoned, completed] });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.deleteAllByUser(TENANT_A, USER_A);
+
+      expect(result).toEqual({ kind: "deleted", deletedCount: 2 });
+      expect(del).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("abandonSession (17b Discard)", () => {
+    function buildAbandonDb(opts: { updateReturning: unknown[]; reReadRows?: unknown[][] }) {
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, opts.reReadRows ?? [[]]],
+        [sessionExercises, [exerciseRows]],
+        [setRecords, [initialSetRows]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const returning = vi.fn().mockResolvedValue(opts.updateReturning);
+      const where = vi.fn().mockReturnValue({ returning });
+      const set = vi.fn().mockReturnValue({ where });
+      const update = vi.fn().mockReturnValue({ set });
+      return { db: { select, update } as never, update };
+    }
+
+    it("transitions an active session to abandoned and returns { kind: 'abandoned', session }", async () => {
+      const { db, update } = buildAbandonDb({
+        updateReturning: [{ id: SESSION_ID }],
+        reReadRows: [[abandonedSessionRow]],
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.abandonSession(TENANT_A, USER_A, SESSION_ID);
+
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(result.kind).toBe("abandoned");
+      if (result.kind === "abandoned") {
+        expect(result.session.status).toBe("abandoned");
+      }
+    });
+
+    it("idempotent retry — an already-abandoned session is a 200 no-op, not a 404", async () => {
+      // The status='active' guard on the UPDATE matches 0 rows on retry; the
+      // scoped re-read finds the row already 'abandoned' and returns it.
+      const { db } = buildAbandonDb({
+        updateReturning: [],
+        reReadRows: [[abandonedSessionRow]],
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.abandonSession(TENANT_A, USER_A, SESSION_ID);
+
+      expect(result.kind).toBe("abandoned");
+    });
+
+    it("returns { kind: 'not_active' } for a completed session", async () => {
+      const { db } = buildAbandonDb({
+        updateReturning: [],
+        reReadRows: [[completedSessionRow]],
+      });
+      const repo = new WorkoutSessionRepository(db);
+
+      const result = await repo.abandonSession(TENANT_A, USER_A, SESSION_ID);
+
+      expect(result).toEqual({ kind: "not_active" });
+    });
+
+    it("returns { kind: 'not_found' } for a nonexistent id, indistinguishable from another tenant/user's session (no IDOR leak)", async () => {
+      const { db } = buildAbandonDb({ updateReturning: [], reReadRows: [[]] });
+      const repo = new WorkoutSessionRepository(db);
+
+      const notFound = await repo.abandonSession(TENANT_A, USER_A, "no-such-session");
+      expect(notFound).toEqual({ kind: "not_found" });
+
+      const { db: dbCrossTenant } = buildAbandonDb({ updateReturning: [], reReadRows: [[]] });
+      const crossTenantRepo = new WorkoutSessionRepository(dbCrossTenant);
+      const crossTenant = await crossTenantRepo.abandonSession(TENANT_B, USER_A, SESSION_ID);
+      expect(crossTenant).toEqual({ kind: "not_found" });
     });
   });
 

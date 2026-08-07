@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { requireAuth } from "../auth/plugin.js";
 import { validateRpe } from "@kinora/domain";
 import type {
+  AbandonSessionOutcome,
   DeleteSessionOutcome,
   StartSessionOutcome,
   WorkoutHistoryEntry,
@@ -59,6 +60,16 @@ export interface WorkoutSessionRouteRepo {
     userId: string,
     id: string
   ): Promise<WorkoutSessionRecord | undefined>;
+  /**
+   * Discards a blocking session on explicit user request
+   * (17b-stale-session-recovery scope A Discard) — see
+   * {@link WorkoutSessionRepository.abandonSession}.
+   */
+  abandonSession(
+    tenantId: string,
+    userId: string,
+    id: string
+  ): Promise<AbandonSessionOutcome>;
   /**
    * Delete one session owned by the caller (10c-workout-session-delete).
    * The repo scopes the delete by (tenantId, userId, id) and guards active
@@ -153,11 +164,23 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
           error: "active_session_conflict",
           activePlanName: outcome.activePlanName,
           activeDay: outcome.activeDay,
+          // 17b scope A: the blocking session, so the client can name its
+          // date and offer Resume/Discard.
+          activeSessionId: outcome.activeSessionId,
+          activeStartedAt: outcome.activeStartedAt,
         });
       }
 
       // started | resumed → 200 with the session snapshot (unchanged shape).
-      return reply.code(200).send(outcome.session);
+      // 17b: additive `autoClosedSession` sibling key, present only when
+      // this "started" call auto-closed a stale session — a resume never
+      // carries it (the outcome union no longer allows it).
+      return reply.code(200).send({
+        ...outcome.session,
+        ...(outcome.kind === "started" && outcome.autoClosedSession
+          ? { autoClosedSession: outcome.autoClosedSession }
+          : {}),
+      });
     }
   );
 
@@ -235,6 +258,32 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
       }
 
       return reply.code(200).send(session);
+    }
+  );
+
+  // POST /workout-sessions/:id/abandon (17b-stale-session-recovery scope A
+  // Discard). Maps the discriminated outcome to HTTP:
+  //   abandoned  → 200 with the session record (also the idempotent no-op
+  //                retry against an already-abandoned session)
+  //   not_active → 409 (the session is completed, not blockable)
+  //   not_found  → 404 (nonexistent, another user's, another tenant's —
+  //                indistinguishable, no existence leak)
+  fastify.post<{ Params: SessionParams }>(
+    "/workout-sessions/:id/abandon",
+    { preHandler: requireAuth() },
+    async (request, reply) => {
+      const { tenantId, userId } = request.authContext!;
+      const { id } = request.params;
+
+      const outcome = await repo.abandonSession(tenantId, userId, id);
+      if (outcome.kind === "not_found") {
+        return reply.code(404).send({ error: "not_found" });
+      }
+      if (outcome.kind === "not_active") {
+        return reply.code(409).send({ error: "session_not_active" });
+      }
+
+      return reply.code(200).send(outcome.session);
     }
   );
 
