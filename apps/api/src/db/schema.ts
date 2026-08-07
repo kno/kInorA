@@ -72,6 +72,22 @@ export const experienceLevelEnum = pgEnum("experience_level", [
 ]);
 
 /**
+ * Self-described sex/gender enum for the user profile (17c-profile-body-metrics).
+ * ONE merged field (see the change's decision 9) feeding plan generation.
+ * `prefer_not_to_say` is a distinct stored member, never a reuse of `null`:
+ * `null` means "never asked/answered", `prefer_not_to_say` means "asked, and
+ * declined". Both degrade identically for generation and volume — see
+ * `heightCm`'s sibling column and `BodyProfilePromptInput` (17c PR3).
+ */
+export const selfDescribedSexEnum = pgEnum("self_described_sex", [
+  "female",
+  "male",
+  "non_binary",
+  "other",
+  "prefer_not_to_say",
+]);
+
+/**
  * Membership role: owner is the tenant creator; member is an invited user.
  * Extensible for future roles (e.g., admin).
  *
@@ -946,6 +962,10 @@ export const userMemoryVectors = pgTable(
  * `goal` and `experienceLevel` are nullable/additive — a row may exist with
  * NULL for either, leaving the user free to choose later. Inserted in the
  * same transaction as tenant/user/membership creation (R3 auto-provision).
+ *
+ * `selfDescribedSex` and `heightCm` (17c-profile-body-metrics) follow the
+ * same "row may exist with NULL, user chooses later" contract — both are
+ * nullable and additive, never backfilled.
  */
 export const userProfiles = pgTable(
   "user_profiles",
@@ -956,6 +976,8 @@ export const userProfiles = pgTable(
     name: text("name").notNull(),
     goal: goalEnum("goal"),
     experienceLevel: experienceLevelEnum("experience_level"),
+    selfDescribedSex: selfDescribedSexEnum("self_described_sex"),
+    heightCm: integer("height_cm"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
