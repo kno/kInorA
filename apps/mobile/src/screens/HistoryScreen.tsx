@@ -67,6 +67,9 @@ export default function HistoryScreen() {
               <Text style={styles.date}>
                 {new Date(item.session.completedAt ?? item.session.startedAt).toLocaleDateString()}
               </Text>
+              {item.session.status === "abandoned" && (
+                <Text style={styles.detail}>{intl.formatMessage({ id: "history.abandoned" })}</Text>
+              )}
               {durationMinutes !== undefined && (
                 <Text style={styles.detail}>
                   {intl.formatMessage({ id: "history.duration" }, { minutes: durationMinutes })}

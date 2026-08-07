@@ -72,6 +72,30 @@ const historyEntry: WorkoutHistoryEntry = {
   trend: { volumeDelta: 20, direction: "up" },
 };
 
+// 17b-stale-session-recovery PR 3: an abandoned session appears in history
+// with its logged sets, labeled and terminal — no resume/log/complete
+// action, and the card stays a non-pressable View like every other entry.
+const abandonedEntry: WorkoutHistoryEntry = {
+  session: {
+    id: "session-abandoned-1",
+    workoutPlanId: "plan-1",
+    status: "abandoned",
+    startedAt: "2026-07-05T08:00:00.000Z",
+    exercises: [
+      {
+        id: "exercise-2",
+        workoutSessionId: "session-abandoned-1",
+        exerciseIndex: 0,
+        title: "Squat",
+        restSeconds: 90,
+        setRecords: [],
+      },
+    ],
+  },
+  totalVolume: 50,
+  trend: undefined,
+};
+
 function renderWithLocale(locale: "en" | "es") {
   let renderer!: ReturnType<typeof create>;
   act(() => {
@@ -145,5 +169,29 @@ describe("HistoryScreen (sync-independent — never touches the offline queue/sn
 
     const found = renderer.root.findAllByProps({ children: "No completed sessions yet." });
     expect(found.length).toBeGreaterThan(0);
+  });
+
+  it("renders the abandoned label for an abandoned session", async () => {
+    getWorkoutHistory.mockResolvedValue({ kind: "ok", entries: [abandonedEntry] });
+
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = renderWithLocale("en");
+    });
+
+    const found = renderer.root.findAllByProps({ children: "Discarded — not completed" });
+    expect(found.length).toBeGreaterThan(0);
+  });
+
+  it("keeps an abandoned session's card a non-pressable View — no navigation introduced", async () => {
+    getWorkoutHistory.mockResolvedValue({ kind: "ok", entries: [abandonedEntry] });
+
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = renderWithLocale("en");
+    });
+
+    const pressableNodes = renderer.root.findAll((node) => node.props.onPress !== undefined);
+    expect(pressableNodes).toHaveLength(0);
   });
 });
