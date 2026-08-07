@@ -16,6 +16,7 @@ import {
 import { mask } from "./mask.js";
 import type { DynamicConfigRepo } from "./dynamic-generator.js";
 import type { AiTracingDeps, TracingHandler } from "./langfuse-handler.js";
+import { linkStreamingModel, linkStructuredChain } from "./prompt-linked-chain.js";
 
 /**
  * LangChain-backed extraction adapter for the conversational create-plan turn
@@ -213,6 +214,8 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
     // model (and hence any observability) sees it.
     let rawPrompt: string;
     let promptSource: "langfuse" | "fallback" = "fallback";
+    let promptName: string | undefined;
+    let promptVersion: number | undefined;
     if (this.deps?.prompts) {
       const resolution = await this.deps.prompts.execute(
         REPLY_PROMPT_DEFINITION,
@@ -220,6 +223,8 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
       );
       rawPrompt = resolution.text;
       promptSource = resolution.source;
+      promptName = resolution.name;
+      promptVersion = resolution.version;
     } else {
       rawPrompt = buildReplyPrompt(input);
     }
@@ -228,6 +233,13 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
     // — a wall-clock timeout OR client disconnect firing mid-turn — cancels this
     // in-flight streaming round-trip instead of blocking on the provider.
     const handler = this.deps?.handler;
+    // Native prompt-version linkage (slice C): wraps the bare streaming model
+    // as `[promptStep, model]` when `model` is a real `Runnable` so the model
+    // run registers as a sibling of the prompt step. Degrades to the
+    // untouched `model` otherwise — same call shape either way, so casting
+    // back to `ExtractionChatModel` is safe (see `adapter-factory.ts`'s
+    // `invokeChain` for the identical idiom).
+    const { chain: linkedModel, linked: promptLinked } = linkStreamingModel(model);
     // Annotated, NOT passed as an inline literal: `ExtractionChatModel`'s own
     // parameter is a loose `Record<string, unknown>` for provider
     // assignability, so this annotation is the only thing that still
@@ -236,10 +248,22 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
     const callOptions: ExtractionCallOptions = {
       signal,
       runName: RUN_NAME,
-      metadata: { ...metadata, promptSource },
+      metadata: {
+        ...metadata,
+        promptSource,
+        promptLinked,
+        ...(promptSource === "langfuse"
+          ? {
+              promptName,
+              promptVersion,
+              promptLabel: "production",
+              langfusePrompt: { name: promptName, version: promptVersion, isFallback: false },
+            }
+          : {}),
+      },
       ...(handler ? { callbacks: [handler] } : {}),
     };
-    const stream = await model.stream(prompt, callOptions);
+    const stream = await (linkedModel as ExtractionChatModel).stream(prompt, callOptions);
     for await (const chunk of stream) {
       if (signal.aborted) return;
       const text = chunkText(chunk.content);
@@ -261,6 +285,8 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
     // everywhere, including inside the seeded reply.
     let rawPrompt: string;
     let promptSource: "langfuse" | "fallback" = "fallback";
+    let promptName: string | undefined;
+    let promptVersion: number | undefined;
     if (this.deps?.prompts) {
       const resolution = await this.deps.prompts.execute(
         EXTRACTION_PROMPT_DEFINITION,
@@ -268,6 +294,8 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
       );
       rawPrompt = resolution.text;
       promptSource = resolution.source;
+      promptName = resolution.name;
+      promptVersion = resolution.version;
     } else {
       rawPrompt = buildExtractionPrompt(input, assistantReply);
     }
@@ -279,14 +307,31 @@ export class PlanSpecExtractionAdapter implements PlanSpecExtractor {
     // structured-output round-trip instead of the caller blocking until the
     // provider responds.
     const handler = this.deps?.handler;
+    // Native prompt-version linkage (slice C): reparents `chain` — the
+    // `withStructuredOutput(...)` sequence — into `[promptStep, ...steps]`
+    // when it is a real `RunnableSequence`. Degrades to the untouched `chain`
+    // otherwise — same call shape either way (see `streamReply` above).
+    const { chain: linkedChain, linked: promptLinked } = linkStructuredChain(chain);
     // Annotated for the same reason as Pass 1 — see `streamReply`.
     const callOptions: ExtractionCallOptions = {
       signal,
       runName: RUN_NAME,
-      metadata: { ...metadata, promptSource },
+      metadata: {
+        ...metadata,
+        promptSource,
+        promptLinked,
+        ...(promptSource === "langfuse"
+          ? {
+              promptName,
+              promptVersion,
+              promptLabel: "production",
+              langfusePrompt: { name: promptName, version: promptVersion, isFallback: false },
+            }
+          : {}),
+      },
       ...(handler ? { callbacks: [handler] } : {}),
     };
-    const raw = await chain.invoke(prompt, callOptions);
+    const raw = await (linkedChain as typeof chain).invoke(prompt, callOptions);
     // Re-parse at the boundary: never trust the model to honor the allow-list.
     // A forbidden key (preferenceScores/confirmed) or bad value is stripped/rejected here.
     return PlanSpecDraftSchema.parse(raw);
