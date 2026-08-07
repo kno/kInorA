@@ -343,7 +343,7 @@ Restructured Invocation Chain; Output Equivalence Under Chain Restructuring; Nat
 Behaviour Is Verifiable Offline; Trace Attribution to Prompt Source and Version (the version-handle
 half); Prompt Tests Run Offline.
 
-- [ ] C.1 RED: `prompt-linked-chain.test.ts` **run-parenting** — a fake callback handler (a plain
+- [x] C.1 RED: `prompt-linked-chain.test.ts` **run-parenting** — a fake callback handler (a plain
       object with `handleChainStart`/`handleChatModelStart`, passed via `callbacks`) records
       `(runId, parentRunId, metadata)` per event, using a REAL `RunnableSequence`/`RunnableLambda`
       from `@langchain/core` plus a ~15-line offline `BaseChatModel` subclass whose `_generate`
@@ -352,57 +352,57 @@ half); Prompt Tests Run Offline.
       `metadata.langfusePrompt`; the MODEL step starts with the same `parentRunId === X` — the lookup
       key the SDK uses is the key the prompt was registered under. No network, no credentials, no SDK
       mock.
-- [ ] C.2 GREEN: create `apps/api/src/ai/prompt-linked-chain.ts` — `promptStep()` returns a
+- [x] C.2 GREEN: create `apps/api/src/ai/prompt-linked-chain.ts` — `promptStep()` returns a
       `RunnableLambda` identity over the already-rendered, already-MASKED string (never a
       `ChatPromptTemplate` — would reinterpret the JSON braces in the output-format block);
       `PromptLinkedChain<T>` interface (`{ chain: T; linked: boolean }`)
-- [ ] C.3 RED: **guard degradation** — `linkStructuredChain(plainObjectWithInvoke)` returns
+- [x] C.3 RED: **guard degradation** — `linkStructuredChain(plainObjectWithInvoke)` returns
       `{ chain: sameReference, linked: false }`; same for `null`/`undefined` (no throw, despite
       `isRunnableSequence` dereferencing `.middle`); an `includeRaw`-shaped `RunnableMap`-first
       sequence is NOT reparented; a declined call still carries full metadata attribution with
       `promptLinked: false` and still generates successfully (table-driven; reuses the existing
       plain-object fake models, which are exactly the declined shape)
-- [ ] C.4 GREEN: implement `linkStructuredChain<T>(structured)` — reparent
+- [x] C.4 GREEN: implement `linkStructuredChain<T>(structured)` — reparent
       `RunnableSequence.from([promptStep(), ...structured.steps])` only when
       `RunnableSequence.isRunnableSequence(thing)` (guard the `null` check FIRST, since it dereferences
       `.middle`) or `Runnable.isRunnable(thing)` (cross-realm safe, via `isRunnableInterface`) confirm
       the shape; otherwise degrade to the original runnable untouched; never throws
-- [ ] C.5 RED: same degradation table for `linkStreamingModel` (bare chat model wrapped as
+- [x] C.5 RED: same degradation table for `linkStreamingModel` (bare chat model wrapped as
       `[promptStep, model]` when it matches; degrades otherwise)
-- [ ] C.6 GREEN: implement `linkStreamingModel<T>(model)`
-- [ ] C.7 RED: **output equivalence** — for the same input, the reparented flat sequence and the
+- [x] C.6 GREEN: implement `linkStreamingModel<T>(model)`
+- [x] C.7 RED: **output equivalence** — for the same input, the reparented flat sequence and the
       untouched `withStructuredOutput` sequence produce an identical parsed result, and
       `WorkoutProgramSchema.parse` still succeeds (offline `BaseChatModel` subclass returning a canned
       `WorkoutProgram` JSON; deep equality before/after)
-- [ ] C.8 GREEN: confirmed by C.4's step-object reuse (`structured.steps` passed through unchanged,
+- [x] C.8 GREEN: confirmed by C.4's step-object reuse (`structured.steps` passed through unchanged,
       preserving the `withConfig` tool binding) — no additional production code expected; document if
       otherwise
-- [ ] C.9 RED: attribution — remote path → metadata has `promptSource: "langfuse"`, `promptLinked`,
+- [x] C.9 RED: attribution — remote path → metadata has `promptSource: "langfuse"`, `promptLinked`,
       `promptName`, `promptVersion`, `promptLabel: "production"`, `langfusePrompt: {name, version,
       isFallback: false}`; fallback path → `promptSource: "fallback"` and NO `promptName`/
       `promptVersion`/`langfusePrompt` key (assert the recorded invoke/stream options at both
       attachment sites)
-- [ ] C.10 GREEN: wire `linkStructuredChain`/`linkStreamingModel` into `invokeChain`
+- [x] C.10 GREEN: wire `linkStructuredChain`/`linkStreamingModel` into `invokeChain`
       (`adapter-factory.ts`) before `.invoke`, and into `extraction-adapter.ts` — `linkStreamingModel`
       for `streamReply`, `linkStructuredChain` for `extract`; attach `metadata.langfusePrompt =
       { name, version, isFallback: false }` only when `promptSource === "langfuse"` (the SDK drops it
       via `isFallback` anyway, but omit it entirely to keep the fallback branch simple); attach
       `promptLinked` from each linker's returned `linked` boolean
-- [ ] C.11 RED: **masking invariant across the restructured chain** — the callback observes the
+- [x] C.11 RED: **masking invariant across the restructured chain** — the callback observes the
       already-rendered, already-masked prompt string at every run in the reparented sequence (extends
       C.1's fake-handler harness to assert the payload, not just parentage)
-- [ ] C.12 GREEN: confirmed by construction — `promptStep()` wraps the value AFTER B1/B2's
+- [x] C.12 GREEN: confirmed by construction — `promptStep()` wraps the value AFTER B1/B2's
       render+mask pipeline runs, never re-touching the string; no additional production code expected
-- [ ] C.13 REFACTOR: confirm the per-call shape guard covers all five plan-generation providers
+- [x] C.13 REFACTOR: confirm the per-call shape guard covers all five plan-generation providers
       (`openrouter`, `openai`, `anthropic`, `google`, `opencode-go`) — none construct a differently
       shaped chain that the guard would mis-handle
-- [ ] C.14 Verify: `pnpm --filter api test` green; `pnpm --filter api test:coverage` green at 85%
+- [x] C.14 Verify: `pnpm --filter api test` green; `pnpm --filter api test:coverage` green at 85%
       functions threshold; `pnpm --filter api exec tsc --noEmit` clean; `pnpm architecture` (dep-cruiser)
       0 violations if it covers `apps/api/src/ai/*`
-- [ ] C.15 Full-chain regression: `app.test.ts` and existing route suites keep passing with no
+- [x] C.15 Full-chain regression: `app.test.ts` and existing route suites keep passing with no
       credentials set (handler `null`, gateway `null`, prompts resolve locally) — no behavioural
       change end-to-end when Langfuse is absent
-- [ ] C.16 File two follow-up GitHub issues on kno/kInorA (`gh auth switch --user kno` first): (1)
+- [x] C.16 File two follow-up GitHub issues on kno/kInorA (`gh auth switch --user kno` first): (1)
       first-mention limitation masking gap now that a real trace channel exists (proposal answer 4);
       (2) re-run `prompt-linked-chain` tests on any `@langchain/openai`/`@langchain/anthropic`/
       `@langchain/google-genai`/`@langchain/core` bump — a shape change degrades silently and safely
@@ -410,15 +410,16 @@ half); Prompt Tests Run Offline.
 - [ ] C.17 Operational, not a test: after C deploys, confirm out of band, once, that the Langfuse
       Prompt tab actually populates against the live project. If it does not,
       `promptLinked: true` in the traces localizes the remaining gap to the SDK rather than to this
-      repo's wiring.
+      repo's wiring. Deliberately left unchecked here — this is a post-deploy operational
+      confirmation, not something this executor can perform before merge.
 
 ## Final Verification (run once the full chain has landed)
 
-- [ ] `pnpm --filter api test` — full suite green, hermetic (no network, no credentials)
-- [ ] `pnpm --filter api test:coverage` — apps/api functions threshold ≥85% (`apps/api/vitest.config.ts:31`)
-- [ ] `pnpm --filter api exec tsc --noEmit` — no errors
-- [ ] `pnpm architecture` — 0 dependency violations
-- [ ] `pnpm build` — CI's real gate, must succeed
-- [ ] Grep confirms no `OpenRouterPlanGenerator` class or its dedicated test file exists anywhere
-- [ ] Grep confirms all five plan-generation provider factories funnel through `invokeChain` with no
+- [x] `pnpm --filter api test` — full suite green, hermetic (no network, no credentials)
+- [x] `pnpm --filter api test:coverage` — apps/api functions threshold ≥85% (`apps/api/vitest.config.ts:31`)
+- [x] `pnpm --filter api exec tsc --noEmit` — no errors
+- [x] `pnpm architecture` — 0 dependency violations
+- [x] `pnpm build` — CI's real gate, must succeed
+- [x] Grep confirms no `OpenRouterPlanGenerator` class or its dedicated test file exists anywhere
+- [x] Grep confirms all five plan-generation provider factories funnel through `invokeChain` with no
       alternate prompt/mask/invoke path

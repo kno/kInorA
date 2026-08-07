@@ -243,3 +243,57 @@ describe("prompt-source attribution (langfuse-prompt-management, slice B2)", () 
     expect(invokeInput).toBe(buildPlanPrompt(baseSpec));
   });
 });
+
+describe("native prompt-version linkage attribution (slice C)", () => {
+  it("attaches promptName, promptVersion, promptLabel and langfusePrompt when the prompt came from Langfuse", async () => {
+    const gateway: LangfusePromptGateway = {
+      fetchPrompt: vi.fn(async () => ({ template: PLAN_PROMPT_TEMPLATE, version: 7 })),
+    };
+    const prompts = new ResolvePrompt(gateway);
+    const adapters = buildAdapters({ prompts });
+    const adapter = adapters["openai"]!("gpt-4o-mini");
+
+    await adapter.generate(baseSpec);
+
+    const config = mockInvoke.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(config).toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          promptSource: "langfuse",
+          promptName: "kinora-plan-generation",
+          promptVersion: 7,
+          promptLabel: "production",
+          langfusePrompt: { name: "kinora-plan-generation", version: 7, isFallback: false },
+        }),
+      })
+    );
+  });
+
+  it("attaches promptLinked and NO promptName/promptVersion/langfusePrompt key on the fallback path", async () => {
+    const adapters = buildAdapters();
+    const adapter = adapters["openai"]!("gpt-4o-mini");
+
+    await adapter.generate(baseSpec);
+
+    const config = mockInvoke.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    const metadata = config?.metadata as Record<string, unknown>;
+    expect(metadata["promptSource"]).toBe("fallback");
+    expect(metadata).toHaveProperty("promptLinked");
+    expect(metadata).not.toHaveProperty("promptName");
+    expect(metadata).not.toHaveProperty("promptVersion");
+    expect(metadata).not.toHaveProperty("promptLabel");
+    expect(metadata).not.toHaveProperty("langfusePrompt");
+  });
+
+  it("promptLinked is false here because the mocked withStructuredOutput chain in this test file is a plain object, not a real RunnableSequence, so the shape guard declines — generation still succeeds", async () => {
+    const adapters = buildAdapters();
+    const adapter = adapters["openai"]!("gpt-4o-mini");
+
+    const program = await adapter.generate(baseSpec);
+
+    expect(program).toEqual(mockProgram);
+    const config = mockInvoke.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    const metadata = config?.metadata as Record<string, unknown>;
+    expect(metadata["promptLinked"]).toBe(false);
+  });
+});

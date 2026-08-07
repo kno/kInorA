@@ -338,6 +338,7 @@ describe("PlanSpecExtractionAdapter tracing attachment (langfuse-prompt-manageme
       provider: "openrouter",
       model: "openai/gpt-4o-mini",
       promptSource: "fallback",
+      promptLinked: false,
     });
     expect(invokeCalls[0]?.options?.runName).toBe("plan-chat-extraction");
     expect(invokeCalls[0]?.options?.metadata).toEqual({
@@ -345,6 +346,7 @@ describe("PlanSpecExtractionAdapter tracing attachment (langfuse-prompt-manageme
       provider: "openrouter",
       model: "openai/gpt-4o-mini",
       promptSource: "fallback",
+      promptLinked: false,
     });
   });
 });
@@ -395,6 +397,83 @@ describe("PlanSpecExtractionAdapter prompt-source attribution (langfuse-prompt-m
     expect(draft.goal).toBe("strength");
     expect(streamCalls[0]?.options?.metadata).toMatchObject({ promptSource: "fallback" });
     expect(invokeCalls[0]?.options?.metadata).toMatchObject({ promptSource: "fallback" });
+  });
+});
+
+describe("PlanSpecExtractionAdapter native prompt-version linkage attribution (slice C)", () => {
+  it("streamReply attaches promptName/promptVersion/promptLabel/langfusePrompt on the langfuse path", async () => {
+    const gateway: LangfusePromptGateway = {
+      fetchPrompt: vi.fn(async () => ({ template: REPLY_PROMPT_TEMPLATE, version: 9 })),
+    };
+    const prompts = new ResolvePrompt(gateway);
+    const { adapter, streamCalls } = buildAdapter({ tokens: ["ok"], extracted: {} }, { prompts });
+    const controller = new AbortController();
+
+    // eslint-disable-next-line no-empty
+    for await (const _ of adapter.streamReply(input(), controller.signal)) {
+    }
+
+    expect(streamCalls[0]?.options?.metadata).toMatchObject({
+      promptSource: "langfuse",
+      promptName: "kinora-chat-reply",
+      promptVersion: 9,
+      promptLabel: "production",
+      langfusePrompt: { name: "kinora-chat-reply", version: 9, isFallback: false },
+    });
+  });
+
+  it("extract attaches promptName/promptVersion/promptLabel/langfusePrompt on the langfuse path", async () => {
+    const gateway: LangfusePromptGateway = {
+      fetchPrompt: vi.fn(async () => ({ template: EXTRACTION_PROMPT_TEMPLATE, version: 11 })),
+    };
+    const prompts = new ResolvePrompt(gateway);
+    const { adapter, invokeCalls } = buildAdapter({ tokens: [], extracted: {} }, { prompts });
+
+    await adapter.extract(input(), "reply");
+
+    expect(invokeCalls[0]?.options?.metadata).toMatchObject({
+      promptSource: "langfuse",
+      promptName: "kinora-chat-extraction",
+      promptVersion: 11,
+      promptLabel: "production",
+      langfusePrompt: { name: "kinora-chat-extraction", version: 11, isFallback: false },
+    });
+  });
+
+  it("attaches promptLinked and NO promptName/promptVersion/langfusePrompt key on the fallback path, for both passes", async () => {
+    const { adapter, streamCalls, invokeCalls } = buildAdapter({ tokens: ["ok"], extracted: {} });
+    const controller = new AbortController();
+
+    let assistantReply = "";
+    for await (const tok of adapter.streamReply(input(), controller.signal)) assistantReply += tok;
+    await adapter.extract(input(), assistantReply);
+
+    const streamMetadata = streamCalls[0]?.options?.metadata as Record<string, unknown>;
+    expect(streamMetadata["promptSource"]).toBe("fallback");
+    expect(streamMetadata).toHaveProperty("promptLinked");
+    expect(streamMetadata).not.toHaveProperty("promptName");
+    expect(streamMetadata).not.toHaveProperty("promptVersion");
+    expect(streamMetadata).not.toHaveProperty("langfusePrompt");
+
+    const invokeMetadata = invokeCalls[0]?.options?.metadata as Record<string, unknown>;
+    expect(invokeMetadata["promptSource"]).toBe("fallback");
+    expect(invokeMetadata).toHaveProperty("promptLinked");
+    expect(invokeMetadata).not.toHaveProperty("promptName");
+    expect(invokeMetadata).not.toHaveProperty("promptVersion");
+    expect(invokeMetadata).not.toHaveProperty("langfusePrompt");
+  });
+
+  it("promptLinked is false because the fake model in this test file is a plain object, not a real Runnable/RunnableSequence, so the shape guard declines — both passes still succeed", async () => {
+    const { adapter, streamCalls, invokeCalls } = buildAdapter({ tokens: ["ok"], extracted: { goal: "strength" } });
+    const controller = new AbortController();
+
+    let assistantReply = "";
+    for await (const tok of adapter.streamReply(input(), controller.signal)) assistantReply += tok;
+    const draft = await adapter.extract(input(), assistantReply);
+
+    expect(draft.goal).toBe("strength");
+    expect((streamCalls[0]?.options?.metadata as Record<string, unknown>)?.["promptLinked"]).toBe(false);
+    expect((invokeCalls[0]?.options?.metadata as Record<string, unknown>)?.["promptLinked"]).toBe(false);
   });
 });
 

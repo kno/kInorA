@@ -8,6 +8,7 @@ import { buildPlanPrompt, buildPlanPromptVariables, PLAN_PROMPT_DEFINITION } fro
 import { mask } from "./mask.js";
 import type { AdapterFactoryMap } from "./dynamic-generator.js";
 import type { AiTracingDeps } from "./langfuse-handler.js";
+import { linkStructuredChain } from "./prompt-linked-chain.js";
 
 interface InvokeChainMetadata {
   provider: string;
@@ -50,6 +51,17 @@ const OPENCODE_GO_BASE_URL = "https://opencode.ai/zen/go/v1";
  * (e.g. existing tests that construct `buildAdapters()` bare), the local
  * template is used directly and `promptSource` is "fallback", matching the
  * behaviour a `no_credentials` resolution would produce.
+ *
+ * Native prompt-version linkage (langfuse-prompt-management, slice C):
+ * `linkStructuredChain` reparents `chain` into one flat sequence
+ * `[promptStep, ...chain.steps]` when `chain` is a real `RunnableSequence`
+ * (the shape `llm.withStructuredOutput(schema)` returns), so the model run
+ * registers as a sibling of the prompt step under the same run — the
+ * precondition Langfuse's `CallbackHandler.registerLangfusePrompt` needs to
+ * link a generation to the prompt version that produced it. A per-call shape
+ * guard degrades to the untouched `chain` when it doesn't decompose this way
+ * (see `prompt-linked-chain.ts`); generation succeeds unaffected either way,
+ * and `promptLinked` in the trace metadata reports which path was taken.
  */
 async function invokeChain(
   chain: { invoke(input: string, options: Record<string, unknown>): Promise<unknown> },
@@ -61,24 +73,43 @@ async function invokeChain(
 
   let rawPrompt: string;
   let promptSource: "langfuse" | "fallback" = "fallback";
+  let promptName: string | undefined;
+  let promptVersion: number | undefined;
   if (deps?.prompts) {
     const resolution = await deps.prompts.execute(PLAN_PROMPT_DEFINITION, buildPlanPromptVariables(spec));
     rawPrompt = resolution.text;
     promptSource = resolution.source;
+    promptName = resolution.name;
+    promptVersion = resolution.version;
   } else {
     rawPrompt = buildPlanPrompt(spec);
   }
   const maskedPrompt = mask(rawPrompt, limitationTerms);
+
+  // The reparented chain implements the same `.invoke(input, options)` call
+  // shape as `chain` from the caller's perspective either way (linked or
+  // degraded) — only the internal run-parenting differs — so it is safe to
+  // treat it as `typeof chain` at the call site below.
+  const { chain: linkedChain, linked: promptLinked } = linkStructuredChain(chain);
 
   const traceMetadata = {
     feature: "plan-generation",
     provider: metadata.provider,
     model: metadata.model,
     promptSource,
+    promptLinked,
+    ...(promptSource === "langfuse"
+      ? {
+          promptName,
+          promptVersion,
+          promptLabel: "production",
+          langfusePrompt: { name: promptName, version: promptVersion, isFallback: false },
+        }
+      : {}),
   };
 
   const handler = deps?.handler;
-  const raw = await chain.invoke(maskedPrompt, {
+  const raw = await (linkedChain as typeof chain).invoke(maskedPrompt, {
     runName: "plan-generation",
     metadata: traceMetadata,
     ...(handler ? { callbacks: [handler] } : {}),
