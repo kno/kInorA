@@ -128,6 +128,7 @@ jobs:
           src/db/repositories/__tests__/billing-customer.integration.test.ts
           src/db/repositories/__tests__/user-account-deletion.integration.test.ts
           src/db/repositories/__tests__/admin-stats.integration.test.ts
+          src/db/repositories/__tests__/user-weight-entry.integration.test.ts
 
       - name: Assert billing suites executed (guard against false-green)
         # Each integration file pairs `describe.skipIf(!hasDb)` (the real tests)

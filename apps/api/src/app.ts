@@ -41,6 +41,7 @@ import {
   type ObservabilityLogger,
 } from "./observability/event-logger.js";
 import { userProfileRoutes } from "./routes/user-profile.js";
+import { userWeightEntryRoutes } from "./routes/user-weight-entry.js";
 import { userMemoryRoutes } from "./routes/user-memories.js";
 import { userPreferencesRoutes } from "./routes/user-preferences.js";
 import { trainerRoutes } from "./routes/trainer.js";
@@ -64,6 +65,7 @@ import {
 import type { PersistVectorMemoryResult } from "./ai/memory-retriever.js";
 import { VectorMemoryRepository } from "./db/repositories/vector-memory.js";
 import { UserProfileRepository } from "./db/repositories/user-profile.js";
+import { UserWeightEntryRepository } from "./db/repositories/user-weight-entry.js";
 import { UserPreferencesRepository } from "./db/repositories/user-preferences.js";
 import { createPlanRouteRepo } from "./plan-route-repo.js";
 import { WsRegistry } from "./ws/registry.js";
@@ -675,6 +677,11 @@ export async function buildApp(
     ) => userPreferencesRepo.upsert(id, input),
   };
   await app.register(userProfileRoutes, { repo: userProfileRouteRepo });
+  // Bodyweight series (17c-profile-body-metrics, PR 2). User-scoped, no
+  // tenant column — reuses the same requireAuth() isolation guarantee as
+  // userProfileRoutes.
+  const userWeightEntryRepo = new UserWeightEntryRepository(database);
+  await app.register(userWeightEntryRoutes, { repo: userWeightEntryRepo });
   await app.register(userPreferencesRoutes, {
     repo: userPreferencesRouteRepo,
   });
