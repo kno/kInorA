@@ -1012,6 +1012,7 @@
     "title": "History",
     "description": "Review your completed workout sessions.",
     "empty": "No completed sessions yet.",
+    "abandoned": "Discarded — not completed",
     "duration": "{minutes} min",
     "totalVolume": "Total volume: {volume} kg",
     "averageRpe": "Average RPE: {rpe}",

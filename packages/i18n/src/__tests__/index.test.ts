@@ -206,7 +206,9 @@ describe("@kinora/i18n package assembly", () => {
     // conflict.discardCancel,conflict.discardFailed}` (17b scope A) — the
     // mobile equivalent (see the mobileTracker namespace test below, whose
     // own count also moves by +7).
-    expect(nonBillingKeys).toHaveLength(771);
+    // +1 `history.abandoned` (17b PR 3) — the read-only history label shown
+    // on an abandoned session, web and mobile.
+    expect(nonBillingKeys).toHaveLength(772);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
