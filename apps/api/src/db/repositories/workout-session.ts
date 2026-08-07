@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, lte } from "drizzle-orm";
 import {
   computeAverageRpe,
   computeSessionVolume,
@@ -29,7 +29,9 @@ import {
   type DomainIntensityBias,
 } from "../progress-domain.js";
 import type {
+  AbandonSessionOutcome,
   AdaptationRecommendation,
+  AutoClosedSessionNotice,
   ClientDashboardDTO,
   DashboardSummaryDTO,
   DeleteSessionOutcome,
@@ -50,6 +52,7 @@ import type {
 } from "@kinora/contracts";
 import type { Database } from "../client.js";
 import { planSpecs, sessionExercises, setRecords, users, workoutPlans, workoutSessions } from "../schema.js";
+import { abandonedSessionCutoff } from "../session-abandonment.js";
 
 /** 14b-v1.1 — session-count window for the RPE-fold's session fetch (mirrors `RPE_WINDOW_SESSIONS`). */
 const RPE_WINDOW_SESSIONS = 3;
@@ -71,7 +74,7 @@ interface WorkoutSessionRow {
   tenantId: string;
   userId: string;
   workoutPlanId: string;
-  status: "active" | "completed";
+  status: "active" | "completed" | "abandoned";
   day: number | null;
   startedAt: Date;
   completedAt: Date | null;
@@ -113,6 +116,14 @@ type DeleteAllSessionsOutcome =
   | { kind: "active_conflict" };
 
 type StartTx = Pick<Database, "insert">;
+
+/**
+ * Narrow read-capability type accepted by `findLatestActiveSession` (17b) so
+ * phase 3 of `startSession` can re-read UNDER the transaction's row lock by
+ * passing the transaction handle, while the phase-1 caller keeps using
+ * `this.db` (the default) unchanged.
+ */
+type Executor = Pick<Database, "select">;
 
 const DEFAULT_HISTORY_LIMIT = 20;
 
@@ -264,24 +275,42 @@ export class WorkoutSessionRepository {
   constructor(private db: Database) {}
 
   /**
-   * Starts (or resumes) a day-scoped workout session (#93).
+   * Starts (or resumes) a day-scoped workout session (#93), auto-closing a
+   * blocking session past `ABANDONED_SESSION_THRESHOLD_HOURS` as `abandoned`
+   * rather than returning a conflict for it (17b-stale-session-recovery).
    *
-   * The `singleActivePerUser` partial unique index guarantees ≤1 active row per
-   * (tenant, user), so we fetch the one active row and compare in code:
-   *   - Branch A: active row matches (planId, day)      → resume (findById)
-   *   - Branch B: active row is a different (planId, day) → conflict
-   *       (a legacy null-day row can never match, so it always conflicts)
-   *   - Branch C: no active row                          → create, persisting `day`
+   * Three phases (see design.md "The auto-close transaction"):
+   *   - Phase 1 — unlocked fast path, unchanged semantics for the two cases
+   *     that need no lock: same-plan-same-day resume (Branch A), and an
+   *     under-threshold blocking session (Branch B conflict).
+   *   - Phase 2 — validates the TARGET plan+day before abandoning anything,
+   *     so a request that would 404 never auto-closes a session first.
+   *   - Phase 3 — authoritative and locked: re-reads the active row under the
+   *     existing user-row `FOR UPDATE` lock and re-decides the branch, so a
+   *     concurrent double-tap's second call sees the FIRST call's result
+   *     (typically `resumed`) instead of racing the same stale read. The
+   *     auto-close UPDATE is scoped by `(tenantId, userId) AND
+   *     status='active' AND started_at < cutoff` — never by the id read
+   *     outside the lock — so it can only ever transition a row that is
+   *     genuinely active and genuinely stale.
    *
-   * Returns `undefined` only when the plan is not ready or the requested day is
-   * not part of the program (the route maps this to 404, unchanged).
+   * `now` defaults to the wall clock; the route never passes it. Optional and
+   * trailing so the age branch is testable without mocking the clock,
+   * matching `getWeeklyOverview`'s own precedent.
+   *
+   * Returns `undefined` only when the plan is not ready or the requested day
+   * is not part of the program (the route maps this to 404, unchanged).
    */
   async startSession(
     tenantId: string,
     userId: string,
     workoutPlanId: string,
-    day: number
+    day: number,
+    now: Date = new Date()
   ): Promise<StartSessionOutcome | undefined> {
+    const cutoff = abandonedSessionCutoff(now);
+
+    // ── Phase 1 — unlocked fast path ────────────────────────────────────
     const existingActive = await this.findLatestActiveSession(tenantId, userId);
     if (existingActive) {
       // Branch A — same plan and same day → resume the in-progress session.
@@ -293,24 +322,28 @@ export class WorkoutSessionRepository {
         return { kind: "resumed", session };
       }
 
-      // Branch B — a different (planId, day), or a legacy null-day row.
-      // Resolve the active plan's display label so the client can render a
-      // meaningful banner. The lookup is scoped to (tenantId, userId) — NEVER
-      // an unscoped `WHERE id =` — so it can only surface the caller's own plan.
-      const activePlanName = await this.findActivePlanName(
-        tenantId,
-        userId,
-        existingActive.workoutPlanId
-      );
+      // Branch B — under the threshold: a different (planId, day), or a
+      // legacy null-day row, but plausibly still in progress. Past the
+      // threshold this falls through to phase 3's auto-close instead.
+      if (existingActive.startedAt >= cutoff) {
+        const activePlanName = await this.findActivePlanName(
+          tenantId,
+          userId,
+          existingActive.workoutPlanId
+        );
 
-      return {
-        kind: "conflict",
-        activePlanId: existingActive.workoutPlanId,
-        activePlanName,
-        activeDay: existingActive.day,
-      };
+        return {
+          kind: "conflict",
+          activePlanId: existingActive.workoutPlanId,
+          activePlanName,
+          activeDay: existingActive.day,
+          activeSessionId: existingActive.id,
+          activeStartedAt: existingActive.startedAt.toISOString(),
+        };
+      }
     }
 
+    // ── Phase 2 — validate the TARGET before abandoning anything ────────
     const plan = await this.findReadyPlan(tenantId, userId, workoutPlanId);
     if (!plan?.programJson) {
       return undefined;
@@ -321,14 +354,66 @@ export class WorkoutSessionRepository {
       return undefined;
     }
 
-    // Branch C — no active session → create a new row, persisting the day.
+    // ── Phase 3 — authoritative, locked ─────────────────────────────────
     return this.db.transaction(async (tx) => {
-      // Serialize session creation with bulk history deletion for this user.
+      // Serialize session creation with bulk history deletion for this user,
+      // and — since 17b — with any other concurrent start for this user.
       await tx
         .select({ id: users.id })
         .from(users)
         .where(eq(users.id, userId))
         .for("update");
+
+      // Re-read UNDER the lock and re-decide: a concurrent call may have
+      // already resolved the stale session while this call waited.
+      const current = await this.findLatestActiveSession(tenantId, userId, tx);
+      let autoClosedSession: AutoClosedSessionNotice | undefined;
+
+      if (current) {
+        if (current.workoutPlanId === workoutPlanId && current.day === day) {
+          const session = await this.findById(tenantId, userId, current.id);
+          if (!session) {
+            return undefined;
+          }
+          return { kind: "resumed", session };
+        }
+
+        if (current.startedAt >= cutoff) {
+          const activePlanName = await this.findActivePlanName(
+            tenantId,
+            userId,
+            current.workoutPlanId
+          );
+          return {
+            kind: "conflict",
+            activePlanId: current.workoutPlanId,
+            activePlanName,
+            activeDay: current.day,
+            activeSessionId: current.id,
+            activeStartedAt: current.startedAt.toISOString(),
+          };
+        }
+
+        // Auto-close: age-scoped, not id-scoped — a stale read can never
+        // abandon the wrong row. `completedAt` stays untouched (NULL):
+        // this is a status update only, never a completion.
+        const closedRows = await tx
+          .update(workoutSessions)
+          .set({ status: "abandoned", updatedAt: now })
+          .where(
+            and(
+              eq(workoutSessions.tenantId, tenantId),
+              eq(workoutSessions.userId, userId),
+              eq(workoutSessions.status, "active"),
+              lt(workoutSessions.startedAt, cutoff)
+            )
+          )
+          .returning({ id: workoutSessions.id, startedAt: workoutSessions.startedAt });
+        const closed = closedRows[0];
+        if (closed) {
+          autoClosedSession = { id: closed.id, startedAt: closed.startedAt.toISOString() };
+        }
+      }
 
       const sessionRows = await tx
         .insert(workoutSessions)
@@ -342,8 +427,60 @@ export class WorkoutSessionRepository {
       const exerciseRows = await this.insertSessionExercises(tx, sessionRow.id, plannedSession.exercises);
       const setRows = await this.insertSetRecords(tx, exerciseRows, plannedSession.exercises);
 
-      return { kind: "started", session: mapWorkoutSessionRecord(sessionRow, exerciseRows, setRows) };
+      return {
+        kind: "started",
+        session: mapWorkoutSessionRecord(sessionRow, exerciseRows, setRows),
+        ...(autoClosedSession ? { autoClosedSession } : {}),
+      };
     });
+  }
+
+  /**
+   * Discards a blocking session on explicit user request (17b scope A
+   * Discard), writing the identical `abandoned` terminal state auto-close
+   * would — one write path, two triggers (age, or this explicit call).
+   *
+   * Mirrors `completeSession`'s idempotency discipline exactly: a guarded
+   * `UPDATE ... WHERE (tenantId, userId, id) AND status='active'`; on 0 rows
+   * a re-read SCOPED IDENTICALLY (never an unscoped `WHERE id =`, the same
+   * IDOR class documented on `completeSession`) resolves the outcome —
+   * `abandoned` → 200 no-op, `completed` → `not_active`, nothing →
+   * `not_found` (indistinguishable from another tenant's/user's session).
+   */
+  async abandonSession(
+    tenantId: string,
+    userId: string,
+    id: string
+  ): Promise<AbandonSessionOutcome> {
+    const rows = await this.db
+      .update(workoutSessions)
+      .set({ status: "abandoned", updatedAt: new Date() })
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.id, id),
+          eq(workoutSessions.status, "active")
+        )
+      )
+      .returning();
+    if (rows.length > 0) {
+      const session = await this.findById(tenantId, userId, id);
+      if (!session) {
+        return { kind: "not_found" };
+      }
+      return { kind: "abandoned", session };
+    }
+
+    const existing = await this.findById(tenantId, userId, id);
+    if (existing?.status === "abandoned") {
+      return { kind: "abandoned", session: existing };
+    }
+    if (existing?.status === "completed") {
+      return { kind: "not_active" };
+    }
+
+    return { kind: "not_found" };
   }
 
   async findById(
@@ -472,6 +609,14 @@ export class WorkoutSessionRepository {
     }
 
     const existing = await this.findById(tenantId, userId, id);
+    // Pinned decision 1 (17b): an abandoned session must never become
+    // completed. The `WHERE status='active'` guard above already excludes
+    // it, so this branch changes no observable behaviour today — it exists
+    // so a future edit to the recovery block below cannot silently start
+    // completing abandoned sessions.
+    if (existing?.status === "abandoned") {
+      return undefined;
+    }
     if (existing?.status === "completed") {
       return existing;
     }
@@ -510,7 +655,10 @@ export class WorkoutSessionRepository {
           eq(workoutSessions.tenantId, tenantId),
           eq(workoutSessions.userId, userId),
           eq(workoutSessions.id, id),
-          eq(workoutSessions.status, "completed")
+          // 17b pinned decision 4: an abandoned session is not "in progress",
+          // so — unlike active — it must be deletable, or the user
+          // accumulates permanently undeletable rows.
+          inArray(workoutSessions.status, ["completed", "abandoned"])
         )
       )
       .returning({ id: workoutSessions.id });
@@ -576,7 +724,10 @@ export class WorkoutSessionRepository {
           and(
             eq(workoutSessions.tenantId, tenantId),
             eq(workoutSessions.userId, userId),
-            eq(workoutSessions.status, "completed")
+            // 17b pinned decision 4: abandoned sessions are deletable
+            // alongside completed ones (see deleteById for the rationale).
+            // The active-only guard read above is unchanged.
+            inArray(workoutSessions.status, ["completed", "abandoned"])
           )
         )
         .returning({ id: workoutSessions.id });
@@ -1415,9 +1566,10 @@ export class WorkoutSessionRepository {
 
   private async findLatestActiveSession(
     tenantId: string,
-    userId: string
+    userId: string,
+    executor: Executor = this.db
   ): Promise<WorkoutSessionRow | undefined> {
-    const rows = await this.db
+    const rows = await executor
       .select()
       .from(workoutSessions)
       .where(

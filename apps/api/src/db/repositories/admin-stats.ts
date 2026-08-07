@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, gte, isNotNull, lt, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, isNotNull, lt, lte, or, sql } from "drizzle-orm";
 import type { BillingTier } from "@kinora/contracts";
 import type { Database } from "../client.js";
 import {
@@ -27,27 +27,22 @@ import {
   resolveEffectiveTier,
 } from "../../billing/entitlement.js";
 import { currentBillingPeriod } from "../../billing/plan-limits.js";
+import {
+  ABANDONED_SESSION_THRESHOLD_HOURS,
+  abandonedSessionCutoff,
+} from "../session-abandonment.js";
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 
 /**
- * How long a `workout_sessions` row may sit in `status = 'active'` before the
- * funnel treats it as ABANDONED rather than in progress (#353).
- *
- * The table records no abandonment: a workout that is closed becomes
- * `completed`, and a workout the user simply walked away from stays `active`
- * forever. Without a cut-off, "sessions in progress" grows monotonically and
- * means nothing. 24h is the smallest threshold that cannot mistake a real
- * workout for an abandoned one — nobody trains for a day straight, and the
- * single-active-session-per-user index means a stale row also blocks the user's
- * next workout, so a genuinely long-running session is not a case worth
- * protecting.
- *
- * Exported and named so the number is reviewable in one place instead of being
- * an unexplained interval buried in a query.
+ * Re-exported from the shared `session-abandonment` module (17b) so this
+ * file keeps publishing `abandonedSessionThresholdHours` on `PlatformStats`
+ * unchanged, and so the existing integration-test import of this symbol at
+ * this path keeps working. The session repository is the other consumer —
+ * neither file computes the hours-to-ms arithmetic itself.
  */
-export const ABANDONED_SESSION_THRESHOLD_HOURS = 24;
+export { ABANDONED_SESSION_THRESHOLD_HOURS };
 
 /**
  * How many signup weeks the retention funnel reports (#353).
@@ -300,9 +295,7 @@ export class AdminStatsRepository
     const windowStart = new Date(
       startOfIsoWeekUtc(now).getTime() - (RETENTION_FUNNEL_WINDOW_WEEKS - 1) * 7 * DAY_MS,
     );
-    const abandonedBefore = new Date(
-      now.getTime() - ABANDONED_SESSION_THRESHOLD_HOURS * HOUR_MS,
-    );
+    const abandonedBefore = abandonedSessionCutoff(now);
 
     // One row per qualifying user. `array_agg(... order by ...)[2]` is the
     // second-oldest completion: Postgres has no nth-value aggregate, and a
@@ -383,15 +376,29 @@ export class AdminStatsRepository
       .groupBy(perUser.cohortWeek)
       .orderBy(desc(perUser.cohortWeek));
 
+    // Two-arm predicate (17b), disjoint on `status` ALONE so mutual exclusion
+    // is structural rather than argued:
+    //   arm 1 — the stored fact. Deliberately NOT age-filtered: an explicitly
+    //           discarded session is abandoned whatever its age.
+    //   arm 2 — the legacy inference, for rows this change never touches
+    //           (no backfill — decision 5).
+    // No row can satisfy both: `status` is a single non-null column with
+    // exactly one value per row, and arm 1 requires 'abandoned' while arm 2
+    // requires 'active'.
     const [abandoned] = await this.db
       .select({ total: sql<number>`count(*)::int` })
       .from(workoutSessions)
       .innerJoin(users, eq(users.id, workoutSessions.userId))
       .where(
         and(
-          eq(workoutSessions.status, "active"),
           gte(workoutSessions.startedAt, windowStart),
-          lt(workoutSessions.startedAt, abandonedBefore),
+          or(
+            eq(workoutSessions.status, "abandoned"),
+            and(
+              eq(workoutSessions.status, "active"),
+              lt(workoutSessions.startedAt, abandonedBefore),
+            ),
+          ),
         ),
       );
 

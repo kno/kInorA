@@ -11,6 +11,7 @@ import type {
   SessionExerciseRecord,
   SetRecordDTO,
   WorkoutSessionRecord,
+  WorkoutSessionRecordStatus,
 } from "@kinora/contracts";
 
 /** Weight stepper increment (kg), matching the design's ±2.5. */
@@ -28,6 +29,32 @@ export const REPS_MAX = 99;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+export type SessionLifecycle = "live" | "completed" | "abandoned";
+
+/**
+ * The forcing function the contracts widening was assumed to provide for
+ * free (17b-stale-session-recovery) — it does not: `isComplete` was
+ * `status === "completed" || currentExercise === undefined`, a plain
+ * equality plus a heuristic that compiles silently against a wider union and
+ * — worse — reported a fully-logged `abandoned` session as complete. This
+ * exhaustive switch with a `never` default makes the NEXT status value a
+ * compile error instead of another silent mislabel.
+ */
+export function sessionLifecycle(status: WorkoutSessionRecordStatus): SessionLifecycle {
+  switch (status) {
+    case "active":
+      return "live";
+    case "completed":
+      return "completed";
+    case "abandoned":
+      return "abandoned";
+    default: {
+      const exhaustive: never = status;
+      throw new Error(`unhandled session status: ${String(exhaustive)}`);
+    }
+  }
 }
 
 /** Elapsed session timer format — zero-padded minutes, e.g. `23:47`. */
@@ -201,6 +228,12 @@ export interface TrackerView {
   nextExercise?: SessionExerciseRecord;
   /** No incomplete sets remain (or the server marked the session completed). */
   isComplete: boolean;
+  /**
+   * True for `completed` and `abandoned` (17b) — the screen uses this to
+   * suppress set-logging controls and the complete CTA, independent of
+   * `isComplete` (an abandoned session is terminal but never "complete").
+   */
+  isTerminal: boolean;
 }
 
 /**
@@ -245,8 +278,14 @@ export function deriveTrackerView(session: WorkoutSessionRecord): TrackerView {
     }
   }
 
+  const lifecycle = sessionLifecycle(session.status);
+  // The `currentExercise === undefined` heuristic ("every set is logged, so
+  // treat it as done") only applies while the session is genuinely live.
+  // For an abandoned session it produced the exact falsehood 17b exists to
+  // prevent: a fully-logged-but-never-confirmed session reporting complete.
   const isComplete =
-    session.status === "completed" || currentExercise === undefined;
+    lifecycle === "completed" || (lifecycle === "live" && currentExercise === undefined);
+  const isTerminal = lifecycle !== "live";
 
   const nextExercise =
     currentExerciseIndex >= 0 && currentExerciseIndex + 1 < exercises.length
@@ -271,6 +310,7 @@ export function deriveTrackerView(session: WorkoutSessionRecord): TrackerView {
     setsInCurrentExercise,
     nextExercise,
     isComplete,
+    isTerminal,
   };
 }
 
