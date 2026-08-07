@@ -212,7 +212,12 @@ describe("@kinora/i18n package assembly", () => {
     // nonBinary,other,preferNotToSay}` + `profile.form.{heightCm,
     // heightCmPlaceholder}` (17c PR1) — the body-metric scalars on the
     // profile form.
-    expect(nonBillingKeys).toHaveLength(781);
+    // +11 `profile.weightEntry.{heading,weightLabel,weightPlaceholder,
+    // dateLabel,submit,saving,invalidWeight,invalidDate,error,listHeading,
+    // listEmpty}` (17c PR2) — the bodyweight-series entry form and list.
+    // Deliberately NOT `profile.weight.*` — that namespace is reserved for
+    // PR 4's first-entry volume-shift notice.
+    expect(nonBillingKeys).toHaveLength(792);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
