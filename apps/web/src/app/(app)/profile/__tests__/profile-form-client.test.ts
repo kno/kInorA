@@ -13,6 +13,8 @@ const PROFILE = {
   name: "Ada Rivera",
   goal: "strength" as const,
   experienceLevel: "intermediate" as const,
+  selfDescribedSex: null,
+  heightCm: null,
 };
 
 function buildFetch(status: number, body: unknown) {
@@ -129,7 +131,7 @@ describe("updateUserProfile", () => {
 
     const result = await updateUserProfile(
       "tok-1",
-      { name: "Ada R.", goal: "strength", experienceLevel: "intermediate" },
+      { name: "Ada R.", goal: "strength", experienceLevel: "intermediate", selfDescribedSex: null, heightCm: null },
       { apiBaseUrl: "http://api", fetchImpl: fetchMock as never },
     );
 
@@ -144,7 +146,7 @@ describe("updateUserProfile", () => {
     // enum value); the client maps it to validation_error with the API code.
     const result = await updateUserProfile(
       "tok-1",
-      { name: "Ada", goal: "strength", experienceLevel: null },
+      { name: "Ada", goal: "strength", experienceLevel: null, selfDescribedSex: null, heightCm: null },
       { apiBaseUrl: "http://api", fetchImpl: fetchMock as never },
     );
 
@@ -157,7 +159,7 @@ describe("updateUserProfile", () => {
 
     const result = await updateUserProfile(
       "tok-1",
-{ name: "   ", goal: null, experienceLevel: null },
+{ name: "   ", goal: null, experienceLevel: null, selfDescribedSex: null, heightCm: null },
       { apiBaseUrl: "http://api", fetchImpl: fetchMock as never },
     );
 
@@ -171,7 +173,7 @@ describe("updateUserProfile", () => {
 
     const result = await updateUserProfile(
       undefined,
-      { name: "Ada", goal: null, experienceLevel: null },
+      { name: "Ada", goal: null, experienceLevel: null, selfDescribedSex: null, heightCm: null },
       { apiBaseUrl: "http://api", fetchImpl: fetchMock as never },
     );
 
@@ -185,7 +187,7 @@ describe("updateUserProfile", () => {
 
     const result = await updateUserProfile(
       "tok-1",
-      { name: "Ada", goal: null, experienceLevel: null },
+      { name: "Ada", goal: null, experienceLevel: null, selfDescribedSex: null, heightCm: null },
       { apiBaseUrl: "http://api", fetchImpl: fetchMock as never },
     );
 
@@ -198,7 +200,7 @@ describe("updateUserProfile", () => {
 
     await updateUserProfile(
       "tok-1",
-      { name: "Ada", goal: "hypertrophy", experienceLevel: "advanced" },
+      { name: "Ada", goal: "hypertrophy", experienceLevel: "advanced", selfDescribedSex: null, heightCm: null },
       { apiBaseUrl: "http://api", fetchImpl: fetchMock as never },
     );
 
@@ -218,7 +220,7 @@ describe("updateUserProfile", () => {
 
     await updateUserProfile(
       "tok-1",
-      { name: "Ada", goal: null, experienceLevel: null },
+      { name: "Ada", goal: null, experienceLevel: null, selfDescribedSex: null, heightCm: null },
       { apiBaseUrl: "http://api", fetchImpl: fetchMock as never },
     );
 
@@ -228,6 +230,61 @@ describe("updateUserProfile", () => {
     expect(body.name).toBe("Ada");
     expect(body).not.toHaveProperty("goal");
     expect(body).not.toHaveProperty("experienceLevel");
+  });
+
+  // --- 17c PR1: selfDescribedSex + heightCm ---
+
+  it("sends selfDescribedSex and heightCm in the JSON body when set", async () => {
+    const fetchMock = buildFetch(200, PROFILE);
+
+    await updateUserProfile(
+      "tok-1",
+      {
+        name: "Ada",
+        goal: null,
+        experienceLevel: null,
+        selfDescribedSex: "female",
+        heightCm: 172,
+      },
+      { apiBaseUrl: "http://api", fetchImpl: fetchMock as never },
+    );
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
+    ) as Record<string, unknown>;
+    expect(body.selfDescribedSex).toBe("female");
+    expect(body.heightCm).toBe(172);
+  });
+
+  it("omits selfDescribedSex/heightCm from the body when they are null (preserve stored)", async () => {
+    const fetchMock = buildFetch(200, PROFILE);
+
+    await updateUserProfile(
+      "tok-1",
+      { name: "Ada", goal: null, experienceLevel: null, selfDescribedSex: null, heightCm: null },
+      { apiBaseUrl: "http://api", fetchImpl: fetchMock as never },
+    );
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
+    ) as Record<string, unknown>;
+    expect(body).not.toHaveProperty("selfDescribedSex");
+    expect(body).not.toHaveProperty("heightCm");
+  });
+
+  it("returns ok when the fetched profile carries prefer_not_to_say, distinguishable from null", async () => {
+    const fetchMock = buildFetch(200, { ...PROFILE, selfDescribedSex: "prefer_not_to_say" });
+
+    const result = await fetchUserProfile("tok-1", {
+      apiBaseUrl: "http://api",
+      fetchImpl: fetchMock as never,
+    });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.profile.selfDescribedSex).toBe("prefer_not_to_say");
+      expect(result.profile.selfDescribedSex).not.toBeNull();
+    }
   });
 });
 

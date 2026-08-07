@@ -75,4 +75,13 @@ describe("Drizzle migration journal", () => {
     expect(entry).toBeDefined();
     expect(entry?.idx).toBe(26);
   });
+
+  it("includes the 17c profile body-metrics migration at idx 27", () => {
+    const journal = readJournal();
+    const entry = journal.entries.find(
+      (candidate) => candidate.tag === "0027_user_profile_body_metrics",
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.idx).toBe(27);
+  });
 });

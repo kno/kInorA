@@ -13,6 +13,7 @@ import type {
   CreateUserMemoryResponse,
   DefaultVectorMemoryEmbeddingConfig,
   DeleteUserMemoryResponse,
+  ExperienceLevel,
   HealthResponse,
   ListUserMemoriesResponse,
   LoginRequest,
@@ -25,6 +26,7 @@ import type {
   PlanPreferenceScores,
   PlanSpec,
   RegisterRequest,
+  SelfDescribedSex,
   SessionContext,
   SessionId,
   SessionResponse,
@@ -42,6 +44,7 @@ import type {
   UserMemoryEligibility,
   UserMemoryStatus,
   UserId,
+  UserProfile,
   WorkoutPlanDetail,
   WorkoutPlanSummary,
   WorkoutProgram,
@@ -74,6 +77,23 @@ describe("shared contracts boundary", () => {
       "ExerciseCatalogDetailSchema",
       "ExerciseCatalogListResponseSchema",
     ]);
+  });
+
+  it("stays unchanged by the 17c body-metric additions (type-only)", () => {
+    // SelfDescribedSex and the new UserProfile fields are type-only additions
+    // (17c-profile-body-metrics PR1) — the runtime export list above MUST NOT
+    // grow as a result.
+    expectTypeOf<SelfDescribedSex>().toEqualTypeOf<
+      "female" | "male" | "non_binary" | "other" | "prefer_not_to_say"
+    >();
+    expectTypeOf<UserProfile>().toEqualTypeOf<{
+      userId: string;
+      name: string;
+      goal: PlanGoal | null;
+      experienceLevel: ExperienceLevel | null;
+      selfDescribedSex: SelfDescribedSex | null;
+      heightCm: number | null;
+    }>();
   });
 
   it("defines the health response contract", () => {

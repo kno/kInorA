@@ -2,6 +2,7 @@ import { describe, it, expectTypeOf } from "vitest";
 // RED: these imports reference types that do not exist in index.ts yet
 import type {
   ExperienceLevel,
+  SelfDescribedSex,
   UserProfile,
   UserPreferences,
   UpdateProfileRequest,
@@ -16,12 +17,14 @@ describe("user profile + preferences contract types (10a/10b)", () => {
     >();
   });
 
-  it("UserProfile carries userId/name/goal/experienceLevel", () => {
+  it("UserProfile carries userId/name/goal/experienceLevel/selfDescribedSex/heightCm", () => {
     expectTypeOf<UserProfile>().toEqualTypeOf<{
       userId: string;
       name: string;
       goal: PlanGoal | null;
       experienceLevel: ExperienceLevel | null;
+      selfDescribedSex: SelfDescribedSex | null;
+      heightCm: number | null;
     }>();
   });
 
