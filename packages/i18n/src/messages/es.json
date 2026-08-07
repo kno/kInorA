@@ -1012,6 +1012,7 @@
     "title": "Historial",
     "description": "Revisa tus sesiones de entrenamiento completadas.",
     "empty": "Todavía no hay sesiones completadas.",
+    "abandoned": "Descartada — no completada",
     "duration": "{minutes} min",
     "totalVolume": "Volumen total: {volume} kg",
     "averageRpe": "RPE promedio: {rpe}",

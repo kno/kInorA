@@ -44,6 +44,30 @@ const historyEntry: WorkoutHistoryEntry = {
   trend: { volumeDelta: 20, direction: "up" },
 };
 
+// 17b-stale-session-recovery PR 3: an abandoned session appears in history
+// alongside its logged sets — terminal there (no resume/log/complete
+// action), with no duration line (no `completedAt`) and an explicit label.
+const abandonedEntry: WorkoutHistoryEntry = {
+  session: {
+    id: "session-abandoned-1",
+    workoutPlanId: "plan-1",
+    status: "abandoned",
+    startedAt: "2026-07-05T08:00:00.000Z",
+    exercises: [
+      {
+        id: "exercise-2",
+        workoutSessionId: "session-abandoned-1",
+        exerciseIndex: 0,
+        title: "Squat",
+        restSeconds: 90,
+        setRecords: [],
+      },
+    ],
+  },
+  totalVolume: 50,
+  trend: undefined,
+};
+
 describe("HistoryPage", () => {
   it("is sync-independent — renders history without touching any offline queue/snapshot module", async () => {
     getWorkoutHistoryAction.mockResolvedValue({ kind: "ok", entries: [historyEntry] });
@@ -87,6 +111,29 @@ describe("HistoryPage", () => {
 
     expect(getWorkoutHistoryAction).toHaveBeenCalledWith({ limit: 20, offset: 20 });
   });
+
+  it("renders the abandoned label and suppresses the duration line for an abandoned session", async () => {
+    getWorkoutHistoryAction.mockResolvedValue({ kind: "ok", entries: [abandonedEntry] });
+
+    const page = await HistoryPage({ searchParams: Promise.resolve({}) });
+    const text = textOf(page);
+
+    expect(text).toContain("Discarded — not completed");
+    // sessionDurationMinutes already returns undefined with no completedAt
+    // (a pre-existing safeguard, not a new branch) — confirm it stays a
+    // no-op rather than rendering a bogus duration for an abandoned session.
+    expect(text).not.toContain("min");
+    // The abandoned session's own volume is still shown truthfully.
+    expect(text).toContain("50");
+  });
+
+  it("introduces no navigable element for an abandoned session in history", async () => {
+    getWorkoutHistoryAction.mockResolvedValue({ kind: "ok", entries: [abandonedEntry] });
+
+    const page = await HistoryPage({ searchParams: Promise.resolve({}) });
+
+    expect(hasAnchor(page)).toBe(false);
+  });
 });
 
 // --- React tree inspection helpers ---
@@ -101,4 +148,11 @@ function textOf(node: ReactNode): string {
 
 function isReactElement(node: ReactNode): node is AnyElement {
   return typeof node === "object" && node !== null && "props" in node;
+}
+
+function hasAnchor(node: ReactNode): boolean {
+  if (Array.isArray(node)) return node.some(hasAnchor);
+  if (!isReactElement(node)) return false;
+  if (node.type === "a") return true;
+  return hasAnchor(node.props.children);
 }

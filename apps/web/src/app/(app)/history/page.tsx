@@ -62,6 +62,9 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
                     ? new Date(entry.session.completedAt).toLocaleDateString()
                     : new Date(entry.session.startedAt).toLocaleDateString()}
                 </h2>
+                {entry.session.status === "abandoned" && (
+                  <p className="kin-text kin-muted">{t("history.abandoned")}</p>
+                )}
                 {durationMinutes !== undefined && (
                   <p className="kin-text kin-muted">
                     {t("history.duration", { minutes: durationMinutes })}

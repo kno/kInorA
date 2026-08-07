@@ -84,7 +84,7 @@ export interface WorkoutSessionRouteRepo {
     tenantId: string,
     userId: string
   ): Promise<{ kind: "deleted"; deletedCount: number } | { kind: "active_conflict" }>;
-  listCompletedSessions(
+  listSessionHistory(
     tenantId: string,
     userId: string,
     query: WorkoutHistoryQuery
@@ -188,7 +188,7 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
   // wins over a parametric one in Fastify's router regardless of
   // registration order, but the ordering here documents that intent
   // explicitly. History is sync-independent: it never touches the offline
-  // queue/snapshot, only reads completed sessions.
+  // queue/snapshot, only reads completed and abandoned (17b) sessions.
   fastify.get<{ Querystring: HistoryQuerystring }>(
     "/workout-sessions/history",
     { schema: historySchema, preHandler: requireAuth() },
@@ -196,7 +196,7 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
       const { tenantId, userId } = request.authContext!;
       const { limit, offset } = request.query;
 
-      const entries = await repo.listCompletedSessions(tenantId, userId, {
+      const entries = await repo.listSessionHistory(tenantId, userId, {
         limit: limit ?? 20,
         offset: offset ?? 0,
       });
