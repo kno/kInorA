@@ -385,7 +385,7 @@ PR 1/PR 2 dependency.
 
 Satisfies: Abandoned Sessions Appear as Read-Only History.
 
-- [ ] PR3.1 RED: `workout-session.integration.test.ts` (extends the existing `listCompletedSessions`
+- [x] PR3.1 RED: `workout-session.integration.test.ts` (extends the existing `listCompletedSessions`
       fixture) — a mixed fixture of `completed` and `abandoned` sessions (some abandoned with
       `completed_at IS NULL`, aged before and after the completed rows by `started_at`): abandoned
       entries appear in the result; ordering follows `coalesce(completed_at, started_at) DESC` so an
@@ -394,39 +394,41 @@ Satisfies: Abandoned Sessions Appear as Read-Only History.
       chain (assert a completed session immediately following a 1-of-15-sets abandoned session does
       not report an inflated trend); `totalVolume`/`averageRpe` are still computed for abandoned
       entries from their logged sets
-- [ ] PR3.2 GREEN: rename `listCompletedSessions` to `listSessionHistory` in
+- [x] PR3.2 GREEN: rename `listCompletedSessions` to `listSessionHistory` in
       `apps/api/src/db/repositories/workout-session.ts` (`:615-690`); widen the status filter to
       `inArray(workoutSessions.status, ["completed", "abandoned"])`; change ordering to
       `desc(sql`coalesce(${workoutSessions.completedAt}, ${workoutSessions.startedAt})`)`; restrict the
       existing pairwise trend walk (`:676-681`) to the completed-only subsequence and attach results
       back by session id, leaving abandoned entries with `trend: undefined`; update the route call
       site to the renamed method; confirm PR3.1 is green
-- [ ] PR3.3 RED: component test — `apps/web/src/app/(app)/history/page.tsx` renders a
+- [x] PR3.3 RED: component test — `apps/web/src/app/(app)/history/page.tsx` renders a
       `history.abandoned` label when `status === "abandoned"`, suppresses the duration line
       (`sessionDurationMinutes` already returns `undefined` with no `completedAt` — assert this stays
       a no-op safeguard, not a new branch), and introduces no navigable element (existing `<li>` cards
       have no anchor today; confirm none is added)
-- [ ] PR3.4 GREEN: implement the label in `history/page.tsx`; add `history.abandoned` to both i18n
+- [x] PR3.4 GREEN: implement the label in `history/page.tsx`; add `history.abandoned` to both i18n
       catalogs; confirm PR3.3 is green
-- [ ] PR3.5 RED: RN component test — `apps/mobile/src/screens/HistoryScreen.tsx` renders the same
+- [x] PR3.5 RED: RN component test — `apps/mobile/src/screens/HistoryScreen.tsx` renders the same
       label; cards stay non-pressable `<View>`s (confirm no navigation is introduced)
-- [ ] PR3.6 GREEN: implement the label in `HistoryScreen.tsx`; confirm PR3.5 is green
+- [x] PR3.6 GREEN: implement the label in `HistoryScreen.tsx`; confirm PR3.5 is green
 
 ### PR 3 verification
 
-- [ ] PR3.7 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green; `pnpm type-check`
+- [x] PR3.7 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green; `pnpm type-check`
       clean; `pnpm build` succeeds
 
 ---
 
 ## Final Verification (run once the full chain has landed)
 
-- [ ] `pnpm -r test` — full suite green, hermetic
-- [ ] `pnpm -r --if-present test:coverage` — apps/api functions ≥85%, apps/web functions ≥90%
-- [ ] `pnpm type-check` — no errors
-- [ ] `pnpm build` — CI's real gate, must succeed (also confirms `packages/i18n` rebuild picked up
+- [x] `pnpm -r test` — full suite green, hermetic (2063 api + 128 skipped, 1683 web, 481 mobile, 305
+      domain, 115 contracts, 83 i18n, 70 exercise-catalog)
+- [x] `pnpm -r --if-present test:coverage` — apps/api functions ≥85%, apps/web functions ≥90%
+- [x] `pnpm type-check` — no errors, all 7 workspaces
+- [x] `pnpm build` — CI's real gate, succeeds (also confirms `packages/i18n` rebuild picked up
       the new catalog entries)
-- [ ] Grep confirms `abandonedSessionThresholdHours` still resolves through `admin-stats.ts`'s
+- [x] Grep confirms `abandonedSessionThresholdHours` still resolves through `admin-stats.ts`'s
       re-export with no broken importer (open decision 3)
 - [ ] Manual/operational: unblocking a stuck user with a stale `active` session requires no
-      production database access — the incident this change exists to close
+      production database access — the incident this change exists to close (PR 1's write path is
+      deployed; the operational confirmation itself is a post-deploy, out-of-apply step)

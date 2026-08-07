@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lt, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import {
   computeAverageRpe,
   computeSessionVolume,
@@ -131,7 +131,7 @@ const DEFAULT_HISTORY_LIMIT = 20;
  * Bounded lookback window for `getDashboardSummary` (09c-v1
  * progress-dashboard-stats, Slice 2). Wide enough to cover any realistic
  * streak/weekly-progress calculation while staying a single bounded query,
- * mirroring `listCompletedSessions`'s bounded-page approach.
+ * mirroring `listSessionHistory`'s bounded-page approach.
  */
 const DASHBOARD_HISTORY_LIMIT = 60;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -737,8 +737,10 @@ export class WorkoutSessionRepository {
   }
 
   /**
-   * Paginated, read-only history of completed sessions (#09b Session
-   * History — sync-independent, never touches the offline queue/snapshot).
+   * Paginated, read-only history of completed AND abandoned sessions (#09b
+   * Session History, widened by 17b-stale-session-recovery — sync-independent,
+   * never touches the offline queue/snapshot). Named `listCompletedSessions`
+   * until 17b PR 3; renamed because it no longer promises completed-only.
    *
    * Batch-fetches with a **constant, bounded number of queries regardless of
    * page size**: (1) one page query over `workout_sessions` scoped by
@@ -755,15 +757,23 @@ export class WorkoutSessionRepository {
    * calling `findById` once per session — that is correct for a single-session
    * read but an N+1 bug at list scale, and MUST NOT be reintroduced here.
    *
-   * Trend: each entry's `trend` compares it against the row immediately
-   * after it in the SAME fetched result set (which is already ordered
-   * newest-first) — so entry `i` pairs with fetched row `i + 1`. For the
-   * last page item, that pairing is exactly the `+1` lookback row. A
-   * mismatched `workoutPlanId` between the pair yields `trend: undefined`
-   * (no cross-plan comparison), matching `computeVolumeTrend`'s "no prior
-   * session in scope" contract.
+   * Ordering (17b): `coalesce(completed_at, started_at) DESC`, NOT
+   * `completed_at DESC` alone. An abandoned session has `completed_at IS
+   * NULL`, and Postgres sorts `NULL` **first** under `ORDER BY ... DESC` — so
+   * ordering by `completed_at` alone would float every abandoned session to
+   * the top of history forever, ahead of sessions completed far more recently.
+   *
+   * Trend (17b): pairs completed-with-completed only. The pairwise walk runs
+   * over the completed-only subsequence of the fetched rows (still newest
+   * first) and results are attached back to the full page by session id.
+   * Abandoned entries always get `trend: undefined` and are never used as a
+   * baseline — otherwise a session abandoned after 1 of 15 sets would make
+   * the next *completed* session look like a huge volume gain. `totalVolume`
+   * and `averageRpe` are still computed for abandoned entries: they are
+   * truthful statements about whatever sets were actually logged, which is
+   * the whole reason the rows are preserved rather than deleted.
    */
-  async listCompletedSessions(
+  async listSessionHistory(
     tenantId: string,
     userId: string,
     query: WorkoutHistoryQuery
@@ -778,10 +788,10 @@ export class WorkoutSessionRepository {
         and(
           eq(workoutSessions.tenantId, tenantId),
           eq(workoutSessions.userId, userId),
-          eq(workoutSessions.status, "completed")
+          inArray(workoutSessions.status, ["completed", "abandoned"])
         )
       )
-      .orderBy(desc(workoutSessions.completedAt))
+      .orderBy(desc(sql`coalesce(${workoutSessions.completedAt}, ${workoutSessions.startedAt})`))
       .limit(limit + 1)
       .offset(offset)) as WorkoutSessionRow[];
 
@@ -824,27 +834,35 @@ export class WorkoutSessionRepository {
       return mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets);
     });
 
-    return records.slice(0, limit).map((session, index) => {
-      const priorSession = records[index + 1];
-      const trend =
-        priorSession && priorSession.workoutPlanId === session.workoutPlanId
-          ? computeVolumeTrend(session, priorSession)
-          : undefined;
-
-      return {
-        session,
-        totalVolume: computeSessionVolume(session),
-        averageRpe: computeAverageRpe(session),
-        trend,
-      };
+    // 17b: pair completed-with-completed only. `records` is still ordered
+    // newest-first (unchanged by the widened status filter), so filtering to
+    // the completed subsequence preserves adjacency for the trend walk.
+    // Abandoned rows are skipped as both a trend subject and a trend
+    // baseline — pairing one in would either report a spurious trend for it,
+    // or make an adjacent completed session look like it swung wildly
+    // relative to a session that was never finished.
+    const completedOnly = records.filter((session) => session.status === "completed");
+    const trendBySessionId = new Map<string, ReturnType<typeof computeVolumeTrend>>();
+    completedOnly.forEach((session, index) => {
+      const priorSession = completedOnly[index + 1];
+      if (priorSession && priorSession.workoutPlanId === session.workoutPlanId) {
+        trendBySessionId.set(session.id, computeVolumeTrend(session, priorSession));
+      }
     });
+
+    return records.slice(0, limit).map((session) => ({
+      session,
+      totalVolume: computeSessionVolume(session),
+      averageRpe: computeAverageRpe(session),
+      trend: trendBySessionId.get(session.id),
+    }));
   }
 
   /**
    * Dashboard summary (09c-v1-progress-dashboard-stats, Slice 2) — streak,
    * weekly progress (X/Y), and the "Ruta de carga" per-day rollup.
    *
-   * Bounded, no N+1, mirroring `listCompletedSessions`: (1) one bounded page
+   * Bounded, no N+1, mirroring `listSessionHistory`: (1) one bounded page
    * of the caller's completed sessions (`DASHBOARD_HISTORY_LIMIT`, scoped by
    * (tenantId, userId)); (2) one lookup of the latest ready plan (for the
    * planned weekly count and the week-route focus labels). Only when at

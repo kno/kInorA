@@ -568,7 +568,7 @@ export async function buildApp(
 
   // Dashboard progress summary (09c-v1-progress-dashboard-stats, Slice 2).
   // Reuses the same WorkoutSessionRepository instance (getDashboardSummary
-  // is one more bounded read method alongside listCompletedSessions).
+  // is one more bounded read method alongside listSessionHistory).
   await app.register(progressRoutes, {
     repo: workoutSessionRepo,
   });

@@ -323,6 +323,155 @@ describe.skipIf(!hasDb)("WorkoutSessionRepository.abandonSession (real Postgres,
   });
 });
 
+describe.skipIf(!hasDb)("WorkoutSessionRepository.listSessionHistory (real Postgres, 17b PR 3)", () => {
+  const { db, pool } = createDbClient();
+  const repo = new WorkoutSessionRepository(db);
+
+  afterAll(async () => {
+    await pool.end();
+  });
+
+  async function seedTenant(): Promise<string> {
+    const [tenant] = await db
+      .insert(tenants)
+      .values({ name: `stale-session-history-${Date.now()}-${Math.random()}` })
+      .returning({ id: tenants.id });
+    return tenant!.id;
+  }
+
+  async function seedUser(): Promise<string> {
+    const [user] = await db
+      .insert(users)
+      .values({ email: `stale-session-history-${Date.now()}-${Math.random()}@example.test` })
+      .returning({ id: users.id });
+    return user!.id;
+  }
+
+  async function seedReadyPlan(tenantId: string, userId: string): Promise<string> {
+    const [spec] = await db
+      .insert(planSpecs)
+      .values({ tenantId, userId, specJson: {}, confirmed: true })
+      .returning({ id: planSpecs.id });
+    const [plan] = await db
+      .insert(workoutPlans)
+      .values({ tenantId, userId, planSpecId: spec!.id, status: "ready", programJson: twoDaySessionsProgram })
+      .returning({ id: workoutPlans.id });
+    return plan!.id;
+  }
+
+  /** One session with one logged, completed set of `weightKg * 5 reps` volume. */
+  async function seedHistorySession(
+    tenantId: string,
+    userId: string,
+    workoutPlanId: string,
+    status: "completed" | "abandoned",
+    startedAt: Date,
+    completedAt: Date | null,
+    weightKg: string,
+  ): Promise<string> {
+    const [session] = await db
+      .insert(workoutSessions)
+      .values({ tenantId, userId, workoutPlanId, status, day: 1, startedAt, completedAt })
+      .returning({ id: workoutSessions.id });
+    const [exercise] = await db
+      .insert(sessionExercises)
+      .values({ workoutSessionId: session!.id, exerciseIndex: 0, title: "Squat", restSeconds: 90 })
+      .returning({ id: sessionExercises.id });
+    await db
+      .insert(setRecords)
+      .values({ sessionExerciseId: exercise!.id, setIndex: 0, targetReps: "5", completed: true, actualReps: 5, weightKg });
+    return session!.id;
+  }
+
+  it("orders by coalesce(completed_at, started_at) DESC, so an abandoned session's NULL completed_at does not float it to the top", async () => {
+    const tenantId = await seedTenant();
+    const userId = await seedUser();
+    const planId = await seedReadyPlan(tenantId, userId);
+
+    // Completed 5 days before the abandoned session below started. Under a
+    // naive `ORDER BY completed_at DESC`, Postgres sorts NULL FIRST, so this
+    // older-but-actually-completed row would wrongly rank BELOW the
+    // abandoned one only if the abandoned one is more recent by
+    // `coalesce` — which it is here, so this asserts the correct order
+    // rather than accidentally passing either way.
+    const olderCompletedId = await seedHistorySession(
+      tenantId,
+      userId,
+      planId,
+      "completed",
+      new Date("2026-08-01T09:00:00Z"),
+      new Date("2026-08-01T10:00:00Z"),
+      "50",
+    );
+    const abandonedId = await seedHistorySession(
+      tenantId,
+      userId,
+      planId,
+      "abandoned",
+      new Date("2026-08-06T09:00:00Z"),
+      null,
+      "20",
+    );
+
+    const entries = await repo.listSessionHistory(tenantId, userId, { limit: 10, offset: 0 });
+
+    expect(entries.map((entry) => entry.session.id)).toEqual([abandonedId, olderCompletedId]);
+  });
+
+  it("excludes an abandoned session from the completed-only trend chain and still computes its own totals", async () => {
+    const tenantId = await seedTenant();
+    const userId = await seedUser();
+    const planId = await seedReadyPlan(tenantId, userId);
+
+    // Oldest → newest by coalesce(completed_at, started_at): completed (50),
+    // abandoned with only 1 of many sets logged (25), completed (60).
+    const oldestCompletedId = await seedHistorySession(
+      tenantId,
+      userId,
+      planId,
+      "completed",
+      new Date("2026-08-01T09:00:00Z"),
+      new Date("2026-08-01T10:00:00Z"),
+      "10",
+    );
+    const abandonedId = await seedHistorySession(
+      tenantId,
+      userId,
+      planId,
+      "abandoned",
+      new Date("2026-08-03T09:00:00Z"),
+      null,
+      "5",
+    );
+    const newestCompletedId = await seedHistorySession(
+      tenantId,
+      userId,
+      planId,
+      "completed",
+      new Date("2026-08-05T09:00:00Z"),
+      new Date("2026-08-05T10:00:00Z"),
+      "12",
+    );
+
+    const entries = await repo.listSessionHistory(tenantId, userId, { limit: 10, offset: 0 });
+    const newest = entries.find((entry) => entry.session.id === newestCompletedId);
+    const abandoned = entries.find((entry) => entry.session.id === abandonedId);
+    const oldest = entries.find((entry) => entry.session.id === oldestCompletedId);
+
+    // Newest completed session pairs with the OLDEST completed session,
+    // skipping the abandoned row that sits between them — otherwise a
+    // 1-of-many-sets abandoned session would make this look like a huge
+    // volume gain (60 vs. 25) instead of the true, modest gain (60 vs. 50).
+    expect(newest?.trend).toEqual({ volumeDelta: 10, direction: "up" });
+    // The abandoned session never gets a trend of its own.
+    expect(abandoned?.trend).toBeUndefined();
+    // Truthful about the one set it actually logged before it was closed.
+    expect(abandoned?.totalVolume).toBe(25);
+    // No completed session after it in this fixture, so no trend either.
+    expect(oldest?.trend).toBeUndefined();
+  });
+});
+
 describe.skipIf(hasDb)("WorkoutSessionRepository.startSession / abandonSession (real Postgres) — skipped", () => {
   it("requires DATABASE_URL (podman pgvector:pg17 harness) to run", () => {
     expect(hasDb).toBe(false);
