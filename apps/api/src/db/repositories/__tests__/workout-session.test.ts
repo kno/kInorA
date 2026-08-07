@@ -1146,7 +1146,7 @@ describe("WorkoutSessionRepository", () => {
     });
   });
 
-  describe("listCompletedSessions", () => {
+  describe("listSessionHistory", () => {
     const SESSION_A_ID = "dddddddd-0000-0000-0000-0000000000a1";
     const SESSION_B_ID = "dddddddd-0000-0000-0000-0000000000b2";
     const SESSION_C_ID = "dddddddd-0000-0000-0000-0000000000c3";
@@ -1234,7 +1234,7 @@ describe("WorkoutSessionRepository", () => {
       );
       const repo = new WorkoutSessionRepository({ select } as never);
 
-      const entries = await repo.listCompletedSessions(TENANT_A, USER_A, { limit: 2, offset: 0 });
+      const entries = await repo.listSessionHistory(TENANT_A, USER_A, { limit: 2, offset: 0 });
 
       // Exactly 3 queries total (sessions page, exercises inArray, sets
       // inArray) — NOT 3 + (2 * per-row findById calls). This is the
@@ -1255,7 +1255,7 @@ describe("WorkoutSessionRepository", () => {
       const { select, exercisesWhere, setsWhere } = createHistoryDb([], [], []);
       const repo = new WorkoutSessionRepository({ select } as never);
 
-      const entries = await repo.listCompletedSessions(TENANT_A, USER_A, { limit: 2, offset: 0 });
+      const entries = await repo.listSessionHistory(TENANT_A, USER_A, { limit: 2, offset: 0 });
 
       expect(entries).toEqual([]);
       expect(exercisesWhere).not.toHaveBeenCalled();
@@ -1270,7 +1270,7 @@ describe("WorkoutSessionRepository", () => {
       );
       const repo = new WorkoutSessionRepository({ select } as never);
 
-      const entries = await repo.listCompletedSessions(TENANT_A, USER_A, { limit: 2, offset: 0 });
+      const entries = await repo.listSessionHistory(TENANT_A, USER_A, { limit: 2, offset: 0 });
 
       // A (page[0]) vs its immediate prior B: 100 - 80 = 20, up.
       expect(entries[0]?.trend).toEqual({ volumeDelta: 20, direction: "up" });
@@ -1291,7 +1291,7 @@ describe("WorkoutSessionRepository", () => {
       );
       const repo = new WorkoutSessionRepository({ select } as never);
 
-      const entries = await repo.listCompletedSessions(TENANT_A, USER_A, { limit: 2, offset: 0 });
+      const entries = await repo.listSessionHistory(TENANT_A, USER_A, { limit: 2, offset: 0 });
 
       expect(entries).toHaveLength(2);
       expect(entries[0]?.trend).toEqual({ volumeDelta: 20, direction: "up" });
@@ -1303,7 +1303,7 @@ describe("WorkoutSessionRepository", () => {
       const { select } = createHistoryDb([], [], []);
       const repo = new WorkoutSessionRepository({ select } as never);
 
-      const entries = await repo.listCompletedSessions(TENANT_B, USER_A, { limit: 2, offset: 0 });
+      const entries = await repo.listSessionHistory(TENANT_B, USER_A, { limit: 2, offset: 0 });
 
       expect(entries).toEqual([]);
     });
@@ -1314,10 +1314,81 @@ describe("WorkoutSessionRepository", () => {
       sessionsWhere.mockReturnValue({ orderBy: vi.fn().mockReturnValue({ limit: limitMock }) });
       const repo = new WorkoutSessionRepository({ select } as never);
 
-      await repo.listCompletedSessions(TENANT_A, USER_A, {});
+      await repo.listSessionHistory(TENANT_A, USER_A, {});
 
       // limit+1 lookback row → 21 when the caller's default limit is 20.
       expect(limitMock).toHaveBeenCalledWith(21);
+    });
+
+    // 17b-stale-session-recovery PR 3: history widens from completed-only to
+    // completed + abandoned. The mocked db here trusts whatever order it is
+    // handed (the real `coalesce(completed_at, started_at) DESC` ordering is
+    // proven against real Postgres in workout-session.integration.test.ts);
+    // this suite pins the pure pairing/volume logic that runs over that order.
+    function buildAbandonedSessionRow(id: string, startedAt: Date) {
+      return {
+        id,
+        tenantId: TENANT_A,
+        userId: USER_A,
+        workoutPlanId: PLAN_ID,
+        status: "abandoned" as const,
+        day: 1,
+        startedAt,
+        completedAt: null,
+      };
+    }
+
+    it("excludes an abandoned entry from the completed trend chain and gives it no trend of its own", async () => {
+      const EXERCISE_ABANDONED_ID = "eeeeeeee-0000-0000-0000-00000000d004";
+      const abandonedRow = buildAbandonedSessionRow(
+        "dddddddd-0000-0000-0000-0000000000d4",
+        new Date("2026-07-09T09:00:00Z"), // between A and B
+      );
+      const exerciseRowAbandoned = {
+        ...exerciseRowA,
+        id: EXERCISE_ABANDONED_ID,
+        workoutSessionId: abandonedRow.id,
+      };
+      // Only 1 of the plan's sets was ever logged before discard/auto-close.
+      const setRowAbandoned = buildSetRow(
+        "ffffffff-0000-0000-0000-00000000d004",
+        EXERCISE_ABANDONED_ID,
+        "20.00",
+        9,
+      );
+
+      const { select } = createHistoryDb(
+        // Newest-first, as `coalesce(completed_at, started_at) DESC` would
+        // return it: A (completed) → abandoned (between A and B) → B
+        // (completed) → C (completed, the +1 lookback row).
+        [sessionRowA, abandonedRow, sessionRowB, sessionRowC],
+        [exerciseRowA, exerciseRowAbandoned, exerciseRowB, exerciseRowC],
+        [setRowA, setRowAbandoned, setRowB, setRowC],
+      );
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const entries = await repo.listSessionHistory(TENANT_A, USER_A, { limit: 3, offset: 0 });
+
+      expect(entries).toHaveLength(3);
+      const [entryA, entryAbandoned, entryB] = entries;
+      expect(entryA?.session.id).toBe(SESSION_A_ID);
+      expect(entryAbandoned?.session.id).toBe(abandonedRow.id);
+      expect(entryB?.session.id).toBe(SESSION_B_ID);
+
+      // The abandoned entry is never given a trend of its own.
+      expect(entryAbandoned?.trend).toBeUndefined();
+      // The abandoned entry is truthful about the one set it actually logged.
+      expect(entryAbandoned?.totalVolume).toBe(20 * 10);
+      expect(entryAbandoned?.averageRpe).toBe(9);
+
+      // A's trend pairs with the next COMPLETED session (B), skipping the
+      // abandoned row that sits between them in fetch order — the naive
+      // `records[index + 1]` pairing this replaces would have compared A
+      // against the abandoned 1-set session and reported a huge, false drop.
+      expect(entryA?.trend).toEqual({ volumeDelta: 20, direction: "up" });
+      // B's trend still pairs with the completed lookback row C, unaffected
+      // by the abandoned row's presence earlier in the page.
+      expect(entryB?.trend).toEqual({ volumeDelta: 20, direction: "up" });
     });
   });
 

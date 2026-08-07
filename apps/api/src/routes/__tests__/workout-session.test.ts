@@ -60,7 +60,7 @@ function buildRepoMock(overrides: Partial<Record<keyof ReturnType<typeof buildRe
     abandonSession: vi.fn().mockResolvedValue({ kind: "abandoned", session: { ...activeSession, status: "abandoned" } }),
     deleteById: vi.fn().mockResolvedValue({ kind: "deleted" }),
     deleteAllByUser: vi.fn().mockResolvedValue({ kind: "deleted", deletedCount: 0 }),
-    listCompletedSessions: vi.fn().mockResolvedValue([]),
+    listSessionHistory: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }
@@ -616,7 +616,7 @@ describe("Workout session routes", () => {
         averageRpe: 8,
         trend: { volumeDelta: 20, direction: "up" },
       };
-      const repo = buildRepoMock({ listCompletedSessions: vi.fn().mockResolvedValue([historyEntry]) });
+      const repo = buildRepoMock({ listSessionHistory: vi.fn().mockResolvedValue([historyEntry]) });
       app = await buildTestApp(repo);
 
       const response = await app.inject({
@@ -627,7 +627,7 @@ describe("Workout session routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual([historyEntry]);
-      expect(repo.listCompletedSessions).toHaveBeenCalledWith(TENANT_A, USER_A, { limit: 20, offset: 0 });
+      expect(repo.listSessionHistory).toHaveBeenCalledWith(TENANT_A, USER_A, { limit: 20, offset: 0 });
     });
 
     it("forwards caller-supplied limit and offset to the repo", async () => {
@@ -641,7 +641,7 @@ describe("Workout session routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(repo.listCompletedSessions).toHaveBeenCalledWith(TENANT_A, USER_A, { limit: 5, offset: 10 });
+      expect(repo.listSessionHistory).toHaveBeenCalledWith(TENANT_A, USER_A, { limit: 5, offset: 10 });
     });
 
     it("returns 422 when limit or offset is not a valid non-negative integer", async () => {
