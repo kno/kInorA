@@ -24,6 +24,8 @@ const PROFILE_FULL: UserProfile = {
   name: "Ada Rivera",
   goal: "strength",
   experienceLevel: "intermediate",
+  selfDescribedSex: "female",
+  heightCm: 172,
 };
 
 const PROFILE_EMPTY_SELECTORS: UserProfile = {
@@ -31,6 +33,8 @@ const PROFILE_EMPTY_SELECTORS: UserProfile = {
   name: "New User",
   goal: null,
   experienceLevel: null,
+  selfDescribedSex: null,
+  heightCm: null,
 };
 
 describe("ProfileForm", () => {
@@ -46,9 +50,15 @@ describe("ProfileForm", () => {
 
     const expSelect = screen.getByLabelText("Experience level") as HTMLSelectElement;
     expect(expSelect.value).toBe("intermediate");
+
+    const sexSelect = screen.getByLabelText("Sex/gender") as HTMLSelectElement;
+    expect(sexSelect.value).toBe("female");
+
+    const heightInput = screen.getByLabelText("Height (cm)") as HTMLInputElement;
+    expect(heightInput.value).toBe("172");
   });
 
-  it("renders placeholder options when goal/experienceLevel are null", () => {
+  it("renders placeholder options when goal/experienceLevel/selfDescribedSex are null", () => {
     renderWithIntl(<ProfileForm initialProfile={PROFILE_EMPTY_SELECTORS} />);
 
     const goalSelect = screen.getByLabelText("Goal") as HTMLSelectElement;
@@ -56,6 +66,59 @@ describe("ProfileForm", () => {
 
     const expSelect = screen.getByLabelText("Experience level") as HTMLSelectElement;
     expect(expSelect.value).toBe("");
+
+    const sexSelect = screen.getByLabelText("Sex/gender") as HTMLSelectElement;
+    expect(sexSelect.value).toBe("");
+
+    const heightInput = screen.getByLabelText("Height (cm)") as HTMLInputElement;
+    expect(heightInput.value).toBe("");
+  });
+
+  it("renders all five selfDescribedSex options plus the placeholder", () => {
+    renderWithIntl(<ProfileForm initialProfile={PROFILE_EMPTY_SELECTORS} />);
+
+    expect(screen.getByRole("option", { name: "Female" })).toBeDefined();
+    expect(screen.getByRole("option", { name: "Male" })).toBeDefined();
+    expect(screen.getByRole("option", { name: "Non-binary" })).toBeDefined();
+    expect(screen.getByRole("option", { name: "Other" })).toBeDefined();
+    expect(screen.getByRole("option", { name: "Prefer not to say" })).toBeDefined();
+  });
+
+  it("renders prefer_not_to_say as a chosen value in its control, not an empty one", () => {
+    renderWithIntl(
+      <ProfileForm initialProfile={{ ...PROFILE_EMPTY_SELECTORS, selfDescribedSex: "prefer_not_to_say" }} />,
+    );
+
+    const sexSelect = screen.getByLabelText("Sex/gender") as HTMLSelectElement;
+    expect(sexSelect.value).toBe("prefer_not_to_say");
+    expect(sexSelect.value).not.toBe("");
+  });
+
+  it("round-trips a selfDescribedSex and heightCm selection through the save action", async () => {
+    saveProfileAction.mockResolvedValue({
+      kind: "ok",
+      profile: { ...PROFILE_EMPTY_SELECTORS, selfDescribedSex: "other", heightCm: 180 },
+    });
+
+    renderWithIntl(<ProfileForm initialProfile={PROFILE_EMPTY_SELECTORS} />);
+
+    const sexSelect = screen.getByLabelText("Sex/gender") as HTMLSelectElement;
+    fireEvent.change(sexSelect, { target: { value: "other" } });
+
+    const heightInput = screen.getByLabelText("Height (cm)") as HTMLInputElement;
+    fireEvent.change(heightInput, { target: { value: "180" } });
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(saveProfileAction).toHaveBeenCalledWith("New User", null, null, "other", 180);
+    });
+
+    const updatedSexSelect = screen.getByLabelText("Sex/gender") as HTMLSelectElement;
+    expect(updatedSexSelect.value).toBe("other");
+    const updatedHeightInput = screen.getByLabelText("Height (cm)") as HTMLInputElement;
+    expect(updatedHeightInput.value).toBe("180");
   });
 
   it("disables the Save button while the name is blank and shows the required hint", () => {
@@ -88,6 +151,8 @@ describe("ProfileForm", () => {
         "Ada Rivera",
         "hypertrophy",
         "intermediate",
+        "female",
+        172,
       );
     });
 
@@ -111,7 +176,7 @@ describe("ProfileForm", () => {
     fireEvent.click(saveButton);
 
     await waitFor(() => {
-      expect(saveProfileAction).toHaveBeenCalledWith("New User", null, null);
+      expect(saveProfileAction).toHaveBeenCalledWith("New User", null, null, null, null);
     });
   });
 
@@ -133,7 +198,14 @@ describe("ProfileForm", () => {
       // A real identity so the name field is non-blank and the only
       // role="alert" rendered is the load-error one.
       <ProfileForm
-        initialProfile={{ userId: "u", name: "Ada", goal: null, experienceLevel: null }}
+        initialProfile={{
+          userId: "u",
+          name: "Ada",
+          goal: null,
+          experienceLevel: null,
+          selfDescribedSex: null,
+          heightCm: null,
+        }}
         initialError="api_unreachable"
       />,
     );

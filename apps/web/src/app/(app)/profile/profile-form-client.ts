@@ -22,9 +22,10 @@ import type {
   UserProfile,
   PlanGoal,
   ExperienceLevel,
+  SelfDescribedSex,
 } from "@kinora/contracts";
 
-export type { UserProfile, PlanGoal, ExperienceLevel };
+export type { UserProfile, PlanGoal, ExperienceLevel, SelfDescribedSex };
 
 /** Common subset of `UpdateProfileRequest` with nullable selectors. */
 export interface ProfileFormInput {
@@ -34,6 +35,10 @@ export interface ProfileFormInput {
   goal: PlanGoal | null;
   /** `null` means "leave the stored value unchanged" → field is omitted. */
   experienceLevel: ExperienceLevel | null;
+  /** `null` means "leave the stored value unchanged" → field is omitted (17c). */
+  selfDescribedSex: SelfDescribedSex | null;
+  /** `null` means "leave the stored value unchanged" → field is omitted (17c). */
+  heightCm: number | null;
 }
 
 export type GetProfileResult =
@@ -65,7 +70,9 @@ function isUserProfile(body: unknown): body is UserProfile {
     typeof b.userId === "string" &&
     typeof b.name === "string" &&
     (b.goal === null || typeof b.goal === "string") &&
-    (b.experienceLevel === null || typeof b.experienceLevel === "string")
+    (b.experienceLevel === null || typeof b.experienceLevel === "string") &&
+    (b.selfDescribedSex === null || typeof b.selfDescribedSex === "string") &&
+    (b.heightCm === null || typeof b.heightCm === "number")
   );
 }
 
@@ -135,6 +142,8 @@ export async function updateUserProfile(
   const body: Record<string, unknown> = { name: input.name };
   if (input.goal !== null) body.goal = input.goal;
   if (input.experienceLevel !== null) body.experienceLevel = input.experienceLevel;
+  if (input.selfDescribedSex !== null) body.selfDescribedSex = input.selfDescribedSex;
+  if (input.heightCm !== null) body.heightCm = input.heightCm;
 
   let res: Response;
   try {

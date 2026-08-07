@@ -2,11 +2,17 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import type { PlanGoal, ExperienceLevel, UserProfile } from "@kinora/contracts";
+import type {
+  PlanGoal,
+  ExperienceLevel,
+  SelfDescribedSex,
+  UserProfile,
+} from "@kinora/contracts";
 import { saveProfileAction } from "./actions";
 import {
   GOAL_SELECT_OPTIONS,
   EXPERIENCE_SELECT_OPTIONS,
+  SELF_DESCRIBED_SEX_SELECT_OPTIONS,
 } from "./options";
 
 export interface ProfileFormProps {
@@ -42,6 +48,12 @@ export function ProfileForm({ initialProfile, initialError }: ProfileFormProps) 
   const [experienceLevel, setExperienceLevel] = useState<ExperienceLevel | null>(
     initialProfile?.experienceLevel ?? null,
   );
+  const [selfDescribedSex, setSelfDescribedSex] = useState<SelfDescribedSex | null>(
+    initialProfile?.selfDescribedSex ?? null,
+  );
+  const [heightCm, setHeightCm] = useState<number | null>(
+    initialProfile?.heightCm ?? null,
+  );
   const [status, setStatus] = useState<Status>("idle");
 
   const trimmedName = name.trim();
@@ -52,13 +64,21 @@ export function ProfileForm({ initialProfile, initialError }: ProfileFormProps) 
     if (nameBlank || status === "saving") return;
 
     setStatus("saving");
-    const result = await saveProfileAction(trimmedName, goal, experienceLevel);
+    const result = await saveProfileAction(
+      trimmedName,
+      goal,
+      experienceLevel,
+      selfDescribedSex,
+      heightCm,
+    );
 
     if (result.kind === "ok") {
       // Reflect the server-normalized values back into the form.
       setName(result.profile.name);
       setGoal(result.profile.goal);
       setExperienceLevel(result.profile.experienceLevel);
+      setSelfDescribedSex(result.profile.selfDescribedSex);
+      setHeightCm(result.profile.heightCm);
       setStatus("saved");
     } else {
       setStatus("error");
@@ -163,6 +183,57 @@ export function ProfileForm({ initialProfile, initialError }: ProfileFormProps) 
             </option>
           ))}
         </select>
+      </div>
+
+      {/* Self-described sex/gender (17c) — nullable; "" means "not chosen
+          yet". `prefer_not_to_say` is a real option value, distinct from "". */}
+      <div style={{ marginBottom: "1.25rem" }}>
+        <label
+          htmlFor="profile-self-described-sex"
+          style={{ display: "block", marginBottom: "0.25rem" }}
+        >
+          {t("profile.form.selfDescribedSex.label")}
+        </label>
+        <select
+          id="profile-self-described-sex"
+          value={selfDescribedSex ?? ""}
+          onChange={(e) => {
+            setSelfDescribedSex((e.target.value || null) as SelfDescribedSex | null);
+            setStatus("idle");
+          }}
+          className="kin-input"
+          style={{ width: "100%" }}
+        >
+          <option value="">{t("profile.form.selfDescribedSex.placeholder")}</option>
+          {SELF_DESCRIBED_SEX_SELECT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {t(option.labelKey)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Height in centimetres (17c) — nullable, SI only, no unit field. */}
+      <div style={{ marginBottom: "1.25rem" }}>
+        <label
+          htmlFor="profile-height-cm"
+          style={{ display: "block", marginBottom: "0.25rem" }}
+        >
+          {t("profile.form.heightCm")}
+        </label>
+        <input
+          id="profile-height-cm"
+          type="number"
+          value={heightCm ?? ""}
+          placeholder={t("profile.form.heightCmPlaceholder")}
+          onChange={(e) => {
+            const raw = e.target.value;
+            setHeightCm(raw === "" ? null : Number(raw));
+            setStatus("idle");
+          }}
+          className="kin-input"
+          style={{ width: "100%" }}
+        />
       </div>
 
       <button

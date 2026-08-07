@@ -1044,7 +1044,18 @@
       "saved": "Perfil guardado.",
       "error": "No se pudo guardar tu perfil. Inténtalo de nuevo.",
       "loadError": "No se pudo cargar tu perfil. Recarga la página.",
-      "nameRequired": "El nombre es obligatorio."
+      "nameRequired": "El nombre es obligatorio.",
+      "selfDescribedSex": {
+        "label": "Sexo/género",
+        "placeholder": "Selecciona una opción",
+        "female": "Femenino",
+        "male": "Masculino",
+        "nonBinary": "No binario",
+        "other": "Otro",
+        "preferNotToSay": "Prefiero no decirlo"
+      },
+      "heightCm": "Altura (cm)",
+      "heightCmPlaceholder": "p. ej. 172"
     },
     "experience": {
       "beginner": "Principiante",
