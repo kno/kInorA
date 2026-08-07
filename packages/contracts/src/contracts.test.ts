@@ -28,8 +28,11 @@ import type {
   SessionContext,
   SessionId,
   SessionResponse,
+  AbandonSessionOutcome,
+  AutoClosedSessionNotice,
   DeleteSessionOutcome,
   StartSessionOutcome,
+  StartSessionResponse,
   TenantId,
   TenantQueryContextDTO,
   TrainingLocation,
@@ -43,6 +46,7 @@ import type {
   WorkoutPlanSummary,
   WorkoutProgram,
   WorkoutSessionRecord,
+  WorkoutSessionRecordStatus,
 } from "./index";
 
 describe("shared contracts boundary", () => {
@@ -157,7 +161,7 @@ describe("shared contracts boundary", () => {
     >();
   });
 
-  it("defines the StartSessionOutcome discriminated union (#93)", () => {
+  it("defines the StartSessionOutcome discriminated union (#93, split + widened by 17b)", () => {
     // started / resumed carry the session; conflict carries the active scope.
     const started: StartSessionOutcome = {
       kind: "started",
@@ -171,20 +175,82 @@ describe("shared contracts boundary", () => {
       kind: "conflict",
       activePlanId: "plan-1",
       activeDay: 2,
+      activeSessionId: "session-1",
+      activeStartedAt: "2026-08-02T10:00:00.000Z",
     };
     expect(started.kind).toBe("started");
     expect(resumed.kind).toBe("resumed");
     expect(conflict.kind).toBe("conflict");
 
-    // The conflict branch narrows to the active-scope fields.
+    // The conflict branch narrows to the active-scope fields, widened by 17b
+    // with activeSessionId/activeStartedAt so the banner can name the
+    // blocking session's date and resume it.
     if (conflict.kind === "conflict") {
       expectTypeOf(conflict.activePlanId).toEqualTypeOf<string>();
       expectTypeOf(conflict.activeDay).toEqualTypeOf<number | null>();
       expectTypeOf(conflict.activePlanName).toEqualTypeOf<string | undefined>();
+      expectTypeOf(conflict.activeSessionId).toEqualTypeOf<string>();
+      expectTypeOf(conflict.activeStartedAt).toEqualTypeOf<string>();
     }
     // The started/resumed branch narrows to the session.
     if (started.kind === "started") {
       expectTypeOf(started.session).toEqualTypeOf<WorkoutSessionRecord>();
+    }
+
+    // 17b: the started/resumed arm is SPLIT, not merely extended, so
+    // autoClosedSession can only ever appear on "started" — a resume closes
+    // nothing.
+    const startedWithNotice: StartSessionOutcome = {
+      kind: "started",
+      session: {} as WorkoutSessionRecord,
+      autoClosedSession: { id: "session-old", startedAt: "2026-08-02T10:00:00.000Z" },
+    };
+    expect(startedWithNotice.kind).toBe("started");
+    if (startedWithNotice.kind === "started") {
+      expectTypeOf(startedWithNotice.autoClosedSession).toEqualTypeOf<
+        AutoClosedSessionNotice | undefined
+      >();
+    }
+    const resumedWithNotice: StartSessionOutcome = {
+      kind: "resumed",
+      session: {} as WorkoutSessionRecord,
+      // @ts-expect-error resumed never carries an auto-close notice
+      autoClosedSession: { id: "x", startedAt: "2026-08-02T10:00:00.000Z" },
+    };
+    expect(resumedWithNotice.kind).toBe("resumed");
+  });
+
+  it("defines WorkoutSessionRecordStatus accepting 'abandoned' (17b)", () => {
+    expectTypeOf<WorkoutSessionRecordStatus>().toEqualTypeOf<
+      "active" | "completed" | "abandoned"
+    >();
+  });
+
+  it("defines StartSessionResponse as an additive optional sibling key, not an envelope (17b)", () => {
+    const response: StartSessionResponse = {
+      ...({} as WorkoutSessionRecord),
+      autoClosedSession: { id: "session-old", startedAt: "2026-08-02T10:00:00.000Z" },
+    };
+    expectTypeOf(response).toMatchTypeOf<WorkoutSessionRecord>();
+    expectTypeOf(response.autoClosedSession).toEqualTypeOf<
+      AutoClosedSessionNotice | undefined
+    >();
+  });
+
+  it("defines the AbandonSessionOutcome discriminated union (17b Discard)", () => {
+    const abandoned: AbandonSessionOutcome = {
+      kind: "abandoned",
+      session: {} as WorkoutSessionRecord,
+    };
+    const notActive: AbandonSessionOutcome = { kind: "not_active" };
+    const notFound: AbandonSessionOutcome = { kind: "not_found" };
+
+    expect(abandoned.kind).toBe("abandoned");
+    expect(notActive.kind).toBe("not_active");
+    expect(notFound.kind).toBe("not_found");
+
+    if (abandoned.kind === "abandoned") {
+      expectTypeOf(abandoned.session).toEqualTypeOf<WorkoutSessionRecord>();
     }
   });
 

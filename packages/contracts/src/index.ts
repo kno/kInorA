@@ -55,7 +55,7 @@ export interface WorkoutProgram {
   limitationWarnings: string[];
 }
 
-export type WorkoutSessionRecordStatus = "active" | "completed";
+export type WorkoutSessionRecordStatus = "active" | "completed" | "abandoned";
 
 export interface SetRecordDTO {
   id: string;
@@ -108,20 +108,66 @@ export interface WorkoutSessionRecord {
 }
 
 /**
- * Discriminated result of `startSession` (#93).
+ * A stale session auto-closed while starting a new one
+ * (17b-stale-session-recovery). `startedAt` is the closed session's own start
+ * date — the fact the client tells the user ("we closed your unfinished
+ * session from {date}").
+ */
+export interface AutoClosedSessionNotice {
+  id: string;
+  startedAt: string;
+}
+
+/**
+ * Discriminated result of `startSession` (#93; split and widened by 17b).
  *
  * `started` / `resumed` carry the session snapshot; `conflict` carries the
  * currently-active scope so the caller can render a localized banner instead
  * of silently resuming the wrong day or collapsing into a generic 404.
+ *
+ * The `started` / `resumed` arm is SPLIT (not merely extended with an
+ * optional field on a shared shape) so `autoClosedSession` can only ever
+ * appear on `started` — a resume closes nothing. `conflict` gains
+ * `activeSessionId` / `activeStartedAt` (17b scope A) so the banner can name
+ * the blocking session's date and resume it directly, including the legacy
+ * null-day case where Branch A cannot match.
  */
 export type StartSessionOutcome =
-  | { kind: "started" | "resumed"; session: WorkoutSessionRecord }
+  | { kind: "started"; session: WorkoutSessionRecord; autoClosedSession?: AutoClosedSessionNotice }
+  | { kind: "resumed"; session: WorkoutSessionRecord }
   | {
       kind: "conflict";
       activePlanId: string;
       activePlanName?: string;
       activeDay: number | null;
+      /** 17b scope A: the blocking session, so the banner can name its date and resume it. */
+      activeSessionId: string;
+      activeStartedAt: string;
     };
+
+/**
+ * 200 body of `POST /workout-sessions` (17b). Additive: the body stays the
+ * session record so every existing positional-parse client is unaffected;
+ * `autoClosedSession` is an optional sibling key, present only when a
+ * start auto-closed a stale session.
+ */
+export type StartSessionResponse = WorkoutSessionRecord & {
+  autoClosedSession?: AutoClosedSessionNotice;
+};
+
+/**
+ * Discriminated result of `abandonSession` (17b scope A Discard).
+ *
+ * Mirrors `completeSession`'s idempotency discipline: `abandoned` covers both
+ * a fresh transition and a no-op retry against an already-`abandoned`
+ * session; `not_active` covers a `completed` session; `not_found` covers
+ * nonexistent, another user's, and another tenant's session indistinguishably
+ * (no IDOR leak).
+ */
+export type AbandonSessionOutcome =
+  | { kind: "abandoned"; session: WorkoutSessionRecord }
+  | { kind: "not_active" }
+  | { kind: "not_found" };
 
 /**
  * Discriminated result of `deleteSession` (10c-workout-session-delete).
