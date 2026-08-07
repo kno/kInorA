@@ -589,6 +589,25 @@ describe("DayDetailPanel — conflict banner (#93 Slice 3)", () => {
     expect(screen.getByText("We couldn't discard that session. Try again.")).toBeDefined();
   });
 
+  it("does not nest a second role=alert region for the discardFailed message", () => {
+    renderWithIntl(
+      <DayDetailPanel
+        sessions={sessions}
+        onStartWorkout={vi.fn()}
+        conflict={{ ...conflictBase, activePlanName: "Summer Block", activeDay: 3 }}
+        onDiscardSession={vi.fn()}
+        discardFailed
+      />,
+    );
+
+    // The conflict container already owns role="alert"; the discardFailed
+    // message must be role="status" so screen readers do not announce two
+    // nested alert regions for the same event.
+    const discardFailedMessage = screen.getByText("We couldn't discard that session. Try again.");
+    expect(discardFailedMessage.getAttribute("role")).toBe("status");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+  });
+
   it("moves focus to the banner when a conflict newly appears (web /plan focus handoff)", () => {
     const scrollIntoView = vi.fn();
     // jsdom does not implement scrollIntoView.

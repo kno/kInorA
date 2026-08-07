@@ -229,7 +229,7 @@ export function DayDetailPanel({
               </button>
             </div>
           )}
-          {discardFailed && <p role="alert">{t("plan.start.discardFailed")}</p>}
+          {discardFailed && <p role="status">{t("plan.start.discardFailed")}</p>}
         </div>
       )}
 

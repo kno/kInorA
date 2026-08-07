@@ -347,6 +347,37 @@ describe("PlanStatusClient — actionable conflict banner (17b scope A)", () => 
     spy.mockRestore();
   });
 
+  it("does not nest a second role=alert region for the discardFailed message", () => {
+    defaultWsReturn("ready");
+    const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+      activeSession: undefined,
+      activeDay: undefined,
+      conflict,
+      autoCloseNotice: undefined,
+      discardFailed: true,
+      error: undefined,
+      syncNotice: undefined,
+      handleStartWorkout: vi.fn(),
+      handleRecordSet: vi.fn(),
+      handleCompleteWorkout: vi.fn(),
+      handleDiscardSession: vi.fn(),
+      handleResumeSession: vi.fn(),
+    });
+
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="ready" />,
+    );
+
+    // The conflict container already owns role="alert"; the discardFailed
+    // message must be role="status" so screen readers do not announce two
+    // nested alert regions for the same event.
+    const discardFailedMessage = screen.getByText("We couldn't discard that session. Try again.");
+    expect(discardFailedMessage.getAttribute("role")).toBe("status");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+
+    spy.mockRestore();
+  });
+
   it("renders a non-blocking auto-close notice when the hook surfaces one", () => {
     defaultWsReturn("ready");
     const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({

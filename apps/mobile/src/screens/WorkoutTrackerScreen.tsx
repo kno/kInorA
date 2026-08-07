@@ -219,6 +219,12 @@ export default function WorkoutTrackerScreen({
   // and feedback when the abandon call itself fails/no-ops.
   const [discardConfirming, setDiscardConfirming] = useState(false);
   const [discardFailed, setDiscardFailed] = useState(false);
+  const [discardInProgress, setDiscardInProgress] = useState(false);
+  // Synchronous mirror of `discardInProgress`, same rationale as
+  // `submittingRef`: a slow connection lets the user tap Discard/confirm
+  // repeatedly before the first render reflects the in-flight state, which
+  // would fire overlapping abandonSession calls.
+  const discardInProgressRef = useRef(false);
 
   // Stepper values for the current set.
   const [weight, setWeight] = useState(0);
@@ -898,7 +904,9 @@ export default function WorkoutTrackerScreen({
   // and does NOT retry — the one outcome worse than a blocked start is one
   // that silently did nothing.
   const handleDiscardConflict = useCallback(async () => {
-    if (!conflict) return;
+    if (!conflict || discardInProgressRef.current) return;
+    discardInProgressRef.current = true;
+    setDiscardInProgress(true);
     try {
       const outcome = await abandonSession(conflict.activeSessionId);
       if (!mountedRef.current) return;
@@ -911,6 +919,9 @@ export default function WorkoutTrackerScreen({
       void loadSession();
     } catch {
       if (mountedRef.current) setDiscardFailed(true);
+    } finally {
+      discardInProgressRef.current = false;
+      if (mountedRef.current) setDiscardInProgress(false);
     }
   }, [conflict, loadSession]);
 
@@ -964,6 +975,7 @@ export default function WorkoutTrackerScreen({
             style={styles.secondaryBtn}
             onPress={() => setDiscardConfirming(true)}
             accessibilityRole="button"
+            disabled={discardInProgress}
             testID="conflict-discard"
           >
             <Text style={styles.secondaryBtnText}>
@@ -983,6 +995,7 @@ export default function WorkoutTrackerScreen({
                 void handleDiscardConflict();
               }}
               accessibilityRole="button"
+              disabled={discardInProgress}
               testID="conflict-discard-confirm"
             >
               <Text style={styles.secondaryBtnText}>
@@ -993,6 +1006,7 @@ export default function WorkoutTrackerScreen({
               style={styles.secondaryBtn}
               onPress={() => setDiscardConfirming(false)}
               accessibilityRole="button"
+              disabled={discardInProgress}
               testID="conflict-discard-cancel"
             >
               <Text style={styles.secondaryBtnText}>

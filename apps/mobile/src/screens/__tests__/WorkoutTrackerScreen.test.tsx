@@ -367,6 +367,58 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
     expect(abandonSession).toHaveBeenCalledWith("sess-blocking");
   });
 
+  it("disables the discard confirm control while abandonSession is in flight, and does not double-fire on a repeated tap", async () => {
+    abandonSession.mockClear();
+    getWorkoutSession.mockResolvedValue({
+      kind: "error",
+      message: "active_session_conflict",
+      activePlanName: "Fuerza",
+      activeDay: 3,
+      activeSessionId: "sess-blocking",
+      activeStartedAt: conflictStartedAt,
+    });
+    let resolveAbandon!: (value: { kind: "ok"; session: WorkoutSessionRecord }) => void;
+    abandonSession.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveAbandon = resolve;
+        }),
+    );
+
+    const en = renderScreen("en");
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const discardBtn = en.root.findByProps({ testID: "conflict-discard" });
+    act(() => {
+      discardBtn.props.onPress();
+    });
+
+    const confirmBtn = en.root.findByProps({ testID: "conflict-discard-confirm" });
+    act(() => {
+      // Two synchronous taps, as a slow connection lets a user do before any
+      // re-render lands: the in-flight ref guard (set eagerly, before the
+      // first `await`) must block the second call.
+      confirmBtn.props.onPress();
+      confirmBtn.props.onPress();
+    });
+
+    // The abandon call is now in flight — the Discard control (re-rendered
+    // as "conflict-discard", since confirming flips back to false) must be
+    // disabled while it resolves.
+    const discardAfterConfirm = en.root.findByProps({ testID: "conflict-discard" });
+    expect(discardAfterConfirm.props.disabled).toBe(true);
+
+    await act(async () => {
+      resolveAbandon({ kind: "ok", session: { ...activeSession, status: "abandoned" } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(abandonSession).toHaveBeenCalledTimes(1);
+  });
+
   it("renders the errorLoad state via useIntl(), in EN and ES", async () => {
     getWorkoutSession.mockResolvedValue({
       kind: "error",
