@@ -74,15 +74,28 @@ export function PlanStatusClient({
     activeSession,
     activeDay,
     conflict,
+    autoCloseNotice,
+    discardFailed,
     error,
     syncNotice,
     handleRecordSet,
     handleCompleteWorkout,
+    handleDiscardSession,
+    handleResumeSession,
   } = useWorkoutSession();
 
   const router = useRouter();
   const t = useTranslations();
   const errorKey = error ? ERROR_KEYS[error] ?? GENERIC_ERROR_KEY : undefined;
+  // 17b scope A: one required confirmation step before Discard takes effect.
+  const [discardConfirming, setDiscardConfirming] = useState(false);
+  // 17b scope A: the mirror image of the conflict banner — non-blocking,
+  // role="status" (polite), never takes focus.
+  const autoCloseNoticeBanner = autoCloseNotice && (
+    <p role="status" data-testid="auto-close-notice">
+      {t("plan.start.autoClosed", { date: new Date(autoCloseNotice.startedAt) })}
+    </p>
+  );
   // Phase 4 web offline: surface a notice regardless of which view is
   // showing for every flush outcome that needs user awareness — a stale
   // Server Action reference (post-redeploy, "reload to sync"), a session
@@ -156,6 +169,7 @@ export function PlanStatusClient({
             {dayLabel && <p>{dayLabel}</p>}
           </header>
         )}
+        {autoCloseNoticeBanner}
         {syncNoticeBanner}
         {errorKey && (
           <p role="alert" data-testid="tracker-error">
@@ -171,25 +185,68 @@ export function PlanStatusClient({
     );
   }
 
-  // Localized conflict banner (#93 Slice 3) — reuses the plan.start.conflict*
-  // keys so /plan/[id] matches /plan.
+  // Localized conflict banner (#93 Slice 3; actionable since 17b scope A) —
+  // reuses the plan.start.conflict* keys so /plan/[id] matches /plan. No
+  // focus management here (out of scope by design — this banner already
+  // renders first in the returned fragment, already above the fold).
   const conflictText = (() => {
     if (!conflict) return "";
+    const parsed = new Date(conflict.activeStartedAt);
+    const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
     if (!conflict.activePlanName) {
-      return t("plan.start.conflict_generic");
+      return t("plan.start.conflict_generic", { date });
     }
     if (conflict.activeDay == null) {
-      return t("plan.start.conflict_no_day", { plan: conflict.activePlanName });
+      return t("plan.start.conflict_no_day", { plan: conflict.activePlanName, date });
     }
-    return t("plan.start.conflict", { plan: conflict.activePlanName, n: conflict.activeDay });
+    return t("plan.start.conflict", { plan: conflict.activePlanName, n: conflict.activeDay, date });
   })();
+
+  function handleDiscardConfirmYes(): void {
+    setDiscardConfirming(false);
+    handleDiscardSession();
+  }
 
   return (
     <>
       {conflict && (
-        <p role="alert" data-testid="start-conflict">
-          {conflictText}
-        </p>
+        <div role="alert" data-testid="start-conflict">
+          <p>{conflictText}</p>
+          <div>
+            <button
+              type="button"
+              className="kin-btn kin-btn--secondary"
+              onClick={() => handleResumeSession(conflict.activeSessionId)}
+            >
+              {t("plan.start.resume")}
+            </button>
+            {!discardConfirming && (
+              <button
+                type="button"
+                className="kin-btn kin-btn--secondary"
+                onClick={() => setDiscardConfirming(true)}
+              >
+                {t("plan.start.discard")}
+              </button>
+            )}
+          </div>
+          {discardConfirming && (
+            <div>
+              <p>{t("plan.start.discardConfirm")}</p>
+              <button type="button" className="kin-btn kin-btn--primary" onClick={handleDiscardConfirmYes}>
+                {t("plan.start.discardConfirmYes")}
+              </button>
+              <button
+                type="button"
+                className="kin-btn kin-btn--secondary"
+                onClick={() => setDiscardConfirming(false)}
+              >
+                {t("plan.start.discardCancel")}
+              </button>
+            </div>
+          )}
+          {discardFailed && <p role="alert">{t("plan.start.discardFailed")}</p>}
+        </div>
       )}
       {syncNoticeBanner}
       {errorKey && (

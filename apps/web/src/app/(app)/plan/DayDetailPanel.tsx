@@ -18,7 +18,7 @@
  * falls back to the Slice-4a inert/session-only rendering unchanged.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { WeeklyDayStatus, WeeklyOverviewDTO, WorkoutSession } from "@kinora/contracts";
 import styles from "./plan-week-view.module.css";
@@ -46,12 +46,35 @@ export interface DayDetailPanelProps {
    */
   onStartWorkout?: (day: number) => void;
   /**
-   * Active-session conflict scope (#93 Slice 3). Set when a start attempt
-   * returns a 409 `active_session_conflict`. Renders a localized banner naming
-   * the plan/day the user must resume or finish first. The single-active
+   * Active-session conflict scope (#93 Slice 3; widened by 17b scope A).
+   * Set when a start attempt returns a 409 `active_session_conflict`.
+   * Renders a localized banner naming the plan/day and the blocking
+   * session's start date, with Resume/Discard actions. The single-active
    * invariant is enforced server-side; this only surfaces it.
    */
-  conflict?: { activePlanName?: string; activeDay: number | null };
+  conflict?: {
+    activePlanName?: string;
+    activeDay: number | null;
+    activeSessionId: string;
+    activeStartedAt: string;
+  };
+  /**
+   * 17b scope A: navigates to the blocking session's tracker. Loads it
+   * directly by id (correct for both a normal conflict and the legacy
+   * null-day case — it never depends on re-deriving the blocking session's
+   * plan identity from the client).
+   */
+  onResumeSession?: (activeSessionId: string) => void;
+  /**
+   * 17b scope A: abandons the blocking session (after the one required
+   * confirmation step below) and retries the requested start.
+   */
+  onDiscardSession?: () => void;
+  /**
+   * 17b scope A: true when the most recent Discard attempt failed — shown
+   * inline, without re-triggering anything itself.
+   */
+  discardFailed?: boolean;
   /**
    * Real weekly-progress overlay (09c-v1-progress-dashboard-stats, Slice
    * 4b) — the current calendar week's day states + prev/next week bounds,
@@ -66,10 +89,33 @@ export function DayDetailPanel({
   sessions,
   onStartWorkout,
   conflict,
+  onResumeSession,
+  onDiscardSession,
+  discardFailed,
   weeklyOverview,
 }: DayDetailPanelProps) {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [overview, setOverview] = useState(weeklyOverview);
+  // 17b scope A: one required confirmation step before Discard takes effect —
+  // a mis-tap next to Resume must not end a session that plausibly holds real
+  // logged sets.
+  const [discardConfirming, setDiscardConfirming] = useState(false);
+  const bannerRef = useRef<HTMLDivElement>(null);
+
+  // Web /plan focus handoff: the banner renders inside this week-board panel
+  // while the Hero CTA that triggered it sits elsewhere, with no natural
+  // scroll path between them — moving focus (not just rendering) is the fix.
+  // Depends on `conflict`'s identity, so a repeated failed start re-announces
+  // and re-focuses.
+  useEffect(() => {
+    if (!conflict) return;
+    setDiscardConfirming(false);
+    bannerRef.current?.focus();
+    // jsdom (most existing component tests) does not implement
+    // scrollIntoView — guard defensively rather than requiring every test to
+    // stub it.
+    bannerRef.current?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  }, [conflict]);
 
   // Resync local `overview` state whenever the `weeklyOverview` PROP changes
   // identity (e.g. the parent server component re-fetches after
@@ -90,17 +136,28 @@ export function DayDetailPanel({
   }
 
   // Derived localized conflict message (readability: no per-render fn, no
-  // side effects). Empty string when there is no conflict.
+  // side effects). Empty string when there is no conflict. `date` is an ICU
+  // {date, date, medium} argument — next-intl formats it per-locale, so no
+  // date string is built by hand.
   const conflictText = ((): string => {
     if (!conflict) return "";
+    // Defensive fallback: a malformed/missing `activeStartedAt` (should never
+    // happen against the real API) must not crash ICU date formatting.
+    const parsed = new Date(conflict.activeStartedAt);
+    const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
     if (!conflict.activePlanName) {
-      return t("plan.start.conflict_generic");
+      return t("plan.start.conflict_generic", { date });
     }
     if (conflict.activeDay == null) {
-      return t("plan.start.conflict_no_day", { plan: conflict.activePlanName });
+      return t("plan.start.conflict_no_day", { plan: conflict.activePlanName, date });
     }
-    return t("plan.start.conflict", { plan: conflict.activePlanName, n: conflict.activeDay });
+    return t("plan.start.conflict", { plan: conflict.activePlanName, n: conflict.activeDay, date });
   })();
+
+  function handleDiscardConfirmYes(): void {
+    setDiscardConfirming(false);
+    onDiscardSession?.();
+  }
 
   function handleCardClick(day: number): void {
     setSelectedDay((prev) => (prev === day ? null : day));
@@ -124,11 +181,55 @@ export function DayDetailPanel({
 
   return (
     <div>
-      {/* Active-session conflict banner (#93 Slice 3) — localized, names the
-          plan/day the user must resume or finish before starting another. */}
+      {/* Active-session conflict banner (#93 Slice 3; actionable since 17b
+          scope A) — localized, names the plan/day/date the user must resume
+          or discard before starting another. `tabIndex={-1}` makes it
+          programmatically focusable (the web /plan focus handoff above)
+          without inserting it into the tab order; `role="alert"` still
+          announces it to screen readers regardless of the focus move. */}
       {conflict && (
-        <div className={styles.conflictBanner} role="alert" data-testid="start-conflict">
-          {conflictText}
+        <div
+          ref={bannerRef}
+          className={styles.conflictBanner}
+          role="alert"
+          tabIndex={-1}
+          data-testid="start-conflict"
+        >
+          <p>{conflictText}</p>
+          <div>
+            <button
+              type="button"
+              className="kin-btn kin-btn--secondary"
+              onClick={() => onResumeSession?.(conflict.activeSessionId)}
+            >
+              {t("plan.start.resume")}
+            </button>
+            {!discardConfirming && (
+              <button
+                type="button"
+                className="kin-btn kin-btn--secondary"
+                onClick={() => setDiscardConfirming(true)}
+              >
+                {t("plan.start.discard")}
+              </button>
+            )}
+          </div>
+          {discardConfirming && (
+            <div>
+              <p>{t("plan.start.discardConfirm")}</p>
+              <button type="button" className="kin-btn kin-btn--primary" onClick={handleDiscardConfirmYes}>
+                {t("plan.start.discardConfirmYes")}
+              </button>
+              <button
+                type="button"
+                className="kin-btn kin-btn--secondary"
+                onClick={() => setDiscardConfirming(false)}
+              >
+                {t("plan.start.discardCancel")}
+              </button>
+            </div>
+          )}
+          {discardFailed && <p role="alert">{t("plan.start.discardFailed")}</p>}
         </div>
       )}
 

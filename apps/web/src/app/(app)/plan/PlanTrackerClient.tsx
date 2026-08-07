@@ -106,15 +106,27 @@ export function PlanTrackerClient({
     activeSession,
     activeDay,
     conflict,
+    autoCloseNotice,
+    discardFailed,
     error,
     syncNotice,
     handleStartWorkout,
     handleRecordSet,
     handleCompleteWorkout,
+    handleDiscardSession,
+    handleResumeSession,
   } = useWorkoutSession();
 
   const t = useTranslations();
   const errorKey = error ? ERROR_KEYS[error] ?? GENERIC_ERROR_KEY : undefined;
+  // 17b scope A: the mirror image of the conflict banner — non-blocking,
+  // role="status" (polite), never takes focus. The user asked to start a
+  // workout and got one; interrupting them would be the wrong trade.
+  const autoCloseNoticeBanner = autoCloseNotice && (
+    <p role="status" data-testid="auto-close-notice">
+      {t("plan.start.autoClosed", { date: new Date(autoCloseNotice.startedAt) })}
+    </p>
+  );
 
   // recommendedDay: the first planned training day this week NOT yet completed
   // (weeklyOverview.days is Monday-first, so day N maps to index N-1); falls
@@ -158,6 +170,7 @@ export function PlanTrackerClient({
             {dayLabel && <p>{dayLabel}</p>}
           </header>
         )}
+        {autoCloseNoticeBanner}
         {syncNoticeBanner}
         {errorKey && (
           <p role="alert" data-testid="tracker-error">
@@ -209,6 +222,9 @@ export function PlanTrackerClient({
               sessions={program.weeklySessions}
               onStartWorkout={(day) => handleStartWorkout(planId, day)}
               conflict={conflict}
+              onResumeSession={handleResumeSession}
+              onDiscardSession={handleDiscardSession}
+              discardFailed={discardFailed}
               weeklyOverview={weeklyOverview}
             />
           </section>

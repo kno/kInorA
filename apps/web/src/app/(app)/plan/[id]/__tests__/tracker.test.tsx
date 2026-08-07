@@ -94,11 +94,15 @@ function mockSession(overrides: Partial<HookReturn>) {
     activeSession: undefined,
     activeDay: undefined,
     conflict: undefined,
+    autoCloseNotice: undefined,
+    discardFailed: false,
     error: undefined,
     syncNotice: undefined,
     handleStartWorkout: vi.fn(),
     handleRecordSet: vi.fn().mockResolvedValue(undefined),
     handleCompleteWorkout: vi.fn().mockResolvedValue(undefined),
+    handleDiscardSession: vi.fn().mockResolvedValue(undefined),
+    handleResumeSession: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as HookReturn);
 }
@@ -167,7 +171,14 @@ describe("PlanStatusClient — active-session takeover on /plan/[id]", () => {
 describe("PlanStatusClient — conflict banner (non-active branch)", () => {
   it("renders a localized active-session conflict banner and does not redirect while generating", () => {
     usePlanWs.mockReturnValue({ status: "generating" });
-    mockSession({ conflict: { activePlanName: "Summer Cut", activeDay: 3 } });
+    mockSession({
+      conflict: {
+        activePlanName: "Summer Cut",
+        activeDay: 3,
+        activeSessionId: "session-blocking",
+        activeStartedAt: "2026-08-05T09:00:00.000Z",
+      },
+    });
 
     renderWithIntl(
       <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="generating" />,

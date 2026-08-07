@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { WorkoutSessionRecord } from "@kinora/contracts";
-import { startWorkoutSession, fetchAuthIdentity } from "../tracker-client";
+import { startWorkoutSession, fetchAuthIdentity, abandonSession } from "../tracker-client";
 
 /**
  * tracker-client 409/conflict mapping (#93 F3).
@@ -108,6 +108,112 @@ describe("tracker-client startWorkoutSession — 409 conflict mapping (F3)", () 
     if (result.kind === "ok") {
       expect(result.session.id).toBe("session-1");
     }
+  });
+
+  it("carries the blocking session's id and start date on a 409 conflict (17b scope A)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse(409, {
+        error: "active_session_conflict",
+        activePlanName: "Summer Cut",
+        activeDay: 3,
+        activeSessionId: "session-blocking",
+        activeStartedAt: "2026-08-05T09:00:00.000Z",
+      }),
+    );
+
+    const result = await startWorkoutSession("plan-1", 1, TOKEN, {
+      ...OPTIONS,
+      fetchImpl,
+    });
+
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.activeSessionId).toBe("session-blocking");
+      expect(result.activeStartedAt).toBe("2026-08-05T09:00:00.000Z");
+    }
+  });
+
+  it("carries the additive autoClosedSession sibling key on a 200 response, when present", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse(200, {
+        ...sessionRecord,
+        autoClosedSession: { id: "session-stale", startedAt: "2026-08-04T08:00:00.000Z" },
+      }),
+    );
+
+    const result = await startWorkoutSession("plan-1", 1, TOKEN, {
+      ...OPTIONS,
+      fetchImpl,
+    });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.autoClosedSession).toEqual({
+        id: "session-stale",
+        startedAt: "2026-08-04T08:00:00.000Z",
+      });
+    }
+  });
+
+  it("omits autoClosedSession on a 200 response that carries none", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, sessionRecord));
+
+    const result = await startWorkoutSession("plan-1", 1, TOKEN, {
+      ...OPTIONS,
+      fetchImpl,
+    });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.autoClosedSession).toBeUndefined();
+    }
+  });
+});
+
+describe("abandonSession (17b scope A Discard)", () => {
+  it("POSTs to the session's abandon sub-resource and returns the abandoned session", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse(200, { ...sessionRecord, status: "abandoned" }),
+    );
+
+    const result = await abandonSession("session-1", TOKEN, { ...OPTIONS, fetchImpl });
+
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://api.test/workout-sessions/session-1/abandon");
+    expect(init.method).toBe("POST");
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.session.status).toBe("abandoned");
+  });
+
+  it("maps a 409 session_not_active to a bare error, not the active-session-conflict shape", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(409, { error: "session_not_active" }));
+
+    const result = await abandonSession("session-1", TOKEN, { ...OPTIONS, fetchImpl });
+
+    expect(result).toEqual({
+      kind: "error",
+      message: "session_not_active",
+      code: "VALIDATION",
+    });
+  });
+
+  it("maps a 404 not_found to the NOT_FOUND code", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(404, { error: "not_found" }));
+
+    const result = await abandonSession("session-1", TOKEN, { ...OPTIONS, fetchImpl });
+
+    expect(result).toEqual({ kind: "error", message: "not_found", code: "NOT_FOUND" });
+  });
+
+  it("returns no_session without calling the API when the token is missing", async () => {
+    const fetchImpl = vi.fn();
+
+    const result = await abandonSession("session-1", undefined, { ...OPTIONS, fetchImpl });
+
+    expect(result).toEqual({ kind: "error", message: "no_session" });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
 

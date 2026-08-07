@@ -8,6 +8,7 @@ const startWorkoutSession = vi.fn();
 const fetchWorkoutSession = vi.fn();
 const recordWorkoutSet = vi.fn();
 const completeWorkoutSession = vi.fn();
+const abandonSession = vi.fn();
 const fetchAuthIdentity = vi.fn();
 
 const sessionRecord: WorkoutSessionRecord = {
@@ -48,10 +49,12 @@ vi.mock("../tracker-client", () => ({
   fetchWorkoutSession: (...args: unknown[]) => fetchWorkoutSession(...args),
   recordWorkoutSet: (...args: unknown[]) => recordWorkoutSet(...args),
   completeWorkoutSession: (...args: unknown[]) => completeWorkoutSession(...args),
+  abandonSession: (...args: unknown[]) => abandonSession(...args),
   fetchAuthIdentity: (...args: unknown[]) => fetchAuthIdentity(...args),
 }));
 
 import {
+  abandonSessionAction,
   completeWorkoutSessionAction,
   getPlanStatusAction,
   getWorkoutSessionAction,
@@ -138,6 +141,8 @@ describe("workout tracker server actions", () => {
       message: "active_session_conflict",
       activePlanName: "Summer Cut",
       activeDay: 3,
+      activeSessionId: "session-blocking",
+      activeStartedAt: "2026-08-05T09:00:00.000Z",
     });
 
     // The whole point of F1: this must resolve to a conflict branch, not reject.
@@ -147,6 +152,27 @@ describe("workout tracker server actions", () => {
     if (result.kind === "conflict") {
       expect(result.activePlanName).toBe("Summer Cut");
       expect(result.activeDay).toBe(3);
+      expect(result.activeSessionId).toBe("session-blocking");
+      expect(result.activeStartedAt).toBe("2026-08-05T09:00:00.000Z");
+    }
+  });
+
+  it("carries the additive autoClosedSession sibling key on a successful start (17b scope A)", async () => {
+    cookieGet.mockReturnValue({ value: "tok" });
+    startWorkoutSession.mockResolvedValue({
+      kind: "ok",
+      session: sessionRecord,
+      autoClosedSession: { id: "session-stale", startedAt: "2026-08-04T08:00:00.000Z" },
+    });
+
+    const result = await startWorkoutSessionAction("plan-1", 1);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.autoClosedSession).toEqual({
+        id: "session-stale",
+        startedAt: "2026-08-04T08:00:00.000Z",
+      });
     }
   });
 
@@ -199,6 +225,42 @@ describe("workout tracker server actions", () => {
 
     expect(completeWorkoutSession).toHaveBeenCalledWith("session-1", "tok");
     expect(result.status).toBe("completed");
+  });
+});
+
+describe("abandonSessionAction (17b scope A Discard)", () => {
+  it("calls abandonSession with the session id and session token, returning the abandoned session", async () => {
+    cookieGet.mockReturnValue({ value: "tok" });
+    abandonSession.mockResolvedValue({
+      kind: "ok",
+      session: { ...sessionRecord, status: "abandoned" },
+    });
+
+    const result = await abandonSessionAction("session-1");
+
+    expect(abandonSession).toHaveBeenCalledWith("session-1", "tok");
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.session.status).toBe("abandoned");
+  });
+
+  it("returns a structured not_active result on a 409 session_not_active, without throwing", async () => {
+    cookieGet.mockReturnValue({ value: "tok" });
+    abandonSession.mockResolvedValue({
+      kind: "error",
+      message: "session_not_active",
+      code: "VALIDATION",
+    });
+
+    const result = await abandonSessionAction("session-1");
+
+    expect(result).toEqual({ kind: "not_active" });
+  });
+
+  it("still throws on a genuinely unexpected failure (network / not_found)", async () => {
+    cookieGet.mockReturnValue({ value: "tok" });
+    abandonSession.mockResolvedValue({ kind: "error", message: "api_unreachable" });
+
+    await expect(abandonSessionAction("session-1")).rejects.toThrow("api_unreachable");
   });
 });
 
