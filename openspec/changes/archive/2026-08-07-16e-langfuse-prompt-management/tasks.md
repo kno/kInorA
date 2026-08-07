@@ -407,11 +407,23 @@ half); Prompt Tests Run Offline.
       (2) re-run `prompt-linked-chain` tests on any `@langchain/openai`/`@langchain/anthropic`/
       `@langchain/google-genai`/`@langchain/core` bump — a shape change degrades silently and safely
       but stops populating the native columns, visible as `promptLinked: false`
-- [ ] C.17 Operational, not a test: after C deploys, confirm out of band, once, that the Langfuse
+- [x] C.17 Operational, not a test: after C deploys, confirm out of band, once, that the Langfuse
       Prompt tab actually populates against the live project. If it does not,
       `promptLinked: true` in the traces localizes the remaining gap to the SDK rather than to this
-      repo's wiring. Deliberately left unchecked here — this is a post-deploy operational
-      confirmation, not something this executor can perform before merge.
+      repo's wiring.
+      **CONFIRMED IN PRODUCTION 2026-08-07 by the product owner**, after `c062278` deployed: BOTH
+      paths — plan generation through `withStructuredOutput` and the chat turn through the bare
+      streaming model — come through linked, the trace metadata carries the prompt name, version and
+      label, and the Langfuse **Prompts** tab shows the linked executions. The native
+      `promptName`/`promptVersion` columns therefore DO populate, which supersedes the design's
+      original "Blocking finding" conclusion that they could not: the flat-sequence decomposition in
+      `prompt-linked-chain.ts` satisfies the SDK's `parentRunId` precondition in practice, not only
+      in theory.
+      Also confirmed in production earlier the same day: Langfuse traces arrive at all (so the
+      credentials that had been set for months with nothing reading them are valid — the question
+      slice A1 existed to answer), and a monitored call reported `promptSource: "langfuse"` once the
+      three prompts existed under the `production` label (so the remote fetch path, its boundary
+      validation and the shared renderer all work end to end against the live project).
 
 ## Final Verification (run once the full chain has landed)
 
