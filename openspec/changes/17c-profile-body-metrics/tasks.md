@@ -139,12 +139,12 @@ Unit Field (partial — the `heightCm` half); `10a-v1-user-memory-structured` Pr
 
 ### Migration + guard
 
-- [ ] PR1.1 Preflight: grep `apps/api/drizzle/meta/_journal.json`, confirm the current highest `idx`
+- [x] PR1.1 Preflight: grep `apps/api/drizzle/meta/_journal.json`, confirm the current highest `idx`
       is 26, so the new entry is `idx: 27` with no gap
-- [ ] PR1.2 RED: extend `apps/api/src/db/__tests__/migration-journal.test.ts` with a pinning assertion
+- [x] PR1.2 RED: extend `apps/api/src/db/__tests__/migration-journal.test.ts` with a pinning assertion
       that `0027_user_profile_body_metrics.sql` exists at `idx: 27` (the general contiguous-`idx`/
       matching-`tag` assertions already cover it with no edit)
-- [ ] PR1.3 GREEN: create `apps/api/drizzle/0027_user_profile_body_metrics.sql` —
+- [x] PR1.3 GREEN: create `apps/api/drizzle/0027_user_profile_body_metrics.sql` —
       `CREATE TYPE "public"."self_described_sex" AS ENUM ('female', 'male', 'non_binary', 'other',
       'prefer_not_to_say');` then `ALTER TABLE "user_profiles" ADD COLUMN "self_described_sex"
       "self_described_sex";` and `ALTER TABLE "user_profiles" ADD COLUMN "height_cm" integer;`; hand-add
@@ -155,11 +155,11 @@ Unit Field (partial — the `heightCm` half); `10a-v1-user-memory-structured` Pr
 
 ### Contracts
 
-- [ ] PR1.4 RED: extend `packages/contracts/src/contracts.test.ts:61-72`'s runtime export assertion
+- [x] PR1.4 RED: extend `packages/contracts/src/contracts.test.ts:61-72`'s runtime export assertion
       to prove it is **unchanged** by this diff (the additions are type-only); add a compile-time
       check that `UserProfile` carries `selfDescribedSex: SelfDescribedSex | null` and
       `heightCm: number | null`
-- [ ] PR1.5 GREEN: in `packages/contracts/src/index.ts` — add
+- [x] PR1.5 GREEN: in `packages/contracts/src/index.ts` — add
       `export type SelfDescribedSex = "female" | "male" | "non_binary" | "other" |
       "prefer_not_to_say"`; add `selfDescribedSex: SelfDescribedSex | null` and
       `heightCm: number | null` to `UserProfile`; confirm PR1.4 is green and `contracts.test.ts:61-72`
@@ -167,7 +167,7 @@ Unit Field (partial — the `heightCm` half); `10a-v1-user-memory-structured` Pr
 
 ### Route: validation + CRUD
 
-- [ ] PR1.6 RED: `apps/api/src/routes/__tests__/user-profile.test.ts` (Fastify `app.inject` harness) —
+- [x] PR1.6 RED: `apps/api/src/routes/__tests__/user-profile.test.ts` (Fastify `app.inject` harness) —
       PUT with a valid `selfDescribedSex` member persists and round-trips on GET; PUT with
       `"unspecified"` returns `422 { error: "invalid_self_described_sex" }` and leaves the profile
       unchanged; PUT `heightCm: 0` and `heightCm: -5` both return `422 { error: "invalid_height_cm" }`
@@ -176,7 +176,7 @@ Unit Field (partial — the `heightCm` half); `10a-v1-user-memory-structured` Pr
       field preserves the existing stored value (the three-way `goal` semantics, verbatim); GET on a
       profile that never set either field returns `null` for both; a `prefer_not_to_say` write reads
       back as `"prefer_not_to_say"`, distinguishable from `null`
-- [ ] PR1.7 GREEN: in `apps/api/src/routes/user-profile.ts` — declare `VALID_SELF_DESCRIBED_SEX`
+- [x] PR1.7 GREEN: in `apps/api/src/routes/user-profile.ts` — declare `VALID_SELF_DESCRIBED_SEX`
       beside the existing `VALID_GOALS` (`:15-25`); extend the PUT handler's three-way merge
       (undefined preserves / null unsets / value stored, per `goal`'s existing pattern at
       `:157-184`) to `selfDescribedSex`; validate `heightCm` as an integer in `[50, 300]` when
@@ -185,31 +185,35 @@ Unit Field (partial — the `heightCm` half); `10a-v1-user-memory-structured` Pr
 
 ### Repository
 
-- [ ] PR1.8 RED: `apps/api/src/db/repositories/__tests__/user-profile.integration.test.ts` (extends
-      the existing suite) — create, read, and upsert round-trip `selfDescribedSex` and `heightCm`
-      through the repository, including the `null`-clears and `prefer_not_to_say`-persists cases
-- [ ] PR1.9 GREEN: `apps/api/src/db/repositories/user-profile.ts` — thread the two columns through the
+- [x] PR1.8 RED: DEVIATION — extended the existing `apps/api/src/db/repositories/__tests__/
+      user-profile.test.ts` (mocked drizzle-chain unit suite) instead of creating a new
+      `.integration.test.ts` file: that suite has never run against real Postgres, and a new
+      integration file would not be on the real-Postgres CI job's hardcoded list (#382) — proof
+      would ship in a file that never runs. Covers create, read, and upsert round-tripping
+      `selfDescribedSex` and `heightCm`, including the `null`-clears and `prefer_not_to_say`-persists
+      cases
+- [x] PR1.9 GREEN: `apps/api/src/db/repositories/user-profile.ts` — thread the two columns through the
       read/create/upsert paths; confirm PR1.8 is green
 
 ### Web profile form
 
-- [ ] PR1.10 RED: RTL + jsdom component test for `apps/web/src/app/(app)/profile/ProfileForm.tsx` —
+- [x] PR1.10 RED: RTL + jsdom component test for `apps/web/src/app/(app)/profile/ProfileForm.tsx` —
       renders all five `selfDescribedSex` options plus the height input; a selection round-trips
       through `profile-form-client.ts`/`actions.ts`; `prefer_not_to_say` renders as a chosen value in
       its control, not an empty one
-- [ ] PR1.11 GREEN: implement in `apps/web/src/app/(app)/profile/{profile-form-client.ts,actions.ts,
+- [x] PR1.11 GREEN: implement in `apps/web/src/app/(app)/profile/{profile-form-client.ts,actions.ts,
       ProfileForm.tsx,options.ts}` — new options list mirroring `goal`'s options shape; confirm PR1.10
       is green
 
 ### i18n
 
-- [ ] PR1.12 GREEN: add `profile.form.selfDescribedSex.*` (five option labels + field label) and
+- [x] PR1.12 GREEN: add `profile.form.selfDescribedSex.*` (five option labels + field label) and
       `profile.form.heightCm` to `packages/i18n/src/messages/{en,es}.json`, both locales, neutral
       professional register; rebuild `packages/i18n` (`pnpm build`) before manual verification
 
 ### PR 1 verification
 
-- [ ] PR1.13 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green (apps/api
+- [x] PR1.13 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green (apps/api
       functions ≥85%, apps/web functions ≥90%); `pnpm type-check` clean; `pnpm build` succeeds
       (confirms `packages/i18n` rebuild)
 
