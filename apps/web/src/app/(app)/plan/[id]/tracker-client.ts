@@ -1,6 +1,10 @@
 import "server-only";
 
-import type { FlushErrorCode, WorkoutSessionRecord } from "@kinora/contracts";
+import type {
+  AutoClosedSessionNotice,
+  FlushErrorCode,
+  WorkoutSessionRecord,
+} from "@kinora/contracts";
 import { apiBaseUrl } from "@/app/(app)/create-plan/plan-draft-client";
 import type { WorkoutSetUpdateInput } from "./tracker-types";
 
@@ -10,7 +14,15 @@ interface ClientOptions {
 }
 
 export type WorkoutSessionResult =
-  | { kind: "ok"; session: WorkoutSessionRecord }
+  | {
+      kind: "ok";
+      session: WorkoutSessionRecord;
+      /**
+       * 17b: additive sibling key present only when this start auto-closed a
+       * stale (>24h) session. Absent on record/complete/abandon responses.
+       */
+      autoClosedSession?: AutoClosedSessionNotice;
+    }
   | {
       kind: "error";
       message: string;
@@ -21,6 +33,13 @@ export type WorkoutSessionResult =
        */
       activePlanName?: string;
       activeDay?: number | null;
+      /**
+       * 17b scope A: the blocking session's id and start date, so the caller
+       * can offer Resume (navigate to its tracker) and name the date in the
+       * banner. Populated only alongside `active_session_conflict`.
+       */
+      activeSessionId?: string;
+      activeStartedAt?: string;
       /**
        * Discriminated flush-failure taxonomy (Phase 4 web offline).
        * Previously the HTTP status was resolved here and then discarded for
@@ -94,6 +113,8 @@ async function parseWorkoutSessionResponse(
       error?: string;
       activePlanName?: string;
       activeDay?: number | null;
+      activeSessionId?: string;
+      activeStartedAt?: string;
     };
     // A 409 active_session_conflict carries the active scope; forward it so the
     // client can render the conflict banner. Other errors map to a bare message.
@@ -103,6 +124,8 @@ async function parseWorkoutSessionResponse(
         message: "active_session_conflict",
         activePlanName: payload.activePlanName,
         activeDay: payload.activeDay,
+        activeSessionId: payload.activeSessionId,
+        activeStartedAt: payload.activeStartedAt,
       };
     }
     return {
@@ -112,12 +135,18 @@ async function parseWorkoutSessionResponse(
     };
   }
 
-  const payload = (await res.json().catch(() => null)) as WorkoutSessionRecord | null;
+  const payload = (await res.json().catch(() => null)) as
+    | (WorkoutSessionRecord & { autoClosedSession?: AutoClosedSessionNotice })
+    | null;
   if (!payload?.id) {
     return { kind: "error", message: "invalid_response" };
   }
 
-  return { kind: "ok", session: payload };
+  return {
+    kind: "ok",
+    session: payload,
+    ...(payload.autoClosedSession ? { autoClosedSession: payload.autoClosedSession } : {}),
+  };
 }
 
 async function performWorkoutSessionRequest(
@@ -198,6 +227,27 @@ export function completeWorkoutSession(
 ): Promise<WorkoutSessionResult> {
   return performWorkoutSessionRequest(
     `/workout-sessions/${sessionId}/complete`,
+    "POST",
+    token,
+    {},
+    options,
+  );
+}
+
+/**
+ * POST /workout-sessions/:id/abandon (17b scope A Discard). Reuses the same
+ * write path threshold-based auto-close uses — this is the client trigger,
+ * never a second mechanism. A 409 here is `session_not_active` (the session
+ * already completed), NOT `active_session_conflict`, so it falls through to
+ * the generic error mapping rather than the conflict-scope branch.
+ */
+export function abandonSession(
+  sessionId: string,
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<WorkoutSessionResult> {
+  return performWorkoutSessionRequest(
+    `/workout-sessions/${sessionId}/abandon`,
     "POST",
     token,
     {},

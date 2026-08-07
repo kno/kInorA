@@ -51,10 +51,12 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PendingMutation, WorkoutSessionRecord } from "@kinora/contracts";
+import type { AutoClosedSessionNotice, PendingMutation, WorkoutSessionRecord } from "@kinora/contracts";
 import { collapseQueue } from "@kinora/domain/offline";
 import {
+  abandonSessionAction,
   completeWorkoutSessionAction,
+  getWorkoutSessionAction,
   recordWorkoutSetAction,
   startWorkoutSessionAction,
 } from "./[id]/actions";
@@ -86,6 +88,13 @@ export interface WorkoutSessionConflict {
   activePlanName?: string;
   /** Normalized to `null` (never `undefined`) so the banner branch is total. */
   activeDay: number | null;
+  /**
+   * 17b scope A: the blocking session's id and start date, so the banner can
+   * name its date and offer Resume (navigate to its tracker when
+   * `activeDay` is `null`, a legacy row) and Discard.
+   */
+  activeSessionId: string;
+  activeStartedAt: string;
 }
 
 export interface UseWorkoutSessionOptions {
@@ -109,6 +118,19 @@ export interface UseWorkoutSessionResult {
   activeDay: number | undefined;
   /** Set when a start attempt returns a 409 conflict (structural, not an error). */
   conflict: WorkoutSessionConflict | undefined;
+  /**
+   * 17b scope A: set when a successful start auto-closed a stale (>24h)
+   * session. A non-blocking notice, not an error — the requested session
+   * still started.
+   */
+  autoCloseNotice: AutoClosedSessionNotice | undefined;
+  /**
+   * 17b scope A: true when the most recent Discard attempt's abandon call
+   * failed or the session was no longer discardable (`not_active`). The
+   * conflict is NOT cleared and the original start is NOT retried — the one
+   * outcome worse than a blocked start is one that silently did nothing.
+   */
+  discardFailed: boolean;
   /** Non-conflict failure message key (network / not_found / invalid_response). */
   error: string | undefined;
   /**
@@ -128,6 +150,20 @@ export interface UseWorkoutSessionResult {
   handleStartWorkout: (planId: string, day: number) => Promise<void>;
   handleRecordSet: (setId: string, input: WorkoutSetUpdateInput) => Promise<void>;
   handleCompleteWorkout: (sessionId: string) => Promise<void>;
+  /**
+   * 17b scope A Discard: abandons the blocking session named by `conflict`,
+   * then retries the ORIGINAL requested start (the plan/day the user was
+   * trying to start, not the blocking session's day). A no-op when there is
+   * no current conflict.
+   */
+  handleDiscardSession: () => Promise<void>;
+  /**
+   * 17b scope A Resume: loads the blocking session directly by id and makes
+   * it the active session — correct for both a normal conflict and the
+   * legacy null-day case, since it never depends on re-deriving the
+   * blocking session's plan identity from the client.
+   */
+  handleResumeSession: (sessionId: string) => Promise<void>;
 }
 
 // Wrapped in arrow functions (never a direct reference to the imported
@@ -173,7 +209,14 @@ export function useWorkoutSession(
   >();
   const [activeDay, setActiveDay] = useState<number | undefined>();
   const [conflict, setConflict] = useState<WorkoutSessionConflict | undefined>();
+  const [autoCloseNotice, setAutoCloseNotice] = useState<AutoClosedSessionNotice | undefined>();
+  const [discardFailed, setDiscardFailed] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  // 17b scope A: the (planId, day) the user was actually trying to start when
+  // a conflict interrupted them — Discard retries THIS, not the blocking
+  // session's day. Set on every start attempt so it is always in sync with
+  // whichever attempt produced the current conflict.
+  const pendingStartRef = useRef<{ planId: string; day: number } | undefined>(undefined);
   const [syncNotice, setSyncNotice] = useState<
     "reload_required" | "auth_required" | "dropped" | undefined
   >();
@@ -435,6 +478,14 @@ export function useWorkoutSession(
       return;
     }
 
+    // 17b scope A: remember what the user actually asked for, so Discard can
+    // retry THIS exact attempt after abandoning the blocking session.
+    pendingStartRef.current = { planId, day };
+    // A repeated start attempt clears the PRIOR auto-close notice up front —
+    // otherwise a stale notice from an earlier attempt would linger next to
+    // an unrelated new conflict/session.
+    setAutoCloseNotice(undefined);
+
     try {
       const result = await startWorkoutSessionAction(planId, day);
       // A 409 conflict is a structural branch — set state, never throw/crash.
@@ -442,6 +493,8 @@ export function useWorkoutSession(
         setConflict({
           activePlanName: result.activePlanName,
           activeDay: result.activeDay ?? null,
+          activeSessionId: result.activeSessionId ?? "",
+          activeStartedAt: result.activeStartedAt ?? "",
         });
         return;
       }
@@ -449,9 +502,11 @@ export function useWorkoutSession(
       // day starts clean.
       sessionIntentRef.current += 1;
       setConflict(undefined);
+      setDiscardFailed(false);
       setError(undefined);
       setActiveDay(result.session.day ?? day);
       setActiveSession(result.session);
+      setAutoCloseNotice(result.autoClosedSession);
 
       if (ctx) {
         await writeSnapshot(ctx.store, ctx.identityKey, result.session.id, result.session);
@@ -463,6 +518,52 @@ export function useWorkoutSession(
       setError("tracker_error_start");
     }
   }, [validateOfflineIdentity]);
+
+  const handleDiscardSession = useCallback(async () => {
+    const blockingSessionId = conflict?.activeSessionId;
+    const pending = pendingStartRef.current;
+    if (!blockingSessionId || !pending) return;
+
+    try {
+      const outcome = await abandonSessionAction(blockingSessionId);
+      if (outcome.kind !== "ok") {
+        // `not_active` — the session is no longer discardable (already
+        // completed elsewhere). Never silently retry the start: the user
+        // must see that Discard did not do what they asked.
+        setDiscardFailed(true);
+        return;
+      }
+
+      setDiscardFailed(false);
+      setConflict(undefined);
+      await handleStartWorkout(pending.planId, pending.day);
+    } catch {
+      // The mutation itself may or may not have landed — treating it as
+      // failed and NOT retrying the start is the safer default: the one
+      // outcome worse than a blocked start is one that silently did nothing.
+      setDiscardFailed(true);
+    }
+  }, [conflict, handleStartWorkout]);
+
+  const handleResumeSession = useCallback(async (sessionId: string) => {
+    try {
+      const session = await getWorkoutSessionAction(sessionId);
+      sessionIntentRef.current += 1;
+      setConflict(undefined);
+      setDiscardFailed(false);
+      setError(undefined);
+      setActiveDay(session.day);
+      setActiveSession(session);
+
+      const ctx = offlineRef.current;
+      if (ctx) {
+        await writeSnapshot(ctx.store, ctx.identityKey, session.id, session);
+        await writeActiveSessionPointer(ctx.store, ctx.identityKey, session.id);
+      }
+    } catch {
+      setError("tracker_error_start");
+    }
+  }, []);
 
   const handleRecordSet = useCallback(
     async (setId: string, input: WorkoutSetUpdateInput) => {
@@ -591,10 +692,14 @@ export function useWorkoutSession(
     activeSession,
     activeDay,
     conflict,
+    autoCloseNotice,
+    discardFailed,
     error,
     syncNotice,
     handleStartWorkout,
     handleRecordSet,
     handleCompleteWorkout,
+    handleDiscardSession,
+    handleResumeSession,
   };
 }

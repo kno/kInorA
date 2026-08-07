@@ -197,7 +197,16 @@ describe("@kinora/i18n package assembly", () => {
     // beside a plan/tracker exercise. Two keys, not one: the visible label is
     // the same short word on every row, so the link also needs an accessible
     // name that says WHICH exercise it opens.
-    expect(nonBillingKeys).toHaveLength(757);
+    // +7 `plan.start.{autoClosed,resume,discard,discardConfirm,
+    // discardConfirmYes,discardCancel,discardFailed}` (17b scope A) — the
+    // actionable under-24h conflict banner's Resume/Discard actions and the
+    // auto-close notice.
+    // +7 `mobileTracker.{autoClosed,conflict.resume,conflict.discard,
+    // conflict.discardConfirm,conflict.discardConfirmYes,
+    // conflict.discardCancel,conflict.discardFailed}` (17b scope A) — the
+    // mobile equivalent (see the mobileTracker namespace test below, whose
+    // own count also moves by +7).
+    expect(nonBillingKeys).toHaveLength(771);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
@@ -381,7 +390,11 @@ describe("@kinora/i18n package assembly", () => {
     const mobileTrackerKeys = Object.keys(flat).filter((key) => key.startsWith("mobileTracker."));
     // 14b-v1.1 Slice B: +1 `mobileTracker.rpe.a11y` (RPE input accessibility
     // label on the mobile tracker's `ExerciseCard`).
-    expect(mobileTrackerKeys).toHaveLength(24);
+    // 17b scope A: +7 `mobileTracker.autoClosed` +
+    // `mobileTracker.conflict.{resume,discard,discardConfirm,
+    // discardConfirmYes,discardCancel,discardFailed}` — Resume/Discard on
+    // the full-screen conflict state and the auto-close notice text.
+    expect(mobileTrackerKeys).toHaveLength(31);
     expect(flat["mobileTracker.retry"]).toBe("Retry");
     expect(flattenMessages(catalogs.es)["mobileTracker.retry"]).toBe("Reintentar");
   });
