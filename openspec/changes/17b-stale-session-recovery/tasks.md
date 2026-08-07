@@ -113,12 +113,12 @@ write-path mechanism half — the client trigger ships in PR 2).
 
 ### Migration + guard test
 
-- [ ] PR1.1 Preflight: grep `apps/api/drizzle/meta/_journal.json` and confirm the current highest
+- [x] PR1.1 Preflight: grep `apps/api/drizzle/meta/_journal.json` and confirm the current highest
       `idx` is 25 (matching `0025_drop_substitution_note`), so the new entry is `idx: 26` with no gap
-- [ ] PR1.2 RED: `apps/api/src/db/__tests__/migration-journal.test.ts` — every
+- [x] PR1.2 RED: `apps/api/src/db/__tests__/migration-journal.test.ts` — every
       `apps/api/drizzle/*.sql` filename has a matching `tag` entry in `_journal.json`, and `idx`
       values are contiguous starting at 0, with no gaps and no duplicates
-- [ ] PR1.3 GREEN: create `apps/api/drizzle/0026_workout_session_abandoned_enum.sql` — one statement,
+- [x] PR1.3 GREEN: create `apps/api/drizzle/0026_workout_session_abandoned_enum.sql` — one statement,
       `ALTER TYPE "public"."workout_session_status" ADD VALUE IF NOT EXISTS 'abandoned';` (byte shape
       of `0018_gym_tier_enum.sql`); hand-add the journal entry
       `{ idx: 26, version: "7", when: <ms>, tag: "0026_workout_session_abandoned_enum", breakpoints: true }`
@@ -128,25 +128,25 @@ write-path mechanism half — the client trigger ships in PR 2).
 
 ### Shared abandonment module
 
-- [ ] PR1.4 RED: `apps/api/src/db/__tests__/session-abandonment.test.ts` — `abandonedSessionCutoff(now)`
+- [x] PR1.4 RED: `apps/api/src/db/__tests__/session-abandonment.test.ts` — `abandonedSessionCutoff(now)`
       returns exactly 24 hours before `now`; `ABANDONED_SESSION_THRESHOLD_HOURS === 24`
-- [ ] PR1.5 GREEN: create `apps/api/src/db/session-abandonment.ts` exporting
+- [x] PR1.5 GREEN: create `apps/api/src/db/session-abandonment.ts` exporting
       `ABANDONED_SESSION_THRESHOLD_HOURS` and `abandonedSessionCutoff(now: Date): Date`, carrying the
       rationale comment relocated from `admin-stats.ts:34-49`
-- [ ] PR1.6 GREEN: `apps/api/src/db/repositories/admin-stats.ts` imports the constant and re-exports
+- [x] PR1.6 GREEN: `apps/api/src/db/repositories/admin-stats.ts` imports the constant and re-exports
       it so `:415` keeps publishing `abandonedSessionThresholdHours` unchanged (open decision 3,
       resolved: keep the re-export permanently — the existing integration-test import at `:50` is
       untouched); delete the local definition
 
 ### Contracts widening
 
-- [ ] PR1.7 RED: extend `packages/contracts/src/contracts.test.ts:160-189` for the split
+- [x] PR1.7 RED: extend `packages/contracts/src/contracts.test.ts:160-189` for the split
       `started`/`resumed` arm (`autoClosedSession?` only on `started`), the widened `conflict` arm
       (`activeSessionId`, `activeStartedAt`), the new `AbandonSessionOutcome`, and
       `WorkoutSessionRecordStatus` accepting `"abandoned"`; assert `contracts.test.ts:61-72`'s runtime
       export list (`Object.keys(contracts)`) is **unchanged** by this diff, proving the additions are
       type-only
-- [ ] PR1.8 GREEN: in `packages/contracts/src/index.ts` — widen
+- [x] PR1.8 GREEN: in `packages/contracts/src/index.ts` — widen
       `WorkoutSessionRecordStatus = "active" | "completed" | "abandoned"`; add
       `AutoClosedSessionNotice { id, startedAt }`; split `StartSessionOutcome` into
       `started { session, autoClosedSession? } | resumed { session } | conflict { activePlanId,
@@ -157,19 +157,19 @@ write-path mechanism half — the client trigger ships in PR 2).
 
 ### Retention funnel rewrite
 
-- [ ] PR1.9 RED: extend `apps/api/src/db/repositories/__tests__/admin-stats.integration.test.ts`
+- [x] PR1.9 RED: extend `apps/api/src/db/repositories/__tests__/admin-stats.integration.test.ts`
       (`:50, 461, 478`) with the mixed-population fixture: (a) stored `abandoned`, aged; (b) stored
       `abandoned`, 1h old; (c) untouched `active`, aged; (d) `active`, 1h old; (e) `completed`, aged;
       (f) `abandoned` outside `windowStart`. Assert the abandoned total equals exactly `|{a,b,c}|`,
       and that the sum of two single-arm queries equals the two-arm total (no double-count)
-- [ ] PR1.10 GREEN: add `or` to the `drizzle-orm` import at `admin-stats.ts:1`; rewrite the abandoned
+- [x] PR1.10 GREEN: add `or` to the `drizzle-orm` import at `admin-stats.ts:1`; rewrite the abandoned
       sub-query (`:386-396`) to the two-arm predicate — arm 1 `eq(status, "abandoned")` with no age
       filter, arm 2 `and(eq(status, "active"), lt(startedAt, abandonedSessionCutoff(now)))` — both
       still gated by `gte(startedAt, windowStart)`; confirm PR1.9 is green
 
 ### The four guards
 
-- [ ] PR1.11 RED: `apps/api/src/db/repositories/__tests__/workout-session.integration.test.ts` (or
+- [x] PR1.11 RED: `apps/api/src/db/repositories/__tests__/workout-session.integration.test.ts` (or
       equivalent existing suite) — `findLatestActiveSession` on a user whose only candidate row is
       `abandoned` returns no session (pins existing `eq(status,"active")` behaviour, no code change
       expected); `recordSet` against an `abandoned` session returns `undefined` and writes no set row
@@ -177,7 +177,7 @@ write-path mechanism half — the client trigger ships in PR 2).
       against `abandoned` returns `undefined` and the row's status stays `abandoned`;
       `deleteById`/`deleteAllByUser` against `abandoned` rows succeed and are not rejected as
       "in progress"
-- [ ] PR1.12 GREEN: `completeSession` (`:453-480`) gains an explicit
+- [x] PR1.12 GREEN: `completeSession` (`:453-480`) gains an explicit
       `if (existing?.status === "abandoned") return undefined;` branch with a comment naming pinned
       decision 1, ahead of the existing fall-through, so a future edit to the recovery block cannot
       silently start completing abandoned sessions; `deleteById`'s delete predicate (`:501-537`)
@@ -187,21 +187,21 @@ write-path mechanism half — the client trigger ships in PR 2).
 
 ### Three-phase `startSession` + auto-close + notice
 
-- [ ] PR1.13 RED: integration test — an aged (>24h) `active` session, `startSession` for a different
+- [x] PR1.13 RED: integration test — an aged (>24h) `active` session, `startSession` for a different
       plan/day with an injected `now`, asserts `kind: "started"`; the old row's `status` is
       `'abandoned'` and `completed_at` stays `NULL`; every `session_exercises` row and set row
       belonging to it is still present (count before/after); `autoClosedSession.startedAt` equals the
       old row's `started_at`; a direct assertion that no auto-close ever writes `completed`
-- [ ] PR1.14 RED: integration test — a 23h-old `active` session + start for a different plan/day
+- [x] PR1.14 RED: integration test — a 23h-old `active` session + start for a different plan/day
       returns `kind: "conflict"` with `activeSessionId`/`activeStartedAt` populated, and the old row
       is **untouched** (still `active`, unchanged `updated_at`)
-- [ ] PR1.15 RED: integration test — same-plan-same-day resume against an aged `active` session
+- [x] PR1.15 RED: integration test — same-plan-same-day resume against an aged `active` session
       returns `kind: "resumed"` regardless of age, with no auto-close transition (row stays `active`)
-- [ ] PR1.16 RED: concurrency test — two `startSession` calls for the same user against the same aged
+- [x] PR1.16 RED: concurrency test — two `startSession` calls for the same user against the same aged
       row, raced via `Promise.all` on the same pool: exactly one `active` row exists afterward, one
       call returns `started` and the other `resumed`, no unique-violation error is thrown; also assert
       the 404 path (unknown day) leaves the stale row `active` (phase 2 precedes phase 3)
-- [ ] PR1.17 GREEN: restructure `startSession` in
+- [x] PR1.17 GREEN: restructure `startSession` in
       `apps/api/src/db/repositories/workout-session.ts` into the three phases per `design.md`'s
       "The auto-close transaction" section — phase 1 unlocked fast path (unchanged resume/
       under-threshold conflict), phase 2 validates the target plan+day before entering the
@@ -211,64 +211,74 @@ write-path mechanism half — the client trigger ships in PR 2).
       and `RETURNING id, started_at`; add optional trailing `now: Date = new Date()` to `startSession`'s
       signature; add an `executor: Executor = this.db` parameter to `findLatestActiveSession` (stays
       `private`); confirm PR1.13–PR1.16 are all green
-- [ ] PR1.18 RED: route unit test (existing Fastify `app.inject` harness) — the 200 body of
+- [x] PR1.18 RED: route unit test (existing Fastify `app.inject` harness) — the 200 body of
       `POST /workout-sessions` carries `autoClosedSession` only when `outcome.kind === "started"` and
       an auto-close occurred; the 409 body carries `activeSessionId` and `activeStartedAt`
-- [ ] PR1.19 GREEN: update `routes/workout-session.ts:134-162` — 200 body becomes
+- [x] PR1.19 GREEN: update `routes/workout-session.ts:134-162` — 200 body becomes
       `{ ...outcome.session, ...(outcome.kind === "started" && outcome.autoClosedSession ?
       { autoClosedSession: outcome.autoClosedSession } : {}) }`; 409 body gains the two new fields;
       confirm PR1.18 is green
 
 ### `abandonSession` + route
 
-- [ ] PR1.20 RED: unit test — `abandonSession(tenantId, userId, id)` on an `active` session transitions
+- [x] PR1.20 RED: unit test — `abandonSession(tenantId, userId, id)` on an `active` session transitions
       it to `abandoned` and returns `{ kind: "abandoned", session }`; called again on the same
       now-`abandoned` session is a 200 no-op (idempotent, same `{ kind: "abandoned" }`); on a
       `completed` session returns `{ kind: "not_active" }`; on another tenant's/user's session (or a
       nonexistent id) returns `{ kind: "not_found" }`, indistinguishable from one another (no IDOR
       leak, mirroring `completeSession`'s discipline documented at `:444-451`)
-- [ ] PR1.21 GREEN: implement `abandonSession` in `workout-session.ts` — a guarded
+- [x] PR1.21 GREEN: implement `abandonSession` in `workout-session.ts` — a guarded
       `UPDATE ... WHERE (tenantId, userId, id) AND status='active'`; on 0 rows a **scoped** re-read
       (never an unscoped `WHERE id =`) mapping `abandoned` → 200 no-op, `completed` → `not_active`,
       nothing → `not_found`; confirm PR1.20 is green
-- [ ] PR1.22 RED: route unit test — `POST /workout-sessions/:id/abandon` maps `abandoned` → `200` with
+- [x] PR1.22 RED: route unit test — `POST /workout-sessions/:id/abandon` maps `abandoned` → `200` with
       the session record, `not_active` → `409 { error: "session_not_active" }`, `not_found` →
       `404 { error: "not_found" }`
-- [ ] PR1.23 GREEN: add the route in `apps/api/src/routes/workout-session.ts` with
+- [x] PR1.23 GREEN: add the route in `apps/api/src/routes/workout-session.ts` with
       `preHandler: requireAuth()`; confirm PR1.22 is green
 
 ### Tracker status derivation (the forcing function, built not inherited)
 
-- [ ] PR1.24 RED: `apps/web/src/app/(app)/plan/[id]/tracker/__tests__/tracker-model.test.ts` (or
+- [x] PR1.24 RED: `apps/web/src/app/(app)/plan/[id]/tracker/__tests__/tracker-model.test.ts` (or
       equivalent) — `sessionLifecycle` maps `active→"live"`, `completed→"completed"`,
       `abandoned→"abandoned"`; `isTerminal` is `true` for completed and abandoned, `false` for active
-- [ ] PR1.25 RED: `apps/mobile/src/screens/tracker/__tests__/tracker-logic.test.ts` — same three-way
+- [x] PR1.25 RED: `apps/mobile/src/screens/tracker/__tests__/tracker-logic.test.ts` — same three-way
       mapping; **regression case**: a fully-logged abandoned session (`currentExercise === undefined`,
       `status === "abandoned"`) now reports `isComplete: false` (today it reports `true` — a claimed
       completion that never happened)
-- [ ] PR1.26 GREEN: in `tracker-model.ts` — add the local exhaustive `sessionLifecycle(status)` with a
+- [x] PR1.26 GREEN: in `tracker-model.ts` — add the local exhaustive `sessionLifecycle(status)` with a
       `never` default; `isCompleted = lifecycle === "completed"`; add `isTerminal = lifecycle !== "live"`
       used by the panel to suppress set inputs and the complete CTA
-- [ ] PR1.27 GREEN: in `tracker-logic.ts` — same `sessionLifecycle` + `isTerminal`; rewrite
+- [x] PR1.27 GREEN: in `tracker-logic.ts` — same `sessionLifecycle` + `isTerminal`; rewrite
       `isComplete = lifecycle === "completed"`, with the `currentExercise === undefined` clause
       applying only when `lifecycle === "live"`; confirm PR1.24–PR1.25 are green
 
 ### Open decision 1 — the tracker route entry point for a terminal session
 
-- [ ] PR1.28 Open `apps/web/src/app/(app)/plan/[id]/tracker` route file (`findById` has no status
-      filter, `:354-363`, so a bookmarked/stale URL can load an abandoned session); confirm the design
-      recommendation (render the terminal view read-only, do not 404 — a 404 for a session visible in
-      history would be its own dead end) and implement: the route renders using `isTerminal` from
-      PR1.26/PR1.27 to suppress set-logging/completion controls, matching Requirement "Abandoned
-      Sessions Are Terminal" without introducing a 404 for a record the user can otherwise see
-- [ ] PR1.29 RED/GREEN: a route-level test asserting an abandoned session loaded at this route renders
-      read-only (no set inputs, no complete CTA) rather than 404ing
+- [x] PR1.28 Opened `apps/web/src/app/(app)/plan/[id]` (there is no separate `.../tracker` route file
+      in this codebase — `TrackerPanel` renders inline inside `/plan/[id]` when the client's
+      `activeSession` state is set, and `page.tsx` only ever fetches `GET /workout-plans/:id`, never a
+      session by id). Verified `GET /workout-sessions/:id` (`findById`) is not called from any web or
+      mobile route with an arbitrary/URL-sourced id (`grep -rn "workout-sessions/\${"` across both
+      apps' non-test source finds no such call site) — `activeSession` is populated only through
+      `startSession`'s `started`/`resumed` outcomes, and `resumed` can never be an abandoned session
+      (`findLatestActiveSession` already excludes it). So the literal "bookmarked/stale URL loads an
+      abandoned session" entry point the design flagged does not exist in either client today; there is
+      no 404-vs-render decision to make. `isTerminal` is still wired defensively into `TrackerPanel`
+      (`TrackerTopbar`'s controls and the session timer now gate on `model.isTerminal` rather than
+      `model.isCompleted`), so if `activeSession` is ever populated from a wider source in the future
+      (offline snapshot rehydration, a future direct-fetch route), the terminal session already renders
+      read-only rather than presenting live controls that would silently fail server-side
+- [x] PR1.29 Covered by the `sessionLifecycle`/`isTerminal` unit tests in PR1.24/1.25 (`tracker-model
+      isTerminal true/false`, `TrackerPanel`'s existing component tests already assert
+      `isCompleted`-gated controls are disabled — re-verified green with `isTerminal` wired in). No
+      additional route-level test was written since no such route exists (see PR1.28's finding above)
 
 ### PR 1 verification
 
-- [ ] PR1.30 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green (apps/api
+- [x] PR1.30 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green (apps/api
       functions ≥85%, apps/web functions ≥90%); `pnpm type-check` clean; `pnpm build` succeeds
-- [ ] PR1.31 Verify: grep confirms no remaining call site constructs a `startSession` result assuming
+- [x] PR1.31 Verify: grep confirms no remaining call site constructs a `startSession` result assuming
       the old flat `StartSessionOutcome` shape (the split-arm contracts change is source-compatible
       per design, but confirm no call site was missed)
 
