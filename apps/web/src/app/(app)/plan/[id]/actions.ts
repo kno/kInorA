@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { fetchPlanStatus, type FetchPlanResult } from "@/app/(app)/create-plan/plan-draft-client";
 import {
+  abandonSession,
   completeWorkoutSession,
   fetchAuthIdentity,
   fetchWorkoutSession,
@@ -12,7 +13,7 @@ import {
   startWorkoutSession,
 } from "./tracker-client";
 import type { WorkoutSetUpdateInput } from "./tracker-types";
-import type { WorkoutSessionRecord } from "@kinora/contracts";
+import type { AutoClosedSessionNotice, WorkoutSessionRecord } from "@kinora/contracts";
 import type { WorkoutSessionResult } from "./tracker-client";
 import { WorkoutSessionActionError } from "./action-errors";
 
@@ -29,8 +30,27 @@ import { WorkoutSessionActionError } from "./action-errors";
  * single `kind:"ok"` success branch.
  */
 export type StartWorkoutSessionActionResult =
+  | { kind: "ok"; session: WorkoutSessionRecord; autoClosedSession?: AutoClosedSessionNotice }
+  | {
+      kind: "conflict";
+      activePlanName?: string;
+      activeDay?: number | null;
+      /** 17b scope A: the blocking session, so the banner can name its date and resume it. */
+      activeSessionId?: string;
+      activeStartedAt?: string;
+    };
+
+/**
+ * Result of the abandon-workout server action (17b scope A Discard).
+ *
+ * Mirrors the start action's discriminated-branch discipline: `not_active`
+ * (the session already completed) is a normal branch, not a throw — the
+ * caller decides whether to retry the original start. Any other failure
+ * (network / not_found) stays a throw.
+ */
+export type AbandonWorkoutSessionActionResult =
   | { kind: "ok"; session: WorkoutSessionRecord }
-  | { kind: "conflict"; activePlanName?: string; activeDay?: number | null };
+  | { kind: "not_active" };
 
 async function sessionToken(): Promise<string | undefined> {
   const jar = await cookies();
@@ -117,7 +137,11 @@ export async function startWorkoutSessionAction(
   const result = await startWorkoutSession(planId, day, token);
 
   if (result.kind === "ok") {
-    return { kind: "ok", session: result.session };
+    return {
+      kind: "ok",
+      session: result.session,
+      ...(result.autoClosedSession ? { autoClosedSession: result.autoClosedSession } : {}),
+    };
   }
 
   // A 409 active_session_conflict is a structured branch, NOT a throw — throwing
@@ -127,11 +151,37 @@ export async function startWorkoutSessionAction(
       kind: "conflict",
       activePlanName: result.activePlanName,
       activeDay: result.activeDay,
+      activeSessionId: result.activeSessionId,
+      activeStartedAt: result.activeStartedAt,
     };
   }
 
   // Any other error (network, not_found, invalid_response) stays a throw so the
   // existing error boundary behavior is preserved for genuinely broken states.
+  throw new Error(result.message);
+}
+
+/**
+ * Server Action for Discard (17b scope A). Reuses the same
+ * `POST /workout-sessions/:id/abandon` write path threshold-based auto-close
+ * uses — this is only the client trigger.
+ */
+export async function abandonSessionAction(
+  sessionId: string,
+): Promise<AbandonWorkoutSessionActionResult> {
+  const token = await sessionToken();
+  const result = await abandonSession(sessionId, token);
+
+  if (result.kind === "ok") {
+    return { kind: "ok", session: result.session };
+  }
+
+  // A 409 session_not_active is a structured branch (the caller decides
+  // whether to retry the start it was blocking) — not a throw.
+  if (result.message === "session_not_active") {
+    return { kind: "not_active" };
+  }
+
   throw new Error(result.message);
 }
 

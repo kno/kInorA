@@ -235,9 +235,13 @@ describe("PlanStatusClient — post-generation redirect to canonical /plan", () 
       conflict: undefined,
       error: undefined,
       syncNotice: undefined,
+      autoCloseNotice: undefined,
+      discardFailed: false,
       handleStartWorkout: vi.fn(),
       handleRecordSet: vi.fn(),
       handleCompleteWorkout: vi.fn(),
+      handleDiscardSession: vi.fn(),
+      handleResumeSession: vi.fn(),
     });
 
     renderWithIntl(
@@ -245,6 +249,165 @@ describe("PlanStatusClient — post-generation redirect to canonical /plan", () 
     );
 
     expect(routerReplace).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
+describe("PlanStatusClient — actionable conflict banner (17b scope A)", () => {
+  const conflict = {
+    activePlanName: "Summer Cut",
+    activeDay: 3,
+    activeSessionId: "session-blocking",
+    activeStartedAt: "2026-08-05T09:00:00.000Z",
+  };
+
+  it("names the blocking session's start date and offers Resume/Discard, no focus assertion", () => {
+    defaultWsReturn("ready");
+    const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+      activeSession: undefined,
+      activeDay: undefined,
+      conflict,
+      autoCloseNotice: undefined,
+      discardFailed: false,
+      error: undefined,
+      syncNotice: undefined,
+      handleStartWorkout: vi.fn(),
+      handleRecordSet: vi.fn(),
+      handleCompleteWorkout: vi.fn(),
+      handleDiscardSession: vi.fn(),
+      handleResumeSession: vi.fn(),
+    });
+
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="ready" />,
+    );
+
+    const banner = screen.getByRole("alert");
+    expect(banner.textContent).toContain("Aug 5, 2026");
+    expect(screen.getByRole("button", { name: "Resume" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Discard" })).toBeDefined();
+
+    spy.mockRestore();
+  });
+
+  it("Resume calls handleResumeSession with the blocking session's id", () => {
+    defaultWsReturn("ready");
+    const handleResumeSession = vi.fn();
+    const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+      activeSession: undefined,
+      activeDay: undefined,
+      conflict,
+      autoCloseNotice: undefined,
+      discardFailed: false,
+      error: undefined,
+      syncNotice: undefined,
+      handleStartWorkout: vi.fn(),
+      handleRecordSet: vi.fn(),
+      handleCompleteWorkout: vi.fn(),
+      handleDiscardSession: vi.fn(),
+      handleResumeSession,
+    });
+
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="ready" />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+
+    expect(handleResumeSession).toHaveBeenCalledWith("session-blocking");
+    spy.mockRestore();
+  });
+
+  it("Discard requires one confirmation before calling handleDiscardSession", () => {
+    defaultWsReturn("ready");
+    const handleDiscardSession = vi.fn();
+    const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+      activeSession: undefined,
+      activeDay: undefined,
+      conflict,
+      autoCloseNotice: undefined,
+      discardFailed: false,
+      error: undefined,
+      syncNotice: undefined,
+      handleStartWorkout: vi.fn(),
+      handleRecordSet: vi.fn(),
+      handleCompleteWorkout: vi.fn(),
+      handleDiscardSession,
+      handleResumeSession: vi.fn(),
+    });
+
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="ready" />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(handleDiscardSession).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Yes, discard" }));
+    expect(handleDiscardSession).toHaveBeenCalledTimes(1);
+
+    spy.mockRestore();
+  });
+
+  it("does not nest a second role=alert region for the discardFailed message", () => {
+    defaultWsReturn("ready");
+    const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+      activeSession: undefined,
+      activeDay: undefined,
+      conflict,
+      autoCloseNotice: undefined,
+      discardFailed: true,
+      error: undefined,
+      syncNotice: undefined,
+      handleStartWorkout: vi.fn(),
+      handleRecordSet: vi.fn(),
+      handleCompleteWorkout: vi.fn(),
+      handleDiscardSession: vi.fn(),
+      handleResumeSession: vi.fn(),
+    });
+
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="ready" />,
+    );
+
+    // The conflict container already owns role="alert"; the discardFailed
+    // message must be role="status" so screen readers do not announce two
+    // nested alert regions for the same event.
+    const discardFailedMessage = screen.getByText("We couldn't discard that session. Try again.");
+    expect(discardFailedMessage.getAttribute("role")).toBe("status");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+
+    spy.mockRestore();
+  });
+
+  it("renders a non-blocking auto-close notice when the hook surfaces one", () => {
+    defaultWsReturn("ready");
+    const spy = vi.spyOn(useWorkoutSessionModule, "useWorkoutSession").mockReturnValue({
+      activeSession: {
+        id: "session-1",
+        workoutPlanId: "plan-1",
+        status: "active",
+        startedAt: "2026-08-07T09:00:00.000Z",
+        exercises: [],
+      },
+      activeDay: 1,
+      conflict: undefined,
+      autoCloseNotice: { id: "session-stale", startedAt: "2026-08-04T08:00:00.000Z" },
+      discardFailed: false,
+      error: undefined,
+      syncNotice: undefined,
+      handleStartWorkout: vi.fn(),
+      handleRecordSet: vi.fn(),
+      handleCompleteWorkout: vi.fn(),
+      handleDiscardSession: vi.fn(),
+      handleResumeSession: vi.fn(),
+    });
+
+    renderWithIntl(
+      <PlanStatusClient planId="plan-1" specId="spec-1" initialStatus="ready" />,
+    );
+
+    const notice = screen.getByRole("status");
+    expect(notice.textContent).toContain("Aug 4, 2026");
+
     spy.mockRestore();
   });
 });
@@ -261,9 +424,13 @@ describe("PlanStatusClient — unmapped error code (CRITICAL regression guard)",
       conflict: undefined,
       error: "some_unknown_error",
       syncNotice: undefined,
+      autoCloseNotice: undefined,
+      discardFailed: false,
       handleStartWorkout: vi.fn(),
       handleRecordSet: vi.fn(),
       handleCompleteWorkout: vi.fn(),
+      handleDiscardSession: vi.fn(),
+      handleResumeSession: vi.fn(),
     });
 
     renderWithIntl(
@@ -287,9 +454,13 @@ describe("PlanStatusClient — offline sync notices (Judgment Day fix #3/#4)", (
       conflict: undefined,
       error: undefined,
       syncNotice: "auth_required",
+      autoCloseNotice: undefined,
+      discardFailed: false,
       handleStartWorkout: vi.fn(),
       handleRecordSet: vi.fn(),
       handleCompleteWorkout: vi.fn(),
+      handleDiscardSession: vi.fn(),
+      handleResumeSession: vi.fn(),
     });
 
     renderWithIntl(
@@ -311,9 +482,13 @@ describe("PlanStatusClient — offline sync notices (Judgment Day fix #3/#4)", (
       conflict: undefined,
       error: undefined,
       syncNotice: "dropped",
+      autoCloseNotice: undefined,
+      discardFailed: false,
       handleStartWorkout: vi.fn(),
       handleRecordSet: vi.fn(),
       handleCompleteWorkout: vi.fn(),
+      handleDiscardSession: vi.fn(),
+      handleResumeSession: vi.fn(),
     });
 
     renderWithIntl(

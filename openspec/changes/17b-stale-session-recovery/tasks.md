@@ -298,14 +298,14 @@ Terminal State as Auto-Close (the client-trigger half — the write path is PR 1
 
 ### Open decision 2 — the exact `{date}` call sites
 
-- [ ] PR2.1 Grep-confirm the complete call-site set for `plan.start.conflict`, `conflict_no_day`,
+- [x] PR2.1 Grep-confirm the complete call-site set for `plan.start.conflict`, `conflict_no_day`,
       `conflict_generic`: `DayDetailPanel.tsx:94-102`, `PlanStatusClient.tsx:176-185`, and the mobile
       `M.conflict*` message definitions. A missed call site would render an unresolved `{date}`
       placeholder rather than failing loudly, so this list is asserted before the i18n edit, not after
 
 ### i18n
 
-- [ ] PR2.2 Update `packages/i18n/src/messages/{en,es}.json` (`en.json:315-317`, `es.json:315-317`) —
+- [x] PR2.2 Update `packages/i18n/src/messages/{en,es}.json` (`en.json:315-317`, `es.json:315-317`) —
       add a `{date}` argument in place to `plan.start.conflict`, `conflict_no_day`, `conflict_generic`;
       add new keys `plan.start.autoClosed`, `plan.start.resume`, `plan.start.discard`,
       `plan.start.discardConfirm`, `plan.start.discardConfirmYes`, `plan.start.discardCancel`,
@@ -315,47 +315,60 @@ Terminal State as Auto-Close (the client-trigger half — the write path is PR 1
 
 ### Web `/plan` — actionable banner with focus management
 
-- [ ] PR2.3 RED: `use-workout-session.test.ts` (or equivalent) — `WorkoutSessionConflict` gains
+- [x] PR2.3 RED: `use-workout-session.test.ts` (or equivalent) — `WorkoutSessionConflict` gains
       `activeSessionId`/`activeStartedAt`; a new `autoCloseNotice` state is set when a `started`
       response carries `autoClosedSession`; `handleDiscardSession` posts to the abandon endpoint then
       retries the original start, and on abandon failure sets a `discardFailed` state and does **not**
       retry the start
-- [ ] PR2.4 GREEN: implement the above in
+- [x] PR2.4 GREEN: implement the above in
       `apps/web/src/app/(app)/plan/use-workout-session.ts`
-- [ ] PR2.5 RED: component test (RTL + jsdom, `scrollIntoView` stubbed) — on a `conflict` result,
+- [x] PR2.5 RED: component test (RTL + jsdom, `scrollIntoView` stubbed) — on a `conflict` result,
       the banner receives focus (`document.activeElement`); the message contains the formatted
       `{date}`; Resume calls start with `(activePlanId, activeDay)`; when `activeDay` is `null`,
       Resume instead navigates to the tracker by `activeSessionId`; Discard shows a confirm step and
       only posts abandon after confirmation; cancel posts nothing; abandon failure shows
       `discardFailed` and does not retry the start
-- [ ] PR2.6 GREEN: implement in `apps/web/src/app/(app)/plan/DayDetailPanel.tsx` — the banner becomes
+
+      **Deviation (discovered, not assumed):** `activePlanId` is on the internal `StartSessionOutcome`
+      type but PR1's shipped route (`routes/workout-session.ts`) never forwards it in the 409 body —
+      only `activePlanName`/`activeDay`/`activeSessionId`/`activeStartedAt` cross the wire. Resuming
+      via `(activePlanId, activeDay)` is therefore not possible from the client as designed. Resume is
+      implemented uniformly (both the normal and legacy null-day case) as `handleResumeSession
+      (activeSessionId)` — a new hook action that loads the blocking session directly by id
+      (`getWorkoutSessionAction`) and sets it active. This is strictly safer than re-deriving plan
+      identity client-side (a same-plan-different-day conflict would otherwise resolve against the
+      wrong plan id and produce a confusing repeat-conflict) and needs no API change.
+- [x] PR2.6 GREEN: implement in `apps/web/src/app/(app)/plan/DayDetailPanel.tsx` — the banner becomes
       a focusable container (`ref`, `tabIndex={-1}`, `role="alert"`) with an effect that calls
       `.focus()` and `.scrollIntoView({ block: "center", behavior: "smooth" })` when `conflict`
       transitions from absent to present; Resume/Discard actions with the one-confirm step; `{date}`
       threaded into the three message keys; confirm PR2.5 is green
-- [ ] PR2.7 RED: component test — the auto-close notice renders `role="status"`, names the closed
+- [x] PR2.7 RED: component test — the auto-close notice renders `role="status"`, names the closed
       session's date, and does **not** steal focus (`document.activeElement` unchanged by its
       appearance)
-- [ ] PR2.8 GREEN: implement the auto-close notice in `DayDetailPanel.tsx`, rendered beside the newly
-      started session; confirm PR2.7 is green
+- [x] PR2.8 GREEN: implement the auto-close notice; **rendered in `PlanTrackerClient.tsx`'s
+      `activeSession` branch, not `DayDetailPanel.tsx`** — `DayDetailPanel` unmounts once a session is
+      active (`PlanTrackerClient` swaps to `TrackerPanel`), so "beside the newly started session"
+      necessarily means beside the tracker identity header, which lives in `PlanTrackerClient`
+      (mirrored in `PlanStatusClient.tsx` for `/plan/[id]`). Confirms PR2.7 is green.
 
 ### Web `/plan/[id]` and mobile — same actions, no focus assertion
 
-- [ ] PR2.9 RED: component test — `PlanStatusClient.tsx` renders the same Resume/Discard + confirm
+- [x] PR2.9 RED: component test — `PlanStatusClient.tsx` renders the same Resume/Discard + confirm
       actions and `{date}`; no focus assertion (out of scope by design — the banner already renders
       first in the returned fragment)
-- [ ] PR2.10 GREEN: implement in `apps/web/src/app/(app)/plan/[id]/PlanStatusClient.tsx` and thread
+- [x] PR2.10 GREEN: implement in `apps/web/src/app/(app)/plan/[id]/PlanStatusClient.tsx` and thread
       the widened conflict fields + the abandon action through
       `apps/web/src/app/(app)/plan/[id]/actions.ts`; confirm PR2.9 is green
-- [ ] PR2.11 RED: RN component test — `WorkoutTrackerScreen.tsx`'s existing full-screen conflict state
+- [x] PR2.11 RED: RN component test — `WorkoutTrackerScreen.tsx`'s existing full-screen conflict state
       gains Resume/Discard + confirm and `{date}`
-- [ ] PR2.12 GREEN: implement in `apps/mobile/src/screens/WorkoutTrackerScreen.tsx`; add the abandon
+- [x] PR2.12 GREEN: implement in `apps/mobile/src/screens/WorkoutTrackerScreen.tsx`; add the abandon
       client call and thread the widened fields in `apps/mobile/src/api/workout-session.ts`; confirm
       PR2.11 is green
 
 ### PR 2 verification
 
-- [ ] PR2.13 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green (apps/web
+- [x] PR2.13 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green (apps/web
       functions ≥90%); `pnpm type-check` clean; `pnpm build` succeeds (rebuilds `packages/i18n`)
 
 ---

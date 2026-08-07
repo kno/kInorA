@@ -4,6 +4,7 @@ import type {
   WorkoutSessionRecord,
 } from "@kinora/contracts";
 import {
+  abandonSession,
   completeWorkoutSession,
   getWorkoutHistory,
   getWorkoutSession,
@@ -97,6 +98,65 @@ describe("workout-session client", () => {
       message: "active_session_conflict",
       activePlanName: "Fuerza total",
       activeDay: 3,
+    });
+  });
+
+  it("carries the blocking session's id and start date on a 409 conflict (17b scope A)", async () => {
+    const fetchImpl = mockFetch(
+      jsonResponse(
+        {
+          error: "active_session_conflict",
+          activePlanName: "Fuerza total",
+          activeDay: 3,
+          activeSessionId: "sess_blocking",
+          activeStartedAt: "2026-08-05T09:00:00.000Z",
+        },
+        409,
+      ),
+    );
+    const res = await startWorkoutSession("plan_1", 1, { getToken: token, fetchImpl });
+    expect(res).toMatchObject({
+      activeSessionId: "sess_blocking",
+      activeStartedAt: "2026-08-05T09:00:00.000Z",
+    });
+  });
+
+  it("carries the additive autoClosedSession sibling key on a 200 response, when present", async () => {
+    const fetchImpl = mockFetch(
+      jsonResponse({
+        ...sessionFixture,
+        autoClosedSession: { id: "sess_stale", startedAt: "2026-08-04T08:00:00.000Z" },
+      }),
+    );
+    const res = await startWorkoutSession("plan_1", 1, { getToken: token, fetchImpl });
+    expect(res.kind).toBe("ok");
+    expect(res).toMatchObject({
+      autoClosedSession: { id: "sess_stale", startedAt: "2026-08-04T08:00:00.000Z" },
+    });
+  });
+
+  describe("abandonSession (17b scope A Discard)", () => {
+    it("POSTs to the session's abandon sub-resource", async () => {
+      const fetchImpl = mockFetch(jsonResponse({ ...sessionFixture, status: "abandoned" }));
+      const res = await abandonSession("sess_1", { getToken: token, apiBaseUrl: "http://api.test", fetchImpl });
+
+      const { url, init } = firstCall(fetchImpl);
+      expect(url).toBe("http://api.test/workout-sessions/sess_1/abandon");
+      expect(init.method).toBe("POST");
+      expect(res.kind).toBe("ok");
+    });
+
+    it("maps a 409 session_not_active to a bare VALIDATION error", async () => {
+      const fetchImpl = mockFetch(jsonResponse({ error: "session_not_active" }, 409));
+      const res = await abandonSession("sess_1", { getToken: token, fetchImpl });
+      expect(res).toEqual({ kind: "error", message: "session_not_active", code: "VALIDATION" });
+    });
+
+    it("returns no_session without calling the API when the token is missing", async () => {
+      const fetchImpl = vi.fn();
+      const res = await abandonSession("sess_1", { getToken: async () => null, fetchImpl });
+      expect(res).toEqual({ kind: "error", message: "no_session" });
+      expect(fetchImpl).not.toHaveBeenCalled();
     });
   });
 

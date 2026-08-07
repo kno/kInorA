@@ -23,10 +23,18 @@ import { describe, expect, it } from "vitest";
 function render(
   locale: "en" | "es",
   id: string,
-  values?: Record<string, string | number>,
+  values?: Record<string, string | number | Date>,
 ) {
   const intl = createIntl({ locale, messages: flattenMessages(catalogs[locale]) });
   return intl.formatMessage({ id }, values);
+}
+
+// 17b scope A: the conflict.* keys gained a `{date, date, medium}` argument
+// naming the blocking session's start date — computed via the same ICU
+// medium format the catalog uses, rather than hand-baking a locale string.
+const CONFLICT_DATE = new Date("2026-08-05T09:00:00.000Z");
+function mediumDate(locale: "en" | "es"): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(CONFLICT_DATE);
 }
 
 describe("tracker copy → ICU catalog parity", () => {
@@ -61,8 +69,8 @@ describe("tracker copy → ICU catalog parity", () => {
       "¡Buen trabajo! Registramos tu entrenamiento.",
     );
     expect(render("es", "mobileTracker.backHome")).toBe("Volver al inicio");
-    expect(render("es", "mobileTracker.conflict.generic")).toBe(
-      "Ya tienes una sesión activa. Termínala antes de empezar otra.",
+    expect(render("es", "mobileTracker.conflict.generic", { date: CONFLICT_DATE })).toBe(
+      `Ya tienes una sesión activa, iniciada el ${mediumDate("es")}. Termínala antes de empezar otra.`,
     );
     expect(render("es", "mobileTracker.error.start")).toBe(
       "No pudimos iniciar la sesión. Inténtalo de nuevo.",
@@ -107,11 +115,19 @@ describe("tracker copy → ICU catalog parity", () => {
     expect(render("es", "mobileTracker.next.detailNoWeight", { sets: 3, reps: "12" })).toBe(
       "3 series · 12 reps",
     );
-    expect(render("es", "mobileTracker.conflict.withScope", { planName: "Fuerza", day: 3 })).toBe(
-      "Ya tienes una sesión activa en «Fuerza» (Día 3). Termínala antes de empezar otra.",
+    expect(
+      render("es", "mobileTracker.conflict.withScope", {
+        planName: "Fuerza",
+        day: 3,
+        date: CONFLICT_DATE,
+      }),
+    ).toBe(
+      `Ya tienes una sesión activa en «Fuerza» (Día 3), iniciada el ${mediumDate("es")}. Termínala antes de empezar otra.`,
     );
-    expect(render("es", "mobileTracker.conflict.withPlan", { planName: "Fuerza" })).toBe(
-      "Ya tienes una sesión activa en «Fuerza». Termínala antes de empezar otra.",
+    expect(
+      render("es", "mobileTracker.conflict.withPlan", { planName: "Fuerza", date: CONFLICT_DATE }),
+    ).toBe(
+      `Ya tienes una sesión activa en «Fuerza», iniciada el ${mediumDate("es")}. Termínala antes de empezar otra.`,
     );
   });
 
@@ -131,9 +147,13 @@ describe("tracker copy → ICU catalog parity", () => {
       render("en", "mobileTracker.objective.withWeight", { weightKg: 40, reps: "8" }),
     ).toBe("40 kg × 8 reps");
     expect(
-      render("en", "mobileTracker.conflict.withScope", { planName: "Fuerza", day: 3 }),
+      render("en", "mobileTracker.conflict.withScope", {
+        planName: "Fuerza",
+        day: 3,
+        date: CONFLICT_DATE,
+      }),
     ).toBe(
-      'You already have an active session in "Fuerza" (Day 3). Finish it before starting another.',
+      `You already have an active session in "Fuerza" (Day 3), started ${mediumDate("en")}. Finish it before starting another.`,
     );
   });
 });

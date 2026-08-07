@@ -18,11 +18,15 @@ vi.mock("../[id]/TrackerPanel.module.css", () => ({
 const startWorkoutSessionAction = vi.fn();
 const recordWorkoutSetAction = vi.fn();
 const completeWorkoutSessionAction = vi.fn();
+const abandonSessionAction = vi.fn();
+const getWorkoutSessionAction = vi.fn();
 
 vi.mock("../[id]/actions", () => ({
   startWorkoutSessionAction: (...args: unknown[]) => startWorkoutSessionAction(...args),
   recordWorkoutSetAction: (...args: unknown[]) => recordWorkoutSetAction(...args),
   completeWorkoutSessionAction: (...args: unknown[]) => completeWorkoutSessionAction(...args),
+  abandonSessionAction: (...args: unknown[]) => abandonSessionAction(...args),
+  getWorkoutSessionAction: (...args: unknown[]) => getWorkoutSessionAction(...args),
 }));
 
 // Pass-through mock (real implementation) so a single test below can
@@ -143,6 +147,8 @@ describe("PlanTrackerClient — inline state swap (#93 Slice 3)", () => {
       kind: "conflict",
       activePlanName: "Other Plan",
       activeDay: 5,
+      activeSessionId: "session-blocking",
+      activeStartedAt: "2026-08-05T09:00:00.000Z",
     });
 
     renderWithIntl(
@@ -161,6 +167,81 @@ describe("PlanTrackerClient — inline state swap (#93 Slice 3)", () => {
     expect(screen.queryByRole("region", { name: "Live workout" })).toBeNull();
     // Day cards still visible (card + open detail header both show the title).
     expect(screen.getAllByText("Push Day").length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("PlanTrackerClient — actionable conflict banner (17b scope A)", () => {
+  it("Resume loads the blocking session directly via the hook (getWorkoutSessionAction)", async () => {
+    startWorkoutSessionAction.mockResolvedValue({
+      kind: "conflict",
+      activePlanName: "Other Plan",
+      activeDay: 5,
+      activeSessionId: "session-blocking",
+      activeStartedAt: "2026-08-05T09:00:00.000Z",
+    });
+    getWorkoutSessionAction.mockResolvedValue({ ...fakeSession, id: "session-blocking" });
+
+    renderWithIntl(<PlanTrackerClient program={program} planId="plan-a" />);
+
+    fireEvent.click(screen.getByText("Push Day"));
+    fireEvent.click(screen.getByRole("button", { name: "Start session" }));
+    await screen.findByRole("alert");
+
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "Live workout" })).toBeDefined();
+    });
+    expect(getWorkoutSessionAction).toHaveBeenCalledWith("session-blocking");
+  });
+
+  it("Discard (after confirmation) abandons the blocking session then retries the original start", async () => {
+    startWorkoutSessionAction
+      .mockResolvedValueOnce({
+        kind: "conflict",
+        activePlanName: "Other Plan",
+        activeDay: 5,
+        activeSessionId: "session-blocking",
+        activeStartedAt: "2026-08-05T09:00:00.000Z",
+      })
+      .mockResolvedValueOnce({ kind: "ok", session: fakeSession });
+    abandonSessionAction.mockResolvedValue({
+      kind: "ok",
+      session: { ...fakeSession, id: "session-blocking", status: "abandoned" },
+    });
+
+    renderWithIntl(<PlanTrackerClient program={program} planId="plan-a" />);
+
+    fireEvent.click(screen.getByText("Push Day"));
+    fireEvent.click(screen.getByRole("button", { name: "Start session" }));
+    await screen.findByRole("alert");
+
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes, discard" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "Live workout" })).toBeDefined();
+    });
+    expect(abandonSessionAction).toHaveBeenCalledWith("session-blocking");
+    expect(startWorkoutSessionAction).toHaveBeenLastCalledWith("plan-a", 1);
+  });
+
+  it("renders a non-blocking auto-close notice beside the newly started session, without stealing focus", async () => {
+    startWorkoutSessionAction.mockResolvedValue({
+      kind: "ok",
+      session: fakeSession,
+      autoClosedSession: { id: "session-stale", startedAt: "2026-08-04T08:00:00.000Z" },
+    });
+
+    renderWithIntl(<PlanTrackerClient program={program} planId="plan-a" />);
+    expect(document.activeElement).toBe(document.body);
+
+    fireEvent.click(screen.getByText("Push Day"));
+    fireEvent.click(screen.getByRole("button", { name: "Start session" }));
+
+    const notice = await screen.findByRole("status");
+    expect(notice.textContent).toContain("Aug 4, 2026");
+    expect(document.activeElement).toBe(document.body);
   });
 });
 
@@ -273,9 +354,13 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
       conflict: undefined,
       error: "some_unknown_error",
       syncNotice: undefined,
+      autoCloseNotice: undefined,
+      discardFailed: false,
       handleStartWorkout: vi.fn(),
       handleRecordSet: vi.fn(),
       handleCompleteWorkout: vi.fn(),
+      handleDiscardSession: vi.fn(),
+      handleResumeSession: vi.fn(),
     });
 
     renderWithIntl(<PlanTrackerClient program={program} planId="plan-a" />);
@@ -294,9 +379,13 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
       conflict: undefined,
       error: undefined,
       syncNotice: "reload_required",
+      autoCloseNotice: undefined,
+      discardFailed: false,
       handleStartWorkout: vi.fn(),
       handleRecordSet: vi.fn(),
       handleCompleteWorkout: vi.fn(),
+      handleDiscardSession: vi.fn(),
+      handleResumeSession: vi.fn(),
     });
 
     renderWithIntl(<PlanTrackerClient program={program} planId="plan-a" />);
@@ -315,9 +404,13 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
       conflict: undefined,
       error: undefined,
       syncNotice: "auth_required",
+      autoCloseNotice: undefined,
+      discardFailed: false,
       handleStartWorkout: vi.fn(),
       handleRecordSet: vi.fn(),
       handleCompleteWorkout: vi.fn(),
+      handleDiscardSession: vi.fn(),
+      handleResumeSession: vi.fn(),
     });
 
     renderWithIntl(<PlanTrackerClient program={program} planId="plan-a" />);
@@ -336,9 +429,13 @@ describe("PlanTrackerClient — thrown errors do not crash the render (CRITICAL 
       conflict: undefined,
       error: undefined,
       syncNotice: "dropped",
+      autoCloseNotice: undefined,
+      discardFailed: false,
       handleStartWorkout: vi.fn(),
       handleRecordSet: vi.fn(),
       handleCompleteWorkout: vi.fn(),
+      handleDiscardSession: vi.fn(),
+      handleResumeSession: vi.fn(),
     });
 
     renderWithIntl(<PlanTrackerClient program={program} planId="plan-a" />);
@@ -446,6 +543,8 @@ describe("PlanTrackerClient — conflict then retry (#93)", () => {
         kind: "conflict",
         activePlanName: "Other Plan",
         activeDay: 5,
+        activeSessionId: "session-blocking",
+        activeStartedAt: "2026-08-05T09:00:00.000Z",
       })
       .mockResolvedValueOnce({ kind: "ok", session: { ...fakeSession, day: 2 } });
 

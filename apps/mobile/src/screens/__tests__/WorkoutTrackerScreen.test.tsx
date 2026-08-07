@@ -63,11 +63,13 @@ const getWorkoutSession = vi.fn();
 const startWorkoutSession = vi.fn();
 const recordWorkoutSet = vi.fn();
 const completeWorkoutSession = vi.fn();
+const abandonSession = vi.fn();
 vi.mock("../../api/workout-session.js", () => ({
   getWorkoutSession: (...args: unknown[]) => getWorkoutSession(...args),
   startWorkoutSession: (...args: unknown[]) => startWorkoutSession(...args),
   recordWorkoutSet: (...args: unknown[]) => recordWorkoutSet(...args),
   completeWorkoutSession: (...args: unknown[]) => completeWorkoutSession(...args),
+  abandonSession: (...args: unknown[]) => abandonSession(...args),
 }));
 
 const WorkoutTrackerScreen = (await import("../WorkoutTrackerScreen.js")).default;
@@ -224,29 +226,36 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
     expect(esText).toContain("Volver al inicio");
   });
 
+  const conflictStartedAt = "2026-08-05T09:00:00.000Z";
+
   it("renders the active-session conflict state via useIntl(), in EN and ES", async () => {
     getWorkoutSession.mockResolvedValue({
       kind: "error",
       message: "active_session_conflict",
       activePlanName: "Fuerza",
       activeDay: 3,
+      activeSessionId: "sess-blocking",
+      activeStartedAt: conflictStartedAt,
     });
 
     const en = renderScreen("en");
     await act(async () => {
       await Promise.resolve();
     });
-    expect(renderedText(en)).toContain(
-      'You already have an active session in "Fuerza" (Day 3). Finish it before starting another.',
-    );
+    const enText = renderedText(en);
+    expect(enText).toContain('You already have an active session in "Fuerza" (Day 3)');
+    expect(enText).toContain("Finish it before starting another.");
+    // ICU {date, date, medium} — the blocking session's start date.
+    expect(enText).toContain("Aug 5, 2026");
 
     const es = renderScreen("es");
     await act(async () => {
       await Promise.resolve();
     });
-    expect(renderedText(es)).toContain(
-      "Ya tienes una sesión activa en «Fuerza» (Día 3). Termínala antes de empezar otra.",
-    );
+    const esText = renderedText(es);
+    expect(esText).toContain("Ya tienes una sesión activa en «Fuerza» (Día 3)");
+    expect(esText).toContain("Termínala antes de empezar otra.");
+    expect(esText).toContain("2026");
   });
 
   it("renders the conflict-with-plan-only branch (no day) via useIntl(), in EN and ES", async () => {
@@ -255,23 +264,26 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
       message: "active_session_conflict",
       activePlanName: "Fuerza",
       activeDay: undefined,
+      activeSessionId: "sess-blocking",
+      activeStartedAt: conflictStartedAt,
     });
 
     const en = renderScreen("en");
     await act(async () => {
       await Promise.resolve();
     });
-    expect(renderedText(en)).toContain(
-      'You already have an active session in "Fuerza". Finish it before starting another.',
-    );
+    const enText = renderedText(en);
+    expect(enText).toContain('You already have an active session in "Fuerza"');
+    expect(enText).toContain("Finish it before starting another.");
+    expect(enText).toContain("Aug 5, 2026");
 
     const es = renderScreen("es");
     await act(async () => {
       await Promise.resolve();
     });
-    expect(renderedText(es)).toContain(
-      "Ya tienes una sesión activa en «Fuerza». Termínala antes de empezar otra.",
-    );
+    const esText = renderedText(es);
+    expect(esText).toContain("Ya tienes una sesión activa en «Fuerza»");
+    expect(esText).toContain("Termínala antes de empezar otra.");
   });
 
   it("renders the generic conflict branch (no plan name) via useIntl(), in EN and ES", async () => {
@@ -280,23 +292,131 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
       message: "active_session_conflict",
       activePlanName: undefined,
       activeDay: undefined,
+      activeSessionId: "sess-blocking",
+      activeStartedAt: conflictStartedAt,
     });
 
     const en = renderScreen("en");
     await act(async () => {
       await Promise.resolve();
     });
-    expect(renderedText(en)).toContain(
-      "You already have an active session. Finish it before starting another.",
-    );
+    const enText = renderedText(en);
+    expect(enText).toContain("You already have an active session");
+    expect(enText).toContain("Finish it before starting another.");
+    expect(enText).toContain("Aug 5, 2026");
 
     const es = renderScreen("es");
     await act(async () => {
       await Promise.resolve();
     });
-    expect(renderedText(es)).toContain(
-      "Ya tienes una sesión activa. Termínala antes de empezar otra.",
+    const esText = renderedText(es);
+    expect(esText).toContain("Ya tienes una sesión activa");
+    expect(esText).toContain("Termínala antes de empezar otra.");
+  });
+
+  it("offers Resume and Discard actions in the conflict state", async () => {
+    getWorkoutSession.mockResolvedValue({
+      kind: "error",
+      message: "active_session_conflict",
+      activePlanName: "Fuerza",
+      activeDay: 3,
+      activeSessionId: "sess-blocking",
+      activeStartedAt: conflictStartedAt,
+    });
+
+    const en = renderScreen("en");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const enText = renderedText(en);
+    expect(enText).toContain("Resume");
+    expect(enText).toContain("Discard");
+  });
+
+  it("Discard requires one confirmation, then calls abandonSession", async () => {
+    getWorkoutSession.mockResolvedValue({
+      kind: "error",
+      message: "active_session_conflict",
+      activePlanName: "Fuerza",
+      activeDay: 3,
+      activeSessionId: "sess-blocking",
+      activeStartedAt: conflictStartedAt,
+    });
+    abandonSession.mockResolvedValue({
+      kind: "ok",
+      session: { ...activeSession, status: "abandoned" },
+    });
+
+    const en = renderScreen("en");
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const discardBtn = en.root.findByProps({ testID: "conflict-discard" });
+    act(() => {
+      discardBtn.props.onPress();
+    });
+
+    const confirmBtn = en.root.findByProps({ testID: "conflict-discard-confirm" });
+    await act(async () => {
+      confirmBtn.props.onPress();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(abandonSession).toHaveBeenCalledWith("sess-blocking");
+  });
+
+  it("disables the discard confirm control while abandonSession is in flight, and does not double-fire on a repeated tap", async () => {
+    abandonSession.mockClear();
+    getWorkoutSession.mockResolvedValue({
+      kind: "error",
+      message: "active_session_conflict",
+      activePlanName: "Fuerza",
+      activeDay: 3,
+      activeSessionId: "sess-blocking",
+      activeStartedAt: conflictStartedAt,
+    });
+    let resolveAbandon!: (value: { kind: "ok"; session: WorkoutSessionRecord }) => void;
+    abandonSession.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveAbandon = resolve;
+        }),
     );
+
+    const en = renderScreen("en");
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const discardBtn = en.root.findByProps({ testID: "conflict-discard" });
+    act(() => {
+      discardBtn.props.onPress();
+    });
+
+    const confirmBtn = en.root.findByProps({ testID: "conflict-discard-confirm" });
+    act(() => {
+      // Two synchronous taps, as a slow connection lets a user do before any
+      // re-render lands: the in-flight ref guard (set eagerly, before the
+      // first `await`) must block the second call.
+      confirmBtn.props.onPress();
+      confirmBtn.props.onPress();
+    });
+
+    // The abandon call is now in flight — the Discard control (re-rendered
+    // as "conflict-discard", since confirming flips back to false) must be
+    // disabled while it resolves.
+    const discardAfterConfirm = en.root.findByProps({ testID: "conflict-discard" });
+    expect(discardAfterConfirm.props.disabled).toBe(true);
+
+    await act(async () => {
+      resolveAbandon({ kind: "ok", session: { ...activeSession, status: "abandoned" } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(abandonSession).toHaveBeenCalledTimes(1);
   });
 
   it("renders the errorLoad state via useIntl(), in EN and ES", async () => {

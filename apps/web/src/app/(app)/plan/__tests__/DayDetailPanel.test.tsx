@@ -436,12 +436,17 @@ describe("DayDetailPanel — day-card visual anatomy (Slice 4a, closes #128)", (
 });
 
 describe("DayDetailPanel — conflict banner (#93 Slice 3)", () => {
+  const conflictBase = {
+    activeSessionId: "session-blocking",
+    activeStartedAt: "2026-08-05T09:00:00.000Z",
+  };
+
   it("renders a localized conflict banner naming the active plan and day when conflict is set", () => {
     renderWithIntl(
       <DayDetailPanel
         sessions={sessions}
         onStartWorkout={vi.fn()}
-        conflict={{ activePlanName: "Summer Block", activeDay: 3 }}
+        conflict={{ ...conflictBase, activePlanName: "Summer Block", activeDay: 3 }}
       />,
     );
 
@@ -455,7 +460,7 @@ describe("DayDetailPanel — conflict banner (#93 Slice 3)", () => {
       <DayDetailPanel
         sessions={sessions}
         onStartWorkout={vi.fn()}
-        conflict={{ activePlanName: "Summer Block", activeDay: null }}
+        conflict={{ ...conflictBase, activePlanName: "Summer Block", activeDay: null }}
       />,
     );
 
@@ -467,18 +472,166 @@ describe("DayDetailPanel — conflict banner (#93 Slice 3)", () => {
 
   it("renders a generic conflict banner when the active plan name is unknown", () => {
     renderWithIntl(
-      <DayDetailPanel sessions={sessions} onStartWorkout={vi.fn()} conflict={{ activeDay: null }} />,
+      <DayDetailPanel
+        sessions={sessions}
+        onStartWorkout={vi.fn()}
+        conflict={{ ...conflictBase, activeDay: null }}
+      />,
     );
 
     const banner = screen.getByRole("alert");
-    expect(banner.textContent).toBe(
-      "You already have an active workout session. Resume or finish it before starting another.",
+    expect(banner.textContent).toContain(
+      "You already have an active workout session, started",
     );
   });
 
   it("renders no conflict banner when conflict is undefined", () => {
     renderWithIntl(<DayDetailPanel sessions={sessions} onStartWorkout={vi.fn()} />);
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("names the blocking session's start date in the banner", () => {
+    renderWithIntl(
+      <DayDetailPanel
+        sessions={sessions}
+        onStartWorkout={vi.fn()}
+        conflict={{ ...conflictBase, activePlanName: "Summer Block", activeDay: 3 }}
+      />,
+    );
+
+    const banner = screen.getByRole("alert");
+    // ICU {date, date, medium} in the "en" locale renders e.g. "Aug 5, 2026".
+    expect(banner.textContent).toContain("Aug 5, 2026");
+  });
+
+  it("offers Resume and Discard actions inside the banner", () => {
+    renderWithIntl(
+      <DayDetailPanel
+        sessions={sessions}
+        onStartWorkout={vi.fn()}
+        conflict={{ ...conflictBase, activePlanName: "Summer Block", activeDay: 3 }}
+        onResumeSession={vi.fn()}
+        onDiscardSession={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Resume" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Discard" })).toBeDefined();
+  });
+
+  it("Resume calls onResumeSession with the blocking session's id", () => {
+    const onResumeSession = vi.fn();
+    renderWithIntl(
+      <DayDetailPanel
+        sessions={sessions}
+        onStartWorkout={vi.fn()}
+        conflict={{ ...conflictBase, activePlanName: "Summer Block", activeDay: 3 }}
+        onResumeSession={onResumeSession}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+
+    expect(onResumeSession).toHaveBeenCalledWith("session-blocking");
+  });
+
+  it("Discard requires one explicit confirmation before it takes effect", () => {
+    const onDiscardSession = vi.fn();
+    renderWithIntl(
+      <DayDetailPanel
+        sessions={sessions}
+        onStartWorkout={vi.fn()}
+        conflict={{ ...conflictBase, activePlanName: "Summer Block", activeDay: 3 }}
+        onDiscardSession={onDiscardSession}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    // Not discarded yet — a confirmation step must appear first.
+    expect(onDiscardSession).not.toHaveBeenCalled();
+    expect(screen.getByText(/Discard this session\?/)).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Yes, discard" }));
+    expect(onDiscardSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("Cancel on the Discard confirmation posts nothing", () => {
+    const onDiscardSession = vi.fn();
+    renderWithIntl(
+      <DayDetailPanel
+        sessions={sessions}
+        onStartWorkout={vi.fn()}
+        conflict={{ ...conflictBase, activePlanName: "Summer Block", activeDay: 3 }}
+        onDiscardSession={onDiscardSession}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onDiscardSession).not.toHaveBeenCalled();
+    // The confirmation step is gone; Discard is back to its initial state.
+    expect(screen.queryByText(/Discard this session\?/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Discard" })).toBeDefined();
+  });
+
+  it("shows discardFailed feedback without retrying anything itself", () => {
+    renderWithIntl(
+      <DayDetailPanel
+        sessions={sessions}
+        onStartWorkout={vi.fn()}
+        conflict={{ ...conflictBase, activePlanName: "Summer Block", activeDay: 3 }}
+        onDiscardSession={vi.fn()}
+        discardFailed
+      />,
+    );
+
+    expect(screen.getByText("We couldn't discard that session. Try again.")).toBeDefined();
+  });
+
+  it("does not nest a second role=alert region for the discardFailed message", () => {
+    renderWithIntl(
+      <DayDetailPanel
+        sessions={sessions}
+        onStartWorkout={vi.fn()}
+        conflict={{ ...conflictBase, activePlanName: "Summer Block", activeDay: 3 }}
+        onDiscardSession={vi.fn()}
+        discardFailed
+      />,
+    );
+
+    // The conflict container already owns role="alert"; the discardFailed
+    // message must be role="status" so screen readers do not announce two
+    // nested alert regions for the same event.
+    const discardFailedMessage = screen.getByText("We couldn't discard that session. Try again.");
+    expect(discardFailedMessage.getAttribute("role")).toBe("status");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+  });
+
+  it("moves focus to the banner when a conflict newly appears (web /plan focus handoff)", () => {
+    const scrollIntoView = vi.fn();
+    // jsdom does not implement scrollIntoView.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window.HTMLElement.prototype as any).scrollIntoView = scrollIntoView;
+
+    const { rerender } = renderWithIntl(
+      <DayDetailPanel sessions={sessions} onStartWorkout={vi.fn()} />,
+    );
+    expect(document.activeElement).toBe(document.body);
+
+    rerender(
+      <NextIntlClientProvider locale="en" messages={catalogs.en} timeZone="UTC">
+        <DayDetailPanel
+          sessions={sessions}
+          onStartWorkout={vi.fn()}
+          conflict={{ ...conflictBase, activePlanName: "Summer Block", activeDay: 3 }}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    const banner = screen.getByRole("alert");
+    expect(document.activeElement).toBe(banner);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
   });
 });
 
