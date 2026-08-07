@@ -49,6 +49,7 @@ import {
 import {
   ABANDONED_SESSION_THRESHOLD_HOURS,
   AdminStatsRepository,
+  RETENTION_FUNNEL_WINDOW_WEEKS,
 } from "../admin-stats.js";
 import { currentBillingPeriod } from "../../../billing/plan-limits.js";
 import type { RetentionFunnelSteps } from "../../../routes/admin-stats.js";
@@ -485,6 +486,57 @@ describe.skipIf(!hasDb)("AdminStatsRepository (real Postgres)", () => {
     );
     expect(after.retention.abandonedSessions).toBeLessThan(
       before.retention.abandonedSessions + 2 + CONCURRENT_NOISE_HEADROOM,
+    );
+  });
+
+  it("17b two-arm predicate: counts stored-abandoned + untouched aged-active exactly once each, never both arms, never outside the window", async () => {
+    const before = await repo.getPlatformStats(NOW);
+    const week = weekOf(NOW, 6);
+    const tenantId = await newTenant("stats-funnel-two-arm");
+
+    const agedMs = (ABANDONED_SESSION_THRESHOLD_HOURS + 1) * 3600_000;
+
+    async function seedSession(input: {
+      status: "abandoned" | "active" | "completed";
+      startedAt: Date;
+    }): Promise<void> {
+      const userId = await newUser({ createdAt: week.signupAt });
+      const planId = await seedFunnelUser({ tenantId, userId, completedAt: [] });
+      await db.insert(workoutSessions).values({
+        tenantId,
+        userId,
+        workoutPlanId: planId,
+        status: input.status,
+        startedAt: input.startedAt,
+        completedAt: input.status === "completed" ? input.startedAt : null,
+      });
+    }
+
+    // (a) stored `abandoned`, aged — arm 1, counted.
+    await seedSession({ status: "abandoned", startedAt: new Date(NOW.getTime() - agedMs) });
+    // (b) stored `abandoned`, 1h old — arm 1 is NOT age-filtered, still counted.
+    await seedSession({ status: "abandoned", startedAt: new Date(NOW.getTime() - 3600_000) });
+    // (c) untouched `active`, aged — arm 2, counted.
+    await seedSession({ status: "active", startedAt: new Date(NOW.getTime() - agedMs) });
+    // (d) `active`, 1h old — neither arm, excluded.
+    await seedSession({ status: "active", startedAt: new Date(NOW.getTime() - 3600_000) });
+    // (e) `completed`, aged — neither arm, excluded.
+    await seedSession({ status: "completed", startedAt: new Date(NOW.getTime() - agedMs) });
+    // (f) stored `abandoned`, outside windowStart — excluded by the shared
+    // `gte(startedAt, windowStart)` clause on both arms.
+    const farOutsideWindow = new Date(
+      NOW.getTime() - (RETENTION_FUNNEL_WINDOW_WEEKS + 4) * 7 * DAY_MS,
+    );
+    await seedSession({ status: "abandoned", startedAt: farOutsideWindow });
+
+    const after = await repo.getPlatformStats(NOW);
+
+    // Exactly {a, b, c} = 3 sessions counted; (d), (e), (f) excluded.
+    expect(after.retention.abandonedSessions).toBeGreaterThanOrEqual(
+      before.retention.abandonedSessions + 3,
+    );
+    expect(after.retention.abandonedSessions).toBeLessThan(
+      before.retention.abandonedSessions + 4 + CONCURRENT_NOISE_HEADROOM,
     );
   });
 
