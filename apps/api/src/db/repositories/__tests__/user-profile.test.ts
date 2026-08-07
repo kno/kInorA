@@ -10,6 +10,8 @@ function profileRow(overrides: Record<string, unknown> = {}) {
     name: "Alex",
     goal: "hypertrophy" as const,
     experienceLevel: "intermediate" as const,
+    selfDescribedSex: null,
+    heightCm: null,
     createdAt: new Date("2026-07-21T10:00:00Z"),
     updatedAt: new Date("2026-07-21T10:00:00Z"),
     ...overrides,
@@ -94,6 +96,8 @@ describe("UserProfileRepository", () => {
         name: "Alex",
         goal: "hypertrophy",
         experienceLevel: "intermediate",
+        selfDescribedSex: null,
+        heightCm: null,
       });
 
       expect(insert).toHaveBeenCalledTimes(1);
@@ -108,6 +112,8 @@ describe("UserProfileRepository", () => {
         name: "Alex",
         goal: "hypertrophy",
         experienceLevel: "intermediate",
+        selfDescribedSex: null,
+        heightCm: null,
       });
     });
 
@@ -122,6 +128,8 @@ describe("UserProfileRepository", () => {
         name: "Alex Updated",
         goal: "strength",
         experienceLevel: "intermediate",
+        selfDescribedSex: null,
+        heightCm: null,
       });
 
       // ON CONFLICT (userId) DO UPDATE is the mechanism that keeps one row per user.
@@ -148,6 +156,8 @@ describe("UserProfileRepository", () => {
         name: "alex",
         goal: null,
         experienceLevel: null,
+        selfDescribedSex: null,
+        heightCm: null,
       });
 
       const payload = values.mock.calls[0][0];
@@ -165,11 +175,83 @@ describe("UserProfileRepository", () => {
       const repoA = new UserProfileRepository({ insert: insertA } as never);
       const repoB = new UserProfileRepository({ insert: insertB } as never);
 
-      await repoA.upsert(USER_A, { name: "Alex", goal: null, experienceLevel: null });
-      await repoB.upsert(USER_B, { name: "Sam", goal: null, experienceLevel: null });
+      await repoA.upsert(USER_A, {
+        name: "Alex",
+        goal: null,
+        experienceLevel: null,
+        selfDescribedSex: null,
+        heightCm: null,
+      });
+      await repoB.upsert(USER_B, {
+        name: "Sam",
+        goal: null,
+        experienceLevel: null,
+        selfDescribedSex: null,
+        heightCm: null,
+      });
 
       expect(insertA).toHaveBeenCalledTimes(1);
       expect(insertB).toHaveBeenCalledTimes(1);
+    });
+
+    // 17c PR1: selfDescribedSex + heightCm round-trip through upsert.
+    it("upsert writes selfDescribedSex and heightCm through create and update", async () => {
+      const row = profileRow({ selfDescribedSex: "female", heightCm: 165 });
+      const { insert, values } = onConflictChain([row]);
+      const repo = new UserProfileRepository({ insert } as never);
+
+      const result = await repo.upsert(USER_A, {
+        name: "Alex",
+        goal: "hypertrophy",
+        experienceLevel: "intermediate",
+        selfDescribedSex: "female",
+        heightCm: 165,
+      });
+
+      expect(result.selfDescribedSex).toBe("female");
+      expect(result.heightCm).toBe(165);
+      const payload = values.mock.calls[0][0];
+      expect(payload.selfDescribedSex).toBe("female");
+      expect(payload.heightCm).toBe(165);
+    });
+
+    // 17c PR1: prefer_not_to_say persists distinctly from null.
+    it("upsert persists prefer_not_to_say distinctly from null", async () => {
+      const row = profileRow({ selfDescribedSex: "prefer_not_to_say" });
+      const { insert, values } = onConflictChain([row]);
+      const repo = new UserProfileRepository({ insert } as never);
+
+      const result = await repo.upsert(USER_A, {
+        name: "Alex",
+        goal: null,
+        experienceLevel: null,
+        selfDescribedSex: "prefer_not_to_say",
+        heightCm: null,
+      });
+
+      expect(result.selfDescribedSex).toBe("prefer_not_to_say");
+      expect(result.selfDescribedSex).not.toBeNull();
+      const payload = values.mock.calls[0][0];
+      expect(payload.selfDescribedSex).toBe("prefer_not_to_say");
+    });
+
+    // 17c PR1: null clears a previously set value.
+    it("upsert writes null for selfDescribedSex/heightCm to clear a previously set value", async () => {
+      const row = profileRow({ selfDescribedSex: null, heightCm: null });
+      const { insert, values } = onConflictChain([row]);
+      const repo = new UserProfileRepository({ insert } as never);
+
+      await repo.upsert(USER_A, {
+        name: "Alex",
+        goal: null,
+        experienceLevel: null,
+        selfDescribedSex: null,
+        heightCm: null,
+      });
+
+      const payload = values.mock.calls[0][0];
+      expect(payload.selfDescribedSex).toBeNull();
+      expect(payload.heightCm).toBeNull();
     });
   });
 
@@ -182,6 +264,8 @@ describe("UserProfileRepository", () => {
         name: "alex",
         goal: null,
         experienceLevel: null,
+        selfDescribedSex: null,
+        heightCm: null,
       });
 
       expect(insert).toHaveBeenCalledTimes(1);
@@ -190,8 +274,24 @@ describe("UserProfileRepository", () => {
         name: "alex",
         goal: null,
         experienceLevel: null,
+        selfDescribedSex: null,
+        heightCm: null,
       });
       expect(onConflictDoNothing).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // 17c PR1: create/read round-trip through findByUserId.
+  describe("findByUserId — body metrics", () => {
+    it("returns selfDescribedSex and heightCm when previously stored", async () => {
+      const row = profileRow({ selfDescribedSex: "other", heightCm: 178 });
+      const { select } = selectChain([row]);
+      const repo = new UserProfileRepository({ select } as never);
+
+      const result = await repo.findByUserId(USER_A);
+
+      expect(result?.selfDescribedSex).toBe("other");
+      expect(result?.heightCm).toBe(178);
     });
   });
 });
