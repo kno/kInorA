@@ -28,7 +28,14 @@ export default defineConfig({
       ],
       thresholds: {
         ...coverageConfig.thresholds,
-        functions: 85, // Some helpers need E2E reach; current is 86.84%.
+        // Some helpers need E2E reach; current is 85.40%. That figure dropped
+        // from an apparent 88.83% when `src/__tests__/build-app.test.ts` began
+        // invoking the real `buildApp()` (#369): V8 only registers a closure as
+        // coverable once its declaration site executes, so the composition
+        // root's ~50 inline route-option closures were previously invisible to
+        // the instrumenter rather than covered. The lower number is the honest
+        // one. Headroom is thin — close real gaps, never lower this.
+        functions: 85,
       },
     },
   },
