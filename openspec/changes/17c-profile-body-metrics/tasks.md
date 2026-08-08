@@ -333,7 +333,7 @@ Body Metrics When Present (ADDED).
 
 ### The redaction module
 
-- [ ] PR3.1 RED: `apps/api/src/ai/__tests__/trace-redaction.test.ts` — `redactSpans` empties exactly
+- [x] PR3.1 RED: `apps/api/src/ai/__tests__/trace-redaction.test.ts` — `redactSpans` empties exactly
       the content of a registered span, leaving delimiters and surrounding text byte-identical;
       handles nested and repeated spans; an unterminated open marker redacts to end-of-string
       (**fail-closed, asserted explicitly** — a template that loses its closing marker still hides
@@ -341,7 +341,7 @@ Body Metrics When Present (ADDED).
       `redactTracedPayload` walks strings inside a string, an array, and a plain object, applying
       `redactSpans` to every string found; a non-string, non-array, non-object payload (number,
       boolean, null, undefined) passes through unchanged
-- [ ] PR3.2 GREEN: create `apps/api/src/ai/trace-redaction.ts` — `TraceRedactionRule { open, close }`;
+- [x] PR3.2 GREEN: create `apps/api/src/ai/trace-redaction.ts` — `TraceRedactionRule { open, close }`;
       `TRACE_REDACTION_RULES: readonly TraceRedactionRule[]` with one entry,
       `{ open: "<body_profile>", close: "</body_profile>" }`; `redactSpans(text: string): string`;
       `redactTracedPayload(params: { data: unknown }): unknown` as the `MaskFunction` shape Langfuse
@@ -349,16 +349,16 @@ Body Metrics When Present (ADDED).
 
 ### Trace metadata typing
 
-- [ ] PR3.3 RED: `expectTypeOf` test — `PlanTraceMetadata` rejects an object literal carrying an
+- [x] PR3.3 RED: `expectTypeOf` test — `PlanTraceMetadata` rejects an object literal carrying an
       excess `weightKg` (or any key outside its declared set) via an excess-property check
-- [ ] PR3.4 GREEN: create `apps/api/src/ai/trace-metadata.ts` exporting `PlanTraceMetadata` exactly as
+- [x] PR3.4 GREEN: create `apps/api/src/ai/trace-metadata.ts` exporting `PlanTraceMetadata` exactly as
       specified in `design.md`'s "The observability discipline requirement"; annotate the inline
       trace-metadata literal in `adapter-factory.ts:95-109` and `extraction-adapter.ts:251-263` with
       the type; confirm PR3.3 is green and both call sites still compile
 
 ### Source-scan guard
 
-- [ ] PR3.5 RED then GREEN, one commit (the guard itself is the test — no separate implementation
+- [x] PR3.5 RED then GREEN, one commit (the guard itself is the test — no separate implementation
       step): a `migration-journal.test.ts`-style source scan over `apps/api/src/**/*.ts` that fails if
       any `metadata:` object-literal key matches
       `/^(weightKg|heightCm|selfDescribedSex|bodyweight)/i` **outside** `trace-redaction.ts` and its
@@ -368,13 +368,13 @@ Body Metrics When Present (ADDED).
 
 ### Handler wiring
 
-- [ ] PR3.6 GREEN: `apps/api/src/ai/langfuse-handler.ts:69-73` — add `mask: redactTracedPayload` to
+- [x] PR3.6 GREEN: `apps/api/src/ai/langfuse-handler.ts:69-73` — add `mask: redactTracedPayload` to
       the `CallbackHandler` constructor options. No RED needed here in isolation; covered by PR3.8's
       end-to-end proof
 
 ### The prompt seam — byte-identical degradation
 
-- [ ] PR3.7 RED: extend `apps/api/src/ai/__tests__/prompt.test.ts`'s existing byte-identity snapshot
+- [x] PR3.7 RED: extend `apps/api/src/ai/__tests__/prompt.test.ts`'s existing byte-identity snapshot
       block (`:279`) and branch-preservation style (`:227-266`) — with `bodyProfile` absent,
       `buildPlanPrompt(spec)` equals the pre-change output exactly (extend the existing snapshot, do
       not create a parallel one); absent with an empty `bodyProfile` object renders identically; each
@@ -382,7 +382,7 @@ Body Metrics When Present (ADDED).
       line; a `prefer_not_to_say`-equivalent (the type excludes it, so this asserts the mapping layer
       never passes it through) emits no line; the rendered section sits between the existing training
       profile and `{{limitationsSection}}`
-- [ ] PR3.8 GREEN: in `apps/api/src/ai/prompt.ts` — add `BodyProfilePromptInput
+- [x] PR3.8 GREEN: in `apps/api/src/ai/prompt.ts` — add `BodyProfilePromptInput
       { selfDescribedSex?: Exclude<SelfDescribedSex, "prefer_not_to_say">; heightCm?: number;
       bodyweightKg?: number }`; add `bodyProfile?: BodyProfilePromptInput` to `PlanPromptInput`; add
       the `{{bodyProfileSection}}` marker to `PLAN_PROMPT_TEMPLATE` on the existing blank line between
@@ -392,30 +392,30 @@ Body Metrics When Present (ADDED).
       `"bodyProfileSection"` to `PLAN_PROMPT_DEFINITION.variables`; do **not** extend
       `requiredMarkers`/`orderedMarkers` (a remote template predating this change must not fail
       validation over a purely additive variable); confirm PR3.7 is green
-- [ ] PR3.9 RED then GREEN: assert `promptLinked` stays `true` on a traced generation with the `mask`
+- [x] PR3.9 RED then GREEN: assert `promptLinked` stays `true` on a traced generation with the `mask`
       option attached (the open apply-time decision on slice-C interaction) — extend the existing
       prompt-linkage test harness from 16e/16e-slice-C rather than assuming orthogonality
 
 ### The masking proof at the invoke boundary
 
-- [ ] PR3.10 RED: extend `apps/api/src/ai/__tests__/adapter-factory.test.ts`'s existing
+- [x] PR3.10 RED: extend `apps/api/src/ai/__tests__/adapter-factory.test.ts`'s existing
       masking-payload harness — **the proof that matters**: with body values present on the spec,
       capture the payload the `CallbackHandler` observes at the `.invoke()` boundary and assert **no**
       body value survives into trace input, while the string actually handed to `.invoke()` still
       **contains** them. Assert both halves in the same test — asserting only the redaction half would
       pass for a change that accidentally also stripped the values from generation
-- [ ] PR3.11 GREEN: in `apps/api/src/ai/generation-service.ts` — attach `bodyProfile` beside
+- [x] PR3.11 GREEN: in `apps/api/src/ai/generation-service.ts` — attach `bodyProfile` beside
       `allowedExercises` (`:224-227`), mapping the user's profile row and resolved bodyweight into
       `BodyProfilePromptInput` (dropping `prefer_not_to_say` per the type's `Exclude`); confirm PR3.10
       is green
 
 ### The fail-closed backstop
 
-- [ ] PR3.12 RED: injected-renderer test — with a deliberately marker-less rendering of the body
+- [x] PR3.12 RED: injected-renderer test — with a deliberately marker-less rendering of the body
       section (simulating a template that lost its `<body_profile>` delimiters), the prompt degrades
       to the no-body rendering (today's exact prompt) and a log event is emitted with reason code
       `body_profile_redaction_unverified`; assert the log payload contains **no** body value, ever
-- [ ] PR3.13 GREEN: in `apps/api/src/ai/adapter-factory.ts`, in `invokeChain`, after rendering and
+- [x] PR3.13 GREEN: in `apps/api/src/ai/adapter-factory.ts`, in `invokeChain`, after rendering and
       before `.invoke()` — when `bodyProfile` is present, check whether `redactSpans(maskedPrompt)`
       still contains the body section's **inner text** (the distinctive multi-line string, not bare
       numerals — so `Session duration: 68 minutes` can never false-positive); if it does, re-render
@@ -423,7 +423,7 @@ Body Metrics When Present (ADDED).
 
 ### PR 3 verification
 
-- [ ] PR3.14 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green (apps/api
+- [x] PR3.14 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green (apps/api
       functions ≥85%); `pnpm type-check` clean; `pnpm build` succeeds
 
 ---

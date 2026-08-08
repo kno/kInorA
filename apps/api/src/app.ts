@@ -440,6 +440,14 @@ export async function buildApp(
         .then((decision) => ({ allowed: decision.allowed })),
   };
 
+  // Constructed here (ahead of their route-registration use further below) so
+  // PlanGenerationService can read the current profile/weight state when
+  // attaching `bodyProfile` to the generation prompt (17c-profile-body-
+  // metrics, PR 3). Reused, not re-instantiated, at their original
+  // registration sites.
+  const userProfileRepo = new UserProfileRepository(database);
+  const userWeightEntryRepo = new UserWeightEntryRepository(database);
+
   const planGenerationService = new PlanGenerationService(
     generator,
     planSpecRepo,
@@ -447,7 +455,9 @@ export async function buildApp(
     registry,
     vectorMemoryRetriever,
     memoryEntitlement,
-    observabilityLogger
+    observabilityLogger,
+    { findByUserId: (id: string) => userProfileRepo.findByUserId(id) },
+    { list: (id: string) => userWeightEntryRepo.list(id) }
   );
   const userMemoryService = new UserMemoryLifecycleService(
     vectorMemoryRepo,
@@ -654,7 +664,8 @@ export async function buildApp(
   // ports are built here from the concrete repos + UserRepository (for the
   // lazy-provision email lookup) so the route files stay free of any DB-layer
   // import. `adminUserRepo` is reused for the email lookup.
-  const userProfileRepo = new UserProfileRepository(database);
+  // `userProfileRepo` is constructed above (reused by PlanGenerationService's
+  // body-profile attachment) — do not re-instantiate.
   // `userPreferencesRepo` is constructed above (reused by the voice speech
   // route's TTS opt-out reader) — do not re-instantiate.
   const userProfileRouteRepo = {
@@ -679,8 +690,8 @@ export async function buildApp(
   await app.register(userProfileRoutes, { repo: userProfileRouteRepo });
   // Bodyweight series (17c-profile-body-metrics, PR 2). User-scoped, no
   // tenant column — reuses the same requireAuth() isolation guarantee as
-  // userProfileRoutes.
-  const userWeightEntryRepo = new UserWeightEntryRepository(database);
+  // userProfileRoutes. `userWeightEntryRepo` is constructed above (reused by
+  // PlanGenerationService's body-profile attachment) — do not re-instantiate.
   await app.register(userWeightEntryRoutes, { repo: userWeightEntryRepo });
   await app.register(userPreferencesRoutes, {
     repo: userPreferencesRouteRepo,

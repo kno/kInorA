@@ -1,8 +1,26 @@
-import type { PlanSpec } from "@kinora/contracts";
+import type { PlanSpec, SelfDescribedSex } from "@kinora/contracts";
 import { isRejectedMemoryText } from "../user-memory/eligibility.js";
 import { renderTemplate, type PromptDefinition } from "./prompt-template.js";
 
-type PlanPromptInput = PlanSpec & {
+/**
+ * Body metrics as prompt input (17c-profile-body-metrics, PR 3). Never
+ * persisted here, never a field on `WorkoutExerciseSchema`/
+ * `WorkoutSessionSchema`/`WorkoutProgramSchema` (#357 is the cautionary
+ * tale for why not) — body data enters generation ONLY as rendered prompt
+ * text.
+ *
+ * `Exclude<…, "prefer_not_to_say">` is small and load-bearing: a declined
+ * answer CANNOT be represented in this type, so the mapping layer
+ * (`generation-service.ts`) must drop it and no branch downstream has to
+ * remember to.
+ */
+export interface BodyProfilePromptInput {
+  selfDescribedSex?: Exclude<SelfDescribedSex, "prefer_not_to_say">;
+  heightCm?: number;
+  bodyweightKg?: number;
+}
+
+export type PlanPromptInput = PlanSpec & {
   memoryContext?: string[];
   /**
    * Closed exercise vocabulary for this user (#352 slice B), already filtered to
@@ -14,6 +32,12 @@ type PlanPromptInput = PlanSpec & {
    * allowed list, which would forbid every exercise.
    */
   allowedExercises?: string[];
+  /**
+   * 17c-profile-body-metrics, PR 3. Absent, or with no populated member,
+   * ⇒ `bodyProfileSection` renders `""` ⇒ the prompt is byte-identical to
+   * today's — see `buildBodyProfileSection`.
+   */
+  bodyProfile?: BodyProfilePromptInput;
 };
 
 const UNSAFE_MEMORY_PATTERNS = [
@@ -60,7 +84,7 @@ USER TRAINING PROFILE:
 - Session duration: {{sessionDurationMinutes}} minutes
 - Training location: {{location}}
 - Available equipment: {{equipmentList}}
-- Training emphasis (0–1 weights): strength={{preferenceStrength}}, hypertrophy={{preferenceHypertrophy}}, endurance={{preferenceEndurance}}, mobility={{preferenceMobility}}{{intensityBiasSection}}
+- Training emphasis (0–1 weights): strength={{preferenceStrength}}, hypertrophy={{preferenceHypertrophy}}, endurance={{preferenceEndurance}}, mobility={{preferenceMobility}}{{intensityBiasSection}}{{bodyProfileSection}}
 
 {{limitationsSection}}
 {{memorySection}}{{vocabularySection}}
@@ -91,6 +115,7 @@ export const PLAN_PROMPT_DEFINITION: PromptDefinition = {
     "preferenceEndurance",
     "preferenceMobility",
     "intensityBiasSection",
+    "bodyProfileSection",
     "limitationsSection",
     "memorySection",
     "vocabularySection",
@@ -112,6 +137,45 @@ export const PLAN_PROMPT_DEFINITION: PromptDefinition = {
   ],
   maxTemplateChars: 20_000,
 };
+
+/**
+ * Builds the `<body_profile>` prompt section (17c-profile-body-metrics, PR 3)
+ * and its distinctive INNER TEXT — the multi-line content between the
+ * delimiters, returned separately because the trace-redaction fail-closed
+ * backstop (`adapter-factory.ts`) needs to check, at the invoke seam, that
+ * this exact text is what actually got wrapped in delimiters.
+ *
+ * Byte-identical degradation is STRUCTURAL: absent `bodyProfile`, or one with
+ * no populated member, returns `{ section: "", innerText: "" }` — copying
+ * `intensityBiasSection`/`vocabularySection` exactly. There is no `if` in the
+ * template, so there is no branch that can render a header with nothing
+ * under it.
+ *
+ * A `prefer_not_to_say` sex cannot reach this function at all — the type
+ * `BodyProfilePromptInput.selfDescribedSex` excludes it — so it emits no
+ * line by construction, not by a runtime check here.
+ */
+export function buildBodyProfileSection(
+  bodyProfile: BodyProfilePromptInput | undefined,
+): { section: string; innerText: string } {
+  const lines: string[] = [];
+  if (bodyProfile?.selfDescribedSex) {
+    lines.push(`- Sex/gender: ${bodyProfile.selfDescribedSex}`);
+  }
+  if (bodyProfile?.heightCm != null) {
+    lines.push(`- Height: ${bodyProfile.heightCm} cm`);
+  }
+  if (bodyProfile?.bodyweightKg != null) {
+    lines.push(`- Bodyweight: ${bodyProfile.bodyweightKg} kg`);
+  }
+
+  if (lines.length === 0) {
+    return { section: "", innerText: "" };
+  }
+
+  const innerText = `USER BODY PROFILE (self-reported):\n${lines.join("\n")}`;
+  return { section: `\n\n<body_profile>\n${innerText}\n</body_profile>`, innerText };
+}
 
 /**
  * Computes the CLOSED variable set `PLAN_PROMPT_TEMPLATE` renders over.
@@ -174,6 +238,8 @@ Every exercise name you return MUST be copied VERBATIM from that list, spelling 
       ? "Uses ONLY exercise names copied verbatim from the ALLOWED EXERCISES list above."
       : `Uses ONLY the available equipment: ${equipmentList}.`;
 
+  const { section: bodyProfileSection } = buildBodyProfileSection(spec.bodyProfile);
+
   return {
     goal: spec.goal,
     daysPerWeek: String(spec.daysPerWeek),
@@ -185,6 +251,7 @@ Every exercise name you return MUST be copied VERBATIM from that list, spelling 
     preferenceEndurance: String(endurance),
     preferenceMobility: String(mobility),
     intensityBiasSection,
+    bodyProfileSection,
     limitationsSection,
     memorySection,
     vocabularySection,

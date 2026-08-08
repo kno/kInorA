@@ -3,6 +3,7 @@ import type { WorkoutProgram } from "@kinora/contracts";
 import { ResolvePrompt } from "../prompt-provider.js";
 import type { LangfusePromptGateway } from "../prompt-source-port.js";
 import { PLAN_PROMPT_TEMPLATE, buildPlanPrompt } from "../prompt.js";
+import { redactTracedPayload } from "../trace-redaction.js";
 
 // ---------------------------------------------------------------------------
 // Mock @langchain/openai — hoisted before any import of production code
@@ -177,6 +178,93 @@ describe("masking invariant on trace payloads", () => {
     expect(invokeInput).toContain("[REDACTED]");
     expect(invokeInput).not.toContain("osteoporosis");
     expect(JSON.stringify([invokeInput, resolvedProgram])).not.toContain("osteoporosis");
+  });
+});
+
+describe("trace redaction (17c-profile-body-metrics, PR 3) — model/trace divergence", () => {
+  it("the model receives the raw bodyweight, while the SAME text redacted by the real mask hook does not", async () => {
+    // This is the proof that matters: it does not fabricate a fake handler
+    // that happens to observe nothing (this file's fake handler is just
+    // `{ name, flushAsync }` — it never intercepts anything, exactly like
+    // production when tracing is off). Instead it proves the COMPOSITION the
+    // real CallbackHandler relies on: `langfuse-handler.test.ts` proves
+    // `redactTracedPayload` is wired as the `mask` option on every
+    // constructed handler; `trace-redaction.test.ts` proves what that
+    // function does to a string. This test proves the invoke input — the
+    // EXACT string a real handler would observe and mask — contains the raw
+    // value for the model, while applying the same masking function that
+    // real handler is configured with removes it.
+    const adapters = buildAdapters();
+    const adapter = adapters["openai"]!("gpt-4o-mini");
+
+    await adapter.generate({
+      ...baseSpec,
+      bodyProfile: { selfDescribedSex: "female", heightCm: 172, bodyweightKg: 68 },
+    });
+
+    const invokeInput = mockInvoke.mock.calls[0]?.[0] as string;
+
+    // Half 1 — the model still gets it (scope B's entire point).
+    expect(invokeInput).toContain("68 kg");
+    expect(invokeInput).toContain("172 cm");
+    expect(invokeInput).toContain("<body_profile>");
+
+    // Half 2 — the exact same string, run through the production mask
+    // function, no longer carries it. Asserting only this half would pass
+    // for a change that accidentally ALSO stripped the values from
+    // generation — asserting only half 1 would pass for a change that never
+    // redacted the trace at all. Both must hold.
+    const tracedInput = redactTracedPayload({ data: invokeInput }) as string;
+    expect(tracedInput).not.toContain("68 kg");
+    expect(tracedInput).not.toContain("172 cm");
+    expect(tracedInput).toContain("<body_profile>[REDACTED]</body_profile>");
+  });
+
+  it("omits the <body_profile> section entirely (nothing to redact) when no body values are present", async () => {
+    const adapters = buildAdapters();
+    const adapter = adapters["openai"]!("gpt-4o-mini");
+
+    await adapter.generate(baseSpec);
+
+    const invokeInput = mockInvoke.mock.calls[0]?.[0] as string;
+    expect(invokeInput).not.toContain("body_profile");
+  });
+});
+
+describe("promptLinked is unaffected by the redaction mask (17c-profile-body-metrics, PR 3.9)", () => {
+  it("promptLinked is IDENTICAL with and without a body profile attached, handler present either way", async () => {
+    // `registerLangfusePrompt` operates on run parenting (the reparented
+    // chain from `linkStructuredChain`'s shape guard), never on `input`/
+    // `output` bytes — the two mechanisms SHOULD be orthogonal. Asserted
+    // here rather than assumed, by comparing the value across the one thing
+    // this change adds: a body profile on the spec. A real
+    // `CallbackHandler` built via `buildLangfuseCallbackHandler` ALWAYS
+    // carries `mask: redactTracedPayload` (see langfuse-handler.test.ts), so
+    // any handler this adapter receives in production has it — this fake
+    // handler stands in for that handler at the injection seam.
+    //
+    // This file's mocked `withStructuredOutput` returns a plain object, not
+    // a real `RunnableSequence` (see `prompt-linked-chain.test.ts` for a
+    // fixture that IS one) — so the shape guard declines and `promptLinked`
+    // is `false` in every test in this file (see the "attaches promptLinked
+    // and NO promptName…" test above). The value that matters for THIS
+    // assertion is not which boolean it is, but that it is the SAME boolean
+    // with a body profile present as without one.
+    const fakeHandler = { name: "langfuse", flushAsync: vi.fn() };
+    const adapters = buildAdapters({ handler: fakeHandler });
+    const adapter = adapters["openai"]!("gpt-4o-mini");
+
+    await adapter.generate(baseSpec);
+    const withoutBodyProfile = (mockInvoke.mock.calls[0]?.[1] as Record<string, unknown>)
+      .metadata as Record<string, unknown>;
+
+    mockInvoke.mockClear();
+    await adapter.generate({ ...baseSpec, bodyProfile: { bodyweightKg: 68 } });
+    const withBodyProfile = (mockInvoke.mock.calls[0]?.[1] as Record<string, unknown>)
+      .metadata as Record<string, unknown>;
+
+    expect(withBodyProfile["promptLinked"]).toBe(withoutBodyProfile["promptLinked"]);
+    expect(withBodyProfile["promptLinked"]).toBe(false);
   });
 });
 

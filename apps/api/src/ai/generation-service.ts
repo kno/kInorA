@@ -9,12 +9,34 @@ import { mask } from "./mask.js";
 import { capVocabularyForPrompt, resolveExerciseVocabulary } from "./exercise-vocabulary.js";
 import { resolveProgramCatalogIds } from "./catalog-resolution.js";
 import { assertPlanSpecShape } from "../plan/boundary.js";
+import type { BodyProfilePromptInput } from "./prompt.js";
+import type { SelfDescribedSex } from "@kinora/contracts";
 import {
   injectLimitationWarnings,
   assertNoDiagnosticLanguage,
   normalizeProgramReps,
 } from "@kinora/domain";
 import type { WarningLocale } from "@kinora/domain";
+
+/**
+ * The minimal profile-row shape `attachBodyProfile` needs (17c-profile-body-
+ * metrics, PR 3) — satisfied by `UserProfileRepository.findByUserId`'s
+ * resolved value without importing the concrete repository class here.
+ */
+interface BodyProfileSourceRow {
+  selfDescribedSex: SelfDescribedSex | null;
+  heightCm: number | null;
+}
+
+/** Reads the current profile row for a user. `null` when no row exists. */
+interface UserProfilePort {
+  findByUserId(userId: string): Promise<BodyProfileSourceRow | null>;
+}
+
+/** Reads a user's bodyweight readings, newest first. */
+interface WeightEntryPort {
+  list(userId: string): Promise<{ weightKg: number }[]>;
+}
 
 /**
  * 404-class error: spec not found or belongs to a different tenant.
@@ -94,7 +116,15 @@ export class PlanGenerationService {
      * pipeline. The console.* lines are retained unchanged so existing tests and
      * log aggregators keep working.
      */
-    private observability?: ObservabilityLogger
+    private observability?: ObservabilityLogger,
+    /**
+     * Optional profile/weight sources (17c-profile-body-metrics, PR 3). When
+     * both are absent (e.g. existing tests that construct the service bare),
+     * `attachBodyProfile` is a no-op and the generated prompt is
+     * byte-identical to before this change.
+     */
+    private userProfileSource?: UserProfilePort,
+    private weightEntrySource?: WeightEntryPort
   ) {}
 
   /**
@@ -216,13 +246,23 @@ export class PlanGenerationService {
 
     try {
       const withMemory = await this.attachMemoryContext(tenantId, userId, planId, spec);
+      // Skips the call (not just its work) when neither source is injected —
+      // `attachBodyProfile` is declared `async`, so even its early-return
+      // branch would otherwise add a microtask hop that does not exist
+      // today, changing the pipeline's timing for every existing caller
+      // that never injects these optional sources (i.e. every test but the
+      // one covering this feature).
+      const withBodyProfile =
+        this.userProfileSource || this.weightEntrySource
+          ? await this.attachBodyProfile(userId, withMemory)
+          : withMemory;
       // #352 slice B: the vocabulary is derived once and used twice — as the
       // closed list in the prompt, and as the allow-list the generated names are
       // resolved against afterwards. Deriving it in one place is what makes
       // "what we asked for" and "what we accept" provably the same set.
       const vocabulary = this.buildVocabulary(tenantId, planId, planSpecId, spec);
       const generationInput = {
-        ...withMemory,
+        ...withBodyProfile,
         allowedExercises: vocabulary.promptNames,
       };
       // generate → post-process → guard → persist
@@ -425,6 +465,54 @@ export class PlanGenerationService {
     });
 
     return linked;
+  }
+
+  /**
+   * Attaches `bodyProfile` beside `allowedExercises` (17c-profile-body-
+   * metrics, PR 3): the profile's `selfDescribedSex`/`heightCm` and the
+   * user's MOST RECENT bodyweight reading, mapped into
+   * `BodyProfilePromptInput`. This is a snapshot for GENERATION, not the
+   * per-session resolution `resolveBodyweightForSession` performs for
+   * volume (a different concern, added by PR 4) — plan generation happens
+   * once, not against a specific past session, so "current weight" is
+   * simply the newest entry.
+   *
+   * `prefer_not_to_say` is dropped here, not merely by the type: a
+   * declined answer must never reach the prompt, and `Exclude<SelfDescribedSex,
+   * "prefer_not_to_say">` on `BodyProfilePromptInput` only stops it from
+   * being ASSIGNED — a runtime value read from the database still needs an
+   * explicit runtime check.
+   *
+   * Returns `spec` unchanged when neither source is injected, or when
+   * neither yields anything to attach — `buildPlanPrompt` then renders
+   * byte-identically to before this change.
+   */
+  private async attachBodyProfile<T extends import("@kinora/contracts").PlanSpec>(
+    userId: string,
+    spec: T
+  ): Promise<T & { bodyProfile?: BodyProfilePromptInput }> {
+    if (!this.userProfileSource && !this.weightEntrySource) {
+      return spec;
+    }
+
+    const [profile, entries] = await Promise.all([
+      this.userProfileSource?.findByUserId(userId) ?? Promise.resolve(null),
+      this.weightEntrySource?.list(userId) ?? Promise.resolve([]),
+    ]);
+
+    const bodyProfile: BodyProfilePromptInput = {};
+    if (profile?.selfDescribedSex && profile.selfDescribedSex !== "prefer_not_to_say") {
+      bodyProfile.selfDescribedSex = profile.selfDescribedSex;
+    }
+    if (profile?.heightCm != null) {
+      bodyProfile.heightCm = profile.heightCm;
+    }
+    if (entries.length > 0) {
+      // `list()` is newest-first — the first entry IS the most recent reading.
+      bodyProfile.bodyweightKg = entries[0]!.weightKg;
+    }
+
+    return Object.keys(bodyProfile).length > 0 ? { ...spec, bodyProfile } : spec;
   }
 
   private async attachMemoryContext(

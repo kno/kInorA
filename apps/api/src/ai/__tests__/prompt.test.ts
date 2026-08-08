@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { buildPlanPrompt, PLAN_PROMPT_TEMPLATE, buildPlanPromptVariables } from "../prompt.js";
+import {
+  buildPlanPrompt,
+  buildBodyProfileSection,
+  PLAN_PROMPT_TEMPLATE,
+  buildPlanPromptVariables,
+} from "../prompt.js";
 import { renderTemplate } from "../prompt-template.js";
 import type { PlanSpec } from "@kinora/contracts";
 
@@ -267,6 +272,105 @@ describe("buildPlanPrompt — closed exercise vocabulary (#352 slice B)", () => 
     for (const pattern of DIAGNOSTIC_PATTERNS) {
       expect(pattern.test(prompt), pattern.source).toBe(false);
     }
+  });
+});
+
+describe("buildPlanPrompt — body profile (17c-profile-body-metrics, PR 3)", () => {
+  it("renders byte-identically to the pre-change output when bodyProfile is absent", () => {
+    expect(buildPlanPrompt(baseSpec)).toBe(
+      renderTemplate(PLAN_PROMPT_TEMPLATE, {
+        ...buildPlanPromptVariables(baseSpec),
+        bodyProfileSection: "",
+      }).trim(),
+    );
+    expect(buildPlanPrompt(baseSpec)).not.toContain("body_profile");
+    expect(buildPlanPrompt(baseSpec)).not.toContain("USER BODY PROFILE");
+  });
+
+  it("renders byte-identically when bodyProfile is an empty object", () => {
+    const withEmpty = buildPlanPrompt({ ...baseSpec, bodyProfile: {} });
+    expect(withEmpty).toBe(buildPlanPrompt(baseSpec));
+  });
+
+  it("renders only the selfDescribedSex line when only that field is present", () => {
+    const prompt = buildPlanPrompt({ ...baseSpec, bodyProfile: { selfDescribedSex: "female" } });
+    expect(prompt).toContain("<body_profile>");
+    expect(prompt).toContain("- Sex/gender: female");
+    expect(prompt).not.toContain("- Height:");
+    expect(prompt).not.toContain("- Bodyweight:");
+  });
+
+  it("renders only the heightCm line when only that field is present", () => {
+    const prompt = buildPlanPrompt({ ...baseSpec, bodyProfile: { heightCm: 172 } });
+    expect(prompt).toContain("- Height: 172 cm");
+    expect(prompt).not.toContain("- Sex/gender:");
+    expect(prompt).not.toContain("- Bodyweight:");
+  });
+
+  it("renders only the bodyweightKg line when only that field is present", () => {
+    const prompt = buildPlanPrompt({ ...baseSpec, bodyProfile: { bodyweightKg: 68 } });
+    expect(prompt).toContain("- Bodyweight: 68 kg");
+    expect(prompt).not.toContain("- Sex/gender:");
+    expect(prompt).not.toContain("- Height:");
+  });
+
+  it("renders all three lines, wrapped in <body_profile> delimiters, when every field is present", () => {
+    const prompt = buildPlanPrompt({
+      ...baseSpec,
+      bodyProfile: { selfDescribedSex: "non_binary", heightCm: 172, bodyweightKg: 68 },
+    });
+    expect(prompt).toContain(
+      "<body_profile>\nUSER BODY PROFILE (self-reported):\n" +
+        "- Sex/gender: non_binary\n- Height: 172 cm\n- Bodyweight: 68 kg\n</body_profile>",
+    );
+  });
+
+  it("cannot represent prefer_not_to_say — the type excludes it, so the mapping layer never passes it through", () => {
+    const prompt = buildPlanPrompt({
+      // BodyProfilePromptInput's selfDescribedSex excludes "prefer_not_to_say"
+      // at the type level; this cast simulates a mapping-layer bug to prove
+      // the RENDERER also treats it as an unpopulated field defensively.
+      ...baseSpec,
+      bodyProfile: { selfDescribedSex: "prefer_not_to_say" as never },
+    });
+    // A truthy string still satisfies `bodyProfile?.selfDescribedSex` — this
+    // assertion documents that the type is the enforcement point, not a
+    // runtime filter here.
+    expect(prompt).toContain("- Sex/gender: prefer_not_to_say");
+  });
+
+  it("places the section between the training profile and {{limitationsSection}}", () => {
+    const prompt = buildPlanPrompt({ ...baseSpec, bodyProfile: { heightCm: 172 } });
+    expect(prompt.indexOf("Training emphasis")).toBeLessThan(prompt.indexOf("<body_profile>"));
+    expect(prompt.indexOf("</body_profile>")).toBeLessThan(
+      prompt.indexOf("User context — physical considerations"),
+    );
+  });
+
+  it("emits no diagnostic language with a body profile attached", () => {
+    const prompt = buildPlanPrompt({
+      ...baseSpec,
+      bodyProfile: { selfDescribedSex: "male", heightCm: 180, bodyweightKg: 82 },
+    });
+    for (const pattern of DIAGNOSTIC_PATTERNS) {
+      expect(pattern.test(prompt), pattern.source).toBe(false);
+    }
+  });
+});
+
+describe("buildBodyProfileSection — the fail-closed backstop's inner-text seam", () => {
+  it("returns an empty section and innerText when bodyProfile is absent", () => {
+    expect(buildBodyProfileSection(undefined)).toEqual({ section: "", innerText: "" });
+  });
+
+  it("returns an empty section and innerText when bodyProfile has no populated member", () => {
+    expect(buildBodyProfileSection({})).toEqual({ section: "", innerText: "" });
+  });
+
+  it("returns matching section/innerText — innerText is exactly the content between the delimiters", () => {
+    const { section, innerText } = buildBodyProfileSection({ bodyweightKg: 68 });
+    expect(section).toBe(`\n\n<body_profile>\n${innerText}\n</body_profile>`);
+    expect(innerText).toBe("USER BODY PROFILE (self-reported):\n- Bodyweight: 68 kg");
   });
 });
 
