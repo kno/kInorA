@@ -554,49 +554,53 @@ boundary: self-contained new screen and API clients; revert in isolation, no oth
 
 Satisfies: Mobile Profile Parity.
 
-- [ ] PR5.1 RED: RN component test — `ProfileScreen.tsx` renders name, goal, experience level,
+- [x] PR5.1 RED: RN component test — `ProfileScreen.tsx` renders name, goal, experience level,
       `selfDescribedSex`, and height; round-trips every field through the mobile API client
-- [ ] PR5.2 GREEN: create `apps/mobile/src/api/user-profile-client.ts` (`fetchUserProfile`/
+- [x] PR5.2 GREEN: create `apps/mobile/src/api/user-profile-client.ts` (`fetchUserProfile`/
       `updateUserProfile`) and `apps/mobile/src/screens/profile/{ProfileScreen.tsx,
       ProfileScreen.styles.ts, messages.ts}` — per-screen `defineMessages`, following
       `screens/tracker/messages.ts`'s convention (mobile does **not** read the shared `next-intl`
       catalogs); confirm PR5.1 is green
-- [ ] PR5.3 RED: RN component test — the weight-entry field posts a new reading and the list renders
+- [x] PR5.3 RED: RN component test — the weight-entry field posts a new reading and the list renders
       newest-first; the first-entry notice renders once on `wasFirstEntry: true` and does not repeat
-- [ ] PR5.4 GREEN: create `apps/mobile/src/api/weight-entry-client.ts` (`fetchWeightEntries`/
+- [x] PR5.4 GREEN: create `apps/mobile/src/api/weight-entry-client.ts` (`fetchWeightEntries`/
       `createWeightEntry`); extend `ProfileScreen.tsx` with the weight-entry field, list, and notice;
       confirm PR5.3 is green
-- [ ] PR5.5 RED: RN component test — an invalid `selfDescribedSex` value, a non-positive `heightCm`,
+- [x] PR5.5 RED: RN component test — an invalid `selfDescribedSex` value, a non-positive `heightCm`,
       and a non-positive `weightKg` are each rejected under the same validation rules as the web
       endpoints (the client surfaces the API's 422, it does not duplicate the validation logic)
-- [ ] PR5.6 GREEN: wire client-side error surfacing for the three rejection cases in `ProfileScreen.tsx`;
+- [x] PR5.6 GREEN: wire client-side error surfacing for the three rejection cases in `ProfileScreen.tsx`;
       confirm PR5.5 is green
 
 ### PR 5 verification
 
-- [ ] PR5.7 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green; `pnpm type-check`
+- [x] PR5.7 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green; `pnpm type-check`
       clean; `pnpm build` succeeds
 
 ---
 
 ## Final Verification (run once the full chain has landed)
 
-- [ ] `pnpm -r test` — full suite green, hermetic
-- [ ] `pnpm -r --if-present test:coverage` — apps/api functions ≥85%, apps/web functions ≥90%
-- [ ] `pnpm type-check` — no errors, all workspaces
-- [ ] `pnpm build` — CI's real gate, succeeds (also confirms `packages/i18n` rebuild picked up every
+- [x] `pnpm -r test` — full suite green, hermetic
+- [x] `pnpm -r --if-present test:coverage` — apps/api functions ≥85%, apps/web functions ≥90%
+- [x] `pnpm type-check` — no errors, all workspaces
+- [x] `pnpm build` — CI's real gate, succeeds (also confirms `packages/i18n` rebuild picked up every
       new catalog entry across PRs 1, 2, and 4)
-- [ ] Grep confirms both migration journal entries (`idx: 27`, `idx: 28`) are present and contiguous
-- [ ] Grep confirms `user-weight-entry.integration.test.ts` is present in
-      `.github/workflows/ci-cd.yml`'s hardcoded file list and actually executed in the most recent CI
-      run (not merely present in the repo)
-- [ ] Grep confirms no `WorkoutExerciseSchema`/`WorkoutSessionSchema`/`WorkoutProgramSchema` field was
+- [x] Grep confirms both migration journal entries (`idx: 27`, `idx: 28`) are present and contiguous
+- [x] Grep confirms `user-weight-entry.integration.test.ts` is present in
+      `.github/workflows/ci-cd.yml`'s hardcoded file list (line 131) — actual CI execution on the
+      real-Postgres job could not be re-confirmed from this apply phase (no CI run inspected; PR5 has
+      not been opened yet, per instructions that is the orchestrator's step)
+- [x] Grep confirms no `WorkoutExerciseSchema`/`WorkoutSessionSchema`/`WorkoutProgramSchema` field was
       added for any body-metric value
-- [ ] Grep confirms no `metadata:` literal in `apps/api/src` outside `trace-redaction.ts` carries a
-      body-metric-shaped key (the source-scan guard from PR3.5, re-checked manually once)
+- [x] Grep confirms no `metadata:` literal in `apps/api/src` outside `trace-redaction.ts` and the
+      guard's own test fixture carries a body-metric-shaped key (the source-scan guard from PR3.5,
+      re-checked manually once)
 - [ ] Manual: with a test user's body fields fully absent, the generation prompt is confirmed
       byte-identical to a pre-change capture (PR3.7's automated snapshot is the durable guarantee;
-      this is a one-time manual sanity check against a real generation call)
+      this is a one-time manual sanity check against a real generation call) — NOT performed this
+      phase: no live LLM/generation call was made; requires a human or a follow-up operational check
 - [ ] Manual/operational: confirm #374 is still unresolved and unchanged from the design's
       reconstruction before considering this change "done" with respect to the composition table —
-      already confirmed once during design/apply handoff; this is the final re-check before archive
+      NOT re-checked this phase: no GitHub issue access from this apply context; already confirmed
+      once during design/apply handoff, still needs one live re-check before archive

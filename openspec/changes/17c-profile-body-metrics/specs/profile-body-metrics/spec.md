@@ -19,7 +19,7 @@ observability event, and their absence MUST leave every existing behavior byte-f
 ### Requirement: Body Descriptor and Height Storage
 
 The system MUST persist, on the user's profile row, one nullable `sexOrGender` enum field with
-values `male`, `female`, `other`, `prefer_not_to_say`, and one nullable `heightCm` numeric field.
+values `female`, `male`, `non_binary`, `other`, `prefer_not_to_say`, and one nullable `heightCm` numeric field.
 Both MUST default to null for a user who has never set them. `prefer_not_to_say` MUST be a distinct
 stored enum value, never a reuse of null: null means "never asked/answered", `prefer_not_to_say`
 means "asked, and the user declined". Both values MUST be treated identically as "absent" by every
