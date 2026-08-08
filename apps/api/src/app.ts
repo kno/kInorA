@@ -402,6 +402,9 @@ export async function buildApp(
   const langfusePromptGateway = buildLangfusePromptGateway();
   const resolvePrompt = new ResolvePrompt(langfusePromptGateway, {
     cacheTtlMs: resolvePromptCacheTtlMs(process.env),
+    // #390 — surfaces a served remote template that lacks a variable the
+    // repository definition declares. Reports only; resolution proceeds.
+    observability: observabilityLogger,
     warn: (reason, promptName, errorName) =>
       app.log.warn(
         { reason, promptName, errorName },

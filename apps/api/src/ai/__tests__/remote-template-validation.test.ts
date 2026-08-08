@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   validateRemoteTemplate,
   checkRenderedTemplate,
+  missingRemoteVariables,
   RemoteTemplateSchema,
 } from "../remote-template-validation.js";
 import type { PromptDefinition } from "../prompt-template.js";
@@ -83,6 +84,28 @@ describe("checkRenderedTemplate", () => {
       ok: false,
       reason: "unresolved_marker_after_render",
     });
+  });
+});
+
+describe("missingRemoteVariables", () => {
+  it("returns nothing when the template references every declared variable", () => {
+    expect(missingRemoteVariables(DEF, DEF.localTemplate)).toEqual([]);
+  });
+
+  it("names a declared variable the template never references", () => {
+    // `{{c}}` is declared but is neither a required nor an ordered marker, so
+    // a template omitting it validates cleanly — exactly the silent gap.
+    const remote = "{{a}}\n{{b}}\nTASK:";
+    expect(validateRemoteTemplate(DEF, remote).ok).toBe(true);
+    expect(missingRemoteVariables(DEF, remote)).toEqual(["c"]);
+  });
+
+  it("reports every missing variable in the definition's declared order", () => {
+    expect(missingRemoteVariables(DEF, "TASK:")).toEqual(["a", "b", "c"]);
+  });
+
+  it("ignores markers the template references but the definition does not declare", () => {
+    expect(missingRemoteVariables(DEF, `${DEF.localTemplate}\n{{extra}}`)).toEqual([]);
   });
 });
 
