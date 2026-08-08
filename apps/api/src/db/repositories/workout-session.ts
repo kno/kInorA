@@ -22,7 +22,9 @@ import {
   computeWeeklyRollup,
   delta,
   normalizeTitle,
+  resolveBodyweightForSession,
   utcWeekBounds as domainUtcWeekBounds,
+  type BodyweightEntry,
   type MuscleGroupDistributionExercise,
   type PersonalRecordSetInput,
   type RpeSessionInput,
@@ -271,8 +273,53 @@ export interface UpdateSetRecordInput {
   notes?: string;
 }
 
+/**
+ * The bodyweight-series read `WorkoutSessionRepository` needs to resolve
+ * `resolvedBodyweightKg` (17c-profile-body-metrics, PR 4). Satisfied by
+ * `UserWeightEntryRepository.listAllForUser` in production; optional so
+ * every existing single-arg-constructor call site (and every existing
+ * mocked-chain test) keeps compiling and behaving byte-identically —
+ * `resolveBodyweightMap` below short-circuits to an empty map when absent.
+ */
+export interface BodyweightSeriesSource {
+  listAllForUser(userId: string): Promise<BodyweightEntry[]>;
+}
+
 export class WorkoutSessionRepository {
-  constructor(private db: Database) {}
+  constructor(
+    private db: Database,
+    private bodyweightSource?: BodyweightSeriesSource
+  ) {}
+
+  /**
+   * Resolves `resolvedBodyweightKg` for a batch of sessions in ONE query
+   * per call (17c-profile-body-metrics, PR 4) — never per-session, so a
+   * year of history costs exactly one extra query, not one per row.
+   * Returns an empty map — every lookup resolving `undefined` — when no
+   * bodyweight source is injected, the user has zero sessions in the batch,
+   * or the user has zero weight entries; every volume formula already
+   * treats `resolvedBodyweightKg === undefined` as "fall back to today's
+   * arithmetic".
+   */
+  private async resolveBodyweightMap(
+    userId: string,
+    sessions: readonly { id: string; at: string }[]
+  ): Promise<Map<string, number | undefined>> {
+    const map = new Map<string, number | undefined>();
+    if (!this.bodyweightSource || sessions.length === 0) {
+      return map;
+    }
+
+    const entries = await this.bodyweightSource.listAllForUser(userId);
+    if (entries.length === 0) {
+      return map;
+    }
+
+    for (const session of sessions) {
+      map.set(session.id, resolveBodyweightForSession(entries, session.at));
+    }
+    return map;
+  }
 
   /**
    * Starts (or resumes) a day-scoped workout session (#93), auto-closing a
@@ -518,7 +565,15 @@ export class WorkoutSessionRepository {
             .from(setRecords)
             .where(inArray(setRecords.sessionExerciseId, exerciseIds))) as SetRecordRow[]);
 
-    return mapWorkoutSessionRecord(sessionRow, exerciseRows, setRows);
+    // `findById` backs every live-tracker read (start/resume, recordSet,
+    // completeSession, abandonSession all re-read through it) — the single
+    // shared path a resolved bodyweight needs to reach the client's
+    // sessionVolume/activeExerciseVolume readout (17c-profile-body-metrics,
+    // PR 4).
+    const at = sessionRow.completedAt?.toISOString() ?? sessionRow.startedAt.toISOString();
+    const bodyweightMap = await this.resolveBodyweightMap(userId, [{ id: sessionRow.id, at }]);
+
+    return mapWorkoutSessionRecord(sessionRow, exerciseRows, setRows, bodyweightMap.get(sessionRow.id));
   }
 
   async recordSet(
@@ -828,10 +883,20 @@ export class WorkoutSessionRepository {
       setsByExercise.set(setRow.sessionExerciseId, current);
     }
 
+    // 17c-profile-body-metrics PR 4 — one batched weight-series read for the
+    // whole page (including the lookback row), never per-session.
+    const bodyweightMap = await this.resolveBodyweightMap(
+      userId,
+      sessionRows.map((sessionRow) => ({
+        id: sessionRow.id,
+        at: sessionRow.completedAt?.toISOString() ?? sessionRow.startedAt.toISOString(),
+      }))
+    );
+
     const records = sessionRows.map((sessionRow) => {
       const ownExercises = exercisesBySession.get(sessionRow.id) ?? [];
       const ownSets = ownExercises.flatMap((exercise) => setsByExercise.get(exercise.id) ?? []);
-      return mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets);
+      return mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets, bodyweightMap.get(sessionRow.id));
     });
 
     // 17b: pair completed-with-completed only. `records` is still ordered
@@ -972,7 +1037,7 @@ export class WorkoutSessionRepository {
     const weeklySessions =
       weeklyCompletedRows.length === 0
         ? []
-        : await this.buildWeeklyRollupSessions(weeklyCompletedRows);
+        : await this.buildWeeklyRollupSessions(weeklyCompletedRows, userId);
 
     const planDays =
       latestReadyPlan?.programJson?.weeklySessions.map((session) => ({
@@ -1048,7 +1113,7 @@ export class WorkoutSessionRepository {
     const completionRate = computeCompletionRate({ completedAtDates, plannedSessionsPerWeek }, now);
 
     const sessions =
-      completedRows.length === 0 ? [] : await this.buildSessionRecords(completedRows);
+      completedRows.length === 0 ? [] : await this.buildSessionRecords(completedRows, ownerUserId);
 
     const rpeTrend = computeRpeTrend(
       sessions.map((session, index): RpeSessionInput => ({
@@ -1072,9 +1137,14 @@ export class WorkoutSessionRepository {
    * `WorkoutSessionRecord`s — two bounded `inArray` queries (never
    * per-session), mirroring `buildRpeSessions`/`buildWeeklyRollupSessions`.
    * Used by `getClientDashboard`, which needs BOTH volume and RPE per
-   * session (unlike those two single-purpose helpers).
+   * session (unlike those two single-purpose helpers). `userId` resolves
+   * one batched bodyweight read (17c-profile-body-metrics, PR 4) so
+   * `recentSessions[].volumeKg` reflects bodyweight sets.
    */
-  private async buildSessionRecords(rows: WorkoutSessionRow[]): Promise<WorkoutSessionRecord[]> {
+  private async buildSessionRecords(
+    rows: WorkoutSessionRow[],
+    userId: string
+  ): Promise<WorkoutSessionRecord[]> {
     if (rows.length === 0) {
       return [];
     }
@@ -1108,20 +1178,28 @@ export class WorkoutSessionRepository {
       setsByExercise.set(setRow.sessionExerciseId, current);
     }
 
+    const bodyweightMap = await this.resolveBodyweightMap(
+      userId,
+      rows.map((row) => ({ id: row.id, at: row.completedAt?.toISOString() ?? row.startedAt.toISOString() }))
+    );
+
     return rows.map((sessionRow) => {
       const ownExercises = exercisesBySession.get(sessionRow.id) ?? [];
       const ownSets = ownExercises.flatMap((exercise) => setsByExercise.get(exercise.id) ?? []);
-      return mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets);
+      return mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets, bodyweightMap.get(sessionRow.id));
     });
   }
 
   /**
    * Computes `{ completedAt, volumeKg }` for a small set of already-fetched,
    * current-week completed session rows — two bounded `inArray` queries
-   * (never per-session), reusing `computeSessionVolume`.
+   * (never per-session), reusing `computeSessionVolume`. `userId` resolves
+   * one batched bodyweight read (17c-profile-body-metrics, PR 4) so the
+   * weekly rollup reflects bodyweight sets.
    */
   private async buildWeeklyRollupSessions(
-    weeklyCompletedRows: WorkoutSessionRow[]
+    weeklyCompletedRows: WorkoutSessionRow[],
+    userId: string
   ): Promise<Array<{ completedAt: string; volumeKg: number }>> {
     const sessionIds = weeklyCompletedRows.map((row) => row.id);
     const exerciseRows = (await this.db
@@ -1152,10 +1230,18 @@ export class WorkoutSessionRepository {
       setsByExercise.set(setRow.sessionExerciseId, current);
     }
 
+    const bodyweightMap = await this.resolveBodyweightMap(
+      userId,
+      weeklyCompletedRows.map((row) => ({
+        id: row.id,
+        at: row.completedAt?.toISOString() ?? row.startedAt.toISOString(),
+      }))
+    );
+
     return weeklyCompletedRows.map((sessionRow) => {
       const ownExercises = exercisesBySession.get(sessionRow.id) ?? [];
       const ownSets = ownExercises.flatMap((exercise) => setsByExercise.get(exercise.id) ?? []);
-      const session = mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets);
+      const session = mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets, bodyweightMap.get(sessionRow.id));
       return {
         completedAt: sessionRow.completedAt!.toISOString(),
         volumeKg: computeSessionVolume(session),
@@ -1312,6 +1398,13 @@ export class WorkoutSessionRepository {
       setsByExercise.set(setRow.sessionExerciseId, current);
     }
 
+    // 17c-profile-body-metrics PR 4 — one batched weight-series read across
+    // BOTH the current and previous period's sessions, never per-session.
+    const bodyweightMap = await this.resolveBodyweightMap(
+      userId,
+      sessionRows.map((row) => ({ id: row.id, at: row.completedAt!.toISOString() }))
+    );
+
     interface StatsBucketEntry {
       completedAt: Date;
       volumeKg: number;
@@ -1325,7 +1418,7 @@ export class WorkoutSessionRepository {
       const completedAt = sessionRow.completedAt!;
       const ownExercises = exercisesBySession.get(sessionRow.id) ?? [];
       const ownSets = ownExercises.flatMap((exercise) => setsByExercise.get(exercise.id) ?? []);
-      const session = mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets);
+      const session = mapWorkoutSessionRecord(sessionRow, ownExercises, ownSets, bodyweightMap.get(sessionRow.id));
       const volumeKg = computeSessionVolume(session);
       const durationMin = Math.max(0, Math.round((completedAt.getTime() - sessionRow.startedAt.getTime()) / 60000));
       const entry: StatsBucketEntry = { completedAt, volumeKg, durationMin };
@@ -1350,12 +1443,19 @@ export class WorkoutSessionRepository {
         continue;
       }
 
+      // 17c-profile-body-metrics PR 4 — the muscle-group bucket's own inline
+      // volume reduce (site (c) of the three that used to compute this
+      // formula independently). Same `(weightKg ?? 0) > 0` predicate and the
+      // session's resolved bodyweight as `computeSessionVolume` above, so
+      // this bucket cannot drift from the KPI total it is a slice of.
+      const resolvedBodyweightKg = bodyweightMap.get(exerciseRow.workoutSessionId);
       const ownSets = setsByExercise.get(exerciseRow.id) ?? [];
       const completedSets = ownSets.filter((set) => set.completed);
-      const setVolumeKg = completedSets.reduce(
-        (sum, set) => sum + (toOptionalNumber(set.weightKg) ?? 0) * (set.actualReps ?? 0),
-        0
-      );
+      const setVolumeKg = completedSets.reduce((sum, set) => {
+        const weightKg = toOptionalNumber(set.weightKg);
+        const effectiveKg = (weightKg ?? 0) > 0 ? weightKg! : (resolvedBodyweightKg ?? 0);
+        return sum + effectiveKg * (set.actualReps ?? 0);
+      }, 0);
 
       distributionInputs.push({
         muscleGroup: (exerciseRow.muscleGroup ?? null) as MuscleGroup | null,
@@ -1717,7 +1817,8 @@ export class WorkoutSessionRepository {
 function mapWorkoutSessionRecord(
   sessionRow: WorkoutSessionRow,
   exerciseRows: SessionExerciseRow[],
-  setRows: SetRecordRow[]
+  setRows: SetRecordRow[],
+  resolvedBodyweightKg?: number
 ): WorkoutSessionRecord {
   const setsByExerciseId = new Map<string, SetRecordDTO[]>();
 
@@ -1768,6 +1869,7 @@ function mapWorkoutSessionRecord(
     exercises,
     startedAt: sessionRow.startedAt.toISOString(),
     completedAt: sessionRow.completedAt?.toISOString() ?? undefined,
+    resolvedBodyweightKg,
   };
 }
 

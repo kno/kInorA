@@ -1,21 +1,39 @@
 /**
  * Real-Postgres integration coverage for `WorkoutSessionRepository.startSession`'s
- * auto-close transaction and `abandonSession` (17b-stale-session-recovery).
+ * auto-close transaction, `abandonSession` (17b-stale-session-recovery), and
+ * bodyweight-volume threading (17c-profile-body-metrics, PR 4).
  *
  * A mocked-db unit suite (`workout-session.test.ts`) already pins the guard
- * stances and the Branch A/B fast path; only a real Postgres can prove the
- * three-phase transaction's actual mechanics: the age-scoped UPDATE, the
- * partial-unique-index interaction, and the double-tap race. Injected `now`
- * throughout — no clock mocking.
+ * stances, the Branch A/B fast path, and the bodyweight-threading call sites
+ * against a mocked chain. What only a real Postgres proves for PR 4: the
+ * resolution rule's date-ordering against a REAL `user_weight_entries`
+ * series (a mock cannot model Postgres's own row ordering), and that the
+ * batched `listAllForUser` read genuinely does not scale with session count.
+ *
+ * This file predates PR 4 (17b) but was NEVER added to the real-Postgres CI
+ * job's hardcoded file list (`.github/workflows/ci-cd.yml`) — one more
+ * instance of #382. Added to that list in the SAME commit as this diff, so
+ * both the pre-existing 17b coverage and this PR's new bodyweight-resolution
+ * assertions actually execute, not just exist in the repo.
  *
  * Opt-in via `DATABASE_URL` (podman pgvector:pg17 harness, same pattern as
  * `workout-session-dashboard.integration.test.ts`) — skipped when no real
  * Postgres is wired so the default `vitest run` stays hermetic.
  */
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { createDbClient } from "../../client.js";
-import { planSpecs, sessionExercises, setRecords, tenants, users, workoutPlans, workoutSessions } from "../../schema.js";
+import {
+  planSpecs,
+  sessionExercises,
+  setRecords,
+  tenants,
+  userWeightEntries,
+  users,
+  workoutPlans,
+  workoutSessions,
+} from "../../schema.js";
 import { WorkoutSessionRepository } from "../workout-session.js";
+import { UserWeightEntryRepository } from "../user-weight-entry.js";
 import { eq } from "drizzle-orm";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -472,7 +490,165 @@ describe.skipIf(!hasDb)("WorkoutSessionRepository.listSessionHistory (real Postg
   });
 });
 
-describe.skipIf(hasDb)("WorkoutSessionRepository.startSession / abandonSession (real Postgres) — skipped", () => {
+describe.skipIf(!hasDb)("WorkoutSessionRepository — bodyweight volume threading (real Postgres, 17c PR 4)", () => {
+  const { db, pool } = createDbClient();
+  const repo = new WorkoutSessionRepository(db, new UserWeightEntryRepository(db));
+
+  afterAll(async () => {
+    await pool.end();
+  });
+
+  async function seedTenant(): Promise<string> {
+    const [tenant] = await db
+      .insert(tenants)
+      .values({ name: `bodyweight-volume-${Date.now()}-${Math.random()}` })
+      .returning({ id: tenants.id });
+    return tenant!.id;
+  }
+
+  async function seedUser(): Promise<string> {
+    const [user] = await db
+      .insert(users)
+      .values({ email: `bodyweight-volume-${Date.now()}-${Math.random()}@example.test` })
+      .returning({ id: users.id });
+    return user!.id;
+  }
+
+  async function seedReadyPlan(tenantId: string, userId: string): Promise<string> {
+    const [spec] = await db
+      .insert(planSpecs)
+      .values({ tenantId, userId, specJson: {}, confirmed: true })
+      .returning({ id: planSpecs.id });
+    const [plan] = await db
+      .insert(workoutPlans)
+      .values({ tenantId, userId, planSpecId: spec!.id, status: "ready", programJson: twoDaySessionsProgram })
+      .returning({ id: workoutPlans.id });
+    return plan!.id;
+  }
+
+  /** One completed session with one bodyweight-only set (no logged weightKg). */
+  async function seedBodyweightSession(
+    tenantId: string,
+    userId: string,
+    workoutPlanId: string,
+    startedAt: Date,
+    completedAt: Date,
+    actualReps: number,
+  ): Promise<string> {
+    const [session] = await db
+      .insert(workoutSessions)
+      .values({ tenantId, userId, workoutPlanId, status: "completed", day: 1, startedAt, completedAt })
+      .returning({ id: workoutSessions.id });
+    const [exercise] = await db
+      .insert(sessionExercises)
+      .values({ workoutSessionId: session!.id, exerciseIndex: 0, title: "Push-up", restSeconds: 60 })
+      .returning({ id: sessionExercises.id });
+    await db
+      .insert(setRecords)
+      .values({ sessionExerciseId: exercise!.id, setIndex: 0, targetReps: "15", completed: true, actualReps, weightKg: null });
+    return session!.id;
+  }
+
+  it("resolves the session-date-nearest weight entry against a REAL series and applies it to totalVolume", async () => {
+    const tenantId = await seedTenant();
+    const userId = await seedUser();
+    const planId = await seedReadyPlan(tenantId, userId);
+
+    // Entries straddling the session so the "nearest at-or-before" rule
+    // (not "most recent regardless of date") is what a mock cannot prove.
+    await db.insert(userWeightEntries).values([
+      { userId, weightKg: "80.00", recordedAt: new Date("2026-06-01T00:00:00Z") },
+      { userId, weightKg: "78.00", recordedAt: new Date("2026-07-01T00:00:00Z") },
+      { userId, weightKg: "90.00", recordedAt: new Date("2026-09-01T00:00:00Z") },
+    ]);
+
+    const sessionId = await seedBodyweightSession(
+      tenantId,
+      userId,
+      planId,
+      new Date("2026-08-01T08:00:00Z"),
+      new Date("2026-08-01T09:00:00Z"),
+      15,
+    );
+
+    const entries = await repo.listSessionHistory(tenantId, userId, { limit: 10, offset: 0 });
+    const entry = entries.find((e) => e.session.id === sessionId);
+
+    // 2026-08-01 is nearest-at-or-before the 2026-07-01 entry, NOT the
+    // 2026-09-01 entry (which is after the session) or the 2026-06-01 one
+    // (which is not the nearest).
+    expect(entry?.session.resolvedBodyweightKg).toBe(78);
+    expect(entry?.totalVolume).toBe(78 * 15);
+  });
+
+  it("does not let a later weigh-in rewrite an already-resolved older session (settled-history pin)", async () => {
+    const tenantId = await seedTenant();
+    const userId = await seedUser();
+    const planId = await seedReadyPlan(tenantId, userId);
+
+    await db.insert(userWeightEntries).values({
+      userId,
+      weightKg: "80.00",
+      recordedAt: new Date("2026-04-01T00:00:00Z"),
+    });
+
+    const sessionId = await seedBodyweightSession(
+      tenantId,
+      userId,
+      planId,
+      new Date("2026-05-01T08:00:00Z"),
+      new Date("2026-05-01T09:00:00Z"),
+      10,
+    );
+
+    const before = await repo.listSessionHistory(tenantId, userId, { limit: 10, offset: 0 });
+    const beforeEntry = before.find((e) => e.session.id === sessionId);
+    expect(beforeEntry?.session.resolvedBodyweightKg).toBe(80);
+
+    // A later reading, recorded AFTER the session date, must not change it.
+    await db.insert(userWeightEntries).values({
+      userId,
+      weightKg: "76.00",
+      recordedAt: new Date("2026-06-01T00:00:00Z"),
+    });
+
+    const after = await repo.listSessionHistory(tenantId, userId, { limit: 10, offset: 0 });
+    const afterEntry = after.find((e) => e.session.id === sessionId);
+    expect(afterEntry?.session.resolvedBodyweightKg).toBe(80);
+  });
+
+  it("issues exactly one weight-series query for a page of many sessions — never one per session", async () => {
+    const tenantId = await seedTenant();
+    const userId = await seedUser();
+    const planId = await seedReadyPlan(tenantId, userId);
+
+    await db.insert(userWeightEntries).values({
+      userId,
+      weightKg: "80.00",
+      recordedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+
+    for (let i = 0; i < 5; i++) {
+      await seedBodyweightSession(
+        tenantId,
+        userId,
+        planId,
+        new Date(`2026-0${i + 2}-01T08:00:00Z`),
+        new Date(`2026-0${i + 2}-01T09:00:00Z`),
+        10,
+      );
+    }
+
+    const listAllForUserSpy = vi.spyOn(UserWeightEntryRepository.prototype, "listAllForUser");
+    const entries = await repo.listSessionHistory(tenantId, userId, { limit: 10, offset: 0 });
+
+    expect(listAllForUserSpy).toHaveBeenCalledTimes(1);
+    expect(entries.filter((e) => e.session.resolvedBodyweightKg === 80)).toHaveLength(5);
+    listAllForUserSpy.mockRestore();
+  });
+});
+
+describe.skipIf(hasDb)("WorkoutSessionRepository (real Postgres) — skipped", () => {
   it("requires DATABASE_URL (podman pgvector:pg17 harness) to run", () => {
     expect(hasDb).toBe(false);
   });
