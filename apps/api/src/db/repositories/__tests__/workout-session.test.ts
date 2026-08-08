@@ -586,6 +586,41 @@ describe("WorkoutSessionRepository", () => {
 
       expect(result).toBeUndefined();
     });
+
+    it("17c PR 4 — attaches resolvedBodyweightKg from the injected bodyweight source", async () => {
+      const select = createQueuedSelectDb(
+        new Map<object, unknown[][]>([
+          [workoutSessions, [[completedSessionRow]]],
+          [sessionExercises, [exerciseRows]],
+          [setRecords, [completedSetRows]],
+        ])
+      ).select;
+      const bodyweightSource = {
+        listAllForUser: vi.fn().mockResolvedValue([{ weightKg: 80, recordedAt: "2026-07-01T00:00:00.000Z" }]),
+      };
+      const repo = new WorkoutSessionRepository({ select } as never, bodyweightSource);
+
+      const result = await repo.findById(TENANT_A, USER_A, SESSION_ID);
+
+      expect(bodyweightSource.listAllForUser).toHaveBeenCalledTimes(1);
+      expect(bodyweightSource.listAllForUser).toHaveBeenCalledWith(USER_A);
+      expect(result?.resolvedBodyweightKg).toBe(80);
+    });
+
+    it("17c PR 4 — leaves resolvedBodyweightKg undefined and issues no extra query when no source is injected", async () => {
+      const select = createQueuedSelectDb(
+        new Map<object, unknown[][]>([
+          [workoutSessions, [[sessionRow]]],
+          [sessionExercises, [exerciseRows]],
+          [setRecords, [completedSetRows]],
+        ])
+      ).select;
+      const repo = new WorkoutSessionRepository({ select } as never);
+
+      const result = await repo.findById(TENANT_A, USER_A, SESSION_ID);
+
+      expect(result?.resolvedBodyweightKg).toBeUndefined();
+    });
   });
 
   describe("recordSet", () => {
@@ -1251,6 +1286,27 @@ describe("WorkoutSessionRepository", () => {
       expect(entries[1]?.totalVolume).toBe(80);
     });
 
+    it("17c PR 4 — resolves the whole page's bodyweight in ONE batched read and reflects it in totalVolume", async () => {
+      const bodyweightSetA = { ...setRowA, weightKg: null, actualReps: 12 };
+      const { select } = createHistoryDb(
+        [sessionRowA, sessionRowB, sessionRowC],
+        [exerciseRowA, exerciseRowB, exerciseRowC],
+        [bodyweightSetA, setRowB, setRowC],
+      );
+      const bodyweightSource = {
+        listAllForUser: vi.fn().mockResolvedValue([{ weightKg: 80, recordedAt: "2026-07-01T00:00:00.000Z" }]),
+      };
+      const repo = new WorkoutSessionRepository({ select } as never, bodyweightSource);
+
+      const entries = await repo.listSessionHistory(TENANT_A, USER_A, { limit: 2, offset: 0 });
+
+      // One weight-series read for the entire page (3 rows including the
+      // lookback), never one per session.
+      expect(bodyweightSource.listAllForUser).toHaveBeenCalledTimes(1);
+      expect(entries[0]?.session.id).toBe(SESSION_A_ID);
+      expect(entries[0]?.totalVolume).toBe(80 * 12);
+    });
+
     it("returns an empty page when the caller has no completed sessions, issuing no follow-up queries", async () => {
       const { select, exercisesWhere, setsWhere } = createHistoryDb([], [], []);
       const repo = new WorkoutSessionRepository({ select } as never);
@@ -1525,6 +1581,28 @@ describe("WorkoutSessionRepository", () => {
       expect(select).toHaveBeenCalledTimes(7);
       expect(sessionsWhere).toHaveBeenCalledTimes(1);
       expect(plansWhere).toHaveBeenCalledTimes(1);
+    });
+
+    it("17c PR 4 — weekly rollup reflects a resolved bodyweight for a weightless set", async () => {
+      const bodyweightSetMon = { ...dashSetMon, weightKg: null, actualReps: 15 };
+      const { select } = createDashboardDb({
+        sessionRows: [dashSessionMon],
+        planRows: [dashReadyPlanRow],
+        exerciseRows: [dashExerciseMon],
+        setRows: [bodyweightSetMon],
+      });
+      const bodyweightSource = {
+        listAllForUser: vi.fn().mockResolvedValue([{ weightKg: 80, recordedAt: "2026-07-01T00:00:00.000Z" }]),
+      };
+      const repo = new WorkoutSessionRepository({ select } as never, bodyweightSource);
+
+      const summary = await repo.getDashboardSummary(TENANT_A, USER_A, NOW);
+
+      // One batched read regardless of how many sessions fall in the week.
+      expect(bodyweightSource.listAllForUser).toHaveBeenCalledTimes(1);
+      expect(bodyweightSource.listAllForUser).toHaveBeenCalledWith(USER_A);
+      const mondayRow = summary.weeklyRollup.find((row) => row.dayIndex === 0);
+      expect(mondayRow?.loadKg).toBe(80 * 15);
     });
 
     it("skips the exercise/set/RPE follow-up queries when there is no completed session at all", async () => {
@@ -1907,6 +1985,27 @@ describe("WorkoutSessionRepository", () => {
       ]);
     });
 
+    it("17c PR 4 — recentSessions[].volumeKg reflects a resolved bodyweight for a weightless set", async () => {
+      const bodyweightSet = { ...cdSet1, weightKg: null, actualReps: 12 };
+      const { select } = createClientDashboardDb({
+        sessionRows: [cdSession1],
+        planRows: [cdReadyPlanRow],
+        exerciseRows: [cdExercise1],
+        setRows: [bodyweightSet],
+      });
+      const bodyweightSource = {
+        listAllForUser: vi.fn().mockResolvedValue([{ weightKg: 70, recordedAt: "2026-07-01T00:00:00.000Z" }]),
+      };
+      const repo = new WorkoutSessionRepository({ select } as never, bodyweightSource);
+
+      const dashboard = await repo.getClientDashboard(TENANT_A, USER_A, NOW);
+
+      expect(bodyweightSource.listAllForUser).toHaveBeenCalledTimes(1);
+      expect(dashboard.recentSessions).toEqual([
+        { date: "2026-07-15T09:00:00.000Z", volumeKg: 70 * 12, meanRpe: 8 },
+      ]);
+    });
+
     it("1.6/req3 tenant-safe by construction — reading a different tenant returns the empty state (real filtering proven in the Postgres integration test)", async () => {
       const { select } = createClientDashboardDb({ sessionRows: [], planRows: [] });
       const repo = new WorkoutSessionRepository({ select } as never);
@@ -2135,6 +2234,42 @@ describe("WorkoutSessionRepository", () => {
 
       const summary = await repo.getStatsRange(TENANT_A, USER_A, "month", NOW);
 
+      expect(summary.personalRecords).toEqual([]);
+      expect(summary.prCount).toEqual({ value: 0, deltaVsPreviousPeriod: null });
+    });
+
+    it("17c PR 4 — totalVolumeKg and muscleGroupDistribution reflect a resolved bodyweight, PRs stay unaffected (non-regression)", async () => {
+      const bodyweightExercise = {
+        ...statsExerciseCurrent,
+        id: "bbbbbbbb-2222-0000-0000-000000000097",
+        title: "Pull-up",
+        muscleGroup: "back",
+      };
+      const bodyweightSet = {
+        ...statsSetCurrent,
+        id: "cccccccc-2222-0000-0000-000000000097",
+        sessionExerciseId: bodyweightExercise.id,
+        weightKg: "0",
+        actualReps: 10,
+      };
+      const { select } = createStatsDb({
+        sessionRows: [statsSessionCurrent],
+        exerciseRows: [bodyweightExercise],
+        setRows: [bodyweightSet],
+      });
+      const bodyweightSource = {
+        listAllForUser: vi.fn().mockResolvedValue([{ weightKg: 75, recordedAt: "2026-07-01T00:00:00.000Z" }]),
+      };
+      const repo = new WorkoutSessionRepository({ select } as never, bodyweightSource);
+
+      const summary = await repo.getStatsRange(TENANT_A, USER_A, "month", NOW);
+
+      // One batched weight-series read for the whole range (current + previous).
+      expect(bodyweightSource.listAllForUser).toHaveBeenCalledTimes(1);
+      expect(summary.totalVolumeKg.value).toBe(75 * 10);
+      expect(summary.muscleGroupDistribution).toEqual([{ muscleGroup: "back", setCount: 1, volumeKg: 75 * 10 }]);
+      // Personal records read the set's own logged load only — never the
+      // resolved bodyweight — so a bodyweight-only exercise still yields no PR.
       expect(summary.personalRecords).toEqual([]);
       expect(summary.prCount).toEqual({ value: 0, deltaVsPreviousPeriod: null });
     });

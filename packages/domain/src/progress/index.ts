@@ -49,3 +49,5 @@ export type {
 } from "./rpe-adaptation.js";
 export { computeRpeTrend, computeCompletionRate } from "./rpe-trend.js";
 export type { RpeTrendPoint, ComputeCompletionRateInput, CompletionRateResult } from "./rpe-trend.js";
+export { resolveBodyweightForSession } from "./bodyweight-resolution.js";
+export type { BodyweightEntry } from "./bodyweight-resolution.js";

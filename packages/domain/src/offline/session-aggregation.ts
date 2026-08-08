@@ -1,10 +1,19 @@
 import type { WorkoutSessionRecord } from "@kinora/contracts";
 
 /**
- * Total training volume for a session: sum of `weightKg * actualReps` across
- * every *completed* set. A completed set missing `weightKg` or `actualReps`
+ * Total training volume for a session: sum of `effectiveKg * actualReps`
+ * across every *completed* set, where `effectiveKg` is the set's own logged
+ * `weightKg` when it is a positive number, or otherwise the session's
+ * `resolvedBodyweightKg` (17c-profile-body-metrics, PR 4 —
+ * `resolveBodyweightForSession` applied once at the repository mapping
+ * boundary). `(weightKg ?? 0) > 0`, not `weightKg == null`, on purpose: an
+ * explicitly-logged `0 kg` set is indistinguishable from an unlogged one,
+ * and `0 * reps` is the "you did nothing" lie bodyweight volume exists to
+ * end. A completed set with no positive weight and no resolved bodyweight
  * contributes 0 (rather than throwing or being skipped from the sum), and a
- * session with no exercises/sets returns 0.
+ * session with no exercises/sets returns 0. **No signature change** from
+ * before PR 4 — `resolvedBodyweightKg` is optional, so every existing
+ * caller compiles and behaves unchanged when it is absent.
  *
  * Pure — no I/O.
  */
@@ -16,7 +25,8 @@ export function computeSessionVolume(session: WorkoutSessionRecord): number {
       if (!set.completed) {
         continue;
       }
-      total += (set.weightKg ?? 0) * (set.actualReps ?? 0);
+      const effectiveKg = (set.weightKg ?? 0) > 0 ? set.weightKg! : (session.resolvedBodyweightKg ?? 0);
+      total += effectiveKg * (set.actualReps ?? 0);
     }
   }
 

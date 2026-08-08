@@ -104,4 +104,68 @@ describe("WeightEntryForm", () => {
     renderWithIntl(<WeightEntryForm initialEntries={[]} />);
     expect(screen.getByText("No weigh-ins recorded yet.")).toBeDefined();
   });
+
+  // 17c-profile-body-metrics PR 4 — volume-shift notice, first entry only.
+  describe("first-entry volume-shift notice", () => {
+    it("renders on wasFirstEntry: true as a polite status region, without stealing focus", async () => {
+      createWeightEntryAction.mockResolvedValue({
+        kind: "ok",
+        entry: { id: "e-3", weightKg: 76, recordedAt: "2026-09-01T00:00:00.000Z" },
+        wasFirstEntry: true,
+      });
+
+      renderWithIntl(<WeightEntryForm initialEntries={[]} />);
+      const activeElementBefore = document.activeElement;
+
+      const weightInput = screen.getByLabelText("Weight (kg)") as HTMLInputElement;
+      fireEvent.change(weightInput, { target: { value: "76" } });
+      const submitButton = screen.getByRole("button", { name: "Log weight" });
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(screen.getByRole("status")).toBeDefined();
+      });
+      expect(document.activeElement).toBe(activeElementBefore);
+    });
+
+    it("does not render on a second entry (wasFirstEntry: false)", async () => {
+      createWeightEntryAction.mockResolvedValue({
+        kind: "ok",
+        entry: { id: "e-3", weightKg: 76, recordedAt: "2026-09-01T00:00:00.000Z" },
+        wasFirstEntry: false,
+      });
+
+      renderWithIntl(<WeightEntryForm initialEntries={ENTRIES} />);
+
+      const weightInput = screen.getByLabelText("Weight (kg)") as HTMLInputElement;
+      fireEvent.change(weightInput, { target: { value: "76" } });
+      const submitButton = screen.getByRole("button", { name: "Log weight" });
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(screen.getAllByRole("listitem")).toHaveLength(3);
+      });
+      expect(screen.queryByRole("status")).toBeNull();
+    });
+
+    it("is dismissible and does not reappear once dismissed", async () => {
+      createWeightEntryAction.mockResolvedValue({
+        kind: "ok",
+        entry: { id: "e-3", weightKg: 76, recordedAt: "2026-09-01T00:00:00.000Z" },
+        wasFirstEntry: true,
+      });
+
+      renderWithIntl(<WeightEntryForm initialEntries={[]} />);
+      const weightInput = screen.getByLabelText("Weight (kg)") as HTMLInputElement;
+      fireEvent.change(weightInput, { target: { value: "76" } });
+      fireEvent.click(screen.getByRole("button", { name: "Log weight" }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("status")).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+      expect(screen.queryByRole("status")).toBeNull();
+    });
+  });
 });

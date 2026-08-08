@@ -79,6 +79,35 @@ describe("tracker-model formatters/helpers", () => {
     expect(allSetsDone(ex2!)).toBe(false);
     expect(allSetsDone({ ...ex2!, setRecords: [] })).toBe(false); // empty is not "done"
   });
+
+  // 17c-profile-body-metrics PR 4 — bodyweight-set volume in the live tracker.
+  describe("exerciseVolume — resolvedBodyweightKg (17c PR 4)", () => {
+    it("existing no-second-argument call sites remain byte-identical", () => {
+      const [ex1] = session().exercises;
+      expect(exerciseVolume(ex1!)).toBe(320);
+    });
+
+    it("applies the bodyweight fallback for a weightless completed set", () => {
+      const bodyweightExercise = {
+        id: "ex-3",
+        workoutSessionId: "sess-1",
+        exerciseIndex: 2,
+        title: "Push-up",
+        restSeconds: 60,
+        setRecords: [
+          { id: "s3a", sessionExerciseId: "ex-3", setIndex: 0, targetReps: "15", actualReps: 15, completed: true },
+        ],
+      };
+
+      expect(exerciseVolume(bodyweightExercise)).toBe(0);
+      expect(exerciseVolume(bodyweightExercise, 80)).toBe(80 * 15);
+    });
+
+    it("leaves a loaded set unaffected by the resolvedBodyweightKg argument", () => {
+      const [ex1] = session().exercises;
+      expect(exerciseVolume(ex1!, 999)).toBe(320);
+    });
+  });
 });
 
 describe("deriveTrackerModel", () => {
@@ -134,6 +163,32 @@ describe("deriveTrackerModel", () => {
     s.status = "completed";
     const completed = deriveTrackerModel(s);
     expect(completed.isTerminal).toBe(true);
+  });
+
+  it("17c PR 4 — threads the session's resolvedBodyweightKg into sessionVolume/activeExerciseVolume", () => {
+    const s: WorkoutSessionRecord = {
+      id: "sess-2",
+      workoutPlanId: "plan-1",
+      status: "active",
+      startedAt: "2026-07-08T09:00:00.000Z",
+      resolvedBodyweightKg: 80,
+      exercises: [
+        {
+          id: "ex-1",
+          workoutSessionId: "sess-2",
+          exerciseIndex: 0,
+          title: "Push-up",
+          restSeconds: 60,
+          setRecords: [
+            { id: "s1a", sessionExerciseId: "ex-1", setIndex: 0, targetReps: "15", actualReps: 15, completed: true },
+          ],
+        },
+      ],
+    };
+
+    const model = deriveTrackerModel(s);
+    expect(model.sessionVolume).toBe(80 * 15);
+    expect(model.activeExerciseVolume).toBe(80 * 15);
   });
 
   it("17b — reports isTerminal true and isCompleted false for an abandoned session (terminal, but not a claimed completion)", () => {

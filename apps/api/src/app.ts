@@ -418,8 +418,20 @@ export async function buildApp(
       app.log.warn(payload, message),
     );
   });
+  // Constructed here (ahead of their route-registration use further below and
+  // of `WorkoutSessionRepository`) so `PlanGenerationService` can read the
+  // current profile/weight state when attaching `bodyProfile` to the
+  // generation prompt (17c-profile-body-metrics, PR 3), and so
+  // `WorkoutSessionRepository` can resolve `resolvedBodyweightKg` for volume
+  // (17c-profile-body-metrics, PR 4). Reused, not re-instantiated, at their
+  // original registration sites.
+  const userProfileRepo = new UserProfileRepository(database);
+  const userWeightEntryRepo = new UserWeightEntryRepository(database);
+
   const workoutPlanRepo = new WorkoutPlanRepository(database);
-  const workoutSessionRepo = new WorkoutSessionRepository(database);
+  const workoutSessionRepo = new WorkoutSessionRepository(database, {
+    listAllForUser: (userId: string) => userWeightEntryRepo.listAllForUser(userId),
+  });
   const planSpecRepo = new PlanSpecRepository(database);
   const vectorMemoryRepo = new VectorMemoryRepository(database);
   const { retriever: vectorMemoryRetriever, writer: vectorMemoryWriter } =
@@ -439,14 +451,6 @@ export async function buildApp(
         .check(scope, "memory_retrieval")
         .then((decision) => ({ allowed: decision.allowed })),
   };
-
-  // Constructed here (ahead of their route-registration use further below) so
-  // PlanGenerationService can read the current profile/weight state when
-  // attaching `bodyProfile` to the generation prompt (17c-profile-body-
-  // metrics, PR 3). Reused, not re-instantiated, at their original
-  // registration sites.
-  const userProfileRepo = new UserProfileRepository(database);
-  const userWeightEntryRepo = new UserWeightEntryRepository(database);
 
   const planGenerationService = new PlanGenerationService(
     generator,

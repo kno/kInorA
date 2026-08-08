@@ -84,6 +84,9 @@ describe("@kinora/contracts export conditions (source-condition convention)", ()
       completedAt?: string;
       // day is the additive scope column introduced by #93.
       day?: number;
+      // resolvedBodyweightKg is the additive volume field introduced by
+      // 17c-profile-body-metrics PR 4.
+      resolvedBodyweightKg?: number;
     }>();
   });
 
