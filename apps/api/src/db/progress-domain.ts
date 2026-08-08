@@ -24,10 +24,12 @@ export {
   utcWeekBounds,
   addUtcDays,
   normalizeTitle,
+  resolveBodyweightForSession,
 } from "@kinora/domain/progress";
 export type {
   MuscleGroupDistributionExercise,
   PersonalRecordSetInput,
   RpeSessionInput,
   IntensityBias as DomainIntensityBias,
+  BodyweightEntry,
 } from "@kinora/domain/progress";
