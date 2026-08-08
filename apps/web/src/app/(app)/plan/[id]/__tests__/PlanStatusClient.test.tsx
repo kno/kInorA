@@ -157,6 +157,46 @@ describe("PlanStatusClient — Regenerate button (Fix 4)", () => {
     });
   });
 
+  it("surfaces an error banner when regeneratePlanAction rejects, instead of no-op'ing silently", async () => {
+    defaultWsReturn("failed");
+    regeneratePlanAction.mockRejectedValue(new Error("network error"));
+
+    renderWithIntl(
+      <PlanStatusClient
+        planId="plan-1"
+        specId="spec-1"
+        initialStatus="failed"
+      />
+    );
+
+    fireEvent.click(screen.getByTestId("regenerate-btn"));
+
+    const alert = await screen.findByTestId("regenerate-error");
+    expect(alert.textContent).toBe("Something went wrong. Please try again.");
+  });
+
+  it("clears a previous regenerate-error banner on a subsequent successful click", async () => {
+    defaultWsReturn("failed");
+    regeneratePlanAction.mockRejectedValueOnce(new Error("network error"));
+    regeneratePlanAction.mockResolvedValueOnce({ planId: "plan-1", status: "generating" });
+
+    renderWithIntl(
+      <PlanStatusClient
+        planId="plan-1"
+        specId="spec-1"
+        initialStatus="failed"
+      />
+    );
+
+    fireEvent.click(screen.getByTestId("regenerate-btn"));
+    await screen.findByTestId("regenerate-error");
+
+    fireEvent.click(screen.getByTestId("regenerate-btn"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("regenerate-error")).toBeNull();
+    });
+  });
+
   it("does not call regeneratePlanAction when specId is undefined", async () => {
     defaultWsReturn("failed");
 

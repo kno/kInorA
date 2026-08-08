@@ -217,7 +217,9 @@ describe("@kinora/i18n package assembly", () => {
     // listEmpty}` (17c PR2) — the bodyweight-series entry form and list.
     // +2 `profile.weight.{volumeShiftNotice,dismiss}` (17c PR4) — the
     // first-entry volume-shift notice on the web weight-entry form.
-    expect(nonBillingKeys).toHaveLength(794);
+    // +1 `profile.weightEntry.loadError` (kno/kInorA#378) — distinguishes a
+    // failed weight-history fetch from an empty list on mobile ProfileScreen.
+    expect(nonBillingKeys).toHaveLength(795);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {

@@ -96,6 +96,11 @@ export function DayDetailPanel({
 }: DayDetailPanelProps) {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [overview, setOverview] = useState(weeklyOverview);
+  // A failed week fetch must not silently leave the stale week on screen with
+  // no signal and no way out — surfaced with a banner + retry, and the last
+  // requested target is kept so "Try again" repeats the exact same request.
+  const [weekNavFailed, setWeekNavFailed] = useState(false);
+  const [lastWeekNavTarget, setLastWeekNavTarget] = useState<string | null>(null);
   // 17b scope A: one required confirmation step before Discard takes effect —
   // a mis-tap next to Resume must not end a session that plausibly holds real
   // logged sets.
@@ -129,10 +134,21 @@ export function DayDetailPanel({
   const t = useTranslations();
 
   async function navigateWeek(targetWeekStart: string): Promise<void> {
+    setLastWeekNavTarget(targetWeekStart);
     const result = await getWeeklyOverviewAction(targetWeekStart);
     if (result.kind === "ok") {
       setOverview(result.overview);
+      setWeekNavFailed(false);
+    } else {
+      // Keep the stale week rendered (better than blanking it out) but make
+      // the failure visible instead of leaving the user to assume prev/next
+      // did nothing.
+      setWeekNavFailed(true);
     }
+  }
+
+  function handleWeekNavRetry(): void {
+    if (lastWeekNavTarget) void navigateWeek(lastWeekNavTarget);
   }
 
   // Derived localized conflict message (readability: no per-render fn, no
@@ -265,6 +281,15 @@ export function DayDetailPanel({
           </button>
         </div>
       </div>
+
+      {weekNavFailed && (
+        <div role="alert" data-testid="week-nav-error">
+          <p>{t("tracker.error.generic")}</p>
+          <button type="button" className="kin-btn kin-btn--secondary" onClick={handleWeekNavRetry}>
+            {t("plan.error.retryCta")}
+          </button>
+        </div>
+      )}
 
       {/* Fixed 7-tile Monday-Sunday day grid (spec-fidelity fix): every
           calendar day is a tile, not just training days. Training-day tiles
