@@ -12,6 +12,7 @@ vi.mock("langfuse-langchain", () => ({
 
 const { buildLangfuseCallbackHandler, resolveLangfuseBaseUrl, flushLangfuseHandlerOnClose } =
   await import("../langfuse-handler.js");
+const { redactTracedPayload } = await import("../trace-redaction.js");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -50,6 +51,36 @@ describe("buildLangfuseCallbackHandler — credential gate", () => {
     });
     expect(handler).not.toBeNull();
     expect(mockCallbackHandlerCtor).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("buildLangfuseCallbackHandler — trace redaction wiring (17c-profile-body-metrics, PR 3)", () => {
+  it("passes the general redaction function as the mask option on every construction", () => {
+    buildLangfuseCallbackHandler({
+      env: { LANGFUSE_PUBLIC_KEY: "pk-test", LANGFUSE_SECRET_KEY: "sk-test" },
+    });
+    expect(mockCallbackHandlerCtor).toHaveBeenCalledWith(
+      expect.objectContaining({ mask: redactTracedPayload }),
+    );
+  });
+
+  it("keeps the mask option alongside baseUrl and credentials — none is dropped by the other", () => {
+    buildLangfuseCallbackHandler({
+      env: {
+        LANGFUSE_PUBLIC_KEY: "pk-test",
+        LANGFUSE_SECRET_KEY: "sk-test",
+        LANGFUSE_HOST: "https://host.example.com",
+      },
+    });
+    const [params] = mockCallbackHandlerCtor.mock.calls[0] as [Record<string, unknown>];
+    expect(params).toEqual(
+      expect.objectContaining({
+        publicKey: "pk-test",
+        secretKey: "sk-test",
+        baseUrl: "https://host.example.com",
+        mask: redactTracedPayload,
+      }),
+    );
   });
 });
 
