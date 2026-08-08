@@ -44,7 +44,11 @@ The dashboard MUST summarize current training progress using available workout a
 
 ### Requirement: Statistics Surface
 
-The statistics surface MUST present progress metrics derived from completed workout sessions, scoped to web only. For the selected period it MUST present KPIs — total volume (kg), session count, total training time, and personal-record (PR) count — each with a delta vs. the previous period; a volume trend (current vs. previous period); muscle-group distribution across the 10 primary muscle groups; and personal records. When the previous period has no data (zero sessions/volume), each KPI delta MUST be null ("new" / no comparison), never infinity, NaN, or a divide-by-zero error. Metrics MUST degrade gracefully when underlying data is sparse or absent, rather than erroring. The statistics surface MUST NOT require an adherence KPI (adherence is a dashboard concern). All queries backing this surface MUST be scoped by (tenantId, userId).
+The statistics surface MUST present progress metrics derived from completed workout sessions, scoped to web only. For the selected period it MUST present KPIs — total volume (kg), session count, total training time, and personal-record (PR) count — each with a delta vs. the previous period; a volume trend (current vs. previous period); muscle-group distribution across the 10 primary muscle groups; and personal records. Total volume, volume trend, and muscle-group distribution figures MUST include volume from bodyweight sets using the resolved bodyweight defined by `profile-body-metrics`' Bodyweight Resolution requirement; a bodyweight set with no resolvable bodyweight (the user has zero weight entries) MUST continue to contribute zero volume, exactly as before this change. PR computation MUST remain unaffected by bodyweight volume (see `profile-body-metrics`' Personal Records Remain Unaffected requirement). When the previous period has no data (zero sessions/volume), each KPI delta MUST be null ("new" / no comparison), never infinity, NaN, or a divide-by-zero error. Metrics MUST degrade gracefully when underlying data is sparse or absent, rather than erroring. The statistics surface MUST NOT require an adherence KPI (adherence is a dashboard concern). All queries backing this surface MUST be scoped by (tenantId, userId).
+
+(Previously: bodyweight and no-weight sets contributed zero volume unconditionally, regardless of
+whether the user had ever recorded a weight. Volume figures now include bodyweight-set contributions
+once the user has at least one weight entry, per the resolution rule in `profile-body-metrics`.)
 
 #### Scenario: User reviews training analytics
 
@@ -75,6 +79,21 @@ The statistics surface MUST present progress metrics derived from completed work
 - GIVEN an exercise only has bodyweight, no-weight/assisted, or null-reps sets logged
 - WHEN the user opens statistics
 - THEN no estimated-1RM personal record is shown for that exercise (it is omitted, not shown as zero), while its sets still contribute to volume, session count, and trends where applicable
+
+#### Scenario: Bodyweight sets contribute zero volume before any weight entry exists
+
+- GIVEN a user has completed bodyweight-only sessions and has never recorded a weight entry
+- WHEN they open statistics
+- THEN total volume, volume trend, and muscle-group distribution for those sessions reflect zero
+  contribution from the bodyweight sets, exactly as before this change
+
+#### Scenario: Bodyweight sets contribute non-zero volume once a weight entry exists
+
+- GIVEN a user has completed bodyweight-only sessions and has recorded at least one weight entry
+  resolvable to those sessions per the Bodyweight Resolution rule
+- WHEN they open statistics
+- THEN total volume, volume trend, and muscle-group distribution include the resolved-bodyweight
+  contribution from those sets
 
 #### Scenario: KPI delta is null when there is no previous period
 
