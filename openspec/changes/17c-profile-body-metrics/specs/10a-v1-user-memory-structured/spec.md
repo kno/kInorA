@@ -6,7 +6,7 @@ The system MUST persist a user profile row uniquely identified by `userId`.
 The profile MUST carry `name` (text, NOT NULL), `goal` (one of `strength`,
 `hypertrophy`, `fat_loss`, `general_fitness`, nullable), `experienceLevel`
 (one of `beginner`, `intermediate`, `advanced`, nullable), `sexOrGender` (one
-of `male`, `female`, `other`, `prefer_not_to_say`, nullable), and `heightCm`
+of `female`, `male`, `non_binary`, `other`, `prefer_not_to_say`, nullable), and `heightCm`
 (numeric, nullable). The `userId` column MUST have a unique constraint.
 `sexOrGender` and `heightCm` MUST both default to null for every profile row
 that predates this change or that has never set them.
