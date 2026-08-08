@@ -130,6 +130,14 @@ jobs:
           src/db/repositories/__tests__/admin-stats.integration.test.ts
           src/db/repositories/__tests__/user-weight-entry.integration.test.ts
           src/db/repositories/__tests__/workout-session.integration.test.ts
+          src/db/repositories/__tests__/observability-events.integration.test.ts
+          src/db/repositories/__tests__/seat-sync.integration.test.ts
+          src/db/repositories/__tests__/tenant-branding.integration.test.ts
+          src/db/repositories/__tests__/tier-override-admin.integration.test.ts
+          src/db/repositories/__tests__/tier-override-admin-observability.integration.test.ts
+          src/db/repositories/__tests__/tier-override-composition.integration.test.ts
+          src/db/repositories/__tests__/trainer-assignment.integration.test.ts
+          src/db/repositories/__tests__/workout-session-dashboard.integration.test.ts
 
       - name: Assert billing suites executed (guard against false-green)
         # Each integration file pairs `describe.skipIf(!hasDb)` (the real tests)
