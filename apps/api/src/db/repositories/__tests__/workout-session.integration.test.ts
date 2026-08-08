@@ -153,8 +153,15 @@ describe.skipIf(!hasDb)("WorkoutSessionRepository.startSession auto-close transa
 
     const setCountAfter = await db.select().from(setRecords);
     const exerciseCountAfter = await db.select().from(sessionExercises);
-    expect(setCountAfter.length).toBe(setCountBefore.length + 1); // +1 for the new session's set
-    expect(exerciseCountAfter.length).toBe(exerciseCountBefore.length + 1);
+    // The new session materializes day 2 of `twoDaySessionsProgram`: one
+    // exercise ("Bench") carrying `sets: 3`. Derived from the fixture rather
+    // than hardcoded — the original `+ 1` was wrong and went unnoticed because
+    // this suite was absent from the real-Postgres CI list until 17c PR 4
+    // (#382), so it had never executed.
+    const newSessionExercises = twoDaySessionsProgram.weeklySessions.find((s) => s.day === 2)!.exercises;
+    const newSessionSetCount = newSessionExercises.reduce((sum, exercise) => sum + exercise.sets, 0);
+    expect(setCountAfter.length).toBe(setCountBefore.length + newSessionSetCount);
+    expect(exerciseCountAfter.length).toBe(exerciseCountBefore.length + newSessionExercises.length);
 
     if (outcome?.kind === "started") {
       expect(outcome.autoClosedSession).toEqual({
