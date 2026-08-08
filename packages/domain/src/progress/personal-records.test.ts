@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computePersonalRecords } from "./personal-records.js";
+import { computePersonalRecords, type PersonalRecordSetInput } from "./personal-records.js";
 
 describe("computePersonalRecords", () => {
   it("computes the estimated 1RM via the Epley formula from the best eligible set", () => {
@@ -64,5 +64,67 @@ describe("computePersonalRecords", () => {
 
   it("returns an empty array for no input", () => {
     expect(computePersonalRecords([])).toEqual([]);
+  });
+
+  // 17c-profile-body-metrics PR 4 — non-regression pin: bodyweight volume
+  // must not change PR computation. `PersonalRecordSetInput` has NO
+  // bodyweight member and this design does not add one, so there is no
+  // channel by which a resolved bodyweight can reach Epley (design.md "Why
+  // PRs cannot move"). `computePersonalRecords` output is byte-identical
+  // whether or not the caller resolved a bodyweight for the owning session.
+  describe("bodyweight volume non-regression (17c PR 4)", () => {
+    const bodyweightOnlyFixture: PersonalRecordSetInput[] = [
+      { exerciseTitle: "Pull-up", completed: true, weightKg: 0, actualReps: 8, achievedAt: "2026-06-01T10:00:00.000Z" },
+      { exerciseTitle: "Push-up", completed: true, weightKg: null, actualReps: 20, achievedAt: "2026-06-02T10:00:00.000Z" },
+    ];
+    const mixedFixture: PersonalRecordSetInput[] = [
+      ...bodyweightOnlyFixture,
+      { exerciseTitle: "Bench Press", completed: true, weightKg: 100, actualReps: 5, achievedAt: "2026-06-03T10:00:00.000Z" },
+    ];
+
+    it("shows no estimated-1RM PR for a bodyweight-only exercise, with or without a resolved bodyweight elsewhere in the run", () => {
+      // The fixture itself never carries a bodyweight value (there is no
+      // field to carry one on) — running it alongside a session that DID
+      // resolve a bodyweight (simulated here by the loaded Bench Press
+      // entry, whose own session may or may not have `resolvedBodyweightKg`
+      // attached upstream) produces an identical PR set either way.
+      const withoutLoadedSession = computePersonalRecords(bodyweightOnlyFixture);
+      const withLoadedSession = computePersonalRecords(mixedFixture).filter(
+        (record) => record.exerciseTitle !== "Bench Press",
+      );
+
+      expect(withoutLoadedSession).toEqual([]);
+      expect(withLoadedSession).toEqual([]);
+    });
+
+    it("pins prCount and personalRecords as byte-identical across the same fixture run twice", () => {
+      // Since `resolveBodyweightForSession` output cannot be threaded into
+      // `PersonalRecordSetInput` (no field), the pin is that calling this
+      // function twice with the identical input is deterministic and
+      // unaffected by any out-of-band bodyweight resolution happening
+      // elsewhere in the call graph for the same period.
+      const first = computePersonalRecords(mixedFixture);
+      const second = computePersonalRecords(mixedFixture);
+
+      expect(first).toEqual(second);
+      expect(first).toHaveLength(1);
+      expect(first[0]!.exerciseTitle).toBe("Bench Press");
+    });
+
+    it("does not accept a bodyweight field on PersonalRecordSetInput (compile-time pin)", () => {
+      const withExcessField: PersonalRecordSetInput = {
+        exerciseTitle: "Bench Press",
+        completed: true,
+        weightKg: 100,
+        actualReps: 5,
+        achievedAt: "2026-06-01T10:00:00.000Z",
+        // @ts-expect-error — `resolvedBodyweightKg` is not a member of
+        // `PersonalRecordSetInput`; this must remain a compile error so a
+        // future edit cannot silently open the channel this design refused.
+        resolvedBodyweightKg: 80,
+      };
+
+      expect(computePersonalRecords([withExcessField])).toHaveLength(1);
+    });
   });
 });
