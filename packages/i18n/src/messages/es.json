@@ -1072,6 +1072,7 @@
       "invalidWeight": "Introduce un peso mayor que 0 kg.",
       "invalidDate": "Introduce una fecha válida que no sea futura.",
       "error": "No se pudo guardar tu registro de peso. Inténtalo de nuevo.",
+      "loadError": "No se pudo cargar tu historial de peso. Inténtalo de nuevo.",
       "listHeading": "Tu historial de peso",
       "listEmpty": "Todavía no hay registros de peso."
     },

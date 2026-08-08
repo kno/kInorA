@@ -37,6 +37,7 @@ export const messages = defineMessages({
   invalidWeight: { id: "profile.weightEntry.invalidWeight" },
   invalidDate: { id: "profile.weightEntry.invalidDate" },
   weightError: { id: "profile.weightEntry.error" },
+  weightLoadError: { id: "profile.weightEntry.loadError" },
   listHeading: { id: "profile.weightEntry.listHeading" },
   listEmpty: { id: "profile.weightEntry.listEmpty" },
 

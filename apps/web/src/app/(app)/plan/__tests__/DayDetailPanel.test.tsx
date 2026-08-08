@@ -732,6 +732,36 @@ describe("DayDetailPanel — real weekly day-state + navigation (09c-v1 Slice 4b
     expect(getWeeklyOverviewAction).toHaveBeenCalledWith("2026-07-06");
   });
 
+  it("surfaces an error and a retry affordance when a week fetch fails, instead of silently keeping the stale week with no signal", async () => {
+    getWeeklyOverviewAction.mockResolvedValue({ kind: "error", message: "api_unreachable" });
+    renderWithIntl(<DayDetailPanel sessions={sessions} weeklyOverview={weeklyOverview} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next week" }));
+
+    const alert = await screen.findByTestId("week-nav-error");
+    expect(within(alert).getByRole("button", { name: "Retry" })).toBeDefined();
+    // The stale week stays visible (unchanged) rather than being blanked out.
+    expect(screen.getByText("13–19 Jul")).toBeDefined();
+  });
+
+  it("Retry re-issues the same failed request and clears the banner on success", async () => {
+    getWeeklyOverviewAction.mockResolvedValueOnce({ kind: "error", message: "api_unreachable" });
+    renderWithIntl(<DayDetailPanel sessions={sessions} weeklyOverview={weeklyOverview} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next week" }));
+    await screen.findByTestId("week-nav-error");
+
+    getWeeklyOverviewAction.mockResolvedValueOnce({
+      kind: "ok",
+      overview: { ...weeklyOverview, weekStart: "2026-07-20", weekLabel: "20–26 Jul", previousWeekStart: "2026-07-13", nextWeekStart: "2026-07-27" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(screen.queryByTestId("week-nav-error")).toBeNull());
+    expect(getWeeklyOverviewAction).toHaveBeenLastCalledWith("2026-07-20");
+    expect(screen.getByText("20–26 Jul")).toBeDefined();
+  });
+
   it("resyncs the rendered week when the weeklyOverview PROP changes (e.g. after router.refresh() on revisiting /plan) instead of staying stuck on the mount-time value", () => {
     const { rerender } = renderWithIntl(
       <DayDetailPanel sessions={sessions} weeklyOverview={weeklyOverview} />,
