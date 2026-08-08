@@ -1,5 +1,6 @@
 import { CallbackHandler } from "langfuse-langchain";
 import type { ResolvePrompt } from "./prompt-provider.js";
+import { redactTracedPayload } from "./trace-redaction.js";
 
 /**
  * Structural port over the Langfuse `CallbackHandler`, so no test ever needs
@@ -69,6 +70,12 @@ export function buildLangfuseCallbackHandler(opts?: {
     return new CallbackHandler({
       publicKey,
       secretKey,
+      // 17c-profile-body-metrics, PR 3: the ONLY seam where the model input
+      // and the trace input can diverge — see trace-redaction.ts. Applied by
+      // the SDK to `input`/`output` at enqueue, in-process, before any
+      // network call; a throw inside it fails CLOSED (the whole payload is
+      // replaced), so a bug here cannot become a leak.
+      mask: redactTracedPayload,
       ...(baseUrl ? { baseUrl } : {}),
     }) as TracingHandler;
   } catch (error) {
