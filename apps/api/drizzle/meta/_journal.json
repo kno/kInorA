@@ -197,6 +197,13 @@
       "when": 1785929726859,
       "tag": "0027_user_profile_body_metrics",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1785929786859,
+      "tag": "0028_user_weight_entries",
+      "breakpoints": true
     }
   ]
 }

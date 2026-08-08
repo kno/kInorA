@@ -234,10 +234,10 @@ Satisfies: Bodyweight Entry Recording; Bodyweight Entry Listing; SI Units Only, 
 
 ### Migration + guard
 
-- [ ] PR2.1 Preflight: confirm the journal `idx` after PR 1 lands is 27, so this entry is `idx: 28`
-- [ ] PR2.2 RED: extend `apps/api/src/db/__tests__/migration-journal.test.ts` with a pinning
+- [x] PR2.1 Preflight: confirm the journal `idx` after PR 1 lands is 27, so this entry is `idx: 28`
+- [x] PR2.2 RED: extend `apps/api/src/db/__tests__/migration-journal.test.ts` with a pinning
       assertion that `0028_user_weight_entries.sql` exists at `idx: 28`
-- [ ] PR2.3 GREEN: create `apps/api/drizzle/0028_user_weight_entries.sql` — the `user_weight_entries`
+- [x] PR2.3 GREEN: create `apps/api/drizzle/0028_user_weight_entries.sql` — the `user_weight_entries`
       table (`id uuid` PK default random, `user_id uuid` FK `ON DELETE CASCADE`, `weight_kg
       numeric(5,2)` NOT NULL, `recorded_at timestamptz` NOT NULL default now, `created_at timestamptz`
       NOT NULL default now) plus the composite `(user_id, recorded_at)` index; hand-add the journal
@@ -248,26 +248,26 @@ Satisfies: Bodyweight Entry Recording; Bodyweight Entry Listing; SI Units Only, 
 
 ### Contracts
 
-- [ ] PR2.4 RED: extend `contracts.test.ts:61-72`'s runtime export assertion to stay unchanged; add a
+- [x] PR2.4 RED: extend `contracts.test.ts:61-72`'s runtime export assertion to stay unchanged; add a
       compile-time check for `WeightEntryDTO { id, weightKg, recordedAt }` and
       `CreateWeightEntryResponse { entry, wasFirstEntry }`
-- [ ] PR2.5 GREEN: add both types to `packages/contracts/src/index.ts`; confirm PR2.4 is green
+- [x] PR2.5 GREEN: add both types to `packages/contracts/src/index.ts`; confirm PR2.4 is green
 
 ### Route + repository
 
-- [ ] PR2.6 RED: `apps/api/src/routes/__tests__/user-weight-entry.test.ts` (`app.inject`) — POST
+- [x] PR2.6 RED: `apps/api/src/routes/__tests__/user-weight-entry.test.ts` (`app.inject`) — POST
       validation matrix: `weightKg = 0`, negative, `> 500`, non-numeric all return
       `422 { error: "invalid_weight_kg" }`; `recordedAt` unparseable or in the future returns
       `422 { error: "invalid_recorded_at" }`; a first POST returns `201 { entry, wasFirstEntry: true
       }`; a second POST for the same user returns `wasFirstEntry: false`; GET returns entries newest
       `recordedAt` first, capped at 100; `userId` is read only from `request.authContext`, never the
       body
-- [ ] PR2.7 RED: `apps/api/src/db/repositories/__tests__/user-weight-entry.integration.test.ts` —
+- [x] PR2.7 RED: `apps/api/src/db/repositories/__tests__/user-weight-entry.integration.test.ts` —
       two readings coexist for one user (no unique index enforced); GET returns newest-first;
       deleting the user cascades every row away; `wasFirstEntry` computed **inside the insert
       transaction** (`count(*) = 1` after insert) is `false` for a second entry inserted concurrently
       with the first (raced via `Promise.all`), proving it cannot fire twice or race a second tab
-- [ ] PR2.8 GREEN: create `apps/api/src/db/repositories/user-weight-entry.ts` — `list` (newest-first,
+- [x] PR2.8 GREEN: create `apps/api/src/db/repositories/user-weight-entry.ts` — `list` (newest-first,
       cap 100), `insert` computing `wasFirstEntry` inside the transaction, `listAllForUser` (ASC,
       unbounded, feeds PR 4's resolution query); create `apps/api/src/routes/user-weight-entry.ts`
       as a new plugin, `preHandler: requireAuth()`, wiring both routes; register it in
@@ -275,7 +275,7 @@ Satisfies: Bodyweight Entry Recording; Bodyweight Entry Listing; SI Units Only, 
 
 ### The CI list line
 
-- [ ] PR2.9 GREEN, same commit as PR2.7: add
+- [x] PR2.9 GREEN, same commit as PR2.7: add
       `apps/api/src/db/repositories/__tests__/user-weight-entry.integration.test.ts` to the hardcoded
       file list in `.github/workflows/ci-cd.yml:113-131`. Verify by re-reading the file after the edit
       that the new path is present alongside the existing eight entries — this is the line that keeps
@@ -283,27 +283,31 @@ Satisfies: Bodyweight Entry Recording; Bodyweight Entry Listing; SI Units Only, 
 
 ### Web weight-entry form + list
 
-- [ ] PR2.10 RED: RTL + jsdom component test — the entry form submits `weightKg` and an optional date;
+- [x] PR2.10 RED: RTL + jsdom component test — the entry form submits `weightKg` and an optional date;
       the list renders entries newest-first; a validation error (non-positive weight) surfaces inline
       without a page reload
-- [ ] PR2.11 GREEN: implement the form and list on `apps/web/src/app/(app)/profile/` alongside the
+- [x] PR2.11 GREEN: implement the form and list on `apps/web/src/app/(app)/profile/` alongside the
       scalar fields (new sub-components; reuse `profile-form-client.ts`'s calling convention); confirm
       PR2.10 is green. **Do not render the first-entry notice here** — it ships in PR 4, gated on the
       volume-threading work it explains
 
 ### i18n
 
-- [ ] PR2.12 GREEN: add the weight-entry form labels and validation-error keys (not the `profile.
+- [x] PR2.12 GREEN: add the weight-entry form labels and validation-error keys (not the `profile.
       weight.*` first-entry-notice keys — those are PR 4) to `packages/i18n/src/messages/{en,es}.json`;
       rebuild before manual verification
 
 ### PR 2 verification
 
-- [ ] PR2.13 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green; `pnpm
+- [x] PR2.13 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green; `pnpm
       type-check` clean; `pnpm build` succeeds
-- [ ] PR2.14 Verify: confirm `user-weight-entry.integration.test.ts` actually executes in the
+- [x] PR2.14 Verify: confirm `user-weight-entry.integration.test.ts` actually executes in the
       real-Postgres CI job (re-read `.github/workflows/ci-cd.yml` after PR2.9, or inspect a CI run) —
-      not merely present in the repo
+      not merely present in the repo. DEVIATION: no CI run exists yet for this branch (not pushed/PR
+      not opened — orchestrator's responsibility per instructions). Verified the file IS present in
+      the hardcoded list (re-read after edit, confirmed at ci-cd.yml:131) and the suite is directory-
+      independent of any other config — the same mechanism that already runs the other 8 files will
+      run this one. Actual CI execution must be confirmed once the PR opens.
 
 ---
 

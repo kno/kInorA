@@ -991,6 +991,41 @@ export const userProfiles = pgTable(
 );
 
 /**
+ * User Weight Entries — dated bodyweight readings, a 1:MANY series keyed by
+ * `userId` (17c-profile-body-metrics, PR 2). Deliberately NO unique index on
+ * `userId` — unlike `userProfiles`/`userPreferences`, a user may have any
+ * number of readings. `weightKg` is `numeric(5,2)`, matching
+ * `set_records.weightKg`'s numeric choice (reads back as `string`; the
+ * repository converts through a `toOptionalNumber`-style helper).
+ * `ON DELETE CASCADE` follows the universal convention for user-scoped child
+ * tables. The composite `(userId, recordedAt)` index serves both the
+ * reverse-chronological list and the bodyweight-resolution query (PR 4) with
+ * one structure.
+ */
+export const userWeightEntries = pgTable(
+  "user_weight_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    weightKg: numeric("weight_kg", { precision: 5, scale: 2 }).notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    userRecordedAtIdx: index("user_weight_entries_user_recorded_at_idx").on(
+      table.userId,
+      table.recordedAt,
+    ),
+  })
+);
+
+/**
  * User Preferences — user-scoped training context defaults (10b-user-preferences).
  * One row per user via unique `userId`.
  * All three data columns are nullable; a row present with NULLs is a valid
