@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import type { ReactElement, ReactNode } from "react";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
@@ -30,6 +30,7 @@ function findFirst(
 
 const cookieGet = vi.fn();
 const fetchUserProfile = vi.fn();
+const fetchWeightEntries = vi.fn();
 
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({ get: cookieGet })),
@@ -55,17 +56,37 @@ vi.mock("../profile-form-client.js", async () => {
   };
 });
 
-// Stub ProfileForm to a lightweight function component so the page test only
-// asserts the page's wiring (fetch + props), not the form internals.
+vi.mock("../weight-entry-client.js", async () => {
+  const actual = await vi.importActual<typeof import("../weight-entry-client.js")>(
+    "../weight-entry-client.js",
+  );
+  return {
+    ...actual,
+    fetchWeightEntries: (...args: unknown[]) => fetchWeightEntries(...args),
+  };
+});
+
+// Stub ProfileForm/WeightEntryForm to lightweight function components so the
+// page test only asserts the page's wiring (fetch + props), not form internals.
 vi.mock("../ProfileForm.js", () => ({
   ProfileForm: (props: AnyProps) => null,
+}));
+vi.mock("../WeightEntryForm.js", () => ({
+  WeightEntryForm: (props: AnyProps) => null,
 }));
 
 import ProfilePage from "../page.js";
 import { ProfileForm } from "../ProfileForm.js";
+import { WeightEntryForm } from "../WeightEntryForm.js";
 
 afterEach(() => {
   vi.clearAllMocks();
+});
+
+beforeEach(() => {
+  // Default: an empty series. Individual tests override when the weight
+  // fetch itself is under test.
+  fetchWeightEntries.mockResolvedValue({ kind: "ok", entries: [] });
 });
 
 // --- Tests ---
@@ -123,6 +144,40 @@ describe("ProfilePage (server component)", () => {
     await ProfilePage();
 
     expect(fetchUserProfile).toHaveBeenCalledWith("my-session-token");
+  });
+
+  it("passes the fetched weight entries to WeightEntryForm on a successful load", async () => {
+    cookieGet.mockReturnValue({ value: "token-1" });
+    fetchUserProfile.mockResolvedValue({
+      kind: "ok",
+      profile: { userId: "u", name: "Ada", goal: null, experienceLevel: null },
+    });
+    fetchWeightEntries.mockResolvedValue({
+      kind: "ok",
+      entries: [{ id: "e-1", weightKg: 72.5, recordedAt: "2026-08-01T00:00:00.000Z" }],
+    });
+
+    const page = (await ProfilePage()) as AnyElement;
+
+    const weightForm = findFirst(page, (el) => el.type === WeightEntryForm);
+    expect(weightForm).toBeDefined();
+    expect(weightForm?.props?.initialEntries).toEqual([
+      { id: "e-1", weightKg: 72.5, recordedAt: "2026-08-01T00:00:00.000Z" },
+    ]);
+  });
+
+  it("degrades to an empty list when the weight-entries fetch fails", async () => {
+    cookieGet.mockReturnValue({ value: "token-1" });
+    fetchUserProfile.mockResolvedValue({
+      kind: "ok",
+      profile: { userId: "u", name: "Ada", goal: null, experienceLevel: null },
+    });
+    fetchWeightEntries.mockResolvedValue({ kind: "error", message: "api_unreachable" });
+
+    const page = (await ProfilePage()) as AnyElement;
+
+    const weightForm = findFirst(page, (el) => el.type === WeightEntryForm);
+    expect(weightForm?.props?.initialEntries).toEqual([]);
   });
 
   it("renders real Spanish copy from the ES catalog (no EN leakage)", async () => {

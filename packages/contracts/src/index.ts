@@ -260,6 +260,26 @@ export interface UserProfile {
 }
 
 /**
+ * One dated bodyweight reading (17c-profile-body-metrics, PR 2). SI only
+ * (kilograms), no unit field. `recordedAt` is an ISO-8601 instant.
+ */
+export interface WeightEntryDTO {
+  id: string;
+  weightKg: number;
+  recordedAt: string;
+}
+
+/**
+ * 201 body of `POST /weight-entries`. `wasFirstEntry` is computed inside the
+ * insert transaction (never inferred client-side) and drives the volume-shift
+ * notice (PR 4) — true only for the user's first-ever reading.
+ */
+export interface CreateWeightEntryResponse {
+  entry: WeightEntryDTO;
+  wasFirstEntry: boolean;
+}
+
+/**
  * User preferences DTO (10b-user-preferences).
  * `defaultEquipment` is an array when non-null; an empty array `[]` is a
  * valid value ("visited the page, chose nothing"), distinct from NULL

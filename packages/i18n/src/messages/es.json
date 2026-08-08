@@ -1061,6 +1061,19 @@
       "beginner": "Principiante",
       "intermediate": "Intermedio",
       "advanced": "Avanzado"
+    },
+    "weightEntry": {
+      "heading": "Registra tu peso",
+      "weightLabel": "Peso (kg)",
+      "weightPlaceholder": "p. ej. 76",
+      "dateLabel": "Fecha",
+      "submit": "Registrar peso",
+      "saving": "Guardando…",
+      "invalidWeight": "Introduce un peso mayor que 0 kg.",
+      "invalidDate": "Introduce una fecha válida que no sea futura.",
+      "error": "No se pudo guardar tu registro de peso. Inténtalo de nuevo.",
+      "listHeading": "Tu historial de peso",
+      "listEmpty": "Todavía no hay registros de peso."
     }
   },
   "memory": {

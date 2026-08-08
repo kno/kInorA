@@ -1061,6 +1061,19 @@
       "beginner": "Beginner",
       "intermediate": "Intermediate",
       "advanced": "Advanced"
+    },
+    "weightEntry": {
+      "heading": "Log your weight",
+      "weightLabel": "Weight (kg)",
+      "weightPlaceholder": "e.g. 76",
+      "dateLabel": "Date",
+      "submit": "Log weight",
+      "saving": "Saving…",
+      "invalidWeight": "Enter a weight greater than 0 kg.",
+      "invalidDate": "Enter a valid date that is not in the future.",
+      "error": "Could not save your weight entry. Please try again.",
+      "listHeading": "Your weight history",
+      "listEmpty": "No weigh-ins recorded yet."
     }
   },
   "memory": {

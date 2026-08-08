@@ -84,4 +84,13 @@ describe("Drizzle migration journal", () => {
     expect(entry).toBeDefined();
     expect(entry?.idx).toBe(27);
   });
+
+  it("includes the 17c bodyweight-series migration at idx 28", () => {
+    const journal = readJournal();
+    const entry = journal.entries.find(
+      (candidate) => candidate.tag === "0028_user_weight_entries",
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.idx).toBe(28);
+  });
 });

@@ -2,7 +2,9 @@ import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { fetchUserProfile } from "./profile-form-client";
+import { fetchWeightEntries } from "./weight-entry-client";
 import { ProfileForm } from "./ProfileForm";
+import { WeightEntryForm } from "./WeightEntryForm";
 
 /**
  * Profile page (/profile) — authenticated, rendered inside the AppShell.
@@ -27,6 +29,12 @@ export default async function ProfilePage() {
   const initialProfile = result.kind === "ok" ? result.profile : null;
   const initialError = result.kind === "error" ? result.message : null;
 
+  // 17c-profile-body-metrics, PR 2 — the bodyweight series is fetched
+  // alongside the profile. A load failure degrades to an empty list rather
+  // than blocking the page (the profile scalars are the load-bearing read).
+  const weightResult = await fetchWeightEntries(token);
+  const initialEntries = weightResult.kind === "ok" ? weightResult.entries : [];
+
   return (
     <main className="kin-page">
       <div className="kin-card kin-card--center">
@@ -35,6 +43,7 @@ export default async function ProfilePage() {
           {t("profile.description")}
         </p>
         <ProfileForm initialProfile={initialProfile} initialError={initialError} />
+        <WeightEntryForm initialEntries={initialEntries} />
       </div>
     </main>
   );
