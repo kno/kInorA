@@ -110,51 +110,56 @@ jobs:
       - name: Run database migrations
         run: pnpm --filter api db:migrate
 
-      - name: Billing integration suites (real Postgres)
-        # Target the integration files directly so this job's purpose —
-        # gating the billing invariants — is explicit. The `json` reporter emits
-        # a machine-readable result file (into the runner temp dir, never the
-        # tracked tree) consumed by the guard step below; the `default` reporter
-        # keeps the human-readable output in the job log.
+      - name: Integration suites (real Postgres)
+        # Glob the whole integration directory rather than naming files. The
+        # previous explicit list had drifted: eight of eighteen suites sat
+        # outside it and therefore ran in NO CI job at all (#382). A glob makes
+        # a newly added suite part of this gate the moment it lands, so the list
+        # cannot silently fall behind the directory again.
+        #
+        # Despite the job NAME (kept byte-identical — it is a required status
+        # check and renaming it would break the gate), this job gates far more
+        # than billing today: workout sessions, admin stats, tenant branding,
+        # trainer assignment, seat sync, observability events, tier overrides,
+        # weight entries and account deletion all live in the same directory.
+        #
+        # The `json` reporter emits a machine-readable result file (into the
+        # runner temp dir, never the tracked tree) consumed by the guard step
+        # below; the `default` reporter keeps human-readable output in the log.
+        working-directory: apps/api
         run: >-
-          pnpm --filter api exec vitest run
+          pnpm exec vitest run
           --reporter=default --reporter=json
-          --outputFile.json="$RUNNER_TEMP/billing-vitest-results.json"
-          src/db/repositories/__tests__/billing-quota.integration.test.ts
-          src/db/repositories/__tests__/billing-admin.integration.test.ts
-          src/db/repositories/__tests__/billing-visibility.integration.test.ts
-          src/db/repositories/__tests__/stripe-schema.integration.test.ts
-          src/db/repositories/__tests__/stripe-webhook.integration.test.ts
-          src/db/repositories/__tests__/billing-customer.integration.test.ts
-          src/db/repositories/__tests__/user-account-deletion.integration.test.ts
-          src/db/repositories/__tests__/admin-stats.integration.test.ts
-          src/db/repositories/__tests__/user-weight-entry.integration.test.ts
-          src/db/repositories/__tests__/workout-session.integration.test.ts
+          --outputFile.json="$RUNNER_TEMP/integration-vitest-results.json"
+          src/db/repositories/__tests__/*.integration.test.ts
 
-      - name: Assert billing suites executed (guard against false-green)
-        # Each integration file pairs `describe.skipIf(!hasDb)` (the real tests)
-        # with a `describe.skipIf(hasDb)` placeholder that passes trivially when
-        # DATABASE_URL is absent. So if DATABASE_URL is ever dropped/renamed or
-        # the service is unreachable, vitest runs ONLY the placeholders, exits
-        # 0, and the job goes GREEN having verified NONE of the billing
-        # invariants. This guard fails the job RED unless the real suites
-        # actually ran.
+      - name: Assert integration suites executed (guard against false-green)
+        # Two distinct false-greens are possible here, and the guard fails on
+        # both. See the script's header for the full reasoning.
         #
-        # Despite the job name (kept stable — renaming it would break the required
-        # status check), this also gates the #353 retention funnel's
-        # test-account exclusion. That suite was previously in NO CI job, so its
-        # assertions only ever ran locally.
+        # 1. DRIFT — a suite exists on disk but was never invoked. This is how
+        #    eight suites accumulated unnoticed. A count-based floor is
+        #    structurally incapable of catching it: a suite that never runs
+        #    contributes nothing to any count. The guard therefore compares the
+        #    files vitest reported against the files present on disk and fails
+        #    if any suite was left out.
         #
-        # MIN is a FLOOR, not the exact count: a DB-absent run yields exactly one
-        # passing placeholder per targeted file (7), so any value above that
-        # catches the false-green. It is deliberately not pinned to the live total
-        # — the suites grow (a DB-present run passed 59 as of #354, while this
-        # comment previously claimed 34), and an exact pin turns every added test
-        # into a spurious RED. Bump MIN when adding real tests; never lower it
-        # below the placeholder count.
+        # 2. NO DATABASE — each suite pairs `describe.skipIf(!hasDb)` (the real
+        #    tests) with a `describe.skipIf(hasDb)` placeholder that passes
+        #    trivially when DATABASE_URL is absent. If the variable is
+        #    dropped/renamed or the service is unreachable, vitest runs ONLY the
+        #    placeholders, exits 0, and this job goes GREEN having verified
+        #    nothing. Every suite still appears in the report, so check 1 alone
+        #    would pass — the floor is what catches this, and it is retained.
+        #
+        # The floor is derived from the file count (2 passing tests per suite)
+        # instead of pinned to a literal, so it neither needs a manual bump when
+        # suites grow nor turns an added test into a spurious RED.
+        working-directory: apps/api
         run: >-
-          node -e 'const r = require(process.argv[1]); const passed = r.numPassedTests ?? 0; const MIN = 46; if (passed < MIN) { console.error("ERROR: billing integration suites did NOT execute (numPassedTests=" + passed + " < " + MIN + "). DATABASE_URL was likely unset/unreachable, so vitest ran only the skip-placeholder tests and would have gone GREEN without verifying any billing invariant. Failing the job."); process.exit(1); } console.log("OK: billing integration suites executed (" + passed + " passed tests).");'
-          "$RUNNER_TEMP/billing-vitest-results.json"
+          node scripts/assert-integration-suites-executed.mjs
+          "$RUNNER_TEMP/integration-vitest-results.json"
+          src/db/repositories/__tests__
 
   docker-smoke:
     name: Docker build & boot smoke
