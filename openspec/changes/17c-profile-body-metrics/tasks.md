@@ -447,7 +447,7 @@ Surface (MODIFIED).
 
 ### The resolution rule (pure, unit-tested)
 
-- [ ] PR4.1 RED: `packages/domain/src/progress/__tests__/bodyweight-resolution.test.ts` — the full
+- [x] PR4.1 RED: `packages/domain/src/progress/__tests__/bodyweight-resolution.test.ts` — the full
       behavior table from `design.md`: zero entries → `undefined`; session after some reading → the
       latest at-or-before; session before every reading → the earliest (backstop); session exactly at
       a reading's instant → that reading (inclusive); two readings at the same instant → the
@@ -455,45 +455,45 @@ Surface (MODIFIED).
       an already-resolved older session** (the settled-history pin — a weight entry on 2026-06-01
       after a session on 2026-05-01 already resolved against a 2026-04-01 entry must not change the
       2026-05-01 session's resolution)
-- [ ] PR4.2 GREEN: create `packages/domain/src/progress/bodyweight-resolution.ts` exporting
+- [x] PR4.2 GREEN: create `packages/domain/src/progress/bodyweight-resolution.ts` exporting
       `BodyweightEntry { weightKg, recordedAt }` and
       `resolveBodyweightForSession(entries, sessionAt): number | undefined`; export it from
       `packages/domain/src/index.ts`; confirm PR4.1 is green
 
 ### Repository: batch read + resolve at mapping + the three sites
 
-- [ ] PR4.3 RED: extend `packages/contracts/src/contracts.test.ts:61-72` runtime-export assertion to
+- [x] PR4.3 RED: extend `packages/contracts/src/contracts.test.ts:61-72` runtime-export assertion to
       stay unchanged; add a compile-time check that `WorkoutSessionRecord.resolvedBodyweightKg` is
       `number | undefined`
-- [ ] PR4.4 GREEN: add `resolvedBodyweightKg?: number` to `WorkoutSessionRecord` in
+- [x] PR4.4 GREEN: add `resolvedBodyweightKg?: number` to `WorkoutSessionRecord` in
       `packages/contracts/src/index.ts`; confirm PR4.3 is green
-- [ ] PR4.5 RED: `apps/api/src/db/repositories/__tests__/workout-session.integration.test.ts` — a
+- [x] PR4.5 RED: `apps/api/src/db/repositories/__tests__/workout-session.integration.test.ts` — a
       batched query reads all of the user's weight entries once per stats/history call (assert query
       count does not scale with session count — no N+1 across a year of sessions); each
       `WorkoutSessionRecord` produced for a volume consumer carries `resolvedBodyweightKg` resolved
       against `session.completedAt ?? session.startedAt`; the muscle-group bucket reduce
       (`:1355-1358`) uses the resolved value for a weightless set; the weekly rollup (`:1161`) and
       `recentSessions[].volumeKg` (`:1063`) both reflect it
-- [ ] PR4.6 GREEN: in `apps/api/src/db/repositories/workout-session.ts` — one batched query per
+- [x] PR4.6 GREEN: in `apps/api/src/db/repositories/workout-session.ts` — one batched query per
       stats/history call reading all of the user's weight entries ordered `recordedAt ASC`; resolve
       once per session via `resolveBodyweightForSession`, applying the identical expression
       `(set.weightKg ?? 0) > 0 ? set.weightKg! : (session.resolvedBodyweightKg ?? 0)` at every site —
       muscle-group bucket, weekly rollup, `recentSessions[].volumeKg`; confirm PR4.5 is green
-- [ ] PR4.7 RED: `packages/domain/src/offline/__tests__/session-aggregation.test.ts` — a
+- [x] PR4.7 RED: `packages/domain/src/offline/__tests__/session-aggregation.test.ts` — a
       bodyweight-only session reports `0` volume when `resolvedBodyweightKg` is absent, non-zero when
       present; a loaded set is unaffected by the field's presence; a `0 kg` **logged** set still takes
       the bodyweight fallback (the `(weightKg ?? 0) > 0` predicate, not `weightKg == null` — an
       explicitly-logged `0 kg` is indistinguishable from unlogged, and `0 × reps` is the lie this
       change exists to end); incomplete (non-`completed`) sets remain excluded, unchanged; history
       trend deltas via `computeVolumeTrend` (`:91`) reflect the resolved contribution
-- [ ] PR4.8 GREEN: in `packages/domain/src/offline/session-aggregation.ts` — `computeSessionVolume`
+- [x] PR4.8 GREEN: in `packages/domain/src/offline/session-aggregation.ts` — `computeSessionVolume`
       reads `session.resolvedBodyweightKg` using the same `(weightKg ?? 0) > 0 ? … : …` expression;
       **no signature change** (it already takes the whole `WorkoutSessionRecord`, so every existing
       caller compiles and behaves unchanged when the field is absent); confirm PR4.7 is green
 
 ### Open decision — the full call-site enumeration
 
-- [ ] PR4.9 Grep-confirm every call site that constructs a `WorkoutSessionRecord` destined for a
+- [x] PR4.9 Grep-confirm every call site that constructs a `WorkoutSessionRecord` destined for a
       **volume** consumer (Stats KPI, weekly rollup, `recentSessions[].volumeKg`, `computeVolumeTrend`,
       the web tracker's live readout) and confirm each one receives the resolved weight from PR4.6.
       Record the confirmed list in the PR description; a missed path degrades safely to today's
@@ -502,7 +502,7 @@ Surface (MODIFIED).
 
 ### Personal records — the non-regression pin
 
-- [ ] PR4.10 RED then GREEN, one commit (the test is the deliverable — no production code changes):
+- [x] PR4.10 RED then GREEN, one commit (the test is the deliverable — no production code changes):
       `packages/domain/src/progress/__tests__/personal-records.test.ts` — `computePersonalRecords`
       output (`prCount`, `personalRecords`) is byte-identical across a fixture run with and without a
       resolved bodyweight attached to the same sets; the `weightKg > 0` eligibility rule
@@ -512,26 +512,26 @@ Surface (MODIFIED).
 
 ### Web tracker
 
-- [ ] PR4.11 RED: `apps/web/src/app/(app)/plan/[id]/tracker/__tests__/tracker-model.test.ts` —
+- [x] PR4.11 RED: `apps/web/src/app/(app)/plan/[id]/tracker/__tests__/tracker-model.test.ts` —
       `exerciseVolume` with a second `resolvedBodyweightKg?: number` argument applies the fallback for
       a weightless set; the existing no-second-argument call sites remain byte-identical
-- [ ] PR4.12 GREEN: `apps/web/src/app/(app)/plan/[id]/tracker/tracker-model.ts:116-121` —
+- [x] PR4.12 GREEN: `apps/web/src/app/(app)/plan/[id]/tracker/tracker-model.ts:116-121` —
       `exerciseVolume` gains the optional second parameter, threaded from the session by
       `deriveTrackerModel`; confirm PR4.11 is green
 
 ### Offline mobile snapshot — the open question
 
-- [ ] PR4.13 Confirm the offline mobile snapshot writer's schema-version assertion (if any) does not
+- [x] PR4.13 Confirm the offline mobile snapshot writer's schema-version assertion (if any) does not
       reject a `WorkoutSessionRecord` carrying the new optional `resolvedBodyweightKg` field, and that
       a snapshot taken before this PR (missing the field) still deserializes correctly. Record which
       file(s) were inspected and the outcome
 
 ### First-entry volume-shift notice
 
-- [ ] PR4.14 RED: RTL + jsdom component test — the notice renders on `wasFirstEntry: true`, is
+- [x] PR4.14 RED: RTL + jsdom component test — the notice renders on `wasFirstEntry: true`, is
       `role="status"`, does **not** steal focus (`document.activeElement` unchanged by its
       appearance), and does **not** render on a second entry (`wasFirstEntry: false`)
-- [ ] PR4.15 GREEN: render the notice on the web weight-entry form (from PR 2's form, now consuming
+- [x] PR4.15 GREEN: render the notice on the web weight-entry form (from PR 2's form, now consuming
       `wasFirstEntry` from the `CreateWeightEntryResponse` PR 2 already returns) — dismissible,
       not persisted; add `profile.weight.*` keys to `packages/i18n/src/messages/{en,es}.json`, both
       locales, neutral professional Spanish; rebuild before manual verification; confirm PR4.14 is
@@ -539,7 +539,7 @@ Surface (MODIFIED).
 
 ### PR 4 verification
 
-- [ ] PR4.16 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green (apps/api
+- [x] PR4.16 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green (apps/api
       functions ≥85%, apps/web functions ≥90%); `pnpm type-check` clean; `pnpm build` succeeds
 
 ---

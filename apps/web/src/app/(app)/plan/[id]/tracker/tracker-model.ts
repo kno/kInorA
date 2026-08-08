@@ -113,11 +113,22 @@ export function formatRest(totalSeconds: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-export function exerciseVolume(exercise: SessionExerciseRecord): number {
-  return exercise.setRecords.reduce(
-    (sum, set) => sum + (set.weightKg ?? 0) * (set.actualReps ?? 0),
-    0,
-  );
+/**
+ * Total volume for one exercise: sum of `effectiveKg * actualReps` across
+ * its sets, where `effectiveKg` is the set's own logged `weightKg` when
+ * positive, or otherwise the optional `resolvedBodyweightKg` (17c-profile-
+ * body-metrics, PR 4 — threaded from the session by `deriveTrackerModel`).
+ * Optional second parameter ⇒ every existing call site compiles and
+ * behaves unchanged when it is absent.
+ */
+export function exerciseVolume(
+  exercise: SessionExerciseRecord,
+  resolvedBodyweightKg?: number,
+): number {
+  return exercise.setRecords.reduce((sum, set) => {
+    const effectiveKg = (set.weightKg ?? 0) > 0 ? set.weightKg! : (resolvedBodyweightKg ?? 0);
+    return sum + effectiveKg * (set.actualReps ?? 0);
+  }, 0);
 }
 
 export function allSetsDone(exercise: SessionExerciseRecord): boolean {
@@ -180,8 +191,13 @@ export function deriveTrackerModel(session: WorkoutSessionRecord): TrackerModel 
   );
   const percent = totalSets === 0 ? 0 : Math.round((completedSets / totalSets) * 100);
 
-  const sessionVolume = exercises.reduce((sum, ex) => sum + exerciseVolume(ex), 0);
-  const activeExerciseVolume = activeExercise ? exerciseVolume(activeExercise) : 0;
+  const sessionVolume = exercises.reduce(
+    (sum, ex) => sum + exerciseVolume(ex, session.resolvedBodyweightKg),
+    0,
+  );
+  const activeExerciseVolume = activeExercise
+    ? exerciseVolume(activeExercise, session.resolvedBodyweightKg)
+    : 0;
 
   const canRecord =
     !isTerminal && !!activeExercise && !!activeSet && !allSetsDone(activeExercise);

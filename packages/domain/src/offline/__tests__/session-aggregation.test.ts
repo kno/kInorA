@@ -29,7 +29,10 @@ function exercise(setRecords: SetRecordDTO[]): SessionExerciseRecord {
   };
 }
 
-function session(exercises: SessionExerciseRecord[]): WorkoutSessionRecord {
+function session(
+  exercises: SessionExerciseRecord[],
+  overrides: Partial<WorkoutSessionRecord> = {},
+): WorkoutSessionRecord {
   return {
     id: "session-1",
     workoutPlanId: "plan-1",
@@ -37,6 +40,7 @@ function session(exercises: SessionExerciseRecord[]): WorkoutSessionRecord {
     exercises,
     startedAt: "2026-07-01T00:00:00.000Z",
     completedAt: "2026-07-01T01:00:00.000Z",
+    ...overrides,
   };
 }
 
@@ -80,6 +84,57 @@ describe("computeSessionVolume", () => {
     ]);
 
     expect(computeSessionVolume(s)).toBe(20 * 10 + 30 * 5);
+  });
+
+  // 17c-profile-body-metrics PR 4 — bodyweight-set volume.
+  describe("bodyweight resolution", () => {
+    it("reports 0 volume for a bodyweight-only session when resolvedBodyweightKg is absent", () => {
+      const s = session(
+        [exercise([set({ weightKg: undefined, actualReps: 15, completed: true })])],
+        { resolvedBodyweightKg: undefined },
+      );
+
+      expect(computeSessionVolume(s)).toBe(0);
+    });
+
+    it("reports non-zero volume for a bodyweight-only session when resolvedBodyweightKg is present", () => {
+      const s = session(
+        [exercise([set({ weightKg: undefined, actualReps: 15, completed: true })])],
+        { resolvedBodyweightKg: 80 },
+      );
+
+      expect(computeSessionVolume(s)).toBe(80 * 15);
+    });
+
+    it("leaves a loaded set unaffected by resolvedBodyweightKg's presence", () => {
+      const s = session(
+        [exercise([set({ weightKg: 100, actualReps: 5, completed: true })])],
+        { resolvedBodyweightKg: 80 },
+      );
+
+      expect(computeSessionVolume(s)).toBe(100 * 5);
+    });
+
+    it("still takes the bodyweight fallback for an explicitly-logged 0 kg set", () => {
+      // (weightKg ?? 0) > 0, not weightKg == null: a logged 0 kg is
+      // indistinguishable from unlogged, and 0 * reps is the lie this
+      // change exists to end.
+      const s = session(
+        [exercise([set({ weightKg: 0, actualReps: 12, completed: true })])],
+        { resolvedBodyweightKg: 70 },
+      );
+
+      expect(computeSessionVolume(s)).toBe(70 * 12);
+    });
+
+    it("excludes an incomplete set from bodyweight volume, unchanged from today", () => {
+      const s = session(
+        [exercise([set({ weightKg: undefined, actualReps: 15, completed: false })])],
+        { resolvedBodyweightKg: 80 },
+      );
+
+      expect(computeSessionVolume(s)).toBe(0);
+    });
   });
 });
 
@@ -163,6 +218,22 @@ describe("computeVolumeTrend", () => {
     expect(computeVolumeTrend(current, prior)).toEqual({
       volumeDelta: 0,
       direction: "flat",
+    });
+  });
+
+  it("reflects a resolved bodyweight contribution in the trend delta", () => {
+    const current = session(
+      [exercise([set({ weightKg: undefined, actualReps: 10, completed: true })])],
+      { resolvedBodyweightKg: 80 },
+    );
+    const prior = session(
+      [exercise([set({ weightKg: undefined, actualReps: 10, completed: true })])],
+      { resolvedBodyweightKg: undefined },
+    );
+
+    expect(computeVolumeTrend(current, prior)).toEqual({
+      volumeDelta: 800,
+      direction: "up",
     });
   });
 });

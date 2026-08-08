@@ -100,7 +100,13 @@ export class UserWeightEntryRepository {
       .select()
       .from(userWeightEntries)
       .where(eq(userWeightEntries.userId, userId))
-      .orderBy(asc(userWeightEntries.recordedAt))) as UserWeightEntryRow[];
+      // Secondary `createdAt ASC` tie-break — NOT `id` (a random UUID
+      // carries no insertion-order signal). Postgres gives no guaranteed
+      // order among rows sharing an identical `recordedAt` without one, and
+      // `resolveBodyweightForSession` (17c-profile-body-metrics, PR 4)
+      // relies on "later-inserted wins a same-instant tie" reading a stable
+      // ascending order from this query.
+      .orderBy(asc(userWeightEntries.recordedAt), asc(userWeightEntries.createdAt))) as UserWeightEntryRow[];
     return rows.map((row) => ({
       weightKg: Number(row.weightKg),
       recordedAt: row.recordedAt.toISOString(),

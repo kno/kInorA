@@ -1074,6 +1074,10 @@
       "error": "No se pudo guardar tu registro de peso. Inténtalo de nuevo.",
       "listHeading": "Tu historial de peso",
       "listEmpty": "Todavía no hay registros de peso."
+    },
+    "weight": {
+      "volumeShiftNotice": "Tus totales anteriores han cambiado. Las series de peso corporal ahora cuentan en tu volumen de entrenamiento, por lo que las cifras anteriores a hoy no son directamente comparables.",
+      "dismiss": "Descartar"
     }
   },
   "memory": {

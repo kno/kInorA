@@ -215,9 +215,9 @@ describe("@kinora/i18n package assembly", () => {
     // +11 `profile.weightEntry.{heading,weightLabel,weightPlaceholder,
     // dateLabel,submit,saving,invalidWeight,invalidDate,error,listHeading,
     // listEmpty}` (17c PR2) — the bodyweight-series entry form and list.
-    // Deliberately NOT `profile.weight.*` — that namespace is reserved for
-    // PR 4's first-entry volume-shift notice.
-    expect(nonBillingKeys).toHaveLength(792);
+    // +2 `profile.weight.{volumeShiftNotice,dismiss}` (17c PR4) — the
+    // first-entry volume-shift notice on the web weight-entry form.
+    expect(nonBillingKeys).toHaveLength(794);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {

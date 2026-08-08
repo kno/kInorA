@@ -113,6 +113,15 @@ describe("shared contracts boundary", () => {
     }>();
   });
 
+  it("stays unchanged by the 17c bodyweight-volume addition (type-only)", () => {
+    // `resolvedBodyweightKg` is a type-only addition to `WorkoutSessionRecord`
+    // (17c-profile-body-metrics PR4) — the runtime export list above MUST NOT
+    // grow as a result.
+    expectTypeOf<WorkoutSessionRecord["resolvedBodyweightKg"]>().toEqualTypeOf<
+      number | undefined
+    >();
+  });
+
   it("defines the health response contract", () => {
     expectTypeOf<HealthResponse>().toEqualTypeOf<{ status: "ok" }>();
   });

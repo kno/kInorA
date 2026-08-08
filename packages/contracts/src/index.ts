@@ -105,6 +105,15 @@ export interface WorkoutSessionRecord {
    * sessions have no day and legacy DTO consumers keep compiling.
    */
   day?: number;
+  /**
+   * The user's bodyweight resolved against this session's date
+   * (17c-profile-body-metrics, PR 4) — `resolveBodyweightForSession`
+   * applied once at the repository mapping boundary. `undefined` when the
+   * user has zero weight entries. Every volume formula reads this ONE
+   * number instead of re-deriving it, so the tracker, stats, and history
+   * surfaces can never disagree about which bodyweight applies.
+   */
+  resolvedBodyweightKg?: number;
 }
 
 /**
