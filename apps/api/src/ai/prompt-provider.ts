@@ -1,6 +1,12 @@
 import { renderTemplate, type PromptDefinition } from "./prompt-template.js";
 import { PromptNotFoundError, type LangfusePromptGateway, type PromptResolution } from "./prompt-source-port.js";
-import { validateRemoteTemplate, checkRenderedTemplate, type PromptRejectionReason } from "./remote-template-validation.js";
+import {
+  validateRemoteTemplate,
+  checkRenderedTemplate,
+  missingRemoteVariables,
+  type PromptRejectionReason,
+} from "./remote-template-validation.js";
+import type { ObservabilityLogger } from "../observability/event-logger.js";
 
 /**
  * Resolves each of the three in-scope prompt templates from Langfuse under
@@ -34,12 +40,22 @@ export interface ResolvePromptOptions {
    * never the template body, never a credential.
    */
   warn?: (reason: PromptRejectionReason, promptName: string, errorName?: string) => void;
+  /**
+   * Observability seam for the template-drift signal (#390). Optional: when
+   * absent, drift is simply not reported — resolution behaviour is identical
+   * either way.
+   */
+  observability?: ObservabilityLogger;
 }
+
+/** Event name for the remote-template drift signal (#390). */
+export const PROMPT_TEMPLATE_DRIFT_EVENT = "prompt.template_drift";
 
 export class ResolvePrompt {
   private readonly cacheTtlMs: number;
   private readonly now: () => number;
   private readonly warn: (reason: PromptRejectionReason, promptName: string, errorName?: string) => void;
+  private readonly observability?: ObservabilityLogger;
   private readonly cache = new Map<string, CacheEntry>();
   /**
    * One in-flight resolution PER PROMPT NAME, coalescing a cold-cache burst
@@ -58,6 +74,7 @@ export class ResolvePrompt {
     this.warn =
       options.warn ??
       ((reason, promptName) => console.warn(`[prompt-provider] ${promptName}: ${reason}`));
+    this.observability = options.observability;
   }
 
   async execute(def: PromptDefinition, variables: Record<string, string>): Promise<PromptResolution> {
@@ -115,7 +132,35 @@ export class ResolvePrompt {
       return this.fallback(def, variables, renderCheck.reason);
     }
 
+    this.reportDrift(def, validated.template, fetched.version);
     return { text: rendered, source: "langfuse", name: def.name, version: fetched.version };
+  }
+
+  /**
+   * Reports — never blocks — a remote template that omits variables the
+   * repository definition declares (#390). The remote template has already
+   * passed validation and IS served; this only makes the gap visible, so a
+   * merged repository change that never reached the Langfuse-hosted prompt
+   * stops being invisible.
+   *
+   * PII invariant (`observability/event-logger.ts`): the metadata carries the
+   * prompt name and the missing VARIABLE NAMES only — never template text,
+   * never rendered output, never a variable's value.
+   */
+  private reportDrift(def: PromptDefinition, template: string, version: number): void {
+    const missing = missingRemoteVariables(def, template);
+    if (missing.length === 0) return;
+    this.observability?.recordEvent({
+      level: "warn",
+      event: PROMPT_TEMPLATE_DRIFT_EVENT,
+      outcome: "remote_missing_variables",
+      metadata: {
+        promptName: def.name,
+        promptVersion: version,
+        missingVariables: missing.join(","),
+        missingVariableCount: missing.length,
+      },
+    });
   }
 
   private fallback(

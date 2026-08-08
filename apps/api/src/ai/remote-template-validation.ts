@@ -78,6 +78,25 @@ export function validateRemoteTemplate(
 }
 
 /**
+ * Drift detection (#390): the declared variables of `def` that the accepted
+ * remote `template` does NOT reference, in `def.variables` order.
+ *
+ * This is deliberately NOT part of {@link validateRemoteTemplate}. A variable
+ * may be legitimately absent from a remote template — an optional section a
+ * prompt owner chose not to render — so a missing variable must never reject
+ * the template. It is, however, exactly the shape of the silent failure this
+ * function exists to surface: a repository template gains a variable, the
+ * Langfuse-hosted template is never updated by hand, and the remote template
+ * keeps validating cleanly while the new data reaches nothing. The caller
+ * (`ResolvePrompt`) reports the gap as an observability event and serves the
+ * remote template regardless.
+ */
+export function missingRemoteVariables(def: PromptDefinition, template: string): string[] {
+  const referenced = new Set(templateVariablesOf(template));
+  return def.variables.filter((name) => !referenced.has(name));
+}
+
+/**
  * Post-render sweep (validation algorithm step 5): a residual `{{` in the
  * RENDERED output means a marker survived rendering unresolved — e.g. a
  * malformed marker (stray whitespace inside the braces) that
