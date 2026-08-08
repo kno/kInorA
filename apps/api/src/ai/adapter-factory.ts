@@ -4,8 +4,16 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { WorkoutProgramSchema } from "@kinora/contracts";
 import type { PlanSpec, WorkoutProgram } from "@kinora/contracts";
 import type { PlanGenerator } from "./port.js";
-import { buildPlanPrompt, buildPlanPromptVariables, PLAN_PROMPT_DEFINITION } from "./prompt.js";
+import {
+  buildPlanPrompt,
+  buildPlanPromptVariables,
+  buildBodyProfileSection,
+  PLAN_PROMPT_DEFINITION,
+  type PlanPromptInput,
+} from "./prompt.js";
 import { mask } from "./mask.js";
+import { isRedactionVerified } from "./trace-redaction.js";
+import type { PlanTraceMetadata } from "./trace-metadata.js";
 import type { AdapterFactoryMap } from "./dynamic-generator.js";
 import type { AiTracingDeps } from "./langfuse-handler.js";
 import { linkStructuredChain } from "./prompt-linked-chain.js";
@@ -62,29 +70,72 @@ const OPENCODE_GO_BASE_URL = "https://opencode.ai/zen/go/v1";
  * guard degrades to the untouched `chain` when it doesn't decompose this way
  * (see `prompt-linked-chain.ts`); generation succeeds unaffected either way,
  * and `promptLinked` in the trace metadata reports which path was taken.
+ *
+ * Trace redaction (17c-profile-body-metrics, PR 3): `bodyProfile`, when
+ * present, renders a `<body_profile>` section INTO `rawPrompt`/`maskedPrompt`
+ * — the raw values reach the model, exactly as scope B requires. They are
+ * kept out of the Langfuse TRACE by a separate mechanism entirely: the
+ * `mask` option wired on the `CallbackHandler` itself (`langfuse-handler.ts`)
+ * redacts that span from whatever the handler observes, so nothing here
+ * masks `maskedPrompt` a second time. This function's ONLY responsibility
+ * toward that control is the FAIL-CLOSED BACKSTOP below: proving, at the
+ * point the raw values are still in scope, that the span rule would actually
+ * have caught them — and degrading to the no-body prompt if it would not.
  */
 async function invokeChain(
   chain: { invoke(input: string, options: Record<string, unknown>): Promise<unknown> },
-  spec: PlanSpec,
+  spec: PlanPromptInput,
   metadata: InvokeChainMetadata,
   deps?: AiTracingDeps
 ): Promise<WorkoutProgram> {
   const limitationTerms = spec.limitations.map((l) => l.text);
 
-  let rawPrompt: string;
-  let promptSource: "langfuse" | "fallback" = "fallback";
-  let promptName: string | undefined;
-  let promptVersion: number | undefined;
-  if (deps?.prompts) {
-    const resolution = await deps.prompts.execute(PLAN_PROMPT_DEFINITION, buildPlanPromptVariables(spec));
-    rawPrompt = resolution.text;
-    promptSource = resolution.source;
-    promptName = resolution.name;
-    promptVersion = resolution.version;
-  } else {
-    rawPrompt = buildPlanPrompt(spec);
+  async function renderPrompt(
+    input: PlanPromptInput
+  ): Promise<{ rawPrompt: string; promptSource: "langfuse" | "fallback"; promptName?: string; promptVersion?: number }> {
+    if (deps?.prompts) {
+      const resolution = await deps.prompts.execute(PLAN_PROMPT_DEFINITION, buildPlanPromptVariables(input));
+      return {
+        rawPrompt: resolution.text,
+        promptSource: resolution.source,
+        promptName: resolution.name,
+        promptVersion: resolution.version,
+      };
+    }
+    return { rawPrompt: buildPlanPrompt(input), promptSource: "fallback" };
   }
-  const maskedPrompt = mask(rawPrompt, limitationTerms);
+
+  let { rawPrompt, promptSource, promptName, promptVersion } = await renderPrompt(spec);
+  let maskedPrompt = mask(rawPrompt, limitationTerms);
+
+  // Fail-closed backstop: the span rule alone fails OPEN — a rendering that
+  // ever lost its `<body_profile>` delimiters would leave the values
+  // untagged and the `mask` option would have nothing to match. Checked
+  // HERE, where the raw section text is still known, before the trace can
+  // ever observe it. No body value is ever logged — only a reason code.
+  if (spec.bodyProfile) {
+    const { innerText } = buildBodyProfileSection(spec.bodyProfile);
+    if (innerText && !isRedactionVerified(maskedPrompt, innerText)) {
+      console.warn(
+        "[adapter-factory] body profile redaction unverified — regenerating without body context",
+        { reason: "body_profile_redaction_unverified" }
+      );
+      // Deliberately bypasses `renderPrompt`/`deps.prompts` here: `ResolvePrompt`
+      // caches a resolution keyed by PROMPT NAME only, not by variables, so a
+      // second `execute()` call for the same name within the cache TTL would
+      // return the FIRST (leaky) resolution rather than re-rendering — turning
+      // this backstop into a no-op. Falling back to the LOCAL builder directly
+      // is also literally "today's exact prompt" (decision already documented
+      // in design.md), with no network dependency and no risk of a second
+      // redaction gap.
+      const { bodyProfile: _dropped, ...specWithoutBodyProfile } = spec;
+      rawPrompt = buildPlanPrompt(specWithoutBodyProfile);
+      promptSource = "fallback";
+      promptName = undefined;
+      promptVersion = undefined;
+      maskedPrompt = mask(rawPrompt, limitationTerms);
+    }
+  }
 
   // The reparented chain implements the same `.invoke(input, options)` call
   // shape as `chain` from the caller's perspective either way (linked or
@@ -92,7 +143,7 @@ async function invokeChain(
   // treat it as `typeof chain` at the call site below.
   const { chain: linkedChain, linked: promptLinked } = linkStructuredChain(chain);
 
-  const traceMetadata = {
+  const traceMetadata: PlanTraceMetadata = {
     feature: "plan-generation",
     provider: metadata.provider,
     model: metadata.model,
