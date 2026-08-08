@@ -11,6 +11,7 @@ import type { AiTracingDeps, TracingHandler } from "../langfuse-handler.js";
 import { ResolvePrompt } from "../prompt-provider.js";
 import type { LangfusePromptGateway } from "../prompt-source-port.js";
 import { REPLY_PROMPT_TEMPLATE, EXTRACTION_PROMPT_TEMPLATE } from "../extraction-prompt.js";
+import { redactTracedPayload } from "../trace-redaction.js";
 
 // --- Fake chat model -------------------------------------------------------
 //
@@ -549,5 +550,82 @@ describe("PlanSpecExtractionAdapter masking relocation (langfuse-prompt-manageme
     expect(streamCalls[0]?.input).not.toContain("[REDACTED]");
     expect(invokeCalls[0]?.input).toContain("lower back pain");
     expect(invokeCalls[0]?.input).not.toContain("[REDACTED]");
+  });
+});
+
+describe("PlanSpecExtractionAdapter first-mention text never reaches the trace (#374)", () => {
+  // The pair of assertions in every test here is the whole point: the string
+  // the MODEL receives (`streamCalls`/`invokeCalls` input) still holds the raw
+  // text, while the same string put through `redactTracedPayload` — the exact
+  // `mask` hook wired into the real `CallbackHandler` in `langfuse-handler.ts`
+  // — no longer does. `mask()` cannot express that divergence; the spans can.
+
+  const FIRST_MENTION = "I have a herniated disc";
+
+  /** What Langfuse would actually persist for a call, given its model input. */
+  function tracedPayload(modelInput: string | undefined): string {
+    return redactTracedPayload({ data: modelInput ?? "" }) as string;
+  }
+
+  it("streamReply: the model reads the first-mention text, the trace payload does not", async () => {
+    const { adapter, streamCalls } = buildAdapter(
+      { tokens: ["ok"], extracted: {} },
+      { handler: FAKE_HANDLER },
+    );
+    const controller = new AbortController();
+    const turn = input({ message: FIRST_MENTION, currentDraft: {} });
+
+    for await (const _tok of adapter.streamReply(turn, controller.signal)) {
+      /* drain */
+    }
+
+    expect(streamCalls[0]?.input).toContain(FIRST_MENTION);
+    expect(tracedPayload(streamCalls[0]?.input)).not.toContain("herniated disc");
+  });
+
+  it("extract: neither the user message NOR the seeded assistant reply survives into the trace payload", async () => {
+    const { adapter, invokeCalls } = buildAdapter(
+      { tokens: [], extracted: {} },
+      { handler: FAKE_HANDLER },
+    );
+    const turn = input({ message: FIRST_MENTION, currentDraft: {} });
+    // Pass 1 echoing the term straight back — the side door that redacting
+    // only the user message would leave open.
+    const echoingReply = "I understand you have a herniated disc, so we'll go gently.";
+
+    await adapter.extract(turn, echoingReply);
+
+    expect(invokeCalls[0]?.input).toContain(FIRST_MENTION);
+    expect(invokeCalls[0]?.input).toContain(echoingReply);
+    const traced = tracedPayload(invokeCalls[0]?.input);
+    expect(traced).not.toContain("herniated disc");
+    expect(traced).not.toContain(echoingReply);
+  });
+
+  it("redacts the turn regardless of content — no first-mention detection is involved", async () => {
+    const { adapter, streamCalls } = buildAdapter({ tokens: ["ok"], extracted: {} });
+    const controller = new AbortController();
+    const turn = input({ message: "I want to squat more", currentDraft: {} });
+
+    for await (const _tok of adapter.streamReply(turn, controller.signal)) {
+      /* drain */
+    }
+
+    // An ordinary message with no health text at all is redacted just the
+    // same: the rule is on the REGION, not on what happens to be in it.
+    expect(tracedPayload(streamCalls[0]?.input)).not.toContain("squat more");
+  });
+
+  it("leaves the traced prompt's non-span structure readable, so a trace still shows the turn's shape", async () => {
+    const { adapter, streamCalls } = buildAdapter({ tokens: ["ok"], extracted: {} });
+    const controller = new AbortController();
+
+    for await (const _tok of adapter.streamReply(input(), controller.signal)) {
+      /* drain */
+    }
+
+    const traced = tracedPayload(streamCalls[0]?.input);
+    expect(traced).toContain("USER MESSAGE:");
+    expect(traced).toContain("<user_message>[REDACTED]</user_message>");
   });
 });

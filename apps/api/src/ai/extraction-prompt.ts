@@ -3,6 +3,20 @@ import { sanitizeMemoryContext } from "./prompt.js";
 import { renderTemplate, type PromptDefinition } from "./prompt-template.js";
 
 /**
+ * Delimiters wrapping this turn's free text so `TRACE_REDACTION_RULES`
+ * (`trace-redaction.ts`) can empty those regions before a payload reaches
+ * Langfuse (#374). They are rendered INSIDE the variable VALUE, never into a
+ * template: a template marker would have to be added to the Langfuse-hosted
+ * copy by hand before the fix took effect in production (#390), whereas a
+ * value-side delimiter travels with the variable through the local template
+ * and the remote one alike.
+ */
+const USER_MESSAGE_OPEN = "<user_message>";
+const USER_MESSAGE_CLOSE = "</user_message>";
+const ASSISTANT_REPLY_OPEN = "<assistant_reply>";
+const ASSISTANT_REPLY_CLOSE = "</assistant_reply>";
+
+/**
  * Builds the prompts for one conversational create-plan turn
  * (12-interactive-text-chat). TWO pure builders, one per LLM pass:
  *
@@ -31,6 +45,18 @@ import { renderTemplate, type PromptDefinition } from "./prompt-template.js";
  *   and intentional, not a leak: raw health text reaching the LLM call for a
  *   first mention is the expected, minimal necessary exposure for the feature
  *   to work.
+ * - That first-mention text no longer reaches the TRACE, though (#374). It
+ *   used to, and was documented here as an accepted gap; it is accepted no
+ *   longer. `buildReplyPromptVariables`/`buildExtractionPromptVariables` wrap
+ *   `message` (and, for Pass 2, the seeded `assistantReply`, which may echo
+ *   the term straight back) in the delimiters registered in
+ *   `TRACE_REDACTION_RULES`, and the Langfuse SDK's own `mask` hook empties
+ *   those regions in-process before any network call. The model still reads
+ *   the raw text — only the traced payload is redacted, which is precisely
+ *   the divergence `mask()` alone cannot express.
+ * - This closes the gap WITHOUT detecting first-mention turns, which is
+ *   impossible: the region is redacted regardless of what it contains, so a
+ *   first mention needs no special case.
  * - Approved memory context is scrubbed of prompt-injection / medical-advice
  *   patterns via `sanitizeMemoryContext()` before inclusion (unaffected by the
  *   masking relocation — it runs in the variables producer, not the renderer).
@@ -193,10 +219,25 @@ export const EXTRACTION_PROMPT_DEFINITION: PromptDefinition = {
   maxTemplateChars: 20_000,
 };
 
+/**
+ * Wraps untrusted free text in a trace-redaction span (#374).
+ *
+ * Any occurrence of the delimiters INSIDE `value` is stripped first. Without
+ * that, a user who types `</user_message>` would close the span early and the
+ * rest of their message — the part most likely to hold the health text this
+ * rule exists to protect — would reach the trace unredacted. Stripping costs
+ * the model nothing: the only text removed is a literal marker no legitimate
+ * message contains.
+ */
+function wrapRedactableSpan(open: string, close: string, value: string): string {
+  const stripped = value.split(open).join("").split(close).join("");
+  return `${open}\n${stripped}\n${close}`;
+}
+
 /** Computes the CLOSED variable set `REPLY_PROMPT_TEMPLATE` renders over. */
 export function buildReplyPromptVariables(input: ChatExtractInput): Record<string, string> {
-  const { message } = input;
   const { knownSection, missingSection, memorySection } = buildContextSections(input);
+  const message = wrapRedactableSpan(USER_MESSAGE_OPEN, USER_MESSAGE_CLOSE, input.message);
   return { knownSection, missingSection, message, memorySection };
 }
 
@@ -205,9 +246,20 @@ export function buildExtractionPromptVariables(
   input: ChatExtractInput,
   assistantReply: string,
 ): Record<string, string> {
-  const { message } = input;
   const { knownSection, missingSection, memorySection } = buildContextSections(input);
-  return { knownSection, missingSection, assistantReply, message, memorySection };
+  const message = wrapRedactableSpan(USER_MESSAGE_OPEN, USER_MESSAGE_CLOSE, input.message);
+  const wrappedReply = wrapRedactableSpan(
+    ASSISTANT_REPLY_OPEN,
+    ASSISTANT_REPLY_CLOSE,
+    assistantReply,
+  );
+  return {
+    knownSection,
+    missingSection,
+    assistantReply: wrappedReply,
+    message,
+    memorySection,
+  };
 }
 
 /**

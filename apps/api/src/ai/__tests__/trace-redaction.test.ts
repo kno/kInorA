@@ -29,6 +29,36 @@ describe("redactSpans — the registered rule set", () => {
     const text = "before <body_profile>68kg, 172cm, no closing tag ever";
     expect(redactSpans(text)).toBe("before <body_profile>[REDACTED]");
   });
+
+  it("empties a <user_message> span, whatever it contains (#374 — no first-mention detection)", () => {
+    const text = "USER MESSAGE:\n<user_message>\nI have a herniated disc\n</user_message>";
+    expect(redactSpans(text)).toBe("USER MESSAGE:\n<user_message>[REDACTED]</user_message>");
+  });
+
+  it("empties an <assistant_reply> span, so a reply echoing the term back is covered too", () => {
+    const text = "<assistant_reply>\nI understand you have a herniated disc.\n</assistant_reply>";
+    expect(redactSpans(text)).toBe("<assistant_reply>[REDACTED]</assistant_reply>");
+  });
+
+  it("empties every registered span in one string — the three rules compose additively", () => {
+    const text = [
+      "<body_profile>68kg</body_profile>",
+      "<assistant_reply>your herniated disc</assistant_reply>",
+      "<user_message>my herniated disc</user_message>",
+    ].join("\n");
+
+    const redacted = redactSpans(text);
+
+    expect(redacted).not.toContain("68kg");
+    expect(redacted).not.toContain("herniated disc");
+    expect(redacted).toBe(
+      [
+        "<body_profile>[REDACTED]</body_profile>",
+        "<assistant_reply>[REDACTED]</assistant_reply>",
+        "<user_message>[REDACTED]</user_message>",
+      ].join("\n"),
+    );
+  });
 });
 
 describe("redactSpans — composed rules (nesting, injectable rule list)", () => {
@@ -87,8 +117,12 @@ describe("redactTracedPayload — the MaskFunction shape Langfuse expects", () =
 });
 
 describe("TRACE_REDACTION_RULES — the production rule set", () => {
-  it("registers exactly one rule: <body_profile>", () => {
-    expect(TRACE_REDACTION_RULES).toEqual([{ open: "<body_profile>", close: "</body_profile>" }]);
+  it("registers <body_profile> (17c) plus the two chat spans (#374)", () => {
+    expect(TRACE_REDACTION_RULES).toEqual([
+      { open: "<body_profile>", close: "</body_profile>" },
+      { open: "<user_message>", close: "</user_message>" },
+      { open: "<assistant_reply>", close: "</assistant_reply>" },
+    ]);
   });
 });
 
