@@ -32,10 +32,14 @@ STILL MISSING (ask a clarifying question for these if the message does not suppl
 - equipment
 
 ASSISTANT REPLY (you just told the user this — extract values CONSISTENT with it):
+<assistant_reply>
 For hypertrophy, 4 days a week of 45 minutes is a solid starting point.
+</assistant_reply>
 
 USER MESSAGE:
-I want to build muscle four days a week"
+<user_message>
+I want to build muscle four days a week
+</user_message>"
 `;
 
 exports[`renderTemplate(EXTRACTION_PROMPT_TEMPLATE, buildExtractionPromptVariables(input, reply)) — byte-identical to buildExtractionPrompt > matches with an empty draft and no missing fields 1`] = `
@@ -64,10 +68,14 @@ CURRENT DRAFT: (empty — nothing captured yet)
 STILL MISSING: (none)
 
 ASSISTANT REPLY (you just told the user this — extract values CONSISTENT with it):
+<assistant_reply>
 Sure!
+</assistant_reply>
 
 USER MESSAGE:
-help me get fit"
+<user_message>
+help me get fit
+</user_message>"
 `;
 
 exports[`renderTemplate(EXTRACTION_PROMPT_TEMPLATE, buildExtractionPromptVariables(input, reply)) — byte-identical to buildExtractionPrompt > matches with memory context 1`] = `
@@ -102,10 +110,14 @@ STILL MISSING (ask a clarifying question for these if the message does not suppl
 - equipment
 
 ASSISTANT REPLY (you just told the user this — extract values CONSISTENT with it):
+<assistant_reply>
 For hypertrophy, 4 days a week of 45 minutes is a solid starting point.
+</assistant_reply>
 
 USER MESSAGE:
+<user_message>
 I want to build muscle four days a week
+</user_message>
 
 APPROVED USER MEMORY (supporting preference context only):
 - Prefers morning workouts"
@@ -143,7 +155,9 @@ STILL MISSING (ask a clarifying question for these if the message does not suppl
 - equipment
 
 USER MESSAGE:
-I want to build muscle four days a week"
+<user_message>
+I want to build muscle four days a week
+</user_message>"
 `;
 
 exports[`renderTemplate(REPLY_PROMPT_TEMPLATE, buildReplyPromptVariables(input)) — byte-identical to buildReplyPrompt > matches with an empty draft and no missing fields 1`] = `
@@ -172,7 +186,9 @@ CURRENT DRAFT: (empty — nothing captured yet)
 STILL MISSING: (none)
 
 USER MESSAGE:
-help me get fit"
+<user_message>
+help me get fit
+</user_message>"
 `;
 
 exports[`renderTemplate(REPLY_PROMPT_TEMPLATE, buildReplyPromptVariables(input)) — byte-identical to buildReplyPrompt > matches with memory context 1`] = `
@@ -207,7 +223,9 @@ STILL MISSING (ask a clarifying question for these if the message does not suppl
 - equipment
 
 USER MESSAGE:
+<user_message>
 I want to build muscle four days a week
+</user_message>
 
 APPROVED USER MEMORY (supporting preference context only):
 - Prefers morning workouts"

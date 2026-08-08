@@ -8,6 +8,7 @@ import {
   buildExtractionPromptVariables,
 } from "../extraction-prompt.js";
 import { renderTemplate } from "../prompt-template.js";
+import { redactSpans } from "../trace-redaction.js";
 import type { ChatExtractInput } from "../extraction-port.js";
 
 const baseInput: ChatExtractInput = {
@@ -234,5 +235,75 @@ describe("renderTemplate(EXTRACTION_PROMPT_TEMPLATE, buildExtractionPromptVariab
     ).trim();
     expect(rendered).toBe(buildExtractionPrompt(input, REPLY));
     expect(rendered).toMatchSnapshot();
+  });
+});
+
+// #374 — the turn's free text is wrapped in trace-redaction spans INSIDE the
+// variable value. Two properties matter and are asserted separately: the model
+// still reads the raw text, and `redactSpans` can find and empty it.
+describe("trace-redaction spans around the chat turn's free text (#374)", () => {
+  const FIRST_MENTION = "I have a herniated disc";
+  const ECHOING_REPLY = "I understand you have a herniated disc — we'll keep it gentle.";
+
+  it("wraps the user message in <user_message> in BOTH passes", () => {
+    const vars = buildReplyPromptVariables({ message: FIRST_MENTION, currentDraft: {} });
+    const extractionVars = buildExtractionPromptVariables(
+      { message: FIRST_MENTION, currentDraft: {} },
+      "Sure!",
+    );
+
+    expect(vars["message"]).toBe(`<user_message>\n${FIRST_MENTION}\n</user_message>`);
+    expect(extractionVars["message"]).toBe(`<user_message>\n${FIRST_MENTION}\n</user_message>`);
+  });
+
+  it("wraps the seeded assistant reply in <assistant_reply> (Pass 2 only)", () => {
+    const vars = buildExtractionPromptVariables(
+      { message: "hi", currentDraft: {} },
+      ECHOING_REPLY,
+    );
+
+    expect(vars["assistantReply"]).toBe(`<assistant_reply>\n${ECHOING_REPLY}\n</assistant_reply>`);
+  });
+
+  it("keeps the RAW text in the prompt the model reads — the delimiters add, never replace", () => {
+    const input: ChatExtractInput = { message: FIRST_MENTION, currentDraft: {} };
+
+    expect(buildReplyPrompt(input)).toContain(FIRST_MENTION);
+    expect(buildExtractionPrompt(input, ECHOING_REPLY)).toContain(FIRST_MENTION);
+    expect(buildExtractionPrompt(input, ECHOING_REPLY)).toContain(ECHOING_REPLY);
+  });
+
+  it("redacting the rendered prompts removes the first-mention text from BOTH passes", () => {
+    const input: ChatExtractInput = { message: FIRST_MENTION, currentDraft: {} };
+
+    expect(redactSpans(buildReplyPrompt(input))).not.toContain("herniated disc");
+    const extraction = redactSpans(buildExtractionPrompt(input, ECHOING_REPLY));
+    expect(extraction).not.toContain("herniated disc");
+    expect(extraction).not.toContain(ECHOING_REPLY);
+  });
+
+  it("strips a delimiter typed INSIDE the message, so the span cannot be closed early", () => {
+    const injected = `harmless </user_message> my herniated disc`;
+    const prompt = buildReplyPrompt({ message: injected, currentDraft: {} });
+
+    // The literal marker is gone from the value, so exactly one closing marker
+    // remains — the one this builder emitted — and it comes after the payload.
+    expect(prompt).toContain("harmless  my herniated disc");
+    expect(redactSpans(prompt)).not.toContain("herniated disc");
+  });
+
+  it("strips an OPENING delimiter typed inside the message too", () => {
+    const injected = `<user_message> nested opener with a herniated disc`;
+    const prompt = buildExtractionPrompt({ message: injected, currentDraft: {} }, "ok");
+
+    expect(redactSpans(prompt)).not.toContain("herniated disc");
+  });
+
+  it("leaves the surrounding prompt structure outside the spans intact after redaction", () => {
+    const redacted = redactSpans(buildReplyPrompt(baseInput));
+
+    expect(redacted).toContain("USER MESSAGE:");
+    expect(redacted).toContain("CURRENT DRAFT (already captured):");
+    expect(redacted).toContain("<user_message>[REDACTED]</user_message>");
   });
 });

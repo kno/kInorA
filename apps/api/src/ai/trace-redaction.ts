@@ -25,9 +25,10 @@
  * GENERAL BY DESIGN: adding a new class of sensitive prompt content is one
  * entry in `TRACE_REDACTION_RULES` plus matching delimiters in whichever
  * prompt renders it — no change to this module, the handler, or any adapter.
- * #374 (first-mention limitation text reaching the trace) is exactly one
- * further entry (a `<user_message>` span) pointed at the same mechanism —
- * see design.md "Composition with #374". This change does not add that rule.
+ * #374 (first-mention limitation text reaching the trace) was exactly that:
+ * two further entries (`<user_message>` and `<assistant_reply>`) pointed at
+ * the same mechanism, with no change to this engine — see design.md
+ * "Composition with #374".
  */
 
 /** One span of prompt text that must never leave the process inside a trace. */
@@ -41,11 +42,27 @@ export interface TraceRedactionRule {
 /**
  * Ordered redaction rules applied to every Langfuse trace input/output.
  *
- * 17c registers ONE rule: the body-metrics section rendered by
- * `buildBodyProfileSection` (`prompt.ts`).
+ * - `<body_profile>` (17c): the body-metrics section rendered by
+ *   `buildBodyProfileSection` (`prompt.ts`).
+ * - `<user_message>` / `<assistant_reply>` (#374): the free text of one chat
+ *   turn, wrapped by `buildReplyPromptVariables` /
+ *   `buildExtractionPromptVariables` (`extraction-prompt.ts`).
+ *
+ * The chat rules are deliberately CONTENT-BLIND. `mask()` can only redact
+ * limitation terms it already knows, so a limitation stated for the FIRST
+ * time travels unmasked through that one turn — and detecting "this is a
+ * first-mention turn" before the trace is emitted is impossible, because the
+ * extractor only learns the term as a side effect of processing the turn.
+ * Redacting the whole region regardless of content sidesteps the detection
+ * problem entirely: first mention stops being a special case.
+ *
+ * The rules are independent and order-free — they operate on disjoint
+ * delimiters, so registering one never weakens another.
  */
 export const TRACE_REDACTION_RULES: readonly TraceRedactionRule[] = [
   { open: "<body_profile>", close: "</body_profile>" },
+  { open: "<user_message>", close: "</user_message>" },
+  { open: "<assistant_reply>", close: "</assistant_reply>" },
 ];
 
 const REDACTED = "[REDACTED]";
