@@ -1,7 +1,24 @@
 import { describe, it, expect, vi } from "vitest";
-import { ResolvePrompt, resolvePromptCacheTtlMs } from "../prompt-provider.js";
+import {
+  ResolvePrompt,
+  resolvePromptCacheTtlMs,
+  PROMPT_TEMPLATE_DRIFT_EVENT,
+} from "../prompt-provider.js";
 import { PromptNotFoundError, type LangfusePromptGateway } from "../prompt-source-port.js";
-import { renderTemplate, type PromptDefinition } from "../prompt-template.js";
+import {
+  renderTemplate,
+  templateVariablesOf,
+  type PromptDefinition,
+} from "../prompt-template.js";
+import { PLAN_PROMPT_DEFINITION } from "../prompt.js";
+import {
+  REPLY_PROMPT_DEFINITION,
+  EXTRACTION_PROMPT_DEFINITION,
+} from "../extraction-prompt.js";
+import type {
+  ObservabilityEventInput,
+  ObservabilityLogger,
+} from "../../observability/event-logger.js";
 
 // Mirrors ResolveBillingPricing's test style (billing-pricing.test.ts) — a
 // fake gateway + an injected clock, no network, no credentials.
@@ -172,6 +189,181 @@ describe("ResolvePrompt", () => {
     expect(resolution.text).toBe(renderTemplate(DEF.localTemplate, VARS));
     expect(resolution.source).toBe("langfuse");
   });
+});
+
+// #390 — a repository template can gain a variable the hand-maintained
+// Langfuse prompt never receives. The remote template still satisfies
+// `requiredMarkers`/`orderedMarkers`, so it validates cleanly and is served
+// with the new data reaching nothing. These tests pin the reporting signal:
+// it names the gap and it NEVER changes what gets served.
+
+/** `{{optional}}` is declared but is neither a required nor an ordered marker. */
+const DRIFT_DEF: PromptDefinition = {
+  name: "kinora-test-prompt",
+  localTemplate: "LOCAL {{x}} {{optional}}",
+  variables: ["x", "optional"],
+  requiredMarkers: ["{{x}}"],
+  orderedMarkers: ["{{x}}"],
+  maxTemplateChars: 1000,
+};
+
+function buildObservability() {
+  const events: ObservabilityEventInput[] = [];
+  const logger: ObservabilityLogger = {
+    recordEvent: (input) => {
+      events.push(input);
+    },
+  };
+  return { logger, events };
+}
+
+/** Every marker the template references, so nothing survives unresolved. */
+function varsFor(def: PromptDefinition): Record<string, string> {
+  return Object.fromEntries(
+    [...templateVariablesOf(def.localTemplate), ...def.variables].map((name) => [
+      name,
+      `value-of-${name}`,
+    ])
+  );
+}
+
+describe("ResolvePrompt template-drift reporting", () => {
+  it("reports drift AND still serves the remote template when a declared variable is absent", async () => {
+    const { gateway } = buildGateway(async () => ({ template: "REMOTE {{x}}", version: 7 }));
+    const { logger, events } = buildObservability();
+    const useCase = new ResolvePrompt(gateway, { observability: logger });
+
+    const resolution = await useCase.execute(DRIFT_DEF, { x: "42", optional: "ignored" });
+
+    expect(resolution).toEqual({
+      text: "REMOTE 42",
+      source: "langfuse",
+      name: DRIFT_DEF.name,
+      version: 7,
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      level: "warn",
+      event: PROMPT_TEMPLATE_DRIFT_EVENT,
+      outcome: "remote_missing_variables",
+      metadata: {
+        promptName: DRIFT_DEF.name,
+        promptVersion: 7,
+        missingVariables: "optional",
+        missingVariableCount: 1,
+      },
+    });
+  });
+
+  it("reports nothing when the remote template references every declared variable", async () => {
+    const { gateway } = buildGateway(async () => ({
+      template: DRIFT_DEF.localTemplate,
+      version: 1,
+    }));
+    const { logger, events } = buildObservability();
+    const useCase = new ResolvePrompt(gateway, { observability: logger });
+
+    const resolution = await useCase.execute(DRIFT_DEF, { x: "42", optional: "here" });
+
+    expect(resolution.source).toBe("langfuse");
+    expect(events).toEqual([]);
+  });
+
+  it("carries the prompt name and missing variable NAMES only — no template or user content", async () => {
+    const { gateway } = buildGateway(async () => ({
+      template: "SYSTEM PREAMBLE {{x}}",
+      version: 2,
+    }));
+    const { logger, events } = buildObservability();
+    const useCase = new ResolvePrompt(gateway, { observability: logger });
+
+    await useCase.execute(DRIFT_DEF, { x: "user-secret-value", optional: "user-body-data" });
+
+    const metadata = JSON.stringify(events[0]?.metadata);
+    expect(metadata).toContain("optional");
+    expect(metadata).not.toContain("SYSTEM PREAMBLE");
+    expect(metadata).not.toContain("user-secret-value");
+    expect(metadata).not.toContain("user-body-data");
+    // A drift event is about a template, never about a person.
+    expect(events[0]?.tenantId ?? null).toBeNull();
+    expect(events[0]?.actorUserId ?? null).toBeNull();
+  });
+
+  it("reports no drift when the remote template was rejected and the local one is served", async () => {
+    const { gateway } = buildGateway(async () => ({ template: "no required marker", version: 1 }));
+    const { logger, events } = buildObservability();
+    const useCase = new ResolvePrompt(gateway, { observability: logger, warn: vi.fn() });
+
+    const resolution = await useCase.execute(DRIFT_DEF, { x: "42", optional: "here" });
+
+    expect(resolution.source).toBe("fallback");
+    expect(events).toEqual([]);
+  });
+
+  it("resolves normally when no observability logger is injected", async () => {
+    const { gateway } = buildGateway(async () => ({ template: "REMOTE {{x}}", version: 1 }));
+    const useCase = new ResolvePrompt(gateway);
+
+    await expect(useCase.execute(DRIFT_DEF, { x: "42", optional: "here" })).resolves.toMatchObject({
+      source: "langfuse",
+    });
+  });
+
+  // The three prompts the repository owns. `kinora-plan-generation` is the
+  // real 17c incident: `{{bodyProfileSection}}` is deliberately not a required
+  // marker, so the stale hosted template validates. For the two chat prompts
+  // every declared variable IS a required marker today, so the equivalent gap
+  // is a definition that has just gained a variable the hosted template lacks.
+  const REAL_CASES: ReadonlyArray<{ def: PromptDefinition; remote: string; missing: string }> = [
+    {
+      def: PLAN_PROMPT_DEFINITION,
+      remote: PLAN_PROMPT_DEFINITION.localTemplate.replace("{{bodyProfileSection}}", ""),
+      missing: "bodyProfileSection",
+    },
+    {
+      def: { ...REPLY_PROMPT_DEFINITION, variables: [...REPLY_PROMPT_DEFINITION.variables, "newSection"] },
+      remote: REPLY_PROMPT_DEFINITION.localTemplate,
+      missing: "newSection",
+    },
+    {
+      def: {
+        ...EXTRACTION_PROMPT_DEFINITION,
+        variables: [...EXTRACTION_PROMPT_DEFINITION.variables, "newSection"],
+      },
+      remote: EXTRACTION_PROMPT_DEFINITION.localTemplate,
+      missing: "newSection",
+    },
+  ];
+
+  for (const { def, remote, missing } of REAL_CASES) {
+    it(`reports the gap for ${def.name} and still serves the remote template`, async () => {
+      const { gateway } = buildGateway(async () => ({ template: remote, version: 5 }));
+      const { logger, events } = buildObservability();
+      const useCase = new ResolvePrompt(gateway, { observability: logger });
+
+      const resolution = await useCase.execute(def, varsFor(def));
+
+      expect(resolution.source).toBe("langfuse");
+      expect(events).toHaveLength(1);
+      expect(events[0]?.metadata).toMatchObject({
+        promptName: def.name,
+        missingVariables: missing,
+        missingVariableCount: 1,
+      });
+    });
+
+    it(`reports nothing for ${def.name} when the hosted template matches the definition`, async () => {
+      const complete: PromptDefinition = { ...def, variables: templateVariablesOf(remote) };
+      const { gateway } = buildGateway(async () => ({ template: remote, version: 5 }));
+      const { logger, events } = buildObservability();
+      const useCase = new ResolvePrompt(gateway, { observability: logger });
+
+      const resolution = await useCase.execute(complete, varsFor(complete));
+
+      expect(resolution.source).toBe("langfuse");
+      expect(events).toEqual([]);
+    });
+  }
 });
 
 describe("resolvePromptCacheTtlMs", () => {
