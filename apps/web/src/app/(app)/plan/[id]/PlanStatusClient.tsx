@@ -66,6 +66,10 @@ export function PlanStatusClient({
   initialStatus,
 }: PlanStatusClientProps) {
   const [regenerating, setRegenerating] = useState(false);
+  // A failed regenerate must never look like a no-op button — surfaced with
+  // the same generic action-failure copy mobile's PlanStatusScreen already
+  // uses for its own failed regenerate/adapt calls (`planStatus.error`).
+  const [regenerateFailed, setRegenerateFailed] = useState(false);
   // #93 Slice 3: the start/record/complete lifecycle (including the 409-conflict
   // branch, the completion-return-to-plan fix, the throw guard, and the day
   // identity) lives in the shared useWorkoutSession hook so /plan and /plan/[id]
@@ -144,6 +148,7 @@ export function PlanStatusClient({
   const handleRegenerate = useCallback(async () => {
     if (!specId) return;
     setRegenerating(true);
+    setRegenerateFailed(false);
     try {
       // Route through a server action — the browser never calls the API directly.
       // regeneratePlanAction reads the session cookie server-side and calls
@@ -151,7 +156,9 @@ export function PlanStatusClient({
       await regeneratePlanAction(specId);
       // Status will be pushed via WS; the ready redirect then takes over.
     } catch {
-      // Network error — user can try again
+      // Network/server error — surface it instead of silently no-op'ing;
+      // the user needs to be able to tell "it failed" from "nothing happened".
+      setRegenerateFailed(true);
     } finally {
       setRegenerating(false);
     }
@@ -252,6 +259,11 @@ export function PlanStatusClient({
       {errorKey && (
         <p role="alert" data-testid="tracker-error">
           {t(errorKey)}
+        </p>
+      )}
+      {regenerateFailed && (
+        <p role="alert" data-testid="regenerate-error">
+          {t("planStatus.error")}
         </p>
       )}
       <PlanStatusView

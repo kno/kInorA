@@ -260,4 +260,55 @@ describe("ProfileScreen (17c PR 5 — mobile profile parity)", () => {
     expect(createWeightEntry).not.toHaveBeenCalled();
     expect(renderer.root.findByProps({ testID: "weight-entry-error" })).toBeTruthy();
   });
+
+  it("surfaces a failed profile load distinctly from an empty profile, and disables Save over it", async () => {
+    const fetchUserProfile = vi
+      .fn<() => Promise<GetProfileResult>>()
+      .mockResolvedValue({ kind: "error", message: "api_unreachable" });
+    const fetchWeightEntries = vi
+      .fn<() => Promise<ListWeightEntriesResult>>()
+      .mockResolvedValue({ kind: "ok", entries: [] });
+
+    const { renderer } = renderScreen({ fetchUserProfile, fetchWeightEntries });
+    await settle();
+
+    // Visible failure signal — not present for a genuinely empty/new profile
+    // (covered by the other tests above, none of which assert this testID).
+    expect(renderer.root.findByProps({ testID: "profile-load-error" })).toBeTruthy();
+    // Fields stay blank, same as a new profile would render...
+    expect(findInput(renderer, "profile-name-input").props.value).toBe("");
+    // ...but Save is disabled, so an edit-and-save cannot overwrite good
+    // server state with the blanks this failed read produced.
+    expect(findButton(renderer, "profile-save-btn").props.disabled).toBe(true);
+  });
+
+  it("does not show the profile-load-error banner when the profile is merely empty", async () => {
+    const fetchUserProfile = vi
+      .fn<() => Promise<GetProfileResult>>()
+      .mockResolvedValue({ kind: "ok", profile: emptyProfile });
+    const fetchWeightEntries = vi
+      .fn<() => Promise<ListWeightEntriesResult>>()
+      .mockResolvedValue({ kind: "ok", entries: [] });
+
+    const { renderer } = renderScreen({ fetchUserProfile, fetchWeightEntries });
+    await settle();
+
+    expect(renderer.root.findAllByProps({ testID: "profile-load-error" })).toHaveLength(0);
+    expect(findButton(renderer, "profile-save-btn").props.disabled).toBe(false);
+  });
+
+  it("surfaces a failed weight-history load distinctly from an empty list", async () => {
+    const fetchUserProfile = vi
+      .fn<() => Promise<GetProfileResult>>()
+      .mockResolvedValue({ kind: "ok", profile: emptyProfile });
+    const fetchWeightEntries = vi
+      .fn<() => Promise<ListWeightEntriesResult>>()
+      .mockResolvedValue({ kind: "error", message: "api_unreachable" });
+
+    const { renderer } = renderScreen({ fetchUserProfile, fetchWeightEntries });
+    await settle();
+
+    expect(renderer.root.findByProps({ testID: "weight-entry-load-error" })).toBeTruthy();
+    expect(renderer.root.findAllByProps({ testID: "weight-entry-list" })).toHaveLength(0);
+  });
 });

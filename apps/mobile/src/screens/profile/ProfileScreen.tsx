@@ -88,6 +88,11 @@ export default function ProfileScreen({
   const clientOptions: ProfileClientOptions & WeightClientOptions = { apiBaseUrl, getToken };
 
   const [loaded, setLoaded] = useState(false);
+  // Set independently per fetch (mount loads profile + weight entries in
+  // parallel) so a failure in one is never masked by success in the other,
+  // and neither renders as indistinguishable from "nothing saved yet".
+  const [profileLoadFailed, setProfileLoadFailed] = useState(false);
+  const [weightLoadFailed, setWeightLoadFailed] = useState(false);
   const [name, setName] = useState("");
   const [goal, setGoal] = useState<PlanGoal | null>(null);
   const [experienceLevel, setExperienceLevel] = useState<ExperienceLevel | null>(null);
@@ -122,9 +127,20 @@ export default function ProfileScreen({
         setExperienceLevel(profileResult.profile.experienceLevel);
         setSelfDescribedSex(profileResult.profile.selfDescribedSex);
         setHeightCm(profileResult.profile.heightCm != null ? String(profileResult.profile.heightCm) : "");
+        setProfileLoadFailed(false);
+      } else {
+        // Leave the fields blank but flag the failure — the banner below
+        // (M.loadError) is what tells this apart from a genuinely new,
+        // never-filled-in profile. Save stays disabled while this is set
+        // (see the button below): the fields below hold nothing real, so a
+        // save here would overwrite good server data with blanks.
+        setProfileLoadFailed(true);
       }
       if (entriesResult.kind === "ok") {
         setEntries(entriesResult.entries);
+        setWeightLoadFailed(false);
+      } else {
+        setWeightLoadFailed(true);
       }
       setLoaded(true);
     })();
@@ -133,7 +149,11 @@ export default function ProfileScreen({
   }, [fetchUserProfile, fetchWeightEntries]);
 
   const handleSave = useCallback(async () => {
-    if (saveStatus === "saving") return;
+    // profileLoadFailed guard mirrors the disabled Save button below: the
+    // fields never held real server data, so a save here would overwrite it
+    // with blanks (defense-in-depth against a programmatic bypass of the
+    // disabled state).
+    if (saveStatus === "saving" || profileLoadFailed) return;
     setSaveStatus("saving");
     const input: ProfileFormInput = {
       name,
@@ -159,7 +179,7 @@ export default function ProfileScreen({
     }
     // clientOptions derived from stable props; intentionally omitted.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saveStatus, name, goal, experienceLevel, selfDescribedSex, heightCm, updateUserProfile]);
+  }, [saveStatus, profileLoadFailed, name, goal, experienceLevel, selfDescribedSex, heightCm, updateUserProfile]);
 
   const handleAddWeight = useCallback(async () => {
     if (weightStatus === "saving") return;
@@ -248,6 +268,12 @@ export default function ProfileScreen({
       </Text>
 
       <View style={styles.card}>
+        {profileLoadFailed && (
+          <Text style={styles.errorText} accessibilityRole="alert" testID="profile-load-error">
+            <FormattedMessage {...M.loadError} />
+          </Text>
+        )}
+
         <Text style={styles.subtitle}>
           <FormattedMessage {...M.nameLabel} />
         </Text>
@@ -309,9 +335,12 @@ export default function ProfileScreen({
 
         <Pressable
           testID="profile-save-btn"
-          style={[styles.btn, saveStatus === "saving" && styles.btnDisabled]}
+          style={[styles.btn, (saveStatus === "saving" || profileLoadFailed) && styles.btnDisabled]}
           accessibilityRole="button"
-          disabled={saveStatus === "saving"}
+          // Disabled while the read failed: the fields hold no real server
+          // data, so editing-and-saving here would overwrite good state with
+          // blanks. The user must reload successfully before saving.
+          disabled={saveStatus === "saving" || profileLoadFailed}
           onPress={handleSave}
         >
           <Text style={styles.btnText}>
@@ -390,7 +419,14 @@ export default function ProfileScreen({
         <Text style={styles.subtitle}>
           <FormattedMessage {...M.listHeading} />
         </Text>
-        {entries.length === 0 ? (
+        {weightLoadFailed ? (
+          // Distinct from listEmpty (below): a failed read must never look
+          // like "you have no weigh-ins yet" — the user still has entries,
+          // they just did not load.
+          <Text style={styles.errorText} accessibilityRole="alert" testID="weight-entry-load-error">
+            <FormattedMessage {...M.weightLoadError} />
+          </Text>
+        ) : entries.length === 0 ? (
           <Text style={styles.errorText}>
             <FormattedMessage {...M.listEmpty} />
           </Text>

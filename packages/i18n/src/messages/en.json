@@ -1072,6 +1072,7 @@
       "invalidWeight": "Enter a weight greater than 0 kg.",
       "invalidDate": "Enter a valid date that is not in the future.",
       "error": "Could not save your weight entry. Please try again.",
+      "loadError": "Could not load your weight history. Please try again.",
       "listHeading": "Your weight history",
       "listEmpty": "No weigh-ins recorded yet."
     },
