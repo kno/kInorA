@@ -1074,6 +1074,10 @@
       "error": "Could not save your weight entry. Please try again.",
       "listHeading": "Your weight history",
       "listEmpty": "No weigh-ins recorded yet."
+    },
+    "weight": {
+      "volumeShiftNotice": "Your past totals have changed. Bodyweight sets now count toward your training volume, so figures from before today are not directly comparable.",
+      "dismiss": "Dismiss"
     }
   },
   "memory": {

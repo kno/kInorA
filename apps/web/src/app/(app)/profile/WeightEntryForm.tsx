@@ -22,8 +22,12 @@ type Status = "idle" | "saving" | "error";
  * new entry is prepended locally — no page reload, no re-fetch — and on a
  * validation error the message surfaces inline via `role="alert"`.
  *
- * Deliberately does NOT render the first-entry volume-shift notice — that
- * ships in PR 4, gated on the volume-threading work it explains.
+ * Also renders the first-entry volume-shift notice (17c-profile-body-metrics,
+ * PR 4) when the server reports `wasFirstEntry: true` — a `role="status"`
+ * panel (polite, not an alert — the user did something successful), naming
+ * cause (bodyweight sets now count toward volume) and consequence (past
+ * totals are not directly comparable). Dismissible and not persisted: the
+ * trigger is a once-per-account server fact, so it cannot re-appear.
  */
 export function WeightEntryForm({ initialEntries }: WeightEntryFormProps) {
   const t = useTranslations();
@@ -33,6 +37,7 @@ export function WeightEntryForm({ initialEntries }: WeightEntryFormProps) {
   const [date, setDate] = useState<string>("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [showVolumeShiftNotice, setShowVolumeShiftNotice] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -61,6 +66,9 @@ export function WeightEntryForm({ initialEntries }: WeightEntryFormProps) {
       setDate("");
       setStatus("idle");
       setErrorKey(null);
+      if (result.wasFirstEntry) {
+        setShowVolumeShiftNotice(true);
+      }
     } else {
       setStatus("error");
       setErrorKey(
@@ -78,6 +86,32 @@ export function WeightEntryForm({ initialEntries }: WeightEntryFormProps) {
       <h2 className="kin-title" style={{ fontSize: "1.125rem", marginBottom: "1rem" }}>
         {t("profile.weightEntry.heading")}
       </h2>
+
+      {showVolumeShiftNotice ? (
+        <div
+          role="status"
+          className="kin-card"
+          style={{
+            marginBottom: "1rem",
+            padding: "0.75rem 1rem",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: "0.75rem",
+          }}
+        >
+          <p className="kin-text" style={{ margin: 0 }}>
+            {t("profile.weight.volumeShiftNotice")}
+          </p>
+          <button
+            type="button"
+            className="kin-btn"
+            onClick={() => setShowVolumeShiftNotice(false)}
+          >
+            {t("profile.weight.dismiss")}
+          </button>
+        </div>
+      ) : null}
 
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: "1rem" }}>
