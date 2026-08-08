@@ -80,6 +80,9 @@ export default function HomeScreen({
   const clientsLabel = intl.formatMessage({ id: "clients.navLabel" });
   // 15b/#294: trainer-only nav entry, mirroring `clientsLabel` above.
   const trainerPlanLabel = intl.formatMessage({ id: "trainerPlan.navLabel" });
+  // 17c PR5: profile nav entry — reuses web's existing app-nav label, no new
+  // catalog key needed (mirrors `ProfileScreen`'s own messages.ts approach).
+  const profileLabel = intl.formatMessage({ id: "appNav.profile" });
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [summary, setSummary] = useState<DashboardSummaryDTO | undefined>();
@@ -206,6 +209,15 @@ export default function HomeScreen({
         accessibilityLabel={historyLabel}
       >
         <Text style={styles.historyText}>{historyLabel}</Text>
+      </Pressable>
+
+      <Pressable
+        style={({ pressed }) => [styles.historyButton, pressed && styles.historyButtonPressed]}
+        onPress={() => navigationRef.current.navigate("Profile")}
+        accessibilityRole="button"
+        accessibilityLabel={profileLabel}
+      >
+        <Text style={styles.historyText}>{profileLabel}</Text>
       </Pressable>
 
       {isTrainer && (

@@ -255,6 +255,17 @@ describe("HomeScreen (C3 — dashboard fetch + plan-status nav entry)", () => {
     expect(logout.length).toBeGreaterThan(0);
   });
 
+  it("navigates to Profile when the Profile nav entry is pressed", async () => {
+    const { renderer, navigation } = renderScreen();
+    await settle();
+
+    const profileButton = renderer.root.find(
+      (n) => n.props.accessibilityLabel === "Profile",
+    );
+    profileButton.props.onPress();
+    expect(navigation.navigate).toHaveBeenCalledWith("Profile");
+  });
+
   // 15b/#294: the Clients/Trainer-plan nav entries are trainer-only, gated on
   // the dashboard summary's `viewerIsTrainer` (attached by the API from the
   // authenticated membership role — no extra request).

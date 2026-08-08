@@ -64,6 +64,7 @@ import ClientListScreen from "./src/screens/clients/ClientListScreen";
 import ClientCreatePlanScreen, {
   type ClientCreatePlanRouteParams,
 } from "./src/screens/clients/ClientCreatePlanScreen";
+import ProfileScreen from "./src/screens/profile/ProfileScreen";
 
 import {
   getSessionToken,
@@ -90,6 +91,7 @@ type RootStackParamList = {
   TrainerPlan: undefined;
   ClientList: undefined;
   ClientCreatePlan: ClientCreatePlanRouteParams;
+  Profile: undefined;
 };
 
 /** Routes that require an authenticated session; auth routes are never guarded. */
@@ -103,6 +105,7 @@ const PROTECTED_ROUTES: (keyof RootStackParamList)[] = [
   "TrainerPlan",
   "ClientList",
   "ClientCreatePlan",
+  "Profile",
 ];
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -244,6 +247,11 @@ export default function App() {
             name="ClientCreatePlan"
             component={ClientCreatePlanScreen}
             options={{ title: "Create plan" }}
+          />
+          <Stack.Screen
+            name="Profile"
+            component={ProfileScreen}
+            options={{ title: "Profile" }}
           />
         </Stack.Navigator>
       </NavigationContainer>
