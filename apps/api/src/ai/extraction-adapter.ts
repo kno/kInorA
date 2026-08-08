@@ -55,8 +55,11 @@ import { linkStreamingModel, linkStructuredChain } from "./prompt-linked-chain.j
  * call sites, exactly mirroring `invokeChain`'s A1 wiring for the plan prompt.
  * This is the ONLY masking point for the chat path (one masking rule, no path
  * where a template can bypass it). All already-known limitation/health terms
- * are scrubbed (a first-mention phrase is unavoidably present — it is the
- * minimal exposure the feature needs, see `extraction-prompt.ts`). Superseded:
+ * are scrubbed (a first-mention phrase is unavoidably present in what the
+ * MODEL reads — it is the minimal exposure the feature needs, see
+ * `extraction-prompt.ts`; #374 keeps it out of the TRACE by a separate
+ * mechanism, the `<user_message>`/`<assistant_reply>` spans emptied by the
+ * Langfuse `mask` hook). Superseded:
  * this used to say NO callback handler is ever attached here — that rationale
  * is deliberately overridden now, mirroring `invokeChain`'s A1 wiring exactly.
  * An optional `deps.handler` (the same injectable Langfuse tracing handler
@@ -64,8 +67,9 @@ import { linkStreamingModel, linkStructuredChain } from "./prompt-linked-chain.j
  * `...(handler ? { callbacks: [handler] } : {})` — so the no-handler call
  * options stay byte-identical to before this change. The trace `metadata`
  * still carries ONLY safe fields (feature/provider/model), and the masked
- * (never raw) prompt is what the callback observes, so health text never
- * reaches the observability backend unmasked.
+ * (never raw) prompt is what the callback observes; the turn's free text on
+ * top of that is emptied by the trace-redaction spans before enqueue, so no
+ * health text — known or first-mention — reaches the observability backend.
  */
 
 /**
