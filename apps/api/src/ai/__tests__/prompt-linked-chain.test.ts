@@ -1,8 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
-import { RunnableSequence, RunnableLambda } from "@langchain/core/runnables";
+import { RunnableSequence, RunnableLambda, RunnableBinding } from "@langchain/core/runnables";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { AIMessage } from "@langchain/core/messages";
+import type { BindToolsInput } from "@langchain/core/language_models/chat_models";
+import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
 import type { ChatResult } from "@langchain/core/outputs";
+import { ChatOpenAI } from "@langchain/openai";
+import { ChatAnthropic } from "@langchain/anthropic";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { WorkoutProgramSchema } from "@kinora/contracts";
 import { promptStep, linkStructuredChain, linkStreamingModel } from "../prompt-linked-chain.js";
 
@@ -25,11 +29,43 @@ class CannedChatModel extends BaseChatModel {
   }
 }
 
+/**
+ * Offline model that drives the REAL `withStructuredOutput` code path, so the
+ * SDK shape pins below observe what the SDK actually builds rather than a
+ * hand-assembled stand-in. Two SDK preconditions shape this class:
+ *
+ * - core's base `withStructuredOutput` throws unless `bindTools` exists, and
+ *   `@langchain/core@1.x` binds through `withConfig` (the older `.bind` is
+ *   gone) — the same way `ChatAnthropic.bindTools` does it.
+ * - the parser core pipes the model into rejects anything that is not an
+ *   `AIMessageChunk`, and looks for a tool call named `extract` (the default
+ *   function name core derives for a Zod schema without an explicit `name`).
+ */
+class CannedToolCallingChatModel extends BaseChatModel {
+  constructor(private readonly toolArgs: Record<string, unknown>) {
+    super({});
+  }
+  _llmType(): string {
+    return "canned-tool-calling-fake";
+  }
+  async _generate(): Promise<ChatResult> {
+    const message = new AIMessageChunk({
+      content: "",
+      tool_calls: [{ name: "extract", args: this.toolArgs, id: "call_1", type: "tool_call" }],
+    });
+    return { generations: [{ message, text: "" }] };
+  }
+  override bindTools(tools: BindToolsInput[]) {
+    return this.withConfig({ tools } as Parameters<BaseChatModel["withConfig"]>[0]);
+  }
+}
+
 interface RecordedEvent {
   event: "chain" | "chat_model";
   runId: string;
   parentRunId?: string;
   metadata?: Record<string, unknown>;
+  runName?: string;
   payload: unknown;
 }
 
@@ -50,8 +86,10 @@ function fakeCallbackHandler() {
       parentRunId: string | undefined,
       _tags?: string[],
       metadata?: Record<string, unknown>,
+      _runType?: string,
+      runName?: string,
     ) {
-      events.push({ event: "chain", runId, parentRunId, metadata, payload: inputs });
+      events.push({ event: "chain", runId, parentRunId, metadata, runName, payload: inputs });
     },
     handleChatModelStart(
       _llm: unknown,
@@ -190,6 +228,190 @@ describe("output equivalence (slice C)", () => {
   });
 });
 
+/**
+ * SDK structured-output shape pins (issue #375).
+ *
+ * Every OTHER test in this file hands `linkStructuredChain` a chain assembled
+ * BY HAND (`RunnableSequence.from([model, parser])`). Those prove the guard
+ * handles that shape correctly; none of them proves the SDK still PRODUCES it.
+ * If a `@langchain/*` bump changed the returned shape, all of them would stay
+ * green and the only signal would be `promptLinked: false` quietly appearing
+ * in trace metadata.
+ *
+ * These pins close that gap by calling `withStructuredOutput` FOR REAL, with
+ * the exact production call shape — `{ method }`, never `includeRaw`
+ * (`adapter-factory.ts`). Constructing a provider client performs no network
+ * I/O, so a placeholder key is enough to inspect the chain it builds.
+ *
+ * A bump of `@langchain/core`, `@langchain/openai`, `@langchain/anthropic` or
+ * `@langchain/google-genai` is what turns these red.
+ */
+function sdkDrift(what: string): string {
+  return [
+    `@langchain structured-output shape drift: ${what}.`,
+    "You most likely did NOT break this — a dependency bump did.",
+    "apps/api/src/ai/prompt-linked-chain.ts decomposes what withStructuredOutput()",
+    "returns and depends on that shape, so its guard needs updating for the new one,",
+    "and then this pin does too. Left unfixed it degrades silently: generation keeps",
+    "working, but Langfuse native prompt linkage stops (promptLinked: false).",
+  ].join(" ");
+}
+
+describe("SDK structured-output shape (issue #375)", () => {
+  const program = {
+    weeklySessions: [{ day: 1, title: "Day 1", exercises: [] }],
+    limitationWarnings: [],
+  };
+
+  // Both methods `adapter-factory.ts` uses: "jsonSchema" for openai/openrouter
+  // and "jsonMode" for opencode-go. Neither passes `includeRaw`.
+  it.each(["jsonSchema", "jsonMode"] as const)(
+    "ChatOpenAI.withStructuredOutput(schema, { method: '%s' }) still returns a two-step RunnableSequence whose first step is the model",
+    (method) => {
+      const llm = new ChatOpenAI({ apiKey: "placeholder-key", model: "gpt-4o-mini" });
+      const structured = llm.withStructuredOutput(WorkoutProgramSchema, { method });
+
+      expect(
+        RunnableSequence.isRunnableSequence(structured),
+        sdkDrift(`ChatOpenAI (method: ${method}) no longer returns a RunnableSequence`),
+      ).toBe(true);
+
+      const { steps } = structured as unknown as { steps: unknown[] };
+      expect(steps, sdkDrift(`ChatOpenAI (method: ${method}) no longer returns a TWO-step sequence`)).toHaveLength(2);
+      expect(
+        steps[0] instanceof BaseChatModel,
+        sdkDrift(`ChatOpenAI (method: ${method}) no longer puts the model FIRST in the sequence`),
+      ).toBe(true);
+
+      expect(
+        linkStructuredChain(structured).linked,
+        sdkDrift(`linkStructuredChain declines ChatOpenAI's real chain (method: ${method})`),
+      ).toBe(true);
+    },
+  );
+
+  it("core's base withStructuredOutput wraps the [model, parser] sequence in a RunnableBinding that only names the run", () => {
+    const structured = new CannedToolCallingChatModel(program).withStructuredOutput(WorkoutProgramSchema);
+
+    expect(
+      structured instanceof RunnableBinding,
+      sdkDrift("core's base withStructuredOutput no longer returns a RunnableBinding"),
+    ).toBe(true);
+
+    const { bound, config, kwargs, configFactories } = structured as unknown as {
+      bound: unknown;
+      config: Record<string, unknown>;
+      kwargs?: Record<string, unknown>;
+      configFactories?: unknown[];
+    };
+    // `linkStructuredChain` unwraps this binding, which is only lossless while
+    // the wrapper holds NOTHING but the run name — hence `Object.keys`, not
+    // just `toEqual` (which ignores explicitly-undefined keys).
+    expect(config, sdkDrift("core's base structured-output binding carries more than a runName")).toEqual({
+      runName: "StructuredOutput",
+    });
+    expect(
+      Object.keys(config),
+      sdkDrift("core's base structured-output binding config gained keys beyond runName"),
+    ).toEqual(["runName"]);
+    expect(
+      Object.keys(kwargs ?? {}),
+      sdkDrift("core's base structured-output binding now carries bound kwargs, which unwrapping would discard"),
+    ).toEqual([]);
+    expect(
+      configFactories ?? [],
+      sdkDrift("core's base structured-output binding now carries config factories, which unwrapping would discard"),
+    ).toEqual([]);
+    expect(
+      RunnableSequence.isRunnableSequence(bound),
+      sdkDrift("core's base structured-output binding no longer wraps a RunnableSequence"),
+    ).toBe(true);
+    expect(
+      (bound as { steps: unknown[] }).steps,
+      sdkDrift("core's base structured-output sequence is no longer [model, parser]"),
+    ).toHaveLength(2);
+  });
+
+  it("linkStructuredChain reparents the SDK's OWN structured sequence and yields an identical, schema-valid result", async () => {
+    const structured = new CannedToolCallingChatModel(program).withStructuredOutput(WorkoutProgramSchema);
+    // The sequence built by the SDK itself — not by this test — which is what
+    // `linkStructuredChain` reparents wherever a provider hands it back unwrapped.
+    const { bound: sdkSequence } = structured as unknown as {
+      bound: { invoke: (input: string, options?: Record<string, unknown>) => Promise<unknown> };
+    };
+
+    const untouchedResult = await sdkSequence.invoke("masked prompt");
+
+    const { chain, linked } = linkStructuredChain(sdkSequence);
+    expect(linked, sdkDrift("linkStructuredChain declines the sequence the SDK itself built")).toBe(true);
+    const linkedResult = await chain.invoke("masked prompt", {});
+
+    expect(linkedResult).toEqual(untouchedResult);
+    expect(WorkoutProgramSchema.parse(linkedResult)).toEqual(WorkoutProgramSchema.parse(untouchedResult));
+  });
+
+  // These two inherit core's base implementation, so they hand back the
+  // RunnableBinding wrapper rather than the bare sequence ChatOpenAI returns.
+  // `linkStructuredChain` unwraps that one shape, so they link too.
+  it.each([
+    ["ChatAnthropic", () => new ChatAnthropic({ apiKey: "placeholder-key", model: "claude-3-5-sonnet-latest" })],
+    [
+      "ChatGoogleGenerativeAI",
+      () => new ChatGoogleGenerativeAI({ apiKey: "placeholder-key", model: "gemini-2.0-flash" }),
+    ],
+  ] as const)("%s returns a RunnableBinding-wrapped sequence, which the guard unwraps and links", (name, makeLlm) => {
+    const structured = makeLlm().withStructuredOutput(WorkoutProgramSchema, { method: "jsonSchema" });
+
+    expect(structured instanceof RunnableBinding, `${name}: expected core's RunnableBinding wrapper`).toBe(true);
+    expect(RunnableSequence.isRunnableSequence(structured)).toBe(false);
+    // The [boundModel, parser] sequence is still in there, one level down.
+    expect(
+      RunnableSequence.isRunnableSequence((structured as unknown as { bound: unknown }).bound),
+      `${name}: expected the wrapper to hold a RunnableSequence`,
+    ).toBe(true);
+
+    expect(
+      linkStructuredChain(structured).linked,
+      sdkDrift(`linkStructuredChain no longer links ${name}'s real chain`),
+    ).toBe(true);
+  });
+
+  it("the unwrapped path keeps the SDK's runName and still parents the model as the prompt step's sibling", async () => {
+    const structured = new CannedToolCallingChatModel(program).withStructuredOutput(WorkoutProgramSchema);
+    const { chain, linked } = linkStructuredChain(structured);
+    expect(linked).toBe(true);
+
+    const handler = fakeCallbackHandler();
+    const langfusePrompt = { name: "kinora-plan-generation", version: 3, isFallback: false };
+    await chain.invoke("masked prompt text", { callbacks: [handler], metadata: { langfusePrompt } });
+
+    const chainEvents = handler.events.filter((e) => e.event === "chain");
+    const outerStart = chainEvents.find((e) => e.parentRunId === undefined);
+    expect(outerStart).toBeDefined();
+    // `withConfig` merges into the sequence's own run rather than adding one of
+    // its own, so the run keeps the SDK's name AND stays the shared parent.
+    expect(outerStart!.runName).toBe("StructuredOutput");
+
+    const promptStepStart = chainEvents.find((e) => e.runId !== outerStart!.runId);
+    expect(promptStepStart?.parentRunId).toBe(outerStart!.runId);
+    expect(promptStepStart?.metadata).toEqual(expect.objectContaining({ langfusePrompt }));
+
+    const modelStart = handler.events.find((e) => e.event === "chat_model");
+    expect(modelStart?.parentRunId).toBe(outerStart!.runId);
+  });
+
+  it("the unwrapped chain produces an output identical to the untouched binding", async () => {
+    const structured = new CannedToolCallingChatModel(program).withStructuredOutput(WorkoutProgramSchema);
+
+    const untouchedResult = await structured.invoke("masked prompt");
+    const { chain } = linkStructuredChain(structured);
+    const linkedResult = await chain.invoke("masked prompt", {});
+
+    expect(linkedResult).toEqual(untouchedResult);
+    expect(WorkoutProgramSchema.parse(linkedResult)).toEqual(WorkoutProgramSchema.parse(untouchedResult));
+  });
+});
+
 describe("guard degradation (slice C)", () => {
   it("linkStructuredChain declines a plain object with .invoke (not a real RunnableSequence) and still generates", async () => {
     const plainObjectWithInvoke = { invoke: vi.fn(async () => ({ ok: true })) };
@@ -217,6 +439,48 @@ describe("guard degradation (slice C)", () => {
     };
     const result = linkStructuredChain(includeRawShaped);
     expect(result).toEqual({ chain: includeRawShaped, linked: false });
+  });
+
+  // The RunnableBinding unwrap must stay a match on ONE pinned shape, never a
+  // blanket "unwrap any binding": a wrapper carrying bound arguments or config
+  // factories would lose them, and a wrapper carrying real config would lose
+  // that too. Each of these binds something core's structured-output wrapper
+  // never carries, so each must still be declined and returned UNTOUCHED.
+  it.each([
+    ["a second config key beyond runName", { runName: "StructuredOutput", tags: ["x"] }, {}, []],
+    ["config without a runName at all", { metadata: { a: 1 } }, {}, []],
+    ["bound kwargs", { runName: "StructuredOutput" }, { tools: [{ name: "t" }] }, []],
+    ["config factories", { runName: "StructuredOutput" }, {}, [() => ({})]],
+  ] as const)(
+    "linkStructuredChain declines a RunnableBinding-shaped chain carrying %s",
+    (_case, config, kwargs, configFactories) => {
+      const inner = RunnableSequence.from([
+        RunnableLambda.from((input: string) => input),
+        RunnableLambda.from((input: string) => input),
+      ]);
+      const binding = Object.assign(Object.create(RunnableBinding.prototype) as object, {
+        bound: inner,
+        config,
+        kwargs,
+        configFactories,
+      });
+
+      const result = linkStructuredChain(binding as unknown as { invoke: () => Promise<unknown> });
+      expect(result.linked).toBe(false);
+      expect(result.chain).toBe(binding);
+    },
+  );
+
+  it("linkStructuredChain declines a binding whose bound value is not a RunnableSequence", () => {
+    const binding = Object.assign(Object.create(RunnableBinding.prototype) as object, {
+      bound: RunnableLambda.from((input: string) => input),
+      config: { runName: "StructuredOutput" },
+      kwargs: {},
+    });
+
+    const result = linkStructuredChain(binding as unknown as { invoke: () => Promise<unknown> });
+    expect(result.linked).toBe(false);
+    expect(result.chain).toBe(binding);
   });
 
   it("linkStreamingModel declines a plain object with .stream (not a real Runnable) and still generates", async () => {
