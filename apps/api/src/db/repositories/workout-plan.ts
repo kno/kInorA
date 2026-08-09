@@ -1,5 +1,5 @@
-import { and, desc, eq } from "drizzle-orm";
-import { workoutPlans } from "../schema.js";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { planSpecs, workoutPlans, workoutSessions } from "../schema.js";
 import type { Database } from "../client.js";
 import type { WorkoutProgram } from "@kinora/contracts";
 
@@ -18,6 +18,20 @@ export interface WorkoutPlanSummary {
    * `defaultPlanName(name, createdAt)` (single default layer).
    */
   name?: string | null;
+}
+
+/**
+ * `listPlansWithProgress`'s row shape (17d PR A) — `WorkoutPlanSummary` plus
+ * the three progress fields the `/plans` list needs. `daysPerWeek` is
+ * `undefined` — never 0 — when `plan_specs` has no usable number.
+ * `completedSessions` is 0 for a plan never trained; `lastTrainedAt` is
+ * `undefined` (not `null`) in that same case — there is no row to read a
+ * date from.
+ */
+export interface WorkoutPlanProgressSummary extends WorkoutPlanSummary {
+  daysPerWeek?: number;
+  completedSessions: number;
+  lastTrainedAt?: Date;
 }
 
 /**
@@ -175,6 +189,118 @@ export class WorkoutPlanRepository {
       )
       .orderBy(desc(workoutPlans.createdAt));
     return rows as WorkoutPlanSummary[];
+  }
+
+  /**
+   * `/plans` list read (17d PR A) — the plan summary plus days-per-week,
+   * completed-session-count, and last-trained-date, produced in EXACTLY
+   * three queries regardless of plan count (the anti-N+1 acceptance
+   * criterion), mirroring `WorkoutSessionRepository.listSessionHistory`'s
+   * batching shape.
+   *
+   * Q1: the same select/where/orderBy as `findAllByUser`, plus `planSpecId`.
+   * Short-circuits with NO further query when `[]` — same guard
+   * `listSessionHistory` uses.
+   *
+   * Q2: one batched `plan_specs` read keyed by the `planSpecId`s from Q1
+   * (already tenant+user scoped, so this cannot reach another user's spec).
+   * `daysPerWeek` is read in TS, not via a jsonb SQL operator, so a
+   * malformed/legacy value degrades to "unknown" (`undefined`) instead of
+   * `NaN` — `spec_json` is untyped `jsonb`.
+   *
+   * Q3: one `GROUP BY workout_plan_id` aggregate over `workout_sessions`,
+   * gated on `status = 'completed'`. `COALESCE(completed_at, started_at)`
+   * for `lastTrainedAt` matches `listSessionHistory`'s ordering expression,
+   * so "last trained" and the history page cannot disagree about a date. A
+   * plan with zero sessions is simply absent from this result — the merge
+   * below defaults to `completedSessions: 0` and omits `lastTrainedAt`,
+   * never a `null` masquerading as a date.
+   *
+   * Does NOT filter archived plans — that column does not exist until PR B.
+   */
+  async listPlansWithProgress(
+    tenantId: string,
+    userId: string
+  ): Promise<WorkoutPlanProgressSummary[]> {
+    const planRows = (await this.db
+      .select({
+        id: workoutPlans.id,
+        status: workoutPlans.status,
+        createdAt: workoutPlans.createdAt,
+        name: workoutPlans.name,
+        planSpecId: workoutPlans.planSpecId,
+      })
+      .from(workoutPlans)
+      .where(and(eq(workoutPlans.tenantId, tenantId), eq(workoutPlans.userId, userId)))
+      .orderBy(desc(workoutPlans.createdAt))) as Array<{
+      id: string;
+      status: "generating" | "ready" | "failed";
+      createdAt: Date;
+      name: string | null;
+      planSpecId: string;
+    }>;
+
+    if (planRows.length === 0) {
+      return [];
+    }
+
+    const specIds = [...new Set(planRows.map((row) => row.planSpecId))];
+    const specRows = (await this.db
+      .select({ id: planSpecs.id, specJson: planSpecs.specJson })
+      .from(planSpecs)
+      .where(inArray(planSpecs.id, specIds))) as Array<{ id: string; specJson: unknown }>;
+
+    const daysPerWeekBySpec = new Map<string, number>();
+    for (const specRow of specRows) {
+      const raw = (specRow.specJson as { daysPerWeek?: unknown } | null)?.daysPerWeek;
+      if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+        daysPerWeekBySpec.set(specRow.id, raw);
+      }
+    }
+
+    const planIds = planRows.map((row) => row.id);
+    const progressRows = (await this.db
+      .select({
+        workoutPlanId: workoutSessions.workoutPlanId,
+        completed: sql<number>`count(*) filter (where ${workoutSessions.status} = 'completed')`,
+        lastTrained: sql<Date | null>`max(coalesce(${workoutSessions.completedAt}, ${workoutSessions.startedAt})) filter (where ${workoutSessions.status} = 'completed')`,
+      })
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          inArray(workoutSessions.workoutPlanId, planIds)
+        )
+      )
+      .groupBy(workoutSessions.workoutPlanId)) as Array<{
+      workoutPlanId: string;
+      completed: number | string;
+      lastTrained: Date | string | null;
+    }>;
+
+    const progressByPlan = new Map<string, { completed: number; lastTrained?: Date }>();
+    for (const row of progressRows) {
+      progressByPlan.set(row.workoutPlanId, {
+        completed: Number(row.completed),
+        lastTrained: row.lastTrained ? new Date(row.lastTrained) : undefined,
+      });
+    }
+
+    return planRows.map((row) => {
+      const progress = progressByPlan.get(row.id);
+      const daysPerWeek = daysPerWeekBySpec.get(row.planSpecId);
+      const lastTrainedAt = progress?.lastTrained;
+      return {
+        id: row.id,
+        status: row.status,
+        createdAt: row.createdAt,
+        name: row.name,
+        ...(daysPerWeek !== undefined ? { daysPerWeek } : {}),
+        completedSessions: progress?.completed ?? 0,
+        ...(lastTrainedAt !== undefined ? { lastTrainedAt } : {}),
+      };
+    });
   }
 
   /**

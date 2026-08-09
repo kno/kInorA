@@ -67,6 +67,33 @@ function selectChainOrderOnly(rows: unknown[]) {
   return { select, from, where, orderBy };
 }
 
+/** Chain for a query that ends at .groupBy() — used by listPlansWithProgress's Q3. */
+function selectChainGroupBy(rows: unknown[]) {
+  const groupBy = vi.fn().mockResolvedValue(rows);
+  const where = vi.fn().mockReturnValue({ groupBy });
+  const from = vi.fn().mockReturnValue({ where });
+  const select = vi.fn().mockReturnValue({ from });
+  return { select, from, where, groupBy };
+}
+
+/**
+ * A `db` double whose `select` returns a DIFFERENT chain per call, in the
+ * fixed order `listPlansWithProgress` issues them: Q1 (plans, orderBy), Q2
+ * (plan_specs, no orderBy), Q3 (workout_sessions, groupBy). Each call is
+ * independently spy-able via the returned `calls` array.
+ */
+function progressDb(q1Rows: unknown[], q2Rows: unknown[] = [], q3Rows: unknown[] = []) {
+  const q1 = selectChainOrderOnly(q1Rows);
+  const q2 = selectChainNoOrder(q2Rows);
+  const q3 = selectChainGroupBy(q3Rows);
+  const select = vi
+    .fn()
+    .mockReturnValueOnce({ from: q1.from })
+    .mockReturnValueOnce({ from: q2.from })
+    .mockReturnValueOnce({ from: q3.from });
+  return { select, q1, q2, q3 };
+}
+
 describe("WorkoutPlanRepository", () => {
   describe("createGenerating", () => {
     it("inserts a row with status 'generating' and returns { id, status }", async () => {
@@ -674,6 +701,130 @@ describe("WorkoutPlanRepository", () => {
       const result = await repo.findLatestReadyByOwner(TENANT_A, USER_A);
 
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe("listPlansWithProgress (17d PR A)", () => {
+    it("issues exactly 3 queries for N plans regardless of N (anti-N+1)", async () => {
+      const twoPlans = [
+        { id: "plan-1", status: "ready" as const, createdAt: new Date("2026-06-29T10:00:00Z"), name: null, planSpecId: SPEC_A },
+        { id: "plan-2", status: "ready" as const, createdAt: new Date("2026-06-28T10:00:00Z"), name: null, planSpecId: SPEC_A },
+      ];
+      const { select } = progressDb(twoPlans, [], []);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      await repo.listPlansWithProgress(TENANT_A, USER_A);
+
+      expect(select).toHaveBeenCalledTimes(3);
+    });
+
+    it("issues exactly ONE query when the user has zero plans (short-circuits Q2/Q3)", async () => {
+      const { select } = progressDb([]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.listPlansWithProgress(TENANT_A, USER_A);
+
+      expect(select).toHaveBeenCalledTimes(1);
+      expect(result).toEqual([]);
+    });
+
+    it("a plan with no sessions gets completedSessions: 0 and no lastTrainedAt (absent, not null)", async () => {
+      const plans = [
+        { id: "plan-1", status: "ready" as const, createdAt: new Date("2026-06-29T10:00:00Z"), name: null, planSpecId: SPEC_A },
+      ];
+      const { select } = progressDb(plans, [], []);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.listPlansWithProgress(TENANT_A, USER_A);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].completedSessions).toBe(0);
+      expect(result[0].lastTrainedAt).toBeUndefined();
+      expect("lastTrainedAt" in result[0]).toBe(false);
+    });
+
+    it("a missing plan_specs row leaves daysPerWeek absent, not 0", async () => {
+      const plans = [
+        { id: "plan-1", status: "ready" as const, createdAt: new Date("2026-06-29T10:00:00Z"), name: null, planSpecId: SPEC_A },
+      ];
+      // Q2 returns no matching plan_specs row for SPEC_A.
+      const { select } = progressDb(plans, [], []);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.listPlansWithProgress(TENANT_A, USER_A);
+
+      expect(result[0].daysPerWeek).toBeUndefined();
+    });
+
+    it("a malformed/legacy spec_json.daysPerWeek (not a positive finite number) leaves daysPerWeek absent", async () => {
+      const plans = [
+        { id: "plan-1", status: "ready" as const, createdAt: new Date("2026-06-29T10:00:00Z"), name: null, planSpecId: SPEC_A },
+      ];
+      const specRows = [{ id: SPEC_A, specJson: { daysPerWeek: "3" } }];
+      const { select } = progressDb(plans, specRows, []);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.listPlansWithProgress(TENANT_A, USER_A);
+
+      expect(result[0].daysPerWeek).toBeUndefined();
+    });
+
+    it("reads a valid spec_json.daysPerWeek from the batched plan_specs read", async () => {
+      const plans = [
+        { id: "plan-1", status: "ready" as const, createdAt: new Date("2026-06-29T10:00:00Z"), name: null, planSpecId: SPEC_A },
+      ];
+      const specRows = [{ id: SPEC_A, specJson: { daysPerWeek: 4 } }];
+      const { select } = progressDb(plans, specRows, []);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.listPlansWithProgress(TENANT_A, USER_A);
+
+      expect(result[0].daysPerWeek).toBe(4);
+    });
+
+    it("merges the completed-count and last-trained aggregate for a plan with sessions", async () => {
+      const plans = [
+        { id: "plan-1", status: "ready" as const, createdAt: new Date("2026-06-29T10:00:00Z"), name: null, planSpecId: SPEC_A },
+      ];
+      const progressRows = [
+        { workoutPlanId: "plan-1", completed: 5, lastTrained: new Date("2026-07-01T10:00:00Z") },
+      ];
+      const { select } = progressDb(plans, [], progressRows);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.listPlansWithProgress(TENANT_A, USER_A);
+
+      expect(result[0].completedSessions).toBe(5);
+      expect(result[0].lastTrainedAt).toEqual(new Date("2026-07-01T10:00:00Z"));
+    });
+
+    it("orders results newest-first, matching findAllByUser", async () => {
+      const plans = [
+        { id: "plan-newer", status: "ready" as const, createdAt: new Date("2026-06-29T10:00:00Z"), name: null, planSpecId: SPEC_A },
+        { id: "plan-older", status: "ready" as const, createdAt: new Date("2026-06-28T10:00:00Z"), name: null, planSpecId: SPEC_A },
+      ];
+      const { select, q1 } = progressDb(plans, [], []);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.listPlansWithProgress(TENANT_A, USER_A);
+
+      expect(result[0].id).toBe("plan-newer");
+      expect(result[1].id).toBe("plan-older");
+      const orderByArg = (q1.orderBy as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+        queryChunks?: Array<{ value?: string[] }>;
+      };
+      const chunks = orderByArg.queryChunks ?? [];
+      expect(chunks.some((chunk) => (chunk.value ?? []).some((v) => v.includes("desc")))).toBe(true);
+    });
+
+    it("cross-tenant/cross-user isolation: an empty Q1 short-circuits without leaking any progress read", async () => {
+      const { select } = progressDb([]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.listPlansWithProgress(TENANT_B, USER_B);
+
+      expect(result).toEqual([]);
+      expect(select).toHaveBeenCalledTimes(1);
     });
   });
 });
