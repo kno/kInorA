@@ -244,6 +244,95 @@ describe("PlanList", () => {
     });
   });
 
+  /**
+   * Issue #412 — the confirmation already claimed `role="alertdialog"` while
+   * providing none of the behaviour that role promises. These are the four
+   * guarantees a modal makes to a keyboard reader; they are asserted directly
+   * so the dialog cannot quietly go back to being a `<section>` in the page.
+   */
+  describe("archive confirmation is a real modal (issue #412)", () => {
+    function openDialog() {
+      renderWithIntl(<PlanList plans={[plan({ id: "plan-1", archivedAt: null })]} now={NOW} />);
+      fireEvent.click(screen.getByTestId("plan-archive-plan-1"));
+      return screen.getByRole("alertdialog");
+    }
+
+    it("marks the dialog as modal", () => {
+      expect(openDialog().getAttribute("aria-modal")).toBe("true");
+    });
+
+    it("moves focus into the dialog when it opens", () => {
+      openDialog();
+
+      expect(document.activeElement).toBe(screen.getByTestId("plan-archive-confirm-plan-1"));
+    });
+
+    it("traps Tab at the last control, wrapping back to the first", () => {
+      const dialog = openDialog();
+      const first = screen.getByTestId("plan-archive-confirm-plan-1");
+      const last = screen.getByTestId("plan-archive-cancel-plan-1");
+
+      last.focus();
+      fireEvent.keyDown(dialog, { key: "Tab" });
+
+      expect(document.activeElement).toBe(first);
+    });
+
+    it("traps Shift+Tab at the first control, wrapping back to the last", () => {
+      const dialog = openDialog();
+      const first = screen.getByTestId("plan-archive-confirm-plan-1");
+      const last = screen.getByTestId("plan-archive-cancel-plan-1");
+
+      first.focus();
+      fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+
+      expect(document.activeElement).toBe(last);
+    });
+
+    it("leaves focus alone for a Tab that does not reach either edge", () => {
+      const dialog = openDialog();
+      const first = screen.getByTestId("plan-archive-confirm-plan-1");
+
+      first.focus();
+      fireEvent.keyDown(dialog, { key: "Tab" });
+
+      // Forward from the first control is an ordinary move the browser makes.
+      expect(document.activeElement).toBe(first);
+    });
+
+    it("dismisses on Escape without archiving", () => {
+      const onArchive = vi.fn();
+      renderWithIntl(
+        <PlanList plans={[plan({ id: "plan-1", archivedAt: null })]} now={NOW} onArchive={onArchive} />,
+      );
+      fireEvent.click(screen.getByTestId("plan-archive-plan-1"));
+
+      fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Escape" });
+
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+      expect(onArchive).not.toHaveBeenCalled();
+    });
+
+    it("ignores unrelated keys", () => {
+      const dialog = openDialog();
+
+      fireEvent.keyDown(dialog, { key: "a" });
+
+      expect(screen.getByRole("alertdialog")).toBeTruthy();
+    });
+
+    it("returns focus to the control that opened it when dismissed", () => {
+      renderWithIntl(<PlanList plans={[plan({ id: "plan-1", archivedAt: null })]} now={NOW} />);
+      const trigger = screen.getByTestId("plan-archive-plan-1");
+
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByTestId("plan-archive-cancel-plan-1"));
+
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
+  });
+
   describe("edit affordance (17d PR D)", () => {
     it("links a ready plan to its program editor", () => {
       renderWithIntl(<PlanList plans={[plan({ id: "plan-1", status: "ready" })]} now={NOW} />);
