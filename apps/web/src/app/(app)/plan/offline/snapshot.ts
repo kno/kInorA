@@ -92,6 +92,30 @@ export async function clearActiveSessionPointer(
   await store.delete("meta", activePointerKey(identityKey));
 }
 
+/**
+ * Forget a session that has reached a terminal status: drop its cached
+ * snapshot and, when the active-session pointer still names it, drop the
+ * pointer too.
+ *
+ * The pointer is only cleared when it names THIS session (or is already
+ * absent) so a newer session's pointer is never collateral damage.
+ *
+ * This is the single write-side cleanup for every terminal route — flush
+ * acknowledgement, an online complete, an abandon — so no route can leave a
+ * pointer naming a finished session behind.
+ */
+export async function discardTerminalSession(
+  store: OfflineStore,
+  identityKey: string,
+  sessionId: string,
+): Promise<void> {
+  await clearSnapshot(store, identityKey, sessionId);
+  const pointer = await readActiveSessionPointer(store, identityKey);
+  if (pointer === undefined || pointer === sessionId) {
+    await clearActiveSessionPointer(store, identityKey);
+  }
+}
+
 export function applyOptimisticComplete(
   snapshot: WorkoutSessionSnapshot,
 ): WorkoutSessionSnapshot {

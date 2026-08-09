@@ -985,3 +985,140 @@ describe("useWorkoutSession — storage I/O failure resilience (09d-v1)", () => 
     }
   });
 });
+
+/**
+ * #398 — a completed session kept hijacking `/plan` through a stale local
+ * pointer. The tracker is a full state swap on `/plan` with no navigation
+ * escape, so hydrating a finished session traps the user on every visit until
+ * they clear IndexedDB. These cover the READ-side recovery (the pointer is
+ * validated, never trusted) and the WRITE-side guarantee (a terminal session
+ * clears its pointer by every route, not only inside one flush branch).
+ */
+const completedSession: WorkoutSessionRecord = { ...activeSession, status: "completed" };
+const abandonedSession: WorkoutSessionRecord = { ...activeSession, status: "abandoned" };
+
+describe("useWorkoutSession — terminal pointer discarded on read (#398)", () => {
+  it("discards a pointer naming a COMPLETED session instead of hydrating it", async () => {
+    const store = createInMemoryOfflineStore();
+    await writeSnapshot(store, IDENTITY, "session-1", completedSession);
+    await writeActiveSessionPointer(store, IDENTITY, "session-1");
+
+    const { result } = await loadHook(store);
+
+    await waitFor(async () => {
+      expect(await readActiveSessionPointer(store, IDENTITY)).toBeUndefined();
+    });
+    // The plan/day view renders, not the tracker.
+    expect(result.current.activeSession).toBeUndefined();
+    expect(result.current.activeDay).toBeUndefined();
+    expect(await readSnapshot(store, IDENTITY, "session-1")).toBeUndefined();
+  });
+
+  it("discards a pointer naming an ABANDONED session (#379 auto-close / explicit discard)", async () => {
+    const store = createInMemoryOfflineStore();
+    await writeSnapshot(store, IDENTITY, "session-1", abandonedSession);
+    await writeActiveSessionPointer(store, IDENTITY, "session-1");
+
+    const { result } = await loadHook(store);
+
+    await waitFor(async () => {
+      expect(await readActiveSessionPointer(store, IDENTITY)).toBeUndefined();
+    });
+    expect(result.current.activeSession).toBeUndefined();
+    expect(await readSnapshot(store, IDENTITY, "session-1")).toBeUndefined();
+  });
+
+  it("still hydrates and resumes a genuinely ACTIVE session (offline resume is not broken)", async () => {
+    const store = createInMemoryOfflineStore();
+    await writeSnapshot(store, IDENTITY, "session-1", activeSession);
+    await writeActiveSessionPointer(store, IDENTITY, "session-1");
+
+    const { result } = await loadHook(store, false);
+
+    await waitFor(() => expect(result.current.activeSession?.id).toBe("session-1"));
+    expect(result.current.activeDay).toBe(1);
+    expect(await readActiveSessionPointer(store, IDENTITY)).toBe("session-1");
+    expect(await readSnapshot(store, IDENTITY, "session-1")).toBeDefined();
+  });
+});
+
+describe("useWorkoutSession — terminal state clears the pointer by every route (#398)", () => {
+  it("leaves no pointer behind when completing on the online path, with no queued mutation and no flush", async () => {
+    // The offline queue is unavailable (enqueue throws), so the hook degrades
+    // to the direct Server Action call — the exact path no flush ever
+    // acknowledges, and the one that used to leave the pointer behind.
+    const store = createInMemoryOfflineStore();
+    await writeSnapshot(store, IDENTITY, "session-1", activeSession);
+    await writeActiveSessionPointer(store, IDENTITY, "session-1");
+
+    const queueless: OfflineStore = {
+      ...store,
+      put: (async (storeName: OfflineStoreName, key: string, value: unknown) => {
+        if (storeName === "mutations") throw new Error("queue unavailable");
+        return store.put(storeName, key, value);
+      }) as typeof store.put,
+    };
+    completeWorkoutSessionAction.mockResolvedValue(completedSession);
+
+    const { result } = await loadHook(queueless);
+    await waitFor(() => expect(result.current.activeSession?.id).toBe("session-1"));
+
+    await act(async () => {
+      await result.current.handleCompleteWorkout("session-1");
+    });
+
+    expect(completeWorkoutSessionAction).toHaveBeenCalledWith("session-1");
+    expect(await getQueuedMutations(store, IDENTITY)).toEqual([]);
+    expect(await readActiveSessionPointer(store, IDENTITY)).toBeUndefined();
+    expect(await readSnapshot(store, IDENTITY, "session-1")).toBeUndefined();
+    expect(result.current.activeSession).toBeUndefined();
+  });
+
+  it("clears the finished session's pointer even while another session's mutation is still queued", async () => {
+    const store = createInMemoryOfflineStore();
+    await writeSnapshot(store, IDENTITY, "session-1", activeSession);
+    await writeActiveSessionPointer(store, IDENTITY, "session-1");
+    await enqueueMutation(store, IDENTITY, {
+      kind: "complete",
+      sessionId: "session-1",
+      queuedAt: 1,
+    });
+    // A mutation belonging to a DIFFERENT session, which stays queued because
+    // its flush is unreachable. It says nothing about session-1 being
+    // finished, so it must not keep session-1's pointer alive.
+    await enqueueMutation(store, IDENTITY, {
+      kind: "complete",
+      sessionId: "session-2",
+      queuedAt: 2,
+    });
+
+    completeWorkoutSessionAction.mockImplementation(async (sessionId: string) => {
+      if (sessionId === "session-2") {
+        throw new WorkoutSessionActionError("network", "UNREACHABLE");
+      }
+      return completedSession;
+    });
+
+    const { result, setOnline } = await loadHook(store, false);
+    await waitFor(() => expect(result.current.activeSession?.id).toBe("session-1"));
+
+    await act(async () => {
+      setOnline(true);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(async () => {
+      expect(await readActiveSessionPointer(store, IDENTITY)).toBeUndefined();
+    });
+    // The other session's mutation is untouched — still queued for its own
+    // next flush, never dropped as collateral.
+    const queued = await getQueuedMutations(store, IDENTITY);
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.sessionId).toBe("session-2");
+    // Session-1's own cached snapshot goes with its pointer; session-2's
+    // pending work is untouched.
+    expect(await readSnapshot(store, IDENTITY, "session-1")).toBeUndefined();
+  });
+});

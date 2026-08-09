@@ -892,3 +892,134 @@ describe("WorkoutTrackerScreen offline wiring (Phase 5, 09b-v1)", () => {
     expect(snapshot?.session.exercises[0]?.setRecords[0]?.completed).toBe(true);
   });
 });
+
+/**
+ * #398 — the persisted active-session pointer could outlive the session it
+ * names, so hydration kept restoring a session the server had already
+ * finished. Mobile shares the mechanism with web (`use-workout-session.ts`);
+ * these cover the READ-side recovery and the WRITE-side guarantee that a
+ * terminal session clears its pointer by every route.
+ */
+describe("WorkoutTrackerScreen terminal-pointer recovery (#398)", () => {
+  it("discards a pointer naming a COMPLETED session instead of hydrating it", async () => {
+    const store = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    const { writeSnapshot, writeActiveSessionPointer, readActiveSessionPointer, readSnapshot } =
+      await import("../../offline/snapshot");
+
+    await writeSnapshot(store, "id-1", "s1", makeSession({ status: "completed" }));
+    await writeActiveSessionPointer(store, "id-1", "s1");
+    startWorkoutSession.mockResolvedValue({ kind: "error", message: "unreachable", code: "UNREACHABLE" });
+
+    renderScreen(
+      { planId: "p1", day: 1 },
+      {
+        getIdentityKey: async () => "id-1",
+        openStore: async () => store,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await flush();
+
+    expect(await readActiveSessionPointer(store, "id-1")).toBeUndefined();
+    expect(await readSnapshot(store, "id-1", "s1")).toBeUndefined();
+  });
+
+  it("discards a pointer naming an ABANDONED session (#379 auto-close / explicit discard)", async () => {
+    const store = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    const { writeSnapshot, writeActiveSessionPointer, readActiveSessionPointer, readSnapshot } =
+      await import("../../offline/snapshot");
+
+    await writeSnapshot(store, "id-1", "s1", makeSession({ status: "abandoned" }));
+    await writeActiveSessionPointer(store, "id-1", "s1");
+    startWorkoutSession.mockResolvedValue({ kind: "error", message: "unreachable", code: "UNREACHABLE" });
+
+    renderScreen(
+      { planId: "p1", day: 1 },
+      {
+        getIdentityKey: async () => "id-1",
+        openStore: async () => store,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await flush();
+
+    expect(await readActiveSessionPointer(store, "id-1")).toBeUndefined();
+    expect(await readSnapshot(store, "id-1", "s1")).toBeUndefined();
+  });
+
+  it("still hydrates a genuinely ACTIVE session from its pointer (offline resume is not broken)", async () => {
+    const store = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(false);
+    const { writeSnapshot, writeActiveSessionPointer, readActiveSessionPointer } =
+      await import("../../offline/snapshot");
+
+    await writeSnapshot(store, "id-1", "s1", makeSession());
+    await writeActiveSessionPointer(store, "id-1", "s1");
+    startWorkoutSession.mockRejectedValue(new Error("must not be called — hydration covers this"));
+
+    const renderer = renderScreen(
+      { planId: "p1", day: 1 },
+      {
+        getIdentityKey: async () => "id-1",
+        openStore: async () => store,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await flush();
+
+    expect(startWorkoutSession).not.toHaveBeenCalled();
+    expect(renderedText(renderer)).toContain("Active session");
+    expect(await readActiveSessionPointer(store, "id-1")).toBe("s1");
+  });
+
+  it("leaves no pointer behind when completing on the online path, with no queued mutation and no flush", async () => {
+    // The offline queue is unavailable (enqueue throws), so the screen
+    // degrades to the direct API call — the exact path no flush ever
+    // acknowledges, and the one that used to leave the pointer behind.
+    const store = createInMemoryStore();
+    const monitor = fakeConnectivityMonitor(true);
+    const { writeSnapshot, writeActiveSessionPointer, readActiveSessionPointer, readSnapshot } =
+      await import("../../offline/snapshot");
+
+    await writeSnapshot(store, "id-1", "s1", makeSession());
+    await writeActiveSessionPointer(store, "id-1", "s1");
+
+    const originalPut = store.put.bind(store);
+    store.put = (async (storeName: string, key: string, value: unknown) => {
+      if (storeName === "mutations") throw new Error("queue unavailable");
+      return originalPut(storeName as never, key, value);
+    }) as typeof store.put;
+
+    getWorkoutSession.mockResolvedValue({ kind: "ok", session: makeSession() });
+    completeWorkoutSession.mockResolvedValue({
+      kind: "ok",
+      session: makeSession({ status: "completed" }),
+    });
+
+    const renderer = renderScreen(
+      { sessionId: "s1" },
+      {
+        getIdentityKey: async () => "id-1",
+        openStore: async () => store,
+        createConnectivityMonitor: async () => monitor,
+      },
+    );
+    await flush();
+
+    const finishButton = renderer.root.find(
+      (n) =>
+        typeof n.props.accessibilityLabel === "string" &&
+        n.props.accessibilityLabel.startsWith("Finish workout"),
+    );
+    await act(async () => {
+      await finishButton.props.onPress();
+    });
+    await flush();
+
+    expect(completeWorkoutSession).toHaveBeenCalledWith("s1");
+    expect(await readActiveSessionPointer(store, "id-1")).toBeUndefined();
+    expect(await readSnapshot(store, "id-1", "s1")).toBeUndefined();
+  });
+});
