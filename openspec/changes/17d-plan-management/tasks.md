@@ -134,25 +134,25 @@ From An Empty List (MODIFIED).
 
 ### Contracts: progress fields
 
-- [ ] A.1 RED: extend `packages/contracts/src/contracts.test.ts`'s exact-shape assertion for
+- [x] A.1 RED: extend `packages/contracts/src/contracts.test.ts`'s exact-shape assertion for
       `WorkoutPlanSummary` (`:318-319`, `toEqualTypeOf`) to include the three new optional fields; add a
       compile-time check that `daysPerWeek?: number`, `completedSessions?: number`, and
       `lastTrainedAt?: string` are all optional and absent by default
-- [ ] A.2 GREEN: in `packages/contracts/src/index.ts` — add `daysPerWeek?: number`,
+- [x] A.2 GREEN: in `packages/contracts/src/index.ts` — add `daysPerWeek?: number`,
       `completedSessions?: number`, `lastTrainedAt?: string` to `WorkoutPlanSummary`, each documented as
       "`?progress=1` only, absent when unknown — never 0/never a fabricated date"; confirm A.1 is green
       and the runtime export-list assertion (`:61-72`) stays unedited (every addition is type-only)
 
 ### Repository: the three-query progress read
 
-- [ ] A.3 RED: `apps/api/src/db/repositories/__tests__/workout-plan.test.ts` — `listPlansWithProgress`:
+- [x] A.3 RED: `apps/api/src/db/repositories/__tests__/workout-plan.test.ts` — `listPlansWithProgress`:
       exactly three queries execute for N plans regardless of N (spy on the db, assert call count
       invariant to N — the anti-N+1 acceptance criterion); zero plans → **one** query, no further reads;
       a plan with no sessions → `completedSessions: 0`, `lastTrainedAt` absent (not `null`); a missing
       `plan_specs` row → `daysPerWeek` absent, not `0`; a malformed/legacy `spec_json.daysPerWeek` (not
       a positive finite number) → `daysPerWeek` absent; ordering matches `findAllByUser`'s
       newest-first
-- [ ] A.4 GREEN: in `apps/api/src/db/repositories/workout-plan.ts` — add
+- [x] A.4 GREEN: in `apps/api/src/db/repositories/workout-plan.ts` — add
       `WorkoutPlanProgressSummary extends WorkoutPlanSummary { daysPerWeek?, completedSessions,
       lastTrainedAt? }` and `listPlansWithProgress(tenantId, userId): Promise<WorkoutPlanProgressSummary[]>`
       per `design.md`'s three-query shape: Q1 mirrors `findAllByUser`'s select plus `planSpecId`
@@ -166,12 +166,12 @@ From An Empty List (MODIFIED).
 
 ### Route: `?progress=1`
 
-- [ ] A.5 RED: `apps/api/src/routes/__tests__/plan-generation.test.ts` (or a new
+- [x] A.5 RED: `apps/api/src/routes/__tests__/plan-generation.test.ts` (or a new
       `plan-list-progress.test.ts` alongside it) — `GET /workout-plans?progress=1` returns the three
       extra fields per plan; `GET /workout-plans` **without** the param is byte-identical to today's
       response (same fields, same order); 401 unauthenticated; cross-tenant/cross-user isolation holds
       for the progress path too
-- [ ] A.6 GREEN: in `apps/api/src/routes/plan.ts`'s `GET /workout-plans` handler — read the `progress`
+- [x] A.6 GREEN: in `apps/api/src/routes/plan.ts`'s `GET /workout-plans` handler — read the `progress`
       query param; when truthy call `repo.listPlansWithProgress` (a new optional method on
       `PlanRouteRepo`) and map the three extra fields onto the response array; otherwise call the
       existing `findAllPlansByUser` unchanged; in `apps/api/src/plan-route-repo.ts` wire
@@ -181,39 +181,39 @@ From An Empty List (MODIFIED).
 
 ### The `/plans` page
 
-- [ ] A.7 RED: RTL + jsdom component/page test for a new
+- [x] A.7 RED: RTL + jsdom component/page test for a new
       `apps/web/src/app/(app)/plans/__tests__/page.test.tsx` — renders every plan with its days/week,
       completed-session-count and last-trained date; a plan never trained shows "never trained" copy,
       not a fabricated date; **a failed list fetch renders a distinguishable error state
       (`role="alert"`)**, never the empty-account state; zero plans renders the empty state with a
       create-plan CTA
-- [ ] A.8 GREEN: create `apps/web/src/app/(app)/plans/{page.tsx,actions.ts,plans-client.ts,PlanList.tsx}`
+- [x] A.8 GREEN: create `apps/web/src/app/(app)/plans/{page.tsx,actions.ts,plans-client.ts,PlanList.tsx}`
       — `actions.ts` calls `GET /workout-plans?progress=1`; `page.tsx` distinguishes the three states
       (ok-with-plans / ok-empty / fetch-failed) explicitly rather than collapsing failure into `[]`
       (the exact anti-pattern PR A's `/plan` fix below closes); `PlanList.tsx` renders per the Open
       Design mock: the plan currently being followed (per `findLatestReadyByOwner`'s "latest ready"
       notion, adapted to the caller's own list) spans two columns with a "Siguiendo ahora" /
       "Currently following" badge, distinct from the rest of the grid; confirm A.7 is green
-- [ ] A.9 RED: extend A.7's suite — `generating` and `failed` plans render real bodies (not blank
+- [x] A.9 RED: extend A.7's suite — `generating` and `failed` plans render real bodies (not blank
       cards) with their existing status copy; any action button that cannot apply to a `generating` or
       `failed` row (e.g. a future edit affordance) is `disabled` **and** `aria-disabled="true"` **and**
       carries an explanatory `title`, per the Open Design mock's blocked-button contract
-- [ ] A.10 GREEN: extend `PlanList.tsx` per A.9; **do not implement the Open Design mock's
+- [x] A.10 GREEN: extend `PlanList.tsx` per A.9; **do not implement the Open Design mock's
       state-switcher control** — it is prototype scaffolding, not product chrome; confirm A.9 is green
 
 ### Nav entry (shared components — propagates to every page)
 
-- [ ] A.11 RED: extend `apps/web/src/components/AppShell/__tests__/SidebarNav.test.tsx` and
+- [x] A.11 RED: extend `apps/web/src/components/AppShell/__tests__/SidebarNav.test.tsx` and
       `MobileNav.test.tsx` (read both files first — their exact assertions were not confirmed during
       design) — `SidebarNav.NAV_ITEMS` renders a `/plans` entry; `MobileNav.SECONDARY_TABS` (the More
       menu, **not** `PRIMARY_TABS` — verified `PRIMARY_TABS.slice(0,2)` + FAB + `.slice(2)` layout
       cannot take a fourth primary tab) renders a `/plans` entry; the bottom bar still renders exactly
       three primary tabs plus the FAB and the More button
-- [ ] A.12 GREEN: add `{ labelKey: "appNav.plans", href: "/plans", icon: "plan" }` (or a distinct icon —
+- [x] A.12 GREEN: add `{ labelKey: "appNav.plans", href: "/plans", icon: "plan" }` (or a distinct icon —
       grep `@/components/icons` for one that reads as "list of plans" rather than reusing `PlanIcon`
       unmodified, to avoid two adjacent identical icons) to `SidebarNav.NAV_ITEMS` and to
       `MobileNav.SECONDARY_TABS`; confirm A.11 is green
-- [ ] A.13 GREEN, same commit as A.10: implement the last-trained age color-coding — grep
+- [x] A.13 GREEN, same commit as A.10: implement the last-trained age color-coding — grep
       `apps/web/src/app/globals.css` for existing semantic tokens (`--success`/`--warning`/similar)
       before introducing new ones; wire "recent" (≤7 days), "aging" (≤30 days), "stale" (>30 days) to
       three distinct visual treatments, never introducing a new `.kin-btn--primary`-style class; a
@@ -221,18 +221,18 @@ From An Empty List (MODIFIED).
 
 ### `/plan` page: the swallowed-error fix (pinned decision 7)
 
-- [ ] A.14 RED: extend `apps/web/src/app/(app)/plan/__tests__/page.test.tsx` (or create it if absent) —
+- [x] A.14 RED: extend `apps/web/src/app/(app)/plan/__tests__/page.test.tsx` (or create it if absent) —
       a failed `listPlansAction()` renders a distinguishable error state, not the same empty-account UI
       a genuinely-zero-plans user sees; a genuinely empty account still renders the empty state with
       its create-plan CTA; `?planId=<owned-id>` deep links still resolve unaffected
-- [ ] A.15 GREEN: in `apps/web/src/app/(app)/plan/page.tsx:36` — replace
+- [x] A.15 GREEN: in `apps/web/src/app/(app)/plan/page.tsx:36` — replace
       `listResult.kind === "ok" ? listResult.plans : []` with an explicit branch that renders the error
       state on `listResult.kind !== "ok"` instead of falling through to the empty-account render;
       confirm A.14 is green
 
 ### i18n
 
-- [ ] A.16 GREEN: add `appNav.plans`, `plans.list.*` (days-per-week/completed/last-trained/never-trained
+- [x] A.16 GREEN: add `appNav.plans`, `plans.list.*` (days-per-week/completed/last-trained/never-trained
       copy, currently-following badge, generating/failed body copy, error-state copy), and
       `plan.nav.loadError.*` to `packages/i18n/src/messages/{en,es}.json`, both locales, neutral
       professional register; bump the leaf-key-count canary test in the same commit; rebuild
@@ -240,7 +240,7 @@ From An Empty List (MODIFIED).
 
 ### PR A verification
 
-- [ ] A.17 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green (apps/api functions
+- [x] A.17 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green (apps/api functions
       ≥85%, apps/web functions ≥90%); `pnpm type-check` clean; `pnpm build` succeeds (confirms
       `packages/i18n` rebuild)
 
