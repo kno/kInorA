@@ -32,7 +32,7 @@ export function createPlanRouteRepo(deps: {
   >;
   workoutPlanRepo: Pick<
     WorkoutPlanRepository,
-    "findById" | "findLatestByPlanSpec" | "findAllByUser"
+    "findById" | "findLatestByPlanSpec" | "findAllByUser" | "listPlansWithProgress"
   >;
 }): PlanRouteRepo {
   const { database, planSpecRepo, planDraftRepo, workoutPlanRepo } = deps;
@@ -82,6 +82,15 @@ export function createPlanRouteRepo(deps: {
       ),
     findAllPlansByUser: (tenantId, userId) =>
       workoutPlanRepo.findAllByUser(tenantId, userId).then((rows) =>
+        rows.map((row) => ({
+          ...row,
+          name: defaultPlanName(row.name, row.createdAt),
+        }))
+      ),
+    // 17d PR A: the `/plans` list read, same single default-name layer as
+    // findAllPlansByUser above — every list consumer renders the SAME label.
+    listPlansWithProgress: (tenantId, userId) =>
+      workoutPlanRepo.listPlansWithProgress(tenantId, userId).then((rows) =>
         rows.map((row) => ({
           ...row,
           name: defaultPlanName(row.name, row.createdAt),
