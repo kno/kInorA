@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='11' fill='%2309090C'/%3E%3Ccircle cx='24' cy='25' r='12.5' fill='none' stroke='%23696964' stroke-width='5'/%3E%3Ccircle cx='24' cy='11' r='8' fill='%23A8F060'/%3E%3C/svg%3E" />
+  <title>kInorA — Configuración de IA</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
+    :root {
+      --bg: oklch(5% 0.006 270);
+      --surface: oklch(11% 0.006 270);
+      --surface-2: oklch(15% 0.006 270);
+      --surface-3: oklch(18% 0.008 270);
+      --border: oklch(24% 0.006 270);
+      --fg: oklch(96% 0.002 270);
+      --muted: oklch(66% 0.006 270);
+      --muted-2: oklch(48% 0.008 270);
+      --accent: oklch(89% 0.20 128);
+      --accent-fg: oklch(5% 0.006 270);
+      --accent-dim: oklch(89% 0.20 128 / 0.12);
+      --success: oklch(89% 0.20 128);
+      --warning: oklch(84% 0.14 90);
+      --danger: oklch(68% 0.19 25);
+      --info: oklch(72% 0.13 250);
+      --font-display: 'Space Grotesk', system-ui, sans-serif;
+      --font-body: 'DM Sans', -apple-system, system-ui, sans-serif;
+      --font-mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', Menlo, monospace;
+      --r-card: 20px;
+      --r-btn: 12px;
+      --r-pill: 999px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { background: var(--bg); }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 58% 8%, oklch(89% 0.20 128 / 0.08), transparent 34%),
+        radial-gradient(circle at 90% 80%, oklch(72% 0.13 250 / 0.055), transparent 32%),
+        var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.025em; line-height: 1.04; }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; }
+    .num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+    .muted { color: var(--muted); }
+    .eyebrow { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+    .app { display: flex; min-height: 100vh; }
+    .sidebar {
+      position: fixed; inset: 0 auto 0 0; width: 248px;
+      background: color-mix(in oklch, var(--surface) 92%, transparent);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; z-index: 10;
+      backdrop-filter: blur(18px);
+    }
+    .sidebar-top { padding: 24px 20px; }
+    .wordmark { display: flex; align-items: center; gap: 9px; margin-bottom: 28px; font-family: var(--font-display); font-size: 19px; font-weight: 700; letter-spacing: -.03em; }
+    .wordmark svg { width: 22px; height: 22px; }
+    .nav { display: flex; flex-direction: column; gap: 3px; }
+    .nav-item { position: relative; display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 14px; border-radius: 10px; color: var(--muted); font-size: 14px; font-weight: 600; transition: .15s ease; }
+    .nav-item:hover { background: var(--surface-2); color: var(--fg); }
+    .nav-item.active { background: var(--accent-dim); color: var(--accent); }
+    .nav-item.active::before { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: var(--accent); }
+    .nav-item svg { width: 18px; height: 18px; }
+    .nav-split { margin: 12px 0 6px; padding: 0 14px; color: var(--muted-2); font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    .sidebar-bottom { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); display: grid; place-items: center; font-family: var(--font-display); font-size: 13px; font-weight: 700; }
+    .user-info { min-width: 0; flex: 1; }
+    .user-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-plan { color: var(--muted); font-size: 11px; font-weight: 700; }
+
+    .main { margin-left: 248px; width: calc(100% - 248px); padding: 30px; }
+    .frame { max-width: 1420px; margin: 0 auto; }
+    .crumbs { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; color: var(--muted-2); font-size: 12px; font-weight: 700; }
+    .crumbs a:hover { color: var(--fg); }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
+    .topbar h1 { font-size: clamp(30px, 3.2vw, 52px); }
+    .topbar-copy { max-width: 700px; }
+    .topbar-copy p { margin-top: 8px; color: var(--muted); font-size: 15px; }
+    .topbar-actions { display: flex; align-items: center; gap: 10px; }
+
+    .btn { min-height: 42px; border: 1px solid var(--border); background: var(--surface-2); color: var(--fg); border-radius: var(--r-btn); padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; font-size: 14px; font-weight: 700; transition: transform .08s ease, background .15s ease, border-color .15s ease; }
+    .btn:hover { background: var(--surface-3); border-color: color-mix(in oklch, var(--border), var(--fg) 14%); }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+    .btn-primary:hover { background: var(--accent); filter: brightness(1.04); }
+    .btn-sm { min-height: 36px; padding: 0 13px; font-size: 13px; }
+    .btn[disabled] { opacity: .36; cursor: not-allowed; }
+    .btn[disabled]:hover { background: var(--surface-2); border-color: var(--border); filter: none; }
+    .btn-primary[disabled]:hover { background: var(--accent); }
+    .btn svg { width: 16px; height: 16px; }
+
+    .panel { background: color-mix(in oklch, var(--surface) 92%, transparent); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+    .panel-head { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .panel-body { padding: 20px; }
+    .pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border: 1px solid var(--border); border-radius: var(--r-pill); color: var(--muted); font-size: 12px; font-weight: 700; }
+    .pill-active { background: var(--accent-dim); border-color: transparent; color: var(--accent); }
+    .pill-active::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 12px var(--accent); }
+    .pill-muted { color: var(--muted-2); }
+    .mono { font-family: var(--font-mono); font-size: 13px; letter-spacing: -.01em; }
+
+    /* ---- banners de estado -------------------------------------------- */
+    .banner { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 16px; border: 1px solid var(--border); background: var(--surface-2); font-size: 14px; color: var(--muted); margin-bottom: 16px; }
+    .banner svg { flex: none; width: 20px; height: 20px; margin-top: 1px; }
+    .banner b { display: block; color: var(--fg); font-family: var(--font-display); font-size: 15px; margin-bottom: 3px; }
+    .banner-danger { border-color: color-mix(in oklch, var(--danger), transparent 56%); background: color-mix(in oklch, var(--danger), transparent 91%); }
+    .banner-danger svg { color: var(--danger); }
+    .banner-success { border-color: color-mix(in oklch, var(--success), transparent 60%); background: color-mix(in oklch, var(--success), transparent 93%); }
+    .banner-success svg { color: var(--success); }
+    .banner-warning { border-color: color-mix(in oklch, var(--warning), transparent 60%); background: color-mix(in oklch, var(--warning), transparent 92%); }
+    .banner-warning svg { color: var(--warning); }
+    .banner-info { border-color: color-mix(in oklch, var(--info), transparent 66%); background: color-mix(in oklch, var(--info), transparent 92%); }
+    .banner-info svg { color: var(--info); }
+
+    /* ---- layout de la pantalla ---------------------------------------- */
+    .config { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); gap: 16px; align-items: start; }
+
+    .field { display: grid; gap: 7px; margin-bottom: 18px; }
+    .field > label { font-size: 13px; font-weight: 700; }
+    .field .hint { color: var(--muted-2); font-size: 12px; }
+    .control { position: relative; }
+    input[type="text"], select, textarea {
+      width: 100%; min-height: 46px; background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--r-btn); color: var(--fg); padding: 0 14px; font: inherit; font-size: 14px; font-weight: 600;
+      transition: border-color .15s ease, background .15s ease;
+    }
+    input[type="text"] { font-family: var(--font-mono); font-size: 13px; font-weight: 500; }
+    input::placeholder { color: var(--muted-2); }
+    input:hover, select:hover { border-color: color-mix(in oklch, var(--border), var(--fg) 16%); }
+    input:focus, select:focus { outline: none; border-color: color-mix(in oklch, var(--fg), transparent 55%); background: var(--surface-3); }
+    select { appearance: none; cursor: pointer; padding-right: 42px; }
+    .control::after { content: ''; position: absolute; right: 16px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+    .control.plain::after { display: none; }
+    fieldset { border: 0; }
+    fieldset[disabled] .field { opacity: .45; }
+    fieldset[disabled] input, fieldset[disabled] select { cursor: not-allowed; }
+
+    .provider-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+    .provider-opt { position: relative; }
+    .provider-opt input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+    .provider-opt span { display: flex; align-items: center; justify-content: center; min-height: 46px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-btn); background: var(--surface-2); color: var(--muted); font-family: var(--font-mono); font-size: 13px; font-weight: 600; transition: .15s ease; }
+    .provider-opt input:hover + span { color: var(--fg); border-color: color-mix(in oklch, var(--border), var(--fg) 18%); }
+    .provider-opt input:checked + span { background: var(--surface-3); border-color: color-mix(in oklch, var(--fg), transparent 52%); color: var(--fg); }
+    .provider-opt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .form-foot { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-top: 18px; border-top: 1px solid var(--border); }
+    .form-foot .note { color: var(--muted-2); font-size: 12px; }
+
+    /* ---- aviso de claves: elemento de diseño, no texto suelto --------- */
+    .keys { padding: 20px; display: grid; gap: 14px; border-color: color-mix(in oklch, var(--warning), transparent 68%); }
+    .keys-top { display: flex; align-items: center; gap: 12px; }
+    .keys-icon { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; background: color-mix(in oklch, var(--warning), transparent 88%); border: 1px solid color-mix(in oklch, var(--warning), transparent 62%); color: var(--warning); }
+    .keys-icon svg { width: 20px; height: 20px; }
+    .keys h2 { font-size: 17px; }
+    .keys p { color: var(--muted); font-size: 13px; }
+    .keys-env { display: grid; gap: 6px; padding: 12px 14px; border-radius: 14px; background: var(--bg); border: 1px solid var(--border); }
+    .keys-env code { font-family: var(--font-mono); font-size: 12px; color: var(--muted); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .keys-env code b { color: var(--muted-2); font-weight: 600; }
+
+    .summary { padding: 20px; display: grid; gap: 12px; }
+    .summary h2 { font-size: 17px; }
+    .kv { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+    .kv:last-child { border-bottom: 0; padding-bottom: 0; }
+    .kv strong { color: var(--fg); font-family: var(--font-mono); font-size: 13px; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+
+    /* ---- acceso denegado ---------------------------------------------- */
+    .state { padding: 60px 28px; text-align: center; display: grid; gap: 12px; justify-items: center; }
+    .state h2 { font-size: 28px; max-width: 520px; }
+    .state p { color: var(--muted); max-width: 480px; font-size: 15px; }
+    .state .btn { margin-top: 8px; }
+    .state-icon { width: 58px; height: 58px; border-radius: 18px; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); margin-bottom: 4px; }
+    .state-denied { border-color: color-mix(in oklch, var(--warning), transparent 62%); }
+    .state-denied .state-icon { color: var(--warning); border-color: color-mix(in oklch, var(--warning), transparent 58%); background: color-mix(in oklch, var(--warning), transparent 90%); }
+    .state-denied .eyebrow { color: var(--warning); }
+
+    /* Conmutador de prototipo: fuera del chrome del producto. */
+    .preview { position: fixed; left: 268px; bottom: 20px; z-index: 25; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 6px; border-radius: var(--r-pill); border: 1px solid var(--border); background: oklch(11% 0.006 270 / .94); backdrop-filter: blur(14px); }
+    .preview span { padding: 0 8px; color: var(--muted-2); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    .preview button { border: 0; background: transparent; color: var(--muted); border-radius: 999px; padding: 7px 11px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .preview button:hover { color: var(--fg); }
+    .preview button[aria-pressed="true"] { background: var(--surface-3); color: var(--fg); }
+
+    @media (max-width: 1180px) {
+      .config { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 860px) {
+      .sidebar { display: none; }
+      .main { width: 100%; margin-left: 0; padding: 18px 18px 96px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .preview { left: 14px; right: 14px; bottom: 14px; justify-content: center; }
+    }
+    @media (max-width: 520px) {
+      .provider-row { grid-template-columns: 1fr 1fr; }
+      .topbar-actions, .form-foot { width: 100%; }
+      .form-foot .btn { width: 100%; }
+      .state { padding: 40px 20px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" aria-label="Navegación principal">
+    <div class="sidebar-top">
+      <div class="wordmark">
+        <svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><circle cx="24" cy="24" r="15" stroke="var(--border)" stroke-width="4"/><path d="M24 9 A15 15 0 0 1 38 19" stroke="var(--muted)" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="9" r="5.5" fill="var(--accent)"/></svg>
+        kInorA
+      </div>
+      <div class="nav">
+        <a href="web-dashboard.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Inicio</a>
+        <a href="web-plan.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Mi plan</a>
+        <a href="web-stats.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 20h18M7 14v6M12 9v11M17 4v16"/></svg>Estadísticas</a>
+        <a href="web-create-plan.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Crear plan</a>
+        <a href="desktop-tracker.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 4v16M18 4v16M6 12h12M2 7h4M18 7h4M2 17h4M18 17h4"/></svg>Tracker</a>
+        <div class="nav-split">Plataforma</div>
+        <a href="web-admin.html" class="nav-item active" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7.5 3v5.5c0 4.4-3.1 8.3-7.5 9.5-4.4-1.2-7.5-5.1-7.5-9.5V6L12 3Z"/><path d="M9.5 12.2l1.9 1.9 3.6-3.9"/></svg>Administración</a>
+      </div>
+    </div>
+    <div class="sidebar-bottom"><div class="avatar">LF</div><div class="user-info"><div class="user-name">Lucía Fernández</div><div class="user-plan">Superadministradora</div></div></div>
+  </nav>
+
+  <main class="main">
+    <div class="frame">
+      <nav class="crumbs" aria-label="Ruta"><a href="web-admin.html">Administración</a><span aria-hidden="true">/</span><span class="muted">Configuración de IA</span></nav>
+
+      <header class="topbar">
+        <div class="topbar-copy">
+          <div class="eyebrow">Plataforma</div>
+          <h1>Configuración de IA</h1>
+          <p>Gestiona el proveedor y el modelo de IA activos para la generación de planes.</p>
+        </div>
+        <div class="topbar-actions">
+          <span class="pill" id="statusPill">Última actualización · 7 ago, 11:42</span>
+        </div>
+      </header>
+
+      <!-- ---- vista normal (cargado / guardado / error de guardado / fallo de lectura) -->
+      <div id="configView">
+        <div id="bannerSlot"></div>
+
+        <div class="config">
+          <form class="panel" id="configForm" novalidate>
+            <div class="panel-head">
+              <h2 style="font-size:18px">Proveedor y modelo activos</h2>
+              <span class="pill" id="dirtyPill" hidden>Cambios sin guardar</span>
+            </div>
+            <div class="panel-body">
+              <fieldset id="formFields">
+                <div class="field" role="group" aria-labelledby="providerLabel">
+                  <span id="providerLabel" style="font-size:13px; font-weight:700">Proveedor</span>
+                  <div class="provider-row">
+                    <label class="provider-opt"><input type="radio" name="provider" value="openrouter" checked /><span>openrouter</span></label>
+                    <label class="provider-opt"><input type="radio" name="provider" value="openai" /><span>openai</span></label>
+                    <label class="provider-opt"><input type="radio" name="provider" value="anthropic" /><span>anthropic</span></label>
+                    <label class="provider-opt"><input type="radio" name="provider" value="google" /><span>google</span></label>
+                  </div>
+                  <p class="hint">Al cambiar de proveedor, el modelo se rellena con el valor por defecto de ese proveedor.</p>
+                </div>
+
+                <div class="field">
+                  <label for="modelInput">Modelo</label>
+                  <div class="control plain">
+                    <input type="text" id="modelInput" value="gpt-4o-mini" placeholder="gpt-4o-mini" spellcheck="false" autocomplete="off" />
+                  </div>
+                  <p class="hint">Identificador libre. Debe existir en el proveedor seleccionado; no se valida aquí.</p>
+                </div>
+              </fieldset>
+
+              <div class="form-foot">
+                <button class="btn btn-primary" type="submit" id="saveBtn">Guardar</button>
+                <button class="btn" type="button" id="resetBtn">Descartar cambios</button>
+                <span class="note" id="saveNote">Se aplica a las nuevas generaciones de plan.</span>
+              </div>
+            </div>
+          </form>
+
+          <aside style="display:grid; gap:16px">
+            <!-- Aviso de claves tratado como componente propio, no como texto suelto -->
+            <section class="panel keys" aria-labelledby="keys-title">
+              <div class="keys-top">
+                <span class="keys-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="14" r="4.2"/><path d="M11.2 11.2 19 3.4M16.4 6.2l2.2 2.2M14.2 8.4l2.2 2.2"/></svg>
+                </span>
+                <div>
+                  <h2 id="keys-title">Claves de API</h2>
+                  <p>No se muestran ni se editan en esta pantalla.</p>
+                </div>
+              </div>
+              <p style="color:var(--muted); font-size:13px">Las claves se gestionan exclusivamente por variables de entorno del servidor. Cambiar el proveedor aquí <strong style="color:var(--fg)">no</strong> configura su credencial: si la variable correspondiente no está definida, la generación fallará.</p>
+              <div class="keys-env" aria-label="Variables de entorno esperadas">
+                <code>OPENROUTER_API_KEY <b>definida</b></code>
+                <code>OPENAI_API_KEY <b>definida</b></code>
+                <code>ANTHROPIC_API_KEY <b>no definida</b></code>
+                <code>GOOGLE_API_KEY <b>no definida</b></code>
+              </div>
+            </section>
+
+            <section class="panel summary" aria-labelledby="summary-title">
+              <h2 id="summary-title">Configuración en servidor</h2>
+              <div>
+                <div class="kv"><span>Proveedor</span><strong id="sumProvider">openrouter</strong></div>
+                <div class="kv"><span>Modelo</span><strong id="sumModel">gpt-4o-mini</strong></div>
+                <div class="kv"><span>Actualizada por</span><strong>lucia@kinora.app</strong></div>
+                <div class="kv"><span>Fecha</span><strong>07/08/2026 11:42</strong></div>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </div>
+
+      <!-- ---- acceso denegado ------------------------------------------ -->
+      <section class="panel state state-denied" id="deniedView" hidden>
+        <div class="state-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="10.5" width="16" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5M12 15v2.5"/></svg>
+        </div>
+        <div class="eyebrow">Acceso denegado</div>
+        <h2>Necesitas permisos de superadministración</h2>
+        <p>Tu cuenta no puede consultar ni modificar la configuración de IA de la plataforma. Si crees que es un error, pide a un superadministrador que revise tu rol.</p>
+        <a class="btn" href="web-dashboard.html">Volver a inicio</a>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="preview" role="group" aria-label="Vista previa de estados (prototipo)">
+  <span>Estado</span>
+  <button type="button" data-state="loaded" aria-pressed="true">Cargado</button>
+  <button type="button" data-state="readError" aria-pressed="false">Fallo de lectura</button>
+  <button type="button" data-state="saved" aria-pressed="false">Guardado</button>
+  <button type="button" data-state="saveError" aria-pressed="false">Error al guardar</button>
+  <button type="button" data-state="denied" aria-pressed="false">Acceso denegado</button>
+</div>
+
+<script>
+  (function () {
+    // Valor por defecto de modelo para cada proveedor.
+    const DEFAULT_MODEL = {
+      openrouter: 'openai/gpt-4o-mini',
+      openai: 'gpt-4o-mini',
+      anthropic: 'claude-3-5-haiku-latest',
+      google: 'gemini-2.0-flash'
+    };
+    // Configuración tal y como está guardada en el servidor.
+    const saved = { provider: 'openrouter', model: 'gpt-4o-mini' };
+
+    const form = document.getElementById('configForm');
+    const fields = document.getElementById('formFields');
+    const radios = Array.from(document.querySelectorAll('input[name="provider"]'));
+    const model = document.getElementById('modelInput');
+    const saveBtn = document.getElementById('saveBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const saveNote = document.getElementById('saveNote');
+    const dirtyPill = document.getElementById('dirtyPill');
+    const bannerSlot = document.getElementById('bannerSlot');
+    const statusPill = document.getElementById('statusPill');
+    const configView = document.getElementById('configView');
+    const deniedView = document.getElementById('deniedView');
+
+    const ICON = {
+      danger: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4.5M12 17.5h.01"/></svg>',
+      success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12.4l2.6 2.6L16 9.6"/></svg>'
+    };
+
+    const BANNERS = {
+      // Fallo de lectura: guardar sobre una lectura fallida sobrescribiría la
+      // configuración real del servidor, así que el envío queda bloqueado.
+      readError: `<div class="banner banner-danger" role="alert">${ICON.danger}<div><b>No hemos podido leer la configuración actual</b>
+        Los campos muestran valores por defecto, no lo que hay en el servidor. Guardar ahora sobrescribiría la configuración real, así que hemos deshabilitado el botón. Vuelve a intentarlo.
+        <div style="margin-top:12px"><button class="btn btn-sm" type="button" id="reloadBtn">Reintentar lectura</button></div></div></div>`,
+      saved: `<div class="banner banner-success" role="status">${ICON.success}<div><b>Configuración guardada</b>
+        Las próximas generaciones de plan usarán <span class="mono" id="savedEcho"></span>.</div></div>`,
+      saveError: `<div class="banner banner-danger" role="alert">${ICON.danger}<div><b>No hemos podido guardar los cambios</b>
+        La configuración del servidor sigue siendo la anterior: <span class="mono" id="keptEcho"></span>. Tus cambios se mantienen en el formulario para que puedas reintentar sin volver a escribirlos.</div></div>`
+    };
+
+    function syncSummary() {
+      document.getElementById('sumProvider').textContent = saved.provider;
+      document.getElementById('sumModel').textContent = saved.model;
+    }
+    function currentProvider() {
+      return radios.find((r) => r.checked).value;
+    }
+    function setProvider(value) {
+      radios.forEach((r) => { r.checked = r.value === value; });
+    }
+    function markDirty() {
+      const dirty = currentProvider() !== saved.provider || model.value !== saved.model;
+      dirtyPill.hidden = !dirty;
+    }
+
+    radios.forEach((radio) => radio.addEventListener('change', () => {
+      setProvider(radio.value);
+      model.value = DEFAULT_MODEL[radio.value];
+      markDirty();
+    }));
+    model.addEventListener('input', markDirty);
+
+    resetBtn.addEventListener('click', () => {
+      setProvider(saved.provider);
+      model.value = saved.model;
+      markDirty();
+      bannerSlot.innerHTML = '';
+    });
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (saveBtn.disabled) return;
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Guardando…';
+      setTimeout(() => {
+        saved.provider = currentProvider();
+        saved.model = model.value;
+        syncSummary();
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Guardar';
+        markDirty();
+        render('saved');
+      }, 900);
+    });
+
+    function render(state) {
+      deniedView.hidden = state !== 'denied';
+      configView.hidden = state === 'denied';
+      bannerSlot.innerHTML = BANNERS[state] || '';
+
+      const broken = state === 'readError';
+      fields.disabled = broken;
+      saveBtn.disabled = broken;
+      resetBtn.disabled = broken;
+      saveNote.textContent = broken
+        ? 'Deshabilitado: no podemos guardar sobre una lectura fallida.'
+        : 'Se aplica a las nuevas generaciones de plan.';
+      statusPill.textContent = broken ? 'Sin conexión con la configuración' : 'Última actualización · 7 ago, 11:42';
+
+      if (state === 'saved') {
+        setProvider(saved.provider); model.value = saved.model; markDirty();
+        const echo = document.getElementById('savedEcho');
+        if (echo) echo.textContent = `${saved.provider} · ${saved.model}`;
+      }
+      if (state === 'saveError') {
+        const kept = document.getElementById('keptEcho');
+        if (kept) kept.textContent = `${saved.provider} · ${saved.model}`;
+      }
+      const reload = document.getElementById('reloadBtn');
+      if (reload) reload.addEventListener('click', () => render('loaded'));
+
+      document.querySelectorAll('.preview button').forEach((b) => {
+        b.setAttribute('aria-pressed', String(b.dataset.state === state));
+      });
+    }
+
+    document.querySelectorAll('.preview button').forEach((button) => {
+      button.addEventListener('click', () => render(button.dataset.state));
+    });
+
+    setProvider(saved.provider);
+    model.value = saved.model;
+    syncSummary();
+    render('loaded');
+  })();
+</script>
+</body>
+</html>

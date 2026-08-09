@@ -517,6 +517,136 @@
       "kind": "image",
       "mime": "image/webp",
       "artifactManifest": null
+    },
+    {
+      "name": "screens/web-admin.html",
+      "path": "screens/web-admin.html",
+      "type": "file",
+      "size": 17277,
+      "mtime": 1786297143883.8484,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/web-admin.html",
+        "entry": "screens/web-admin.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
+    },
+    {
+      "name": "screens/web-admin-ai-config.html",
+      "path": "screens/web-admin-ai-config.html",
+      "type": "file",
+      "size": 29835,
+      "mtime": 1786297143897.9473,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/web-admin-ai-config.html",
+        "entry": "screens/web-admin-ai-config.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
+    },
+    {
+      "name": "screens/web-admin-tenants.html",
+      "path": "screens/web-admin-tenants.html",
+      "type": "file",
+      "size": 42200,
+      "mtime": 1786297143912.5537,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/web-admin-tenants.html",
+        "entry": "screens/web-admin-tenants.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
+    },
+    {
+      "name": "screens/web-admin-stats.html",
+      "path": "screens/web-admin-stats.html",
+      "type": "file",
+      "size": 31171,
+      "mtime": 1786297143925.7449,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/web-admin-stats.html",
+        "entry": "screens/web-admin-stats.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
+    },
+    {
+      "name": "screens/web-admin-logs.html",
+      "path": "screens/web-admin-logs.html",
+      "type": "file",
+      "size": 34881,
+      "mtime": 1786297143937.027,
+      "kind": "html",
+      "mime": "text/html; charset=utf-8",
+      "artifactKind": "html",
+      "artifactManifest": {
+        "version": 1,
+        "kind": "html",
+        "title": "screens/web-admin-logs.html",
+        "entry": "screens/web-admin-logs.html",
+        "renderer": "html",
+        "status": "complete",
+        "exports": [
+          "html",
+          "pdf",
+          "zip"
+        ],
+        "metadata": {
+          "inferred": true
+        }
+      }
     }
   ]
 }
