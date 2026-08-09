@@ -1315,7 +1315,9 @@
       "start": "We couldn't start the session. Please try again.",
       "record": "We couldn't save the set. Please try again.",
       "complete": "We couldn't finish the session. Please try again.",
-      "planArchived": "This plan is archived, so a new session cannot be started on it. Unarchive it from your plans list to train with it again."
+      "planArchived": "This plan is archived, so a new session cannot be started on it. Unarchive it from your plans list to train with it again.",
+      "dayNotInPlan": "Day {day} is no longer part of this plan — you can train {count, plural, one {day {days}} other {days {days}}}.",
+      "dayNotInPlanNoDays": "Day {day} is no longer part of this plan, and no days are left to train. Edit the plan to add one back."
     },
     "reps": {
       "decrease": "Decrease rep",
