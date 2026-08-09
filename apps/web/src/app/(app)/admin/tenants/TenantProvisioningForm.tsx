@@ -14,6 +14,7 @@ import {
   grantAction,
   revokeAction,
 } from "./actions";
+import styles from "../admin.module.css";
 
 type Feedback =
   | { kind: "idle" }
@@ -152,170 +153,252 @@ export function TenantProvisioningForm() {
   }
 
   return (
-    <div style={{ maxWidth: 560 }}>
-      <form onSubmit={handleSearch} className="kin-card" style={{ marginBottom: "1rem" }}>
-        <label htmlFor="tenant-search" style={{ display: "block", marginBottom: "0.25rem" }}>
-          {t("search.label")}
-        </label>
-        <input
-          id="tenant-search"
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="kin-input"
-          style={{ width: "100%" }}
-          placeholder={t("search.placeholder")}
-        />
-        <button
-          type="submit"
-          disabled={searching}
-          className="kin-btn kin-btn--primary"
-          style={{ marginTop: "0.75rem" }}
-        >
-          {searching ? t("search.searching") : t("search.button")}
-        </button>
-      </form>
-
-      {results !== null && (
-        <div className="kin-card" style={{ marginBottom: "1rem" }}>
-          {results.length === 0 ? (
-            <p className="kin-muted">{t("search.noResults")}</p>
-          ) : (
-            <ul style={{ listStyle: "none", padding: 0, display: "grid", gap: "0.5rem" }}>
-              {results.map((tenant) => (
-                <li key={tenant.id}>
-                  <button
-                    type="button"
-                    className="kin-btn"
-                    style={{ width: "100%", textAlign: "left" }}
-                    onClick={() => handleSelect(tenant.id)}
-                  >
-                    <strong>{tenant.name}</strong>
-                    <span className="kin-muted" style={{ display: "block", fontSize: "0.75rem" }}>
-                      {tenant.id}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
-      {selected && (
-        <div className="kin-card" style={{ marginBottom: "1rem" }}>
-          <h2 className="kin-title" style={{ fontSize: "1.125rem" }}>
-            {selected.tenant.name}
-          </h2>
-          <p className="kin-muted">
-            {t("state.effectiveTier")}: <strong>{selected.effectiveTier}</strong>
-          </p>
-          <p className="kin-muted">
-            {t("state.billingStatus")}: {selected.billingStatus ?? t("state.none")}
-          </p>
-          {selected.activeOverride ? (
-            <p className="kin-muted">
-              {t("state.activeOverride")}: <strong>{selected.activeOverride.tier}</strong>
-            </p>
-          ) : (
-            <p className="kin-muted">{t("state.noOverride")}</p>
-          )}
-
-          {selected.activeOverride && (
-            <button
-              type="button"
-              className="kin-btn"
-              style={{ marginTop: "0.5rem" }}
-              onClick={handleRevoke}
-              disabled={feedback.kind === "loading"}
-            >
-              {t("revoke.button")}
-            </button>
-          )}
-
-          <form onSubmit={handleGrant} style={{ marginTop: "1rem" }}>
-            <h3 style={{ fontSize: "1rem", marginBottom: "0.5rem" }}>{t("grant.title")}</h3>
-
-            <div style={{ marginBottom: "0.75rem" }}>
-              <label htmlFor="grant-tier" style={{ display: "block", marginBottom: "0.25rem" }}>
-                {t("grant.tierLabel")}
-              </label>
-              <select
-                id="grant-tier"
-                value={tier}
-                onChange={(e) => setTier(e.target.value as GrantableTier)}
-                className="kin-input"
-                style={{ width: "100%" }}
-              >
-                {GRANTABLE_TIERS.map((value) => (
-                  <option key={value} value={value}>
-                    {value === "trainer" ? t("grant.tierTrainer") : t("grant.tierGym")}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={{ marginBottom: "0.75rem" }}>
-              <label htmlFor="grant-reason" style={{ display: "block", marginBottom: "0.25rem" }}>
-                {t("grant.reasonLabel")}
-              </label>
-              <textarea
-                id="grant-reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className="kin-input"
-                style={{ width: "100%" }}
-                rows={2}
-                placeholder={t("grant.reasonPlaceholder")}
-                required
-              />
-            </div>
-
-            <div style={{ marginBottom: "0.75rem" }}>
-              <label htmlFor="grant-starts" style={{ display: "block", marginBottom: "0.25rem" }}>
-                {t("grant.startsAtLabel")}
-              </label>
-              <input
-                id="grant-starts"
-                type="date"
-                value={startsAt}
-                onChange={(e) => setStartsAt(e.target.value)}
-                className="kin-input"
-                style={{ width: "100%" }}
-              />
-            </div>
-
-            <div style={{ marginBottom: "0.75rem" }}>
-              <label htmlFor="grant-ends" style={{ display: "block", marginBottom: "0.25rem" }}>
-                {t("grant.endsAtLabel")}
-              </label>
-              <input
-                id="grant-ends"
-                type="date"
-                value={endsAt}
-                onChange={(e) => setEndsAt(e.target.value)}
-                className="kin-input"
-                style={{ width: "100%" }}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={feedback.kind === "loading"}
-              className="kin-btn kin-btn--primary"
-            >
-              {feedback.kind === "loading" ? t("grant.submitting") : t("grant.submit")}
-            </button>
-          </form>
-        </div>
-      )}
-
+    <div>
       {feedback.kind === "saved" && (
-        <p style={{ color: "green" }}>
+        <p className={`${styles.banner} ${styles.bannerSuccess}`} role="status">
           {t(feedback.action === "revoke" ? "revoke.success" : "grant.success")}
         </p>
       )}
-      {feedback.kind === "error" && <p style={{ color: "red" }}>{feedback.message}</p>}
+      {feedback.kind === "error" && (
+        <p className={`${styles.banner} ${styles.bannerDanger}`} role="alert">
+          {feedback.message}
+        </p>
+      )}
+
+      <div className={styles.provision}>
+        {/* Step 1 — find the organization. */}
+        <div className={styles.col}>
+          <section className={styles.panel} aria-labelledby="tenants-step1">
+            <div className={styles.panelHead}>
+              <span className={styles.stepBadge} aria-hidden="true">
+                1
+              </span>
+              <h2 id="tenants-step1">{t("searchTitle")}</h2>
+            </div>
+
+            <form onSubmit={handleSearch} className={styles.panelBody}>
+              <div className={styles.field}>
+                <label htmlFor="tenant-search">{t("search.label")}</label>
+                <input
+                  id="tenant-search"
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="kin-input"
+                  placeholder={t("search.placeholder")}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <p className={styles.hint}>{t("searchHint")}</p>
+              </div>
+              <div className={styles.formFoot}>
+                <button type="submit" disabled={searching} className="kin-btn kin-btn--primary">
+                  {searching ? t("search.searching") : t("search.button")}
+                </button>
+              </div>
+            </form>
+
+            {results === null ? (
+              <div className={`${styles.state} ${styles.stateCompact}`} data-testid="tenants-search-idle">
+                <div className={styles.eyebrow}>{t("searchTitle")}</div>
+                <h2>{t("idleTitle")}</h2>
+                <p>{t("idleDescription")}</p>
+              </div>
+            ) : results.length === 0 ? (
+              <div className={`${styles.state} ${styles.stateCompact} ${styles.stateEmpty}`}>
+                <div className={styles.eyebrow}>{t("noResultsTitle")}</div>
+                <p>{t("search.noResults")}</p>
+              </div>
+            ) : (
+              <ul className={styles.results}>
+                {results.map((tenant) => {
+                  const isSelected = selected?.tenant.id === tenant.id;
+                  return (
+                    <li key={tenant.id}>
+                      <button
+                        type="button"
+                        className={`${styles.result}${isSelected ? ` ${styles.resultSelected}` : ""}`}
+                        aria-current={isSelected ? "true" : undefined}
+                        onClick={() => handleSelect(tenant.id)}
+                      >
+                        <span className={styles.resultName}>{tenant.name}</span>
+                        <span className={styles.resultId}>{tenant.id}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        </div>
+
+        {/* Steps 2 and 3 — read the current state, then change it. */}
+        <div className={styles.col}>
+          {!selected ? (
+            <section className={styles.panel}>
+              <div className={styles.panelHead}>
+                <span className={styles.stepBadge} aria-hidden="true">
+                  2
+                </span>
+                <h2>{t("detailTitle")}</h2>
+              </div>
+              <div className={`${styles.state} ${styles.stateCompact}`} data-testid="tenants-no-selection">
+                <h2>{t("noSelectionTitle")}</h2>
+                <p>{t("noSelectionDescription")}</p>
+              </div>
+            </section>
+          ) : (
+            <>
+              <section className={styles.panel} aria-labelledby="tenants-step2">
+                <div className={styles.panelHead}>
+                  <span className={styles.stepBadge} aria-hidden="true">
+                    2
+                  </span>
+                  <h2 id="tenants-step2">{t("detailTitle")}</h2>
+                </div>
+                <div className={styles.panelBody}>
+                  <div className={styles.orgName}>{selected.tenant.name}</div>
+                  <div className={styles.orgId}>{selected.tenant.id}</div>
+
+                  <div className={styles.facts}>
+                    <div className={styles.metric}>
+                      <div className={styles.eyebrow}>{t("state.effectiveTier")}</div>
+                      <div className={`${styles.metricValue} ${styles.metricValueSm}`}>
+                        {selected.effectiveTier}
+                      </div>
+                    </div>
+                    <div
+                      className={`${styles.metric}${selected.billingStatus ? "" : ` ${styles.metricAbsent}`}`}
+                    >
+                      <div className={styles.eyebrow}>{t("state.billingStatus")}</div>
+                      <div className={`${styles.metricValue} ${styles.metricValueSm}`}>
+                        {selected.billingStatus ?? t("state.none")}
+                      </div>
+                    </div>
+                    <div
+                      className={`${styles.metric} ${
+                        selected.activeOverride ? styles.metricOverrideOn : styles.metricAbsent
+                      }`}
+                    >
+                      <div className={styles.eyebrow}>{t("state.activeOverride")}</div>
+                      <div className={`${styles.metricValue} ${styles.metricValueSm}`}>
+                        {selected.activeOverride ? selected.activeOverride.tier : t("state.none")}
+                      </div>
+                      {!selected.activeOverride && (
+                        <div className={styles.metricSub}>{t("state.noOverride")}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className={styles.panel} aria-labelledby="tenants-step3">
+                <div className={styles.panelHead}>
+                  <span className={styles.stepBadge} aria-hidden="true">
+                    3
+                  </span>
+                  <h2 id="tenants-step3">{t("grant.title")}</h2>
+                </div>
+                <form onSubmit={handleGrant} className={styles.panelBody}>
+                  <div className={styles.grantGrid}>
+                    <div className={styles.field}>
+                      <label htmlFor="grant-tier">{t("grant.tierLabel")}</label>
+                      <select
+                        id="grant-tier"
+                        value={tier}
+                        onChange={(e) => setTier(e.target.value as GrantableTier)}
+                        className="kin-input"
+                      >
+                        {GRANTABLE_TIERS.map((value) => (
+                          <option key={value} value={value}>
+                            {value === "trainer" ? t("grant.tierTrainer") : t("grant.tierGym")}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className={styles.field}>
+                      <label htmlFor="grant-starts">{t("grant.startsAtLabel")}</label>
+                      <input
+                        id="grant-starts"
+                        type="date"
+                        value={startsAt}
+                        onChange={(e) => setStartsAt(e.target.value)}
+                        className={`kin-input ${styles.dateInput}`}
+                      />
+                    </div>
+
+                    <div className={`${styles.field} ${styles.span2}`}>
+                      {/* The "Required" marker sits OUTSIDE the label: anything
+                          inside it joins the textarea's accessible name. */}
+                      <label htmlFor="grant-reason">{t("grant.reasonLabel")}</label>
+                      <textarea
+                        id="grant-reason"
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        className={`kin-input ${styles.textarea}`}
+                        rows={3}
+                        placeholder={t("grant.reasonPlaceholder")}
+                        required
+                      />
+                      <p className={styles.hint}>
+                        <span className={styles.required}>{t("required")}</span> {t("reasonHint")}
+                      </p>
+                    </div>
+
+                    <div className={styles.field}>
+                      <label htmlFor="grant-ends">{t("grant.endsAtLabel")}</label>
+                      <input
+                        id="grant-ends"
+                        type="date"
+                        value={endsAt}
+                        onChange={(e) => setEndsAt(e.target.value)}
+                        className={`kin-input ${styles.dateInput}`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className={styles.formFoot}>
+                    <button
+                      type="submit"
+                      disabled={feedback.kind === "loading"}
+                      className="kin-btn kin-btn--primary"
+                    >
+                      {feedback.kind === "loading" ? t("grant.submitting") : t("grant.submit")}
+                    </button>
+                    <span className={styles.note}>{t("grantNote")}</span>
+                  </div>
+                </form>
+              </section>
+
+              {/* Only rendered when there is something to revoke. */}
+              {selected.activeOverride && (
+                <section
+                  className={`${styles.panel} ${styles.dangerZone}`}
+                  aria-labelledby="tenants-revoke"
+                >
+                  <div className={styles.panelHead}>
+                    <h2 id="tenants-revoke">{t("revokeTitle")}</h2>
+                  </div>
+                  <div className={styles.panelBody}>
+                    <div className={styles.dangerRow}>
+                      <p>{t("revokeDescription")}</p>
+                      <button
+                        type="button"
+                        className="kin-btn kin-btn--danger"
+                        onClick={handleRevoke}
+                        disabled={feedback.kind === "loading"}
+                      >
+                        {t("revoke.button")}
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
