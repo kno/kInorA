@@ -200,12 +200,17 @@ describe("StatsPage", () => {
     expect(text).toContain("No personal records yet");
   });
 
-  it("shows a fallback message when the fetch fails", async () => {
+  it("shows a visible error message (not the loading/empty intro copy) when the fetch fails", async () => {
     vi.mocked(getStatsAction).mockResolvedValueOnce({ kind: "error", message: "no_session" });
 
     const page = await renderPage();
+    const text = textOf(page);
 
-    expect(textOf(page)).toContain("Track your progress");
+    expect(text).not.toContain("Track your progress");
+    const error = findFirst(page, (el) => el.props?.["data-testid"] === "stats-page-error");
+    expect(error).toBeDefined();
+    expect(error?.props?.role).toBe("alert");
+    expect(textOf(error)).toContain("We couldn't load your statistics");
   });
 
   it("renders real Spanish copy from the ES catalog (not EN leakage)", async () => {
