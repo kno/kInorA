@@ -246,10 +246,15 @@ describe("@kinora/i18n package assembly", () => {
     // the generic "couldn't start the session, try again" and invited a retry
     // that can never succeed. `mobileTracker.*` is counted BOTH here and in
     // its own scoped test below, so both numbers move together.
+    // +2 `mobileTracker.error.{dayNotInPlan,dayNotInPlanNoDays}`
+    // (kno/kInorA#409) — the mobile tracker's words for the API's
+    // `404 day_not_in_plan`, which the web plan editor made reachable by
+    // removing a day. Two keys because the refusal has two shapes: some days
+    // remain (name them) or none do.
     // +6 `aiConfig.*` (kno/kInorA#414) — the /admin/ai-config panel gained an
     // API-keys notice and a server-configuration summary, both of which needed
     // real catalog copy instead of more hardcoded literals.
-    expect(nonBillingKeys).toHaveLength(811);
+    expect(nonBillingKeys).toHaveLength(813);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
