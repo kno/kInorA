@@ -12,11 +12,15 @@
  * tokens; no colour, radius or spacing literal is introduced except the two
  * variables below, which globals.css does not define yet.
  *
- * `.panel` is the local card surface. It is deliberately NOT `.kin-card`:
- * `.kin-card` currently carries no background/border/padding, and these screens
- * additionally need the head/body split the design specifies. When the shared
- * product surface lands (kno/kInorA#413), `.panel` should be reconciled with it
- * — it references the same tokens, so that is a rename, not a redesign.
+ * This module defines NO card surface of its own. `.panel` and `.metric` both
+ * `composes: kin-surface from global` — the single definition kno/kInorA#416
+ * added to globals.css — and add only what is genuinely theirs (clipping for
+ * the panel head/body split, tile padding for the metric). Nothing here is
+ * temporary.
+ *
+ * Neither is `.kin-card`, deliberately: it carries `max-width: var(--maxw-card)`
+ * (24rem) and a `--sp-4` flex gap, which are right for a standalone card and
+ * wrong for a full-width panel or a tile in a four-column grid.
  */
 
 .shell {
@@ -124,10 +128,11 @@
 
 /* ---- surfaces ------------------------------------------------------- */
 
+/* The surface itself lives in globals.css as `.kin-surface` — the single
+ * definition #416 introduced. Only the panel-specific clipping stays here,
+ * mirroring what `plan-week-view.module.css` `.panel` does. */
 .panel {
-  background: color-mix(in oklch, var(--surface) 92%, transparent);
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
+  composes: kin-surface from global;
   overflow: hidden;
 }
 
@@ -327,15 +332,19 @@
   gap: var(--sp-4);
 }
 
+/* A metric tile is a surface too, so it composes the same one rather than
+ * restating a third variant. It is NOT `.kin-card`: that adds
+ * `max-width: var(--maxw-card)` (24rem) and a `--sp-4` flex gap, both wrong for
+ * a tile sitting in a four-column grid. */
 .metric {
+  composes: kin-surface from global;
   min-width: 0;
   padding: var(--sp-3);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--surface);
 }
 
-.metricLead {
+/* Doubled selector so the variant beats the composed `.kin-surface` background
+ * regardless of how the global and module stylesheets end up ordered. */
+.metric.metricLead {
   background: var(--surface-2);
 }
 
@@ -368,7 +377,7 @@
   color: var(--admin-muted-2);
 }
 
-.metricOverrideOn {
+.metric.metricOverrideOn {
   border-color: color-mix(in oklch, var(--accent), transparent 60%);
   background: color-mix(in oklch, var(--surface), var(--accent) 5%);
 }
@@ -757,7 +766,7 @@
   gap: var(--sp-3);
 }
 
-.keys {
+.panel.keys {
   display: grid;
   gap: var(--sp-2);
   padding: var(--sp-3);
@@ -918,7 +927,7 @@
   grid-column: 1 / -1;
 }
 
-.dangerZone {
+.panel.dangerZone {
   border-color: color-mix(in oklch, var(--danger), transparent 62%);
 }
 
@@ -975,7 +984,7 @@
   font-size: var(--fs-h3);
 }
 
-.stateIdle {
+.panel.stateIdle {
   border-style: dashed;
 }
 
@@ -987,9 +996,8 @@
   color: var(--admin-muted-2);
 }
 
-.stateError {
+.panel.stateError {
   border-color: color-mix(in oklch, var(--danger), transparent 56%);
-  background: color-mix(in oklch, var(--surface) 92%, transparent);
 }
 
 .stateError .eyebrow {
