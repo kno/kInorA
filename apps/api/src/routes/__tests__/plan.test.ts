@@ -934,6 +934,58 @@ describe("Plan routes", () => {
       expect(repo.listPlansWithProgress).not.toHaveBeenCalled();
     });
 
+    it("17d PR B — ?includeArchived=1 threads through to listPlansWithProgress and the DTO carries archivedAt", async () => {
+      const repo = buildPlanRepo({
+        listPlansWithProgress: vi.fn().mockResolvedValue([
+          {
+            id: "plan-1",
+            status: "ready",
+            createdAt: new Date("2026-06-29T10:00:00Z"),
+            name: "Summer Cut",
+            archivedAt: new Date("2026-07-15T10:00:00Z"),
+            completedSessions: 0,
+          },
+        ]),
+      });
+      app = await buildTestApp(buildSessionDb(), repo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/workout-plans?progress=1&includeArchived=1",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(repo.listPlansWithProgress).toHaveBeenCalledWith(TENANT_A, USER_A, {
+        includeArchived: true,
+      });
+      expect(response.json()[0].archivedAt).toBe("2026-07-15T10:00:00.000Z");
+    });
+
+    it("17d PR B — omits ?includeArchived and the DTO carries archivedAt: null for an active plan", async () => {
+      const repo = buildPlanRepo({
+        listPlansWithProgress: vi.fn().mockResolvedValue([
+          {
+            id: "plan-1",
+            status: "ready",
+            createdAt: new Date("2026-06-29T10:00:00Z"),
+            name: "Summer Cut",
+            archivedAt: null,
+            completedSessions: 0,
+          },
+        ]),
+      });
+      app = await buildTestApp(buildSessionDb(), repo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/workout-plans?progress=1",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.json()[0].archivedAt).toBeNull();
+    });
+
     it("cross-tenant/cross-user isolation: calls listPlansWithProgress with the caller's own tenantId+userId", async () => {
       const repo = buildPlanRepo({ listPlansWithProgress: vi.fn().mockResolvedValue([]) });
       app = await buildTestApp(buildSessionDb(TENANT_B, USER_A), repo);
@@ -944,7 +996,11 @@ describe("Plan routes", () => {
         headers: { authorization: `Bearer ${VALID_TOKEN}` },
       });
 
-      expect(repo.listPlansWithProgress).toHaveBeenCalledWith(TENANT_B, USER_A);
+      // 17d PR B: the third arg defaults to { includeArchived: false } —
+      // absent ?includeArchived=1, the list stays filtered.
+      expect(repo.listPlansWithProgress).toHaveBeenCalledWith(TENANT_B, USER_A, {
+        includeArchived: false,
+      });
     });
 
     it("a plan never trained omits daysPerWeek/lastTrainedAt rather than sending 0/a fabricated date", async () => {

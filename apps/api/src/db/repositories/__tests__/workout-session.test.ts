@@ -46,7 +46,12 @@ const readyPlanRow = {
   errorMessage: null,
   createdAt: new Date("2026-07-04T08:00:00Z"),
   updatedAt: new Date("2026-07-04T08:00:00Z"),
+  /** 17d PR B: active by default; archived-plan tests override this. */
+  archivedAt: null as Date | null,
 };
+
+/** Same plan, archived (17d PR B). */
+const archivedPlanRow = { ...readyPlanRow, archivedAt: new Date("2026-08-01T00:00:00Z") };
 
 const sessionRow = {
   id: SESSION_ID,
@@ -141,6 +146,28 @@ const completedSetRows = [
     notes: "Strong set",
   },
 ];
+
+/**
+ * Wraps `createQueuedSelectDb`, additionally recording every table object
+ * passed to `.from()` — used to prove structurally (not just by absence of
+ * a fixture) that `recordSet`/`completeSession`/`abandonSession` NEVER read
+ * `workoutPlans`, which is why archiving a plan cannot affect a session
+ * already in progress on it (17d PR B, design's reason #1).
+ */
+function createQueuedSelectDbWithTableSpy(queues: Map<object, unknown[][]>) {
+  const queriedTables: object[] = [];
+  const { select: innerSelect } = createQueuedSelectDb(queues);
+  const select = vi.fn().mockImplementation((...args: unknown[]) => {
+    const inner = innerSelect(...args) as { from: (table: object) => unknown };
+    return {
+      from: (table: object) => {
+        queriedTables.push(table);
+        return inner.from(table);
+      },
+    };
+  });
+  return { select, queriedTables };
+}
 
 function createQueuedSelectDb(queues: Map<object, unknown[][]>) {
   const select = vi.fn().mockReturnValue({
@@ -277,7 +304,7 @@ describe("WorkoutSessionRepository", () => {
       expect(transaction).not.toHaveBeenCalled();
     });
 
-    it("returns undefined and performs no insert when the requested day does not exist in the plan", async () => {
+    it("17d PR B — returns { kind: 'day_not_in_plan', availableDays } when the requested day does not exist in the plan", async () => {
       // Day 99 is not present in readyProgram which only has day 1.
       const queues = new Map<object, unknown[][]>([
         [workoutSessions, [[]]],
@@ -289,7 +316,41 @@ describe("WorkoutSessionRepository", () => {
 
       const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 99);
 
-      expect(result).toBeUndefined();
+      expect(result).toEqual({ kind: "day_not_in_plan", availableDays: [1] });
+      expect(transaction).not.toHaveBeenCalled();
+    });
+
+    it("17d PR B — startSession refuses a NEW session against an archived plan with { kind: 'plan_archived' }", async () => {
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[]]],
+        [workoutPlans, [[archivedPlanRow]]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const transaction = vi.fn();
+      const repo = new WorkoutSessionRepository({ select, transaction } as never);
+
+      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 1);
+
+      expect(result).toEqual({ kind: "plan_archived" });
+      expect(transaction).not.toHaveBeenCalled();
+    });
+
+    it("17d PR B — a session already in progress on an archived plan is still resumed (the archived check sits after the resume branch)", async () => {
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[sessionRow], [sessionRow]]],
+        [sessionExercises, [exerciseRows]],
+        [setRecords, [initialSetRows]],
+      ]);
+      const select = createQueuedSelectDb(queues).select;
+      const transaction = vi.fn();
+      const repo = new WorkoutSessionRepository({ select, transaction } as never);
+
+      // sessionRow is (PLAN_ID, day 1) — Phase 1 Branch A resumes it BEFORE
+      // Phase 2's archived check ever runs, so whether the plan itself is
+      // archived is irrelevant to this call.
+      const result = await repo.startSession(TENANT_A, USER_A, PLAN_ID, 1);
+
+      expect(result.kind).toBe("resumed");
       expect(transaction).not.toHaveBeenCalled();
     });
 
@@ -678,6 +739,33 @@ describe("WorkoutSessionRepository", () => {
       });
     });
 
+    it("17d PR B — succeeds against an archived plan: never reads workout_plans at all", async () => {
+      const updatedSetRows = [
+        { ...initialSetRows[0], actualReps: 10, completed: true },
+        initialSetRows[1],
+        initialSetRows[2],
+      ];
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[sessionRow], [sessionRow]]],
+        [sessionExercises, [exerciseRows, exerciseRows, exerciseRows]],
+        [setRecords, [initialSetRows, updatedSetRows]],
+      ]);
+      const { select, queriedTables } = createQueuedSelectDbWithTableSpy(queues);
+      const returning = vi.fn().mockResolvedValue([updatedSetRows[0]]);
+      const where = vi.fn().mockReturnValue({ returning });
+      const set = vi.fn().mockReturnValue({ where });
+      const update = vi.fn().mockReturnValue({ set });
+      const repo = new WorkoutSessionRepository({ select, update } as never);
+
+      const result = await repo.recordSet(TENANT_A, USER_A, SESSION_ID, SET_1_ID, {
+        actualReps: 10,
+        completed: true,
+      });
+
+      expect(result?.status).toBe("active");
+      expect(queriedTables).not.toContain(workoutPlans);
+    });
+
     it("NEGATIVE CONTROL (risk-BLOCKER/IDOR) — the UPDATE is scoped to the caller's session so a cross-session setId affects no rows", async () => {
       // Attack shape: a caller who owns SESSION_ID passes a setId that actually
       // belongs to ANOTHER session/user. Even if a pre-check were fooled, the
@@ -812,6 +900,25 @@ describe("WorkoutSessionRepository", () => {
       expect(update).toHaveBeenCalledTimes(1);
       expect(result?.status).toBe("completed");
       expect(result?.completedAt).toBe("2026-07-04T09:20:00.000Z");
+    });
+
+    it("17d PR B — succeeds against an archived plan: never reads workout_plans at all", async () => {
+      const queues = new Map<object, unknown[][]>([
+        [workoutSessions, [[completedSessionRow]]],
+        [sessionExercises, [exerciseRows]],
+        [setRecords, [initialSetRows]],
+      ]);
+      const { select, queriedTables } = createQueuedSelectDbWithTableSpy(queues);
+      const returning = vi.fn().mockResolvedValue([completedSessionRow]);
+      const where = vi.fn().mockReturnValue({ returning });
+      const set = vi.fn().mockReturnValue({ where });
+      const update = vi.fn().mockReturnValue({ set });
+      const repo = new WorkoutSessionRepository({ select, update } as never);
+
+      const result = await repo.completeSession(TENANT_A, USER_A, SESSION_ID);
+
+      expect(result?.status).toBe("completed");
+      expect(queriedTables).not.toContain(workoutPlans);
     });
 
     it("does not complete a session owned by another user in the same tenant", async () => {
@@ -1139,6 +1246,25 @@ describe("WorkoutSessionRepository", () => {
       if (result.kind === "abandoned") {
         expect(result.session.status).toBe("abandoned");
       }
+    });
+
+    it("17d PR B — succeeds against an archived plan: never reads workout_plans at all", async () => {
+      const queries = new Map<object, unknown[][]>([
+        [workoutSessions, [[abandonedSessionRow]]],
+        [sessionExercises, [exerciseRows]],
+        [setRecords, [initialSetRows]],
+      ]);
+      const { select, queriedTables } = createQueuedSelectDbWithTableSpy(queries);
+      const returning = vi.fn().mockResolvedValue([{ id: SESSION_ID }]);
+      const where = vi.fn().mockReturnValue({ returning });
+      const set = vi.fn().mockReturnValue({ where });
+      const update = vi.fn().mockReturnValue({ set });
+      const repo = new WorkoutSessionRepository({ select, update } as never);
+
+      const result = await repo.abandonSession(TENANT_A, USER_A, SESSION_ID);
+
+      expect(result.kind).toBe("abandoned");
+      expect(queriedTables).not.toContain(workoutPlans);
     });
 
     it("idempotent retry — an already-abandoned session is a 200 no-op, not a 404", async () => {

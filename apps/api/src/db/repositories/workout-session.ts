@@ -69,6 +69,8 @@ interface WorkoutPlanRow {
   programJson: WorkoutProgram | null;
   /** Plan creation instant; guards a brand-new plan from a false `low` (14a). */
   createdAt: Date;
+  /** 17d PR B: null when active — read so Phase 2 can refuse a NEW session. */
+  archivedAt: Date | null;
 }
 
 interface WorkoutSessionRow {
@@ -345,8 +347,10 @@ export class WorkoutSessionRepository {
    * trailing so the age branch is testable without mocking the clock,
    * matching `getWeeklyOverview`'s own precedent.
    *
-   * Returns `undefined` only when the plan is not ready or the requested day
-   * is not part of the program (the route maps this to 404, unchanged).
+   * Returns `undefined` only when the plan is missing or not ready (the route
+   * maps this to a bare 404, unchanged). Since 17d PR B the two refusals the
+   * client can act on are typed instead: `day_not_in_plan` (still 404, now
+   * carrying `availableDays`) and `plan_archived` (409).
    */
   async startSession(
     tenantId: string,
@@ -396,9 +400,24 @@ export class WorkoutSessionRepository {
       return undefined;
     }
 
+    // 17d PR B: archive refuses a NEW session and nothing else. Reaching
+    // this line already means neither Phase 1 resume branch matched, so an
+    // in-progress session on this plan was returned above and never sees
+    // this check.
+    if (plan.archivedAt !== null) {
+      return { kind: "plan_archived" };
+    }
+
     const plannedSession = plan.programJson.weeklySessions.find((session) => session.day === day);
     if (!plannedSession) {
-      return undefined;
+      // 17d PR B (decision 7c): distinguishable from "no such plan". An edit
+      // that removes a day (PR D) makes this reachable through a user
+      // action, so the client must be able to say WHICH days remain rather
+      // than render a bare 404.
+      return {
+        kind: "day_not_in_plan",
+        availableDays: plan.programJson.weeklySessions.map((s) => s.day).sort((a, b) => a - b),
+      };
     }
 
     // ── Phase 3 — authoritative, locked ─────────────────────────────────

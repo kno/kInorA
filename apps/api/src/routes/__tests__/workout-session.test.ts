@@ -198,6 +198,40 @@ describe("Workout session routes", () => {
     expect(repo.startSession).toHaveBeenCalledWith(TENANT_A, USER_A, PLAN_ID, 1);
   });
 
+  it("17d PR B — returns 409 plan_archived when starting a new session against an archived plan", async () => {
+    const repo = buildRepoMock({
+      startSession: vi.fn().mockResolvedValue({ kind: "plan_archived" }),
+    });
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/workout-sessions",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { workoutPlanId: PLAN_ID, day: 1 },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ error: "plan_archived" });
+  });
+
+  it("17d PR B — returns 404 day_not_in_plan with the ascending availableDays when the requested day was removed", async () => {
+    const repo = buildRepoMock({
+      startSession: vi.fn().mockResolvedValue({ kind: "day_not_in_plan", availableDays: [1, 2, 3] }),
+    });
+    app = await buildTestApp(repo);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/workout-sessions",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: { workoutPlanId: PLAN_ID, day: 4 },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "day_not_in_plan", availableDays: [1, 2, 3] });
+  });
+
   it("returns 422 when day exceeds the weekly maximum (risk-WARNING — day has an upper bound)", async () => {
     app = await buildTestApp();
 

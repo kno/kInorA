@@ -21,6 +21,7 @@ import type {
   MembershipRole,
   MembershipStatus,
   OidcCallbackParams,
+  PlanArchiveResponse,
   PlanGoal,
   PlanLimitation,
   PlanPreferenceScores,
@@ -224,9 +225,20 @@ describe("shared contracts boundary", () => {
       activeSessionId: "session-1",
       activeStartedAt: "2026-08-02T10:00:00.000Z",
     };
+    // 17d PR B: two more typed refusals, added to the SAME union.
+    const planArchived: StartSessionOutcome = { kind: "plan_archived" };
+    const dayNotInPlan: StartSessionOutcome = {
+      kind: "day_not_in_plan",
+      availableDays: [1, 2, 3],
+    };
     expect(started.kind).toBe("started");
     expect(resumed.kind).toBe("resumed");
     expect(conflict.kind).toBe("conflict");
+    expect(planArchived.kind).toBe("plan_archived");
+    expect(dayNotInPlan.kind).toBe("day_not_in_plan");
+    if (dayNotInPlan.kind === "day_not_in_plan") {
+      expectTypeOf(dayNotInPlan.availableDays).toEqualTypeOf<number[]>();
+    }
 
     // The conflict branch narrows to the active-scope fields, widened by 17b
     // with activeSessionId/activeStartedAt so the banner can name the
@@ -321,6 +333,8 @@ describe("shared contracts boundary", () => {
       status: string;
       createdAt: string;
       name?: string;
+      /** 17d PR B. ISO-8601 instant, or null when the plan is active. */
+      archivedAt?: string | null;
       /** 17d PR A — `?progress=1` only, absent when unknown, never 0/a fabricated date. */
       daysPerWeek?: number;
       completedSessions?: number;
@@ -332,6 +346,20 @@ describe("shared contracts boundary", () => {
       program?: WorkoutProgram;
       specId: string;
       name?: string;
+      /** 17d PR B — threaded into PlanWeekView's archived-plan indicator. */
+      archivedAt?: string | null;
+    }>();
+  });
+
+  it("defines the archive/unarchive response DTO (17d PR B)", () => {
+    const archived: PlanArchiveResponse = { id: "plan-1", archivedAt: "2026-08-09T10:00:00.000Z" };
+    const unarchived: PlanArchiveResponse = { id: "plan-1", archivedAt: null };
+
+    expect(archived.archivedAt).toBe("2026-08-09T10:00:00.000Z");
+    expect(unarchived.archivedAt).toBeNull();
+    expectTypeOf<PlanArchiveResponse>().toEqualTypeOf<{
+      id: string;
+      archivedAt: string | null;
     }>();
   });
 

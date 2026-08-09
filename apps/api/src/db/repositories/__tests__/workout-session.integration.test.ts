@@ -233,13 +233,26 @@ describe.skipIf(!hasDb)("WorkoutSessionRepository.startSession auto-close transa
     const userId = await seedUser();
     const planId = await seedReadyPlan(tenantId, userId);
     const staleId = await seedActiveSession(tenantId, userId, planId, AGED_STARTED_AT, 1);
+    const [before] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, staleId));
 
     const outcome = await repo.startSession(tenantId, userId, planId, 9, NOW);
 
-    expect(outcome).toBeUndefined();
+    // 17d PR B replaced the bare `undefined` for this case with a typed
+    // `day_not_in_plan` refusal carrying the days that DO exist. The route
+    // still answers 404 for it, so the HTTP contract this test is named after
+    // is unchanged — only the repository-level shape moved.
+    expect(outcome?.kind).toBe("day_not_in_plan");
+    if (outcome?.kind === "day_not_in_plan") {
+      expect(outcome.availableDays).toEqual([1, 2]);
+    }
 
-    const [row] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, staleId));
-    expect(row?.status).toBe("active");
+    // The invariant under test: phase 2 refuses BEFORE phase 3's auto-close
+    // runs, so the aged row is neither abandoned nor otherwise touched. If the
+    // two phases were ever reordered, this row would come back `abandoned`
+    // with a bumped `updatedAt`.
+    const [after] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, staleId));
+    expect(after?.status).toBe("active");
+    expect(after?.updatedAt.getTime()).toBe(before!.updatedAt.getTime());
   });
 });
 

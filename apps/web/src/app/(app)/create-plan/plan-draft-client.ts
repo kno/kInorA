@@ -315,6 +315,8 @@ export interface PlanStatusResponse {
    * web reads `plan.name` directly with no client-side fallback branching.
    */
   name?: string;
+  /** 17d PR B. ISO-8601 instant, or null/absent when the plan is active. */
+  archivedAt?: string | null;
 }
 
 export type FetchPlanResult =
