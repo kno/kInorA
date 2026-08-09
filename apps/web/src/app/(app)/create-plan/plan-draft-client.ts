@@ -317,6 +317,12 @@ export interface PlanStatusResponse {
   name?: string;
   /** 17d PR B. ISO-8601 instant, or null/absent when the plan is active. */
   archivedAt?: string | null;
+  /**
+   * 17d PR D. ISO-8601 instant of the last write — the program editor loads it
+   * and sends it back as `expectedUpdatedAt` so a concurrent save is detected
+   * rather than silently overwritten.
+   */
+  updatedAt?: string;
 }
 
 export type FetchPlanResult =

@@ -351,6 +351,8 @@ describe("shared contracts boundary", () => {
       name?: string;
       /** 17d PR B — threaded into PlanWeekView's archived-plan indicator. */
       archivedAt?: string | null;
+      /** 17d PR D — the program editor's optimistic-concurrency token. */
+      updatedAt?: string;
     }>();
   });
 

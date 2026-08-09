@@ -1745,5 +1745,44 @@
       "hideToggle": "Hide archived",
       "sectionHeading": "Archived plans"
     }
+  },
+  "planEdit": {
+    "title": "Edit program",
+    "description": "Change the days and exercises in this program. Your training history is untouched — sessions you already trained keep exactly what they recorded, and any session in progress right now keeps the workout it started with. Edits apply to the next session you start.",
+    "openAction": "Edit program",
+    "dayNumberLabel": "Day of the week (1-7)",
+    "dayTitleLabel": "Day title",
+    "exerciseNameLabel": "Exercise",
+    "exerciseSetsLabel": "Sets",
+    "exerciseRepsLabel": "Reps",
+    "exerciseRestLabel": "Rest (seconds)",
+    "addDay": "Add a day",
+    "addExercise": "Add an exercise",
+    "removeDay": "Remove this day",
+    "removeExercise": "Remove",
+    "save": "Save program",
+    "saving": "Saving…",
+    "saved": "Program saved. Your next session will use it.",
+    "validationTitle": "This program can't be saved yet:",
+    "issues": {
+      "empty_program": "Keep at least one training day — a program with no days cannot be started.",
+      "duplicate_day": "Two days share the same day of the week. Give each one its own.",
+      "invalid_day": "Every day of the week must be between 1 and 7.",
+      "empty_session": "Every day needs at least one exercise."
+    },
+    "conflict": {
+      "title": "This plan changed somewhere else",
+      "desc": "Someone saved a newer version of this program while you were editing. Reload to see it, then re-apply your changes — nothing of yours was saved.",
+      "reload": "Reload the latest version"
+    },
+    "notReady": {
+      "title": "This plan cannot be edited",
+      "desc": "Only a plan that finished generating can be edited. A plan that is still generating, or that failed, has no program to change yet."
+    },
+    "loadError": {
+      "title": "Couldn't load this program",
+      "desc": "We could not read this plan, so there is nothing to edit safely. Please try again."
+    },
+    "error": "We could not save your changes. Please try again."
   }
 }

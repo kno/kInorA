@@ -156,7 +156,10 @@ describe("@kinora/i18n package assembly", () => {
         !key.startsWith("brandingStudio.") &&
         // 17d PR A: the `plans.*` /plans list namespace has its own scoped
         // count test below, per the frozen-total convention.
-        !key.startsWith("plans."),
+        !key.startsWith("plans.") &&
+        // 17d PR D: the `planEdit.*` program-editor namespace has its own
+        // scoped count test below, per the frozen-total convention.
+        !key.startsWith("planEdit."),
     );
     // +1 `tracker.restartLabel` authored for #251 (restart-timer control on
     // the live tracker topbar; pause/restart now persist across navigation).
@@ -513,6 +516,38 @@ describe("@kinora/i18n package assembly", () => {
     expect(flat["plans.archive.confirmBody"]).toContain("nothing is deleted");
     expect(flattenMessages(catalogs.es)["plans.archive.confirmBody"]).toContain(
       "no se elimina nada",
+    );
+  });
+
+  it("the planEdit namespace is present with EN+ES parity (17d PR D — program editor)", () => {
+    expect(catalogs.en.planEdit).toBeDefined();
+    expect(catalogs.es.planEdit).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+
+    const flat = flattenMessages(catalogs.en);
+    const planEditKeys = Object.keys(flat).filter((key) => key.startsWith("planEdit."));
+    // title, description, openAction, error = 4 scalar + the form labels
+    // dayNumberLabel, dayTitleLabel, exerciseNameLabel, exerciseSetsLabel,
+    // exerciseRepsLabel, exerciseRestLabel = 6 + the controls addDay,
+    // addExercise, removeDay, removeExercise, save, saving, saved,
+    // validationTitle = 8 + issues.{empty_program,duplicate_day,invalid_day,
+    // empty_session} = 4 (one per EditedProgramIssue the domain can report) +
+    // conflict.{title,desc,reload} = 3 (the lost-race message, distinct from a
+    // validation failure) + notReady.{title,desc} = 2 + loadError.{title,desc}
+    // = 2 (a failed read must never render as an empty form).
+    expect(planEditKeys).toHaveLength(29);
+    expect(flat["planEdit.issues.empty_program"]).toContain("at least one training day");
+    expect(flattenMessages(catalogs.es)["planEdit.issues.empty_program"]).toContain(
+      "al menos un día",
+    );
+    // The conflict copy must promise nothing was saved — that is the whole
+    // reassurance the losing writer needs before reloading.
+    expect(flat["planEdit.conflict.desc"]).toContain("nothing of yours was saved");
+    expect(flattenMessages(catalogs.es)["planEdit.conflict.desc"]).toContain(
+      "no se guardó nada",
     );
   });
 

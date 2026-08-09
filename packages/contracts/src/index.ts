@@ -246,6 +246,11 @@ export interface WorkoutPlanDetail {
   name?: string;
   /** 17d PR B — threaded into PlanWeekView's archived-plan indicator. */
   archivedAt?: string | null;
+  /**
+   * 17d PR D — ISO-8601 instant of the last write, and the optimistic-
+   * concurrency token the program editor sends back as `expectedUpdatedAt`.
+   */
+  updatedAt?: string;
 }
 
 /**
