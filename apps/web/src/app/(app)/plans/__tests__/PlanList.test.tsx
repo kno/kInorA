@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { renderWithIntl } from "@/test-utils/render-with-intl";
 import type { WorkoutPlanSummary } from "@kinora/contracts";
 import { PlanList } from "../PlanList";
@@ -161,5 +161,86 @@ describe("PlanList", () => {
 
     const card = screen.getByTestId("plan-card-plan-1");
     expect(card.textContent).not.toMatch(/\b0\b.*days/i);
+  });
+
+  describe("archive (17d PR B)", () => {
+    it("excludes an archived plan from the default active grid", () => {
+      renderWithIntl(
+        <PlanList
+          plans={[
+            plan({ id: "plan-1", archivedAt: null }),
+            plan({ id: "plan-2", archivedAt: "2026-08-01T00:00:00.000Z" }),
+          ]}
+          now={NOW}
+        />,
+      );
+
+      expect(screen.queryByTestId("plan-card-plan-1")).toBeTruthy();
+      expect(screen.queryByTestId("plan-card-plan-2")).toBeNull();
+    });
+
+    it("reveals archived plans in their own section, below a separator, only when the show-archived toggle is active", () => {
+      renderWithIntl(
+        <PlanList
+          plans={[
+            plan({ id: "plan-1", archivedAt: null }),
+            plan({ id: "plan-2", archivedAt: "2026-08-01T00:00:00.000Z" }),
+          ]}
+          now={NOW}
+        />,
+      );
+
+      expect(screen.queryByTestId("plan-card-archived-plan-2")).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: /show archived/i }));
+
+      expect(screen.getByTestId("plan-card-archived-plan-2")).toBeTruthy();
+      expect(screen.getByRole("separator")).toBeTruthy();
+    });
+
+    it("the archive confirmation copy states that history is preserved", () => {
+      const onArchive = vi.fn().mockResolvedValue({ id: "plan-1", archivedAt: "2026-08-09T00:00:00.000Z" });
+      renderWithIntl(
+        <PlanList plans={[plan({ id: "plan-1", archivedAt: null })]} now={NOW} onArchive={onArchive} />,
+      );
+
+      fireEvent.click(screen.getByTestId("plan-archive-plan-1"));
+
+      const dialog = screen.getByRole("alertdialog");
+      expect(dialog.textContent).toMatch(/nothing is deleted/i);
+      expect(onArchive).not.toHaveBeenCalled();
+    });
+
+    it("confirming archive calls onArchive and moves the plan out of the active grid", async () => {
+      const onArchive = vi.fn().mockResolvedValue({ id: "plan-1", archivedAt: "2026-08-09T00:00:00.000Z" });
+      renderWithIntl(
+        <PlanList plans={[plan({ id: "plan-1", archivedAt: null })]} now={NOW} onArchive={onArchive} />,
+      );
+
+      fireEvent.click(screen.getByTestId("plan-archive-plan-1"));
+      fireEvent.click(screen.getByTestId("plan-archive-confirm-plan-1"));
+
+      await screen.findByRole("button", { name: /show archived/i });
+      expect(onArchive).toHaveBeenCalledWith("plan-1");
+      expect(screen.queryByTestId("plan-card-plan-1")).toBeNull();
+    });
+
+    it("unarchiving from the archived section moves the plan back into the default grid without a page reload", async () => {
+      const onUnarchive = vi.fn().mockResolvedValue({ id: "plan-2", archivedAt: null });
+      renderWithIntl(
+        <PlanList
+          plans={[plan({ id: "plan-2", archivedAt: "2026-08-01T00:00:00.000Z" })]}
+          now={NOW}
+          onUnarchive={onUnarchive}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /show archived/i }));
+      fireEvent.click(screen.getByTestId("plan-unarchive-plan-2"));
+
+      await screen.findByTestId("plan-card-plan-2");
+      expect(onUnarchive).toHaveBeenCalledWith("plan-2");
+      expect(screen.queryByTestId("plan-card-archived-plan-2")).toBeNull();
+    });
   });
 });
