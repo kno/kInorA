@@ -1771,7 +1771,19 @@
       "unarchiveAction": "Desarchivar",
       "showToggle": "Ver archivados ({count})",
       "hideToggle": "Ocultar archivados",
-      "sectionHeading": "Planes archivados"
+      "sectionHeading": "Planes archivados",
+      "bulk": {
+        "selectLabel": "Seleccionar {name}",
+        "selectedCount": "{count, plural, one {# plan seleccionado} other {# planes seleccionados}}",
+        "action": "Archivar seleccionados",
+        "clear": "Quitar selección",
+        "confirmTitle": "{count, plural, one {¿Archivar este plan?} other {¿Archivar estos # planes?}}",
+        "confirmBody": "{count, plural, one {Archivar oculta este plan de tu lista. Cada sesión y estadística se conserva — no se elimina nada, y puedes desarchivarlo cuando quieras.} other {Archivar oculta estos # planes de tu lista. Cada sesión y estadística se conserva — no se elimina nada, y puedes desarchivarlos cuando quieras.}}",
+        "successBody": "{count, plural, one {# plan archivado.} other {# planes archivados.}}",
+        "resultTitle": "Algunos planes no se archivaron",
+        "resultArchived": "Archivados: {names}",
+        "resultFailed": "Sin archivar: {names}. Inténtalo de nuevo, o archívalos de uno en uno."
+      }
     }
   },
   "planEdit": {

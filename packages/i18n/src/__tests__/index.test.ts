@@ -554,8 +554,13 @@ describe("@kinora/i18n package assembly", () => {
     // neverTrained,open} = 6 + list.openDisabled.{generating,failed} = 2
     // (14, 17d PR A) + archive.{action,confirmTitle,confirmBody,confirm,
     // cancel,unarchiveAction,showToggle,hideToggle,sectionHeading} = 9
-    // (17d PR B — the show-archived toggle + per-row archive/unarchive).
-    expect(plansKeys).toHaveLength(23);
+    // (17d PR B — the show-archived toggle + per-row archive/unarchive)
+    // (23) + archive.bulk.{selectLabel,selectedCount,action,clear,confirmTitle,
+    // confirmBody,successBody,resultTitle,resultArchived,resultFailed} = 10
+    // (#412 — the bulk selection, its own pluralised confirm, and the
+    // partial-failure report that names both groups). Bulk reuses
+    // archive.{confirm,cancel} rather than authoring its own buttons.
+    expect(plansKeys).toHaveLength(33);
     expect(flat["plans.title"]).toBe("Plans");
     expect(flattenMessages(catalogs.es)["plans.title"]).toBe("Planes");
     expect(flat["plans.list.neverTrained"]).toBe("Never trained");
@@ -564,6 +569,17 @@ describe("@kinora/i18n package assembly", () => {
     expect(flattenMessages(catalogs.es)["plans.archive.confirmBody"]).toContain(
       "no se elimina nada",
     );
+    // #412: the bulk confirm is a DIFFERENT message with the SAME promise. That
+    // sentence is why this feature is archive-and-not-delete — `workout_sessions`
+    // cascades from a plan, so a real delete would erase every logged workout —
+    // and it has to survive pluralisation in both catalogs, in both branches.
+    const enBulkBody = flat["plans.archive.bulk.confirmBody"]!;
+    const esBulkBody = flattenMessages(catalogs.es)["plans.archive.bulk.confirmBody"]!;
+    expect(enBulkBody.split("nothing is deleted")).toHaveLength(3);
+    expect(esBulkBody.split("no se elimina nada")).toHaveLength(3);
+    // And it is genuinely countable, not a singular message reused.
+    expect(enBulkBody).toContain("plural");
+    expect(esBulkBody).toContain("plural");
   });
 
   it("the planEdit namespace is present with EN+ES parity (17d PR D — program editor)", () => {

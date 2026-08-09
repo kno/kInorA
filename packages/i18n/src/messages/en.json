@@ -1771,7 +1771,19 @@
       "unarchiveAction": "Unarchive",
       "showToggle": "Show archived ({count})",
       "hideToggle": "Hide archived",
-      "sectionHeading": "Archived plans"
+      "sectionHeading": "Archived plans",
+      "bulk": {
+        "selectLabel": "Select {name}",
+        "selectedCount": "{count, plural, one {# plan selected} other {# plans selected}}",
+        "action": "Archive selected",
+        "clear": "Clear selection",
+        "confirmTitle": "{count, plural, one {Archive this plan?} other {Archive these # plans?}}",
+        "confirmBody": "{count, plural, one {Archiving hides this plan from your list. Every session and stat is kept — nothing is deleted, and you can unarchive it anytime.} other {Archiving hides these # plans from your list. Every session and stat is kept — nothing is deleted, and you can unarchive them anytime.}}",
+        "successBody": "{count, plural, one {# plan archived.} other {# plans archived.}}",
+        "resultTitle": "Some plans were not archived",
+        "resultArchived": "Archived: {names}",
+        "resultFailed": "Not archived: {names}. Try again, or archive them one at a time."
+      }
     }
   },
   "planEdit": {

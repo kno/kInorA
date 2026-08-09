@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithIntl } from "@/test-utils/render-with-intl";
 import type { WorkoutPlanSummary } from "@kinora/contracts";
 import { PlanList } from "../PlanList";
@@ -330,6 +330,287 @@ describe("PlanList", () => {
 
       expect(screen.queryByRole("alertdialog")).toBeNull();
       expect(document.activeElement).toBe(trigger);
+    });
+  });
+
+  // #412 — bulk archive loops the existing one-plan endpoint, so the whole
+  // design lives in what happens when only SOME of those calls come back.
+  describe("bulk archive (#412)", () => {
+    function archived(id: string) {
+      return { id, archivedAt: "2026-08-09T00:00:00.000Z" };
+    }
+
+    function twoPlans() {
+      return [
+        plan({ id: "plan-1", name: "Summer Cut" }),
+        plan({ id: "plan-2", name: "Winter Bulk" }),
+      ];
+    }
+
+    /** Select both plans and open the bulk confirmation. */
+    function selectBothAndConfirm() {
+      fireEvent.click(screen.getByTestId("plan-select-plan-1"));
+      fireEvent.click(screen.getByTestId("plan-select-plan-2"));
+      fireEvent.click(screen.getByTestId("plan-bulk-archive"));
+    }
+
+    it("offers no bulk bar until something is selected", () => {
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} />);
+
+      expect(screen.queryByTestId("plan-bulk-bar")).toBeNull();
+    });
+
+    it("counts the selection with a pluralised label", () => {
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} />);
+
+      fireEvent.click(screen.getByTestId("plan-select-plan-1"));
+      expect(screen.getByTestId("plan-bulk-count").textContent).toMatch(/1 plan selected/i);
+
+      fireEvent.click(screen.getByTestId("plan-select-plan-2"));
+      expect(screen.getByTestId("plan-bulk-count").textContent).toMatch(/2 plans selected/i);
+    });
+
+    it("labels each checkbox with its own plan's name", () => {
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} />);
+
+      expect(
+        screen.getByTestId("plan-select-plan-2").getAttribute("aria-label"),
+      ).toContain("Winter Bulk");
+    });
+
+    it("offers no selection on an archived row", () => {
+      renderWithIntl(
+        <PlanList
+          plans={[plan({ id: "plan-3", archivedAt: "2026-08-01T00:00:00.000Z" })]}
+          now={NOW}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /show archived/i }));
+
+      expect(screen.getByTestId("plan-card-archived-plan-3")).toBeTruthy();
+      expect(screen.queryByTestId("plan-select-plan-3")).toBeNull();
+    });
+
+    // The sentence that makes this feature archive-and-not-delete has to be in
+    // the bulk confirmation too, not only the singular one.
+    it("the bulk confirmation keeps the nothing-is-deleted guarantee and counts the plans", () => {
+      const onArchive = vi.fn();
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} onArchive={onArchive} />);
+
+      selectBothAndConfirm();
+
+      const dialog = screen.getByTestId("plan-bulk-confirm");
+      expect(dialog.textContent).toMatch(/nothing is deleted/i);
+      expect(dialog.getAttribute("aria-label")).toMatch(/these 2 plans/i);
+      expect(onArchive).not.toHaveBeenCalled();
+    });
+
+    // It reuses the modal the single-plan confirmation became, rather than
+    // introducing a second dialog mechanism beside it — so it must carry the
+    // same contract, not merely look similar.
+    it("is the same real modal: aria-modal, focus moved in, Escape dismisses", () => {
+      const onArchive = vi.fn();
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} onArchive={onArchive} />);
+
+      selectBothAndConfirm();
+
+      const dialog = screen.getByTestId("plan-bulk-confirm");
+      expect(dialog.getAttribute("aria-modal")).toBe("true");
+      expect(dialog.getAttribute("role")).toBe("alertdialog");
+      expect(document.activeElement).toBe(screen.getByTestId("plan-bulk-confirm-yes"));
+
+      fireEvent.keyDown(dialog, { key: "Escape" });
+      expect(screen.queryByTestId("plan-bulk-confirm")).toBeNull();
+      expect(onArchive).not.toHaveBeenCalled();
+    });
+
+    it("traps Tab inside the bulk dialog, wrapping at the last control", () => {
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} onArchive={vi.fn()} />);
+
+      selectBothAndConfirm();
+      const dialog = screen.getByTestId("plan-bulk-confirm");
+      screen.getByTestId("plan-bulk-confirm-cancel").focus();
+      fireEvent.keyDown(dialog, { key: "Tab" });
+
+      expect(document.activeElement).toBe(screen.getByTestId("plan-bulk-confirm-yes"));
+    });
+
+    // Its own trigger, not whichever row's Archive was pressed last.
+    it("returns focus to the bulk Archive button when dismissed", () => {
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} onArchive={vi.fn()} />);
+
+      selectBothAndConfirm();
+      fireEvent.click(screen.getByTestId("plan-bulk-confirm-cancel"));
+
+      expect(document.activeElement).toBe(screen.getByTestId("plan-bulk-archive"));
+    });
+
+    it("archives every selected plan with one call each and moves them out of the grid", async () => {
+      const onArchive = vi.fn().mockImplementation((id: string) => Promise.resolve(archived(id)));
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} onArchive={onArchive} />);
+
+      selectBothAndConfirm();
+      fireEvent.click(screen.getByTestId("plan-bulk-confirm-yes"));
+
+      await screen.findByTestId("plan-bulk-done");
+      expect(onArchive.mock.calls.map((call) => call[0]).sort()).toEqual(["plan-1", "plan-2"]);
+      expect(screen.queryByTestId("plan-card-plan-1")).toBeNull();
+      expect(screen.queryByTestId("plan-card-plan-2")).toBeNull();
+      // A clean run reads as a clean run, not as a warning.
+      expect(screen.queryByTestId("plan-bulk-partial")).toBeNull();
+      expect(screen.queryByTestId("plan-bulk-bar")).toBeNull();
+    });
+
+    // The failure mode the whole design is for.
+    it("names exactly which plans were archived and which were not on a partial failure", async () => {
+      const onArchive = vi
+        .fn()
+        .mockImplementation((id: string) =>
+          Promise.resolve(id === "plan-2" ? null : archived(id)),
+        );
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} onArchive={onArchive} />);
+
+      selectBothAndConfirm();
+      fireEvent.click(screen.getByTestId("plan-bulk-confirm-yes"));
+
+      await screen.findByTestId("plan-bulk-partial");
+      expect(screen.getByTestId("plan-bulk-partial-archived").textContent).toContain(
+        "Summer Cut",
+      );
+      expect(screen.getByTestId("plan-bulk-partial-failed").textContent).toContain(
+        "Winter Bulk",
+      );
+      // The one that landed left the grid; the one that did not is still there.
+      expect(screen.queryByTestId("plan-card-plan-1")).toBeNull();
+      expect(screen.getByTestId("plan-card-plan-2")).toBeTruthy();
+    });
+
+    it("keeps only the failed plans selected, so retrying is one click", async () => {
+      const onArchive = vi
+        .fn()
+        .mockImplementation((id: string) =>
+          Promise.resolve(id === "plan-2" ? null : archived(id)),
+        );
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} onArchive={onArchive} />);
+
+      selectBothAndConfirm();
+      fireEvent.click(screen.getByTestId("plan-bulk-confirm-yes"));
+
+      await screen.findByTestId("plan-bulk-partial");
+      expect(screen.getByTestId("plan-bulk-count").textContent).toMatch(/1 plan selected/i);
+      expect((screen.getByTestId("plan-select-plan-2") as HTMLInputElement).checked).toBe(true);
+    });
+
+    it("reports an all-failed run without claiming anything was archived", async () => {
+      const onArchive = vi.fn().mockResolvedValue(null);
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} onArchive={onArchive} />);
+
+      selectBothAndConfirm();
+      fireEvent.click(screen.getByTestId("plan-bulk-confirm-yes"));
+
+      await screen.findByTestId("plan-bulk-partial");
+      expect(screen.queryByTestId("plan-bulk-partial-archived")).toBeNull();
+      expect(screen.queryByTestId("plan-bulk-done")).toBeNull();
+      expect(screen.getByTestId("plan-card-plan-1")).toBeTruthy();
+      expect(screen.getByTestId("plan-card-plan-2")).toBeTruthy();
+    });
+
+    it("survives a rejected call instead of leaving the list mid-archive", async () => {
+      const onArchive = vi
+        .fn()
+        .mockImplementation((id: string) =>
+          id === "plan-2" ? Promise.reject(new Error("boom")) : Promise.resolve(archived(id)),
+        );
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} onArchive={onArchive} />);
+
+      selectBothAndConfirm();
+      fireEvent.click(screen.getByTestId("plan-bulk-confirm-yes"));
+
+      await screen.findByTestId("plan-bulk-partial");
+      expect(screen.getByTestId("plan-bulk-partial-failed").textContent).toContain(
+        "Winter Bulk",
+      );
+      expect(screen.queryByTestId("plan-card-plan-1")).toBeNull();
+    });
+
+    it("cancelling the bulk confirmation archives nothing and keeps the selection", () => {
+      const onArchive = vi.fn();
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} onArchive={onArchive} />);
+
+      fireEvent.click(screen.getByTestId("plan-select-plan-1"));
+      fireEvent.click(screen.getByTestId("plan-bulk-archive"));
+      fireEvent.click(screen.getByTestId("plan-bulk-confirm-cancel"));
+
+      expect(onArchive).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("plan-bulk-confirm")).toBeNull();
+      expect(screen.getByTestId("plan-bulk-count").textContent).toMatch(/1 plan selected/i);
+    });
+
+    it("clearing the selection removes the bar entirely", () => {
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} />);
+
+      fireEvent.click(screen.getByTestId("plan-select-plan-1"));
+      fireEvent.click(screen.getByTestId("plan-bulk-clear"));
+
+      expect(screen.queryByTestId("plan-bulk-bar")).toBeNull();
+      expect((screen.getByTestId("plan-select-plan-1") as HTMLInputElement).checked).toBe(false);
+    });
+
+    it("deselects a plan when it is clicked a second time", () => {
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} />);
+
+      fireEvent.click(screen.getByTestId("plan-select-plan-1"));
+      fireEvent.click(screen.getByTestId("plan-select-plan-1"));
+
+      expect(screen.queryByTestId("plan-bulk-bar")).toBeNull();
+    });
+
+    // Decided rather than inherited: the show-archived toggle reveals a section
+    // with no checkboxes, so nothing selectable enters or leaves.
+    it("flipping the show-archived toggle leaves the selection alone", () => {
+      renderWithIntl(
+        <PlanList
+          plans={[...twoPlans(), plan({ id: "plan-3", archivedAt: "2026-08-01T00:00:00.000Z" })]}
+          now={NOW}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId("plan-select-plan-1"));
+      fireEvent.click(screen.getByRole("button", { name: /show archived/i }));
+      fireEvent.click(screen.getByRole("button", { name: /hide archived/i }));
+
+      expect(screen.getByTestId("plan-bulk-count").textContent).toMatch(/1 plan selected/i);
+    });
+
+    // Consistent with what a single-row archive allows today: the plan you are
+    // following is archivable, and pretending otherwise by skipping it silently
+    // would archive fewer plans than the user asked for.
+    it("allows the currently-followed plan into the selection", async () => {
+      const onArchive = vi.fn().mockImplementation((id: string) => Promise.resolve(archived(id)));
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} onArchive={onArchive} />);
+
+      expect(screen.getByTestId("plan-card-plan-1").textContent).toMatch(/currently following/i);
+      fireEvent.click(screen.getByTestId("plan-select-plan-1"));
+      fireEvent.click(screen.getByTestId("plan-bulk-archive"));
+      fireEvent.click(screen.getByTestId("plan-bulk-confirm-yes"));
+
+      await screen.findByTestId("plan-bulk-done");
+      expect(onArchive).toHaveBeenCalledWith("plan-1");
+    });
+
+    it("archiving a selected plan on its own drops it from the selection", async () => {
+      const onArchive = vi.fn().mockImplementation((id: string) => Promise.resolve(archived(id)));
+      renderWithIntl(<PlanList plans={twoPlans()} now={NOW} onArchive={onArchive} />);
+
+      fireEvent.click(screen.getByTestId("plan-select-plan-1"));
+      fireEvent.click(screen.getByTestId("plan-select-plan-2"));
+      fireEvent.click(screen.getByTestId("plan-archive-plan-1"));
+      fireEvent.click(screen.getByTestId("plan-archive-confirm-plan-1"));
+
+      await waitFor(() =>
+        expect(screen.getByTestId("plan-bulk-count").textContent).toMatch(/1 plan selected/i),
+      );
     });
   });
 
