@@ -17,8 +17,14 @@
  * Archive is a filing decision, not a delete: `workout_sessions.workoutPlanId`
  * cascades on delete, so removing a plan would erase every logged workout and
  * the statistics, PRs and streaks derived from them. Archiving hides the plan
- * and refuses NEW sessions on it; the history stays, and the screen says so
- * beside the action.
+ * and refuses NEW sessions on it; the history stays. The confirm step says so
+ * in full, in the catalog's own words — that reassurance is the reason the
+ * feature is an archive and not a delete, so it is never trimmed or dropped.
+ *
+ * One read, not two: the list is always fetched WITH archived rows and split
+ * client-side. The show-archived control is therefore pure local state — it
+ * costs no round trip, and it can state how many archived plans are waiting
+ * behind it, which a filtered read could not.
  *
  * Architecture — thin glue over the tested `plan-status-client.ts`, mirroring
  * `ClientListScreen`/`PlanStatusScreen`: all network and result-mapping logic
@@ -109,6 +115,8 @@ export default function PlansScreen({
   const [showArchived, setShowArchived] = useState(false);
   const [busyPlanId, setBusyPlanId] = useState<string | null>(null);
   const [actionFailed, setActionFailed] = useState(false);
+  /** The row whose archive confirm is currently armed, if any. */
+  const [confirmingPlanId, setConfirmingPlanId] = useState<string | null>(null);
 
   const clientRef = useRef<PlansClientApi>({
     fetchPlanList: client?.fetchPlanList ?? defaultFetchPlanList,
@@ -147,14 +155,16 @@ export default function PlansScreen({
 
   const clientOptions: ClientOptions = { apiBaseUrl, getToken };
 
-  const load = useCallback(async (includeArchived: boolean) => {
+  const load = useCallback(async () => {
     if (!mountedRef.current) return;
     setPhase("loading");
     setActionFailed(false);
 
+    // Always ask for archived rows too — they are split out client-side, so
+    // toggling the archived section never costs a second request.
     const result = await clientRef.current.fetchPlanList({
       ...clientOptions,
-      includeArchived,
+      includeArchived: true,
     });
     if (!mountedRef.current) return;
 
@@ -175,14 +185,8 @@ export default function PlansScreen({
   }, [handleSessionExpired]);
 
   useEffect(() => {
-    void load(false);
+    void load();
   }, [load]);
-
-  const handleToggleArchived = useCallback(async () => {
-    const next = !showArchived;
-    setShowArchived(next);
-    await load(next);
-  }, [showArchived, load]);
 
   /**
    * Archive or unarchive one row. The list is updated in place from the
@@ -192,6 +196,7 @@ export default function PlansScreen({
   const applyArchive = useCallback(
     async (planId: string, archived: boolean) => {
       if (busyPlanId) return;
+      setConfirmingPlanId(null);
       setBusyPlanId(planId);
       setActionFailed(false);
 
@@ -212,20 +217,18 @@ export default function PlansScreen({
         return;
       }
 
+      // The row is re-filed, never dropped: an archived plan moves into the
+      // archived section (hidden or not), an unarchived one moves back.
       setPlans((current) =>
-        // While archived rows are hidden, an archived plan leaves the list
-        // outright; while they are shown, it moves below the separator.
-        result.archivedAt !== null && !showArchived
-          ? current.filter((plan) => plan.id !== result.id)
-          : current.map((plan) =>
-              plan.id === result.id ? { ...plan, archivedAt: result.archivedAt } : plan,
-            ),
+        current.map((plan) =>
+          plan.id === result.id ? { ...plan, archivedAt: result.archivedAt } : plan,
+        ),
       );
       setBusyPlanId(null);
       // clientOptions is derived from stable props; intentionally omitted from deps.
       // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [busyPlanId, showArchived, handleSessionExpired],
+    [busyPlanId, handleSessionExpired],
   );
 
   const activePlans = plans.filter((plan) => !isArchived(plan));
@@ -309,13 +312,54 @@ export default function PlansScreen({
               archived ? M.unarchiveAction : M.archiveAction,
             )}
             disabled={busyPlanId === plan.id}
-            onPress={() => applyArchive(plan.id, !archived)}
+            onPress={() =>
+              // Unarchiving restores a plan and needs no warning; archiving
+              // takes it out of circulation, so it asks first.
+              archived ? applyArchive(plan.id, false) : setConfirmingPlanId(plan.id)
+            }
           >
             <Text style={styles.btnSecondaryText}>
               <FormattedMessage {...(archived ? M.unarchiveAction : M.archiveAction)} />
             </Text>
           </Pressable>
         </View>
+
+        {confirmingPlanId === plan.id && (
+          <View testID={`plan-archive-confirm-${plan.id}`} style={styles.confirm}>
+            <Text style={styles.sectionHeading}>
+              <FormattedMessage {...M.confirmTitle} />
+            </Text>
+            {/* The whole reassurance, verbatim: this is where the user learns
+                that archiving deletes nothing. */}
+            <Text style={styles.body}>
+              <FormattedMessage {...M.confirmBody} />
+            </Text>
+            <View style={styles.actionRow}>
+              <Pressable
+                testID={`plan-archive-confirm-yes-${plan.id}`}
+                style={styles.btn}
+                accessibilityRole="button"
+                accessibilityLabel={intl.formatMessage(M.confirm)}
+                onPress={() => applyArchive(plan.id, true)}
+              >
+                <Text style={styles.btnText}>
+                  <FormattedMessage {...M.confirm} />
+                </Text>
+              </Pressable>
+              <Pressable
+                testID={`plan-archive-confirm-no-${plan.id}`}
+                style={styles.btnSecondary}
+                accessibilityRole="button"
+                accessibilityLabel={intl.formatMessage(M.cancel)}
+                onPress={() => setConfirmingPlanId(null)}
+              >
+                <Text style={styles.btnSecondaryText}>
+                  <FormattedMessage {...M.cancel} />
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
 
         {plan.status !== "ready" && (
           <Text style={styles.detail}>
@@ -355,7 +399,7 @@ export default function PlansScreen({
           style={styles.btn}
           accessibilityRole="button"
           accessibilityLabel={intl.formatMessage(M.retry)}
-          onPress={() => load(showArchived)}
+          onPress={() => load()}
         >
           <Text style={styles.btnText}>
             <FormattedMessage {...M.retry} />
@@ -401,26 +445,31 @@ export default function PlansScreen({
           </Pressable>
         </View>
       ) : (
-        <>
-          {activePlans.map(renderPlan)}
-          <Text style={styles.body}>
-            <FormattedMessage {...M.historyPreserved} />
-          </Text>
-        </>
+        activePlans.map(renderPlan)
       )}
 
-      <Pressable
-        testID="plans-show-archived"
-        style={styles.btnSecondary}
-        accessibilityRole="button"
-        accessibilityLabel={intl.formatMessage(showArchived ? M.hideArchived : M.showArchived)}
-        accessibilityState={{ expanded: showArchived }}
-        onPress={handleToggleArchived}
-      >
-        <Text style={styles.btnSecondaryText}>
-          <FormattedMessage {...(showArchived ? M.hideArchived : M.showArchived)} />
-        </Text>
-      </Pressable>
+      {archivedPlans.length > 0 && (
+        <Pressable
+          testID="plans-show-archived"
+          style={styles.btnSecondary}
+          accessibilityRole="button"
+          accessibilityLabel={
+            showArchived
+              ? intl.formatMessage(M.hideToggle)
+              : intl.formatMessage(M.showToggle, { count: archivedPlans.length })
+          }
+          accessibilityState={{ expanded: showArchived }}
+          onPress={() => setShowArchived((current) => !current)}
+        >
+          <Text style={styles.btnSecondaryText}>
+            {showArchived ? (
+              <FormattedMessage {...M.hideToggle} />
+            ) : (
+              <FormattedMessage {...M.showToggle} values={{ count: archivedPlans.length }} />
+            )}
+          </Text>
+        </Pressable>
+      )}
 
       {showArchived && archivedPlans.length > 0 && (
         <View testID="plans-archived-section" style={styles.separator}>

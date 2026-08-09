@@ -39,6 +39,30 @@ const PlansScreen = (await import("../PlansScreen.js")).default;
 
 const NOW = new Date("2026-08-09T12:00:00.000Z");
 
+/**
+ * The `plans.archive.*` / `plan.archived.*` copy is authored by 17d PR B
+ * (#403) and is not on `main` yet, so `resolveMessages("en")` cannot resolve
+ * it on this branch. These entries are transcribed from that PR's `en.json`
+ * so the archive assertions below test REAL copy rather than raw message ids.
+ * They are merged UNDER the real catalog, so the moment #403 lands the
+ * catalog wins and this fixture can be deleted outright.
+ */
+const PENDING_PR_B_COPY: Record<string, string> = {
+  "plans.archive.action": "Archive",
+  "plans.archive.confirmTitle": "Archive this plan?",
+  "plans.archive.confirmBody":
+    "Archiving hides this plan from your list. Every session and stat is kept — nothing is deleted, and you can unarchive it anytime.",
+  "plans.archive.confirm": "Archive",
+  "plans.archive.cancel": "Cancel",
+  "plans.archive.unarchiveAction": "Unarchive",
+  "plans.archive.showToggle": "Show archived ({count})",
+  "plans.archive.hideToggle": "Hide archived",
+  "plans.archive.sectionHeading": "Archived plans",
+  "plan.archived.badge": "Archived",
+};
+
+const enMessages = { ...PENDING_PR_B_COPY, ...resolveMessages("en") };
+
 const activePlan: PlanListItem = {
   id: "plan_9",
   status: "ready",
@@ -102,7 +126,7 @@ function renderScreen(
   let renderer!: ReactTestRenderer;
   act(() => {
     renderer = create(
-      <IntlProvider locale="en" defaultLocale="en" messages={resolveMessages("en")}>
+      <IntlProvider locale="en" defaultLocale="en" messages={enMessages}>
         <PlansScreen
           navigation={navigation}
           clearSession={clearSession}
@@ -191,7 +215,17 @@ describe("PlansScreen (17d PR C — mobile plans list + archive)", () => {
     expect(byId(renderer, "plan-open-plan_bad").props.disabled).toBe(true);
   });
 
-  it("archives a row and removes it from the list without re-fetching the whole screen", async () => {
+  it("reads archived rows in the same request, so the toggle costs no round trip", async () => {
+    const { client } = renderScreen();
+    await settle();
+
+    expect(client.fetchPlanList).toHaveBeenCalledTimes(1);
+    expect(client.fetchPlanList).toHaveBeenCalledWith(
+      expect.objectContaining({ includeArchived: true }),
+    );
+  });
+
+  it("asks before archiving, and states in full that nothing is deleted", async () => {
     const { renderer, client } = renderScreen();
     await settle();
 
@@ -199,18 +233,55 @@ describe("PlansScreen (17d PR C — mobile plans list + archive)", () => {
       await byId(renderer, "plan-archive-plan_8").props.onPress();
     });
 
+    // Arming the confirm archives nothing on its own.
+    expect(client.archivePlan).not.toHaveBeenCalled();
+    expect(has(renderer, "plan-archive-confirm-plan_8")).toBe(true);
+
+    const rendered = text(renderer);
+    expect(rendered).toContain("Archive this plan?");
+    // The reassurance is the reason this is an archive and not a delete: it is
+    // carried whole, not trimmed to a shorter paraphrase.
+    expect(rendered).toContain(PENDING_PR_B_COPY["plans.archive.confirmBody"]);
+    expect(rendered).toContain("nothing is deleted");
+  });
+
+  it("archives nothing and closes the confirm when it is cancelled", async () => {
+    const { renderer, client } = renderScreen();
+    await settle();
+
+    await act(async () => {
+      await byId(renderer, "plan-archive-plan_8").props.onPress();
+    });
+    await act(async () => {
+      await byId(renderer, "plan-archive-confirm-no-plan_8").props.onPress();
+    });
+
+    expect(client.archivePlan).not.toHaveBeenCalled();
+    expect(has(renderer, "plan-archive-confirm-plan_8")).toBe(false);
+    expect(has(renderer, "plan-card-plan_8")).toBe(true);
+  });
+
+  it("archives a row on confirm and removes it from the active list without re-fetching", async () => {
+    const { renderer, client } = renderScreen();
+    await settle();
+
+    await act(async () => {
+      await byId(renderer, "plan-archive-plan_8").props.onPress();
+    });
+    await act(async () => {
+      await byId(renderer, "plan-archive-confirm-yes-plan_8").props.onPress();
+    });
+
     expect(client.archivePlan).toHaveBeenCalledWith("plan_8", expect.anything());
     expect(has(renderer, "plan-card-plan_8")).toBe(false);
     expect(has(renderer, "plan-card-plan_9")).toBe(true);
     // No full reload: the initial load is still the only list read.
     expect(client.fetchPlanList).toHaveBeenCalledTimes(1);
-  });
-
-  it("states that history is preserved beside the archive action", async () => {
-    const { renderer } = renderScreen();
-    await settle();
-
-    expect(text(renderer)).toContain("Your workout history is kept");
+    // ...and the row was re-filed, not dropped — it is waiting behind the toggle.
+    await act(async () => {
+      await byId(renderer, "plans-show-archived").props.onPress();
+    });
+    expect(has(renderer, "plan-card-plan_8")).toBe(true);
   });
 
   it("keeps the row and surfaces an inline error when archiving fails", async () => {
@@ -227,42 +298,49 @@ describe("PlansScreen (17d PR C — mobile plans list + archive)", () => {
     await act(async () => {
       await byId(renderer, "plan-archive-plan_8").props.onPress();
     });
+    await act(async () => {
+      await byId(renderer, "plan-archive-confirm-yes-plan_8").props.onPress();
+    });
 
     expect(has(renderer, "plans-action-error")).toBe(true);
     expect(has(renderer, "plan-card-plan_8")).toBe(true);
   });
 
   it("reveals archived rows in their own section when show-archived is toggled on", async () => {
-    const fetchPlanList = vi
-      .fn()
-      .mockResolvedValueOnce(ok([activePlan]))
-      .mockResolvedValueOnce(ok([activePlan, archivedPlan]));
-    const { renderer } = renderScreen({ client: makeClient({ fetchPlanList }) });
+    const { renderer, client } = renderScreen({
+      client: makeClient({ fetchPlanList: vi.fn(async () => ok([activePlan, archivedPlan])) }),
+    });
     await settle();
 
     expect(has(renderer, "plan-card-plan_7")).toBe(false);
     expect(has(renderer, "plans-archived-section")).toBe(false);
+    // The toggle says how many are waiting behind it.
+    expect(text(renderer)).toContain("Show archived (1)");
 
     await act(async () => {
       await byId(renderer, "plans-show-archived").props.onPress();
     });
 
-    expect(fetchPlanList).toHaveBeenLastCalledWith(
-      expect.objectContaining({ includeArchived: true }),
-    );
     expect(has(renderer, "plans-archived-section")).toBe(true);
     expect(has(renderer, "plan-card-plan_7")).toBe(true);
     // Archived rows live below the separator, never mixed into the active list.
     expect(has(renderer, "plan-archive-plan_7")).toBe(false);
     expect(has(renderer, "plan-unarchive-plan_7")).toBe(true);
+    // Revealing them costs no second read.
+    expect(client.fetchPlanList).toHaveBeenCalledTimes(1);
   });
 
-  it("moves an unarchived plan back into the active list without a reload", async () => {
-    const fetchPlanList = vi
-      .fn()
-      .mockResolvedValueOnce(ok([activePlan]))
-      .mockResolvedValueOnce(ok([activePlan, archivedPlan]));
-    const client = makeClient({ fetchPlanList });
+  it("offers no show-archived control when there is nothing archived to show", async () => {
+    const { renderer } = renderScreen();
+    await settle();
+
+    expect(has(renderer, "plans-show-archived")).toBe(false);
+  });
+
+  it("unarchives straight away — no confirm — and moves the plan back into the active list", async () => {
+    const client = makeClient({
+      fetchPlanList: vi.fn(async () => ok([activePlan, archivedPlan])),
+    });
     const { renderer } = renderScreen({ client });
     await settle();
     await act(async () => {
@@ -276,7 +354,20 @@ describe("PlansScreen (17d PR C — mobile plans list + archive)", () => {
     expect(client.unarchivePlan).toHaveBeenCalledWith("plan_7", expect.anything());
     expect(has(renderer, "plan-archive-plan_7")).toBe(true);
     expect(has(renderer, "plan-unarchive-plan_7")).toBe(false);
-    expect(fetchPlanList).toHaveBeenCalledTimes(2);
+    expect(client.fetchPlanList).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks an archived row as archived", async () => {
+    const { renderer } = renderScreen({
+      client: makeClient({ fetchPlanList: vi.fn(async () => ok([activePlan, archivedPlan])) }),
+    });
+    await settle();
+    await act(async () => {
+      await byId(renderer, "plans-show-archived").props.onPress();
+    });
+
+    expect(has(renderer, "plan-archived-badge-plan_7")).toBe(true);
+    expect(has(renderer, "plan-archived-badge-plan_9")).toBe(false);
   });
 
   it("renders a distinguishable error state on a failed load — never an empty list", async () => {

@@ -128,6 +128,16 @@ export const styles = StyleSheet.create({
   btnDisabled: {
     opacity: 0.5,
   },
+  /** The inline archive confirm, set apart from the row it belongs to. */
+  confirm: {
+    backgroundColor: colors.surface2,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing[3],
+    marginTop: spacing[2],
+    gap: spacing[2],
+  },
   separator: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
