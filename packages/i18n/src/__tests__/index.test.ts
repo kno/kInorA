@@ -584,11 +584,19 @@ describe("@kinora/i18n package assembly", () => {
     // empty_session} = 4 (one per EditedProgramIssue the domain can report) +
     // conflict.{title,desc,reload} = 3 (the lost-race message, distinct from a
     // validation failure) + notReady.{title,desc} = 2 + loadError.{title,desc}
-    // = 2 (a failed read must never render as an empty form).
-    expect(planEditKeys).toHaveLength(29);
+    // = 2 (a failed read must never render as an empty form)
+    // (29, 17d PR D) + nameLabel = 1 + issues.{plan_name_empty,
+    // plan_name_too_long} = 2 (one per PlanNameIssue, #415's rename field).
+    expect(planEditKeys).toHaveLength(32);
     expect(flat["planEdit.issues.empty_program"]).toContain("at least one training day");
     expect(flattenMessages(catalogs.es)["planEdit.issues.empty_program"]).toContain(
       "al menos un día",
+    );
+    // #415: renaming to blank is refused, not silently resolved to the
+    // date-based default — the copy has to say which, in both catalogs.
+    expect(flat["planEdit.issues.plan_name_empty"]).toContain("creation date");
+    expect(flattenMessages(catalogs.es)["planEdit.issues.plan_name_empty"]).toContain(
+      "fecha de creación",
     );
     // The conflict copy must promise nothing was saved — that is the whole
     // reassurance the losing writer needs before reloading.

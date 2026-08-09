@@ -87,9 +87,11 @@ export function createPlanRouteRepo(deps: {
     // there is nothing for this adapter to add beyond the delegation.
     // The same single default-name layer every other plan read goes through,
     // so the edit response labels the plan exactly as the list and detail do.
-    updateProgram: (tenantId, userId, id, program, expectedVersion) =>
+    // #415: `name` rides the same guarded statement — see the route's own note
+    // on why renaming does not get a second optimistic-concurrency guard.
+    updateProgram: (tenantId, userId, id, program, expectedVersion, name) =>
       workoutPlanRepo
-        .updateProgram(tenantId, userId, id, program, expectedVersion)
+        .updateProgram(tenantId, userId, id, program, expectedVersion, name)
         .then((row) =>
           row ? { ...row, name: defaultPlanName(row.name, row.createdAt) } : row
         ),

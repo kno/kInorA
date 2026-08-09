@@ -1778,6 +1778,7 @@
     "title": "Edit program",
     "description": "Change the days and exercises in this program. Your training history is untouched — sessions you already trained keep exactly what they recorded, and any session in progress right now keeps the workout it started with. Edits apply to the next session you start.",
     "openAction": "Edit program",
+    "nameLabel": "Plan name",
     "dayNumberLabel": "Day of the week (1-7)",
     "dayTitleLabel": "Day title",
     "exerciseNameLabel": "Exercise",
@@ -1796,7 +1797,9 @@
       "empty_program": "Keep at least one training day — a program with no days cannot be started.",
       "duplicate_day": "Two days share the same day of the week. Give each one its own.",
       "invalid_day": "Every day of the week must be between 1 and 7.",
-      "empty_session": "Every day needs at least one exercise."
+      "empty_session": "Every day needs at least one exercise.",
+      "plan_name_empty": "Give this plan a name — a blank one gets labelled with its creation date instead.",
+      "plan_name_too_long": "This name is too long. Keep it to 120 characters or fewer."
     },
     "conflict": {
       "title": "This plan changed somewhere else",

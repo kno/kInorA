@@ -57,8 +57,8 @@ function renderEditor(onSave: ReturnType<typeof vi.fn>) {
   );
 }
 
-function okResult(next: WorkoutProgram): UpdateProgramResult {
-  return { kind: "ok", program: next, version: 4 };
+function okResult(next: WorkoutProgram, name = "Summer Cut"): UpdateProgramResult {
+  return { kind: "ok", name, program: next, version: 4 };
 }
 
 describe("ProgramEditor (17d PR D)", () => {
@@ -260,5 +260,111 @@ describe("ProgramEditor (17d PR D)", () => {
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     const sent = onSave.mock.calls[0]![1] as WorkoutProgram;
     expect(sent.limitationWarnings).toEqual(["Go easy on the shoulder."]);
+  });
+
+  // #415 — the plan's name was the one field this editor showed and would not
+  // let you change.
+  describe("rename (#415)", () => {
+    it("opens the name field on the name the server already resolved", () => {
+      renderEditor(vi.fn());
+
+      expect((screen.getByTestId("plan-name") as HTMLInputElement).value).toBe("Summer Cut");
+    });
+
+    it("submits the edited name alongside the program", async () => {
+      const onSave = vi.fn().mockResolvedValue(okResult(program(), "Winter Bulk"));
+      renderEditor(onSave);
+
+      fireEvent.change(screen.getByTestId("plan-name"), { target: { value: "Winter Bulk" } });
+      fireEvent.click(screen.getByTestId("save-program"));
+
+      await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+      expect(onSave.mock.calls[0]![3]).toBe("Winter Bulk");
+    });
+
+    it("shows the new name in the header once the server confirms it", async () => {
+      const onSave = vi.fn().mockResolvedValue(okResult(program(), "Winter Bulk"));
+      renderEditor(onSave);
+
+      fireEvent.change(screen.getByTestId("plan-name"), { target: { value: "  Winter Bulk  " } });
+      fireEvent.click(screen.getByTestId("save-program"));
+
+      await screen.findByTestId("edit-saved");
+      // The SERVER's trimmed value, not the padded one that was typed.
+      expect((screen.getByTestId("plan-name") as HTMLInputElement).value).toBe("Winter Bulk");
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Winter Bulk");
+    });
+
+    // Absent and unchanged are the same request, and neither should rewrite a
+    // column the user never touched.
+    it("sends no name at all when the field was not edited", async () => {
+      const onSave = vi.fn().mockResolvedValue(okResult(program()));
+      renderEditor(onSave);
+
+      fireEvent.change(screen.getByTestId("day-title-0"), { target: { value: "Chest" } });
+      fireEvent.click(screen.getByTestId("save-program"));
+
+      await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+      expect(onSave.mock.calls[0]![3]).toBeUndefined();
+    });
+
+    it("does not resend the name on a second save after the first one landed", async () => {
+      const onSave = vi.fn().mockResolvedValue(okResult(program(), "Winter Bulk"));
+      renderEditor(onSave);
+
+      fireEvent.change(screen.getByTestId("plan-name"), { target: { value: "Winter Bulk" } });
+      fireEvent.click(screen.getByTestId("save-program"));
+      await screen.findByTestId("edit-saved");
+
+      fireEvent.change(screen.getByTestId("day-title-0"), { target: { value: "Chest" } });
+      fireEvent.click(screen.getByTestId("save-program"));
+
+      await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
+      expect(onSave.mock.calls[1]![3]).toBeUndefined();
+    });
+
+    it("blocks a blank name before any request is made, and says why", async () => {
+      const onSave = vi.fn();
+      renderEditor(onSave);
+
+      fireEvent.change(screen.getByTestId("plan-name"), { target: { value: "   " } });
+      fireEvent.click(screen.getByTestId("save-program"));
+
+      const message = await screen.findByTestId("edit-validation");
+      expect(message.textContent).toMatch(/creation date/i);
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it("renders a server-reported name issue the client did not catch", async () => {
+      const onSave = vi
+        .fn()
+        .mockResolvedValue({ kind: "invalid", issues: ["plan_name_too_long"] });
+      renderEditor(onSave);
+
+      fireEvent.change(screen.getByTestId("plan-name"), { target: { value: "Winter Bulk" } });
+      fireEvent.click(screen.getByTestId("save-program"));
+
+      const message = await screen.findByTestId("edit-validation");
+      expect(message.textContent).toMatch(/too long/i);
+    });
+
+    it("caps the field at the column bound so an overlong name cannot be typed in", () => {
+      renderEditor(vi.fn());
+
+      expect((screen.getByTestId("plan-name") as HTMLInputElement).maxLength).toBe(120);
+    });
+
+    it("falls back to the generic editor title when the plan has no name at all", () => {
+      renderWithIntl(
+        <ProgramEditor
+          planId="plan-1"
+          program={program()}
+          version={LOADED_VERSION}
+          onSave={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Edit program");
+    });
   });
 });

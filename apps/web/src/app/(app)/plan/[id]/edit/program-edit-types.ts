@@ -18,11 +18,15 @@ import type { WorkoutProgram } from "@kinora/contracts";
  * guessing which, and a reload is the right move for only one of them.
  *
  * `invalid` carries the server's structural issues verbatim (the
- * `EditedProgramIssue` identifiers) so the form can point at the actual rule
- * that was broken.
+ * `EditedProgramIssue` and `PlanNameIssue` identifiers) so the form can point
+ * at the actual rule that was broken.
+ *
+ * `ok` carries the plan's `name` as the SERVER resolved it (#415) — through
+ * the same blank→default layer every other plan read goes through — rather
+ * than echoing what the editor typed, so the header shows what `/plans` will.
  */
 export type UpdateProgramResult =
-  | { kind: "ok"; program: WorkoutProgram; version: number }
+  | { kind: "ok"; name: string; program: WorkoutProgram; version: number }
   | { kind: "conflict"; currentVersion: number | null }
   | { kind: "not_ready" }
   | { kind: "invalid"; issues: string[] }

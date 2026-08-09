@@ -12,6 +12,13 @@ export { derivePreferenceScores } from "./plan/derive-preference-scores.js";
 
 export { defaultPlanName } from "./plan/default-plan-name.js";
 
+export {
+  PLAN_NAME_MAX_LENGTH,
+  normalizePlanName,
+  validatePlanName,
+} from "./plan/plan-name.js";
+export type { PlanNameIssue } from "./plan/plan-name.js";
+
 export { validateRpe } from "./plan/rpe.js";
 export type { RpeValidation } from "./plan/rpe.js";
 
