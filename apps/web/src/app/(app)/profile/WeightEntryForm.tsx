@@ -87,10 +87,13 @@ export function WeightEntryForm({ initialEntries }: WeightEntryFormProps) {
         {t("profile.weightEntry.heading")}
       </h2>
 
+      {/* Layout-only (`kin-stack`, the old surface-less `.kin-card`): this
+          notice sits INSIDE the card above, so a second card surface here
+          would read as a box in a box. */}
       {showVolumeShiftNotice ? (
         <div
           role="status"
-          className="kin-card"
+          className="kin-stack"
           style={{
             marginBottom: "1rem",
             padding: "0.75rem 1rem",

@@ -176,7 +176,13 @@ a {
   }
 }
 
-/* Constrained card container. */
+/* Constrained column container — layout only, NO surface.
+ *
+ * This is exactly what `.kin-card` used to be, extracted under an honest name.
+ * Use it for a wrapper that only needs the column rhythm and whose children
+ * are the real cards: a page-level container that keeps `.kin-card` would draw
+ * a box around a box now that `.kin-card` paints a surface. */
+.kin-stack,
 .kin-card {
   width: 100%;
   max-width: var(--maxw-card);
@@ -185,6 +191,30 @@ a {
   gap: var(--sp-4);
 }
 
+/* The card surface, defined ONCE for the whole app.
+ *
+ * `.kin-card` promised a surface by its name and drew nothing — width, flex and
+ * gap only — so every "card" in the app was an invisible column of text. This
+ * is the surface `/plan`'s week view already used (`plan-week-view.module.css`
+ * `.panel`); that module now composes this rule instead of restating it, so
+ * there is a single definition rather than two that can drift.
+ *
+ * `--surface` already resolves `--gym-surface` at the token (see `:root`), and
+ * the explicit `var(--gym-surface, var(--surface))` here matches the pattern
+ * `.kin-input` / `.kin-btn--ghost` use. `--border` has no `--gym-*` override in
+ * this design system, so it is consumed directly. */
+.kin-surface,
+.kin-card {
+  background: color-mix(in oklch, var(--gym-surface, var(--surface)) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+}
+
+.kin-card {
+  padding: var(--sp-4);
+}
+
+.kin-stack--center,
 .kin-card--center {
   text-align: center;
   /* Center fixed-size flex children (e.g. the OrbitProgress loader ring, which
