@@ -1,6 +1,6 @@
 {
-  "pulledAt": "2026-07-01T15:25:00Z",
-  "source": "Open Design MCP (sidecar stdio)",
+  "pulledAt": "2026-08-09T00:00:00Z",
+  "source": "Open Design project store (release-stable namespace, on-disk read)",
   "project": {
     "name": "kiNorA",
     "id": "ceeff5f6-0930-4e48-a0b0-17a6a5c9b9ad",
@@ -9,13 +9,9 @@
   },
   "mcpServer": "open-design",
   "retrieval": {
-    "transport": "sidecar stdio",
-    "ipcPath": "/tmp/open-design/ipc/release-stable/daemon.sock",
-    "daemonCli": "/Applications/Open Design.app/Contents/Resources/app/prebundled/daemon/daemon-cli.mjs",
-    "methods": [
-      "get_project",
-      "list_files"
-    ]
+    "transport": "on-disk project store",
+    "projectDir": "~/Library/Application Support/Open Design/namespaces/release-stable/data/projects/ceeff5f6-0930-4e48-a0b0-17a6a5c9b9ad",
+    "note": "The open-design MCP server is an OpenCode plugin and was not reachable from this client; the five web-admin-*.html screens were read directly from the same project store the MCP serves."
   },
   "files": [
     "DESIGN.md",
@@ -44,7 +40,12 @@
     "screens/mobile-create-plan.html",
     "screens/mobile-voice.html",
     "screens/mobile-exercise.html",
-    "screens/mobile-tracker.html"
+    "screens/mobile-tracker.html",
+    "screens/web-admin.html",
+    "screens/web-admin-ai-config.html",
+    "screens/web-admin-tenants.html",
+    "screens/web-admin-stats.html",
+    "screens/web-admin-logs.html"
   ],
   "traceability": {
     "screenSnapshots": [
@@ -57,7 +58,12 @@
       "screens/mobile-create-plan.html",
       "screens/mobile-voice.html",
       "screens/mobile-exercise.html",
-      "screens/mobile-tracker.html"
+      "screens/mobile-tracker.html",
+      "screens/web-admin.html",
+      "screens/web-admin-ai-config.html",
+      "screens/web-admin-tenants.html",
+      "screens/web-admin-stats.html",
+      "screens/web-admin-logs.html"
     ],
     "iconReferences": [
       "icons.html"

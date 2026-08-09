@@ -5,6 +5,8 @@ import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { fetchProfile } from "../../auth/profile-client";
 import { fetchStats } from "./stats-client";
 import { StatsView } from "./StatsView";
+import { AdminPageShell } from "../AdminPageShell";
+import styles from "../admin.module.css";
 
 /**
  * Admin platform-statistics page — /admin/stats (GH #309).
@@ -16,9 +18,15 @@ import { StatsView } from "./StatsView";
  *     and /admin/logs pages use, so a non-admin never sees this panel.
  *  3. Fetches the cross-tenant aggregates server-side and renders the read-only
  *     StatsView, or a localized error message on any non-ok result.
+ *
+ * Layout follows the Open Design `web-admin-stats.html` screen
+ * (kno/kInorA#414). The design's "Updated · <date>" pill and its "Refresh"
+ * button are deliberately NOT rendered: the page carries no last-refreshed
+ * timestamp, and a hardcoded date beside a button is precisely the defect
+ * kno/kInorA#411 was raised for.
  */
 export default async function AdminStatsPage() {
-  const t = await getTranslations("platformStats");
+  const t = await getTranslations();
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
 
@@ -30,20 +38,24 @@ export default async function AdminStatsPage() {
   const result = await fetchStats(token);
 
   return (
-    <main className="kin-page">
-      <div className="kin-stack kin-stack--center">
-        <h1 className="kin-title">{t("title")}</h1>
-        <p className="kin-text kin-muted" style={{ marginBottom: "1.5rem" }}>
-          {t("description")}
-        </p>
-        {result.kind === "ok" ? (
-          <StatsView stats={result.stats} />
-        ) : (
-          <p className="kin-text" role="alert" data-testid="stats-error">
-            {t("error")}
-          </p>
-        )}
-      </div>
-    </main>
+    <AdminPageShell
+      eyebrow={t("admin.sectionEyebrow")}
+      title={t("platformStats.title")}
+      description={t("platformStats.description")}
+      backLabel={t("admin.pageTitle")}
+    >
+      {result.kind === "ok" ? (
+        <StatsView stats={result.stats} />
+      ) : (
+        <section
+          className={`${styles.panel} ${styles.state} ${styles.stateError}`}
+          role="alert"
+          data-testid="stats-error"
+        >
+          <div className={styles.eyebrow}>{t("platformStats.errorEyebrow")}</div>
+          <p>{t("platformStats.error")}</p>
+        </section>
+      )}
+    </AdminPageShell>
   );
 }

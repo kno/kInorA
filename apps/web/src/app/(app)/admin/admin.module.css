@@ -1,0 +1,1073 @@
+/*
+ * Shared styling for the five /admin backoffice routes (kno/kInorA#414).
+ *
+ * Translated from the Open Design screens `web-admin.html`,
+ * `web-admin-ai-config.html`, `web-admin-tenants.html`, `web-admin-stats.html`
+ * and `web-admin-logs.html` in the `kiNorA` project
+ * (ceeff5f6-0930-4e48-a0b0-17a6a5c9b9ad).
+ *
+ * ONE module for all five routes rather than five copies: the backoffice is a
+ * single visual surface and #414 asks for shared styling to live in exactly one
+ * place. Everything here resolves through the existing globals.css design
+ * tokens; no colour, radius or spacing literal is introduced except the two
+ * variables below, which globals.css does not define yet.
+ *
+ * This module defines NO card surface of its own. `.panel` and `.metric` both
+ * `composes: kin-surface from global` — the single definition kno/kInorA#416
+ * added to globals.css — and add only what is genuinely theirs (clipping for
+ * the panel head/body split, tile padding for the metric). Nothing here is
+ * temporary.
+ *
+ * Neither is `.kin-card`, deliberately: it carries `max-width: var(--maxw-card)`
+ * (24rem) and a `--sp-4` flex gap, which are right for a standalone card and
+ * wrong for a full-width panel or a tile in a four-column grid.
+ */
+
+.shell {
+  /*
+   * Deliberately NOT `.kin-page`: that shell is `min-height: 100vh` with
+   * `align-items/justify-content: center`, which is right for a login card and
+   * wrong for a tenant table, a log viewer or a metrics dashboard. Backoffice
+   * content is dense, wide and read top-down. #414.
+   */
+  width: 100%;
+  padding: var(--sp-4) var(--sp-3);
+
+  /* globals.css defines neither of these yet; scope them here rather than
+   * reaching into a file another change owns. */
+  --admin-muted-2: color-mix(in oklch, var(--muted), var(--bg) 42%);
+  --admin-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, monospace;
+}
+
+@media (min-width: 768px) {
+  .shell {
+    padding: var(--sp-5) var(--sp-4);
+  }
+}
+
+.frame {
+  max-width: 1420px;
+  margin: 0 auto;
+}
+
+/* ---- chrome --------------------------------------------------------- */
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.crumbs a:hover {
+  color: var(--fg);
+}
+
+.crumbsCurrent {
+  color: var(--admin-muted-2);
+}
+
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.topbarCopy {
+  max-width: 700px;
+}
+
+.topbarCopy p {
+  margin-top: var(--sp-1);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.topbarActions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+}
+
+.eyebrow {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+}
+
+.mono {
+  font-family: var(--admin-mono);
+  font-size: 0.75rem;
+  letter-spacing: -0.01em;
+}
+
+.num {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* ---- surfaces ------------------------------------------------------- */
+
+/* The surface itself lives in globals.css as `.kin-surface` — the single
+ * definition #416 introduced. Only the panel-specific clipping stays here,
+ * mirroring what `plan-week-view.module.css` `.panel` does. */
+.panel {
+  composes: kin-surface from global;
+  overflow: hidden;
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.panelHead h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  letter-spacing: -0.02em;
+}
+
+.panelBody {
+  padding: var(--sp-3);
+}
+
+.section {
+  margin-bottom: var(--sp-3);
+}
+
+.stepBadge {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.panelHead .stepBadge + h2 {
+  margin-right: auto;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.pillActive {
+  border-color: transparent;
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.pillActive::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ---- banners -------------------------------------------------------- */
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.banner b {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+}
+
+.bannerInfo {
+  border-color: color-mix(in oklch, var(--info), transparent 66%);
+  background: color-mix(in oklch, var(--info), transparent 92%);
+}
+
+.bannerSuccess {
+  border-color: color-mix(in oklch, var(--success), transparent 60%);
+  background: color-mix(in oklch, var(--success), transparent 93%);
+}
+
+.bannerWarning {
+  border-color: color-mix(in oklch, var(--warning), transparent 60%);
+  background: color-mix(in oklch, var(--warning), transparent 92%);
+}
+
+.bannerDanger {
+  border-color: color-mix(in oklch, var(--danger), transparent 56%);
+  background: color-mix(in oklch, var(--danger), transparent 91%);
+}
+
+/* ---- /admin landing: backoffice entry points ------------------------ */
+
+.accessGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-2);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.access {
+  display: block;
+  height: 100%;
+  padding: var(--sp-3);
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.access:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklch, var(--border), var(--fg) 22%);
+  background: color-mix(in oklch, var(--surface-2) 88%, transparent);
+}
+
+.accessTitle {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.3125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.accessDesc {
+  display: block;
+  margin-top: 7px;
+  max-width: 46ch;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.accessGo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border);
+  width: 100%;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.access:hover .accessGo {
+  color: var(--fg);
+}
+
+/* ---- metric grids --------------------------------------------------- */
+
+.grid {
+  display: grid;
+  gap: var(--sp-1);
+}
+
+.g2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.g3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.g4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.stack {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+/* A metric tile is a surface too, so it composes the same one rather than
+ * restating a third variant. It is NOT `.kin-card`: that adds
+ * `max-width: var(--maxw-card)` (24rem) and a `--sp-4` flex gap, both wrong for
+ * a tile sitting in a four-column grid. */
+.metric {
+  composes: kin-surface from global;
+  min-width: 0;
+  padding: var(--sp-3);
+}
+
+/* Doubled selector so the variant beats the composed `.kin-surface` background
+ * regardless of how the global and module stylesheets end up ordered. */
+.metric.metricLead {
+  background: var(--surface-2);
+}
+
+.metricValue {
+  margin-top: var(--sp-1);
+  font-family: var(--font-display);
+  font-size: 1.875rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.metricValueSm {
+  font-size: 1.3125rem;
+}
+
+.metricSub {
+  margin-top: 3px;
+  color: var(--admin-muted-2);
+  font-size: 0.75rem;
+}
+
+.metricAlert .metricValue {
+  color: var(--danger);
+}
+
+.metricAbsent .metricValue {
+  color: var(--admin-muted-2);
+}
+
+.metric.metricOverrideOn {
+  border-color: color-mix(in oklch, var(--accent), transparent 60%);
+  background: color-mix(in oklch, var(--surface), var(--accent) 5%);
+}
+
+.metricOverrideOn .metricValue {
+  color: var(--accent);
+}
+
+/* ---- distribution bars ---------------------------------------------- */
+
+.split {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.splitRow {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.splitName {
+  font-family: var(--admin-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.splitTrack {
+  height: 10px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.splitTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in oklch, var(--info), transparent 26%);
+}
+
+.splitValue {
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---- retention funnel ------------------------------------------------ */
+
+.funnel {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.funnelRow {
+  display: grid;
+  grid-template-columns: minmax(150px, 230px) minmax(0, 1fr) minmax(150px, auto);
+  gap: var(--sp-3);
+  align-items: center;
+}
+
+.funnelLabel {
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.funnelTrack {
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.funnelTrack span {
+  display: block;
+  height: 100%;
+  background: color-mix(in oklch, var(--info), transparent 32%);
+}
+
+.funnelValue {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: var(--sp-1);
+  white-space: nowrap;
+}
+
+.funnelValue strong {
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.funnelValue em {
+  padding-left: var(--sp-1);
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.funnelOrigin .funnelTrack span {
+  background: var(--accent-dim);
+}
+
+.funnelOrigin .funnelValue strong {
+  color: var(--accent);
+}
+
+/* ---- tables ---------------------------------------------------------- */
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  padding: 11px var(--sp-2);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 11px var(--sp-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8125rem;
+  vertical-align: top;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table tbody tr:hover td {
+  background: color-mix(in oklch, var(--surface-2) 60%, transparent);
+}
+
+.tableCohorts {
+  min-width: 860px;
+}
+
+.tableLogs {
+  min-width: 1100px;
+}
+
+.cellTime {
+  white-space: nowrap;
+  font-family: var(--admin-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.cellEvent {
+  white-space: nowrap;
+  font-family: var(--admin-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.cellWeek {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cellRatio {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+  white-space: nowrap;
+}
+
+.cellRatio strong {
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cellRatio em {
+  color: var(--admin-muted-2);
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.uuid {
+  font-family: var(--admin-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+  border-bottom: 1px dotted var(--border);
+  cursor: help;
+}
+
+.uuidNone {
+  border-bottom: 0;
+  color: var(--admin-muted-2);
+  cursor: default;
+}
+
+.outcome {
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.outcomeKo {
+  color: var(--danger);
+}
+
+.meta {
+  max-width: 320px;
+  font-family: var(--admin-mono);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tableFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+
+.note {
+  color: var(--admin-muted-2);
+  font-size: 0.75rem;
+}
+
+/* ---- log levels: tokens, never ad-hoc colour ------------------------- */
+
+.level {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.level::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.levelInfo {
+  color: var(--info);
+  border-color: color-mix(in oklch, var(--info), transparent 62%);
+  background: color-mix(in oklch, var(--info), transparent 92%);
+}
+
+.levelWarn {
+  color: var(--warning);
+  border-color: color-mix(in oklch, var(--warning), transparent 62%);
+  background: color-mix(in oklch, var(--warning), transparent 92%);
+}
+
+.levelError {
+  color: var(--danger);
+  border-color: color-mix(in oklch, var(--danger), transparent 58%);
+  background: color-mix(in oklch, var(--danger), transparent 90%);
+}
+
+/* ---- form fields ----------------------------------------------------- */
+
+.filters {
+  display: grid;
+  grid-template-columns: 150px minmax(160px, 1fr) minmax(180px, 1fr) 190px 190px auto;
+  gap: var(--sp-2);
+  align-items: end;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.field > label,
+.fieldLabel {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.hint {
+  color: var(--admin-muted-2);
+  font-size: 0.75rem;
+}
+
+.required {
+  color: var(--danger);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.fieldError {
+  color: var(--danger);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.fieldSpaced {
+  margin-top: var(--sp-3);
+}
+
+.bannerInline {
+  margin: var(--sp-3) 0 0;
+}
+
+.formFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding-top: var(--sp-3);
+  margin-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+
+.applyCell {
+  align-self: end;
+}
+
+/* Native date/time pickers render a light widget on a dark surface without
+ * this; `.kin-input` supplies the rest of the styling. */
+.dateInput {
+  color-scheme: dark;
+  font-family: var(--admin-mono);
+  font-size: 0.8125rem;
+}
+
+.textarea {
+  min-height: 92px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+/* ---- ai-config layout ------------------------------------------------ */
+
+.config {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  gap: var(--sp-3);
+  align-items: start;
+}
+
+.aside {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.panel.keys {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-color: color-mix(in oklch, var(--warning), transparent 68%);
+}
+
+.keysTop {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.keysIcon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: 1px solid color-mix(in oklch, var(--warning), transparent 62%);
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--warning), transparent 88%);
+  color: var(--warning);
+}
+
+.keys h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+}
+
+.keys p {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.summary {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+}
+
+.summary h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+}
+
+.kv {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.kv:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.kv strong {
+  color: var(--fg);
+  font-family: var(--admin-mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* ---- tenants layout --------------------------------------------------- */
+
+.provision {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+}
+
+.col {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.results {
+  display: grid;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.result {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 13px var(--sp-3);
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+
+.results li:first-child .result {
+  border-top: 0;
+}
+
+.result:hover {
+  background: var(--surface-2);
+}
+
+.resultSelected {
+  background: var(--surface-2);
+  box-shadow: inset 3px 0 0 var(--fg);
+}
+
+.resultName {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.resultId {
+  color: var(--admin-muted-2);
+  font-family: var(--admin-mono);
+  font-size: 0.6875rem;
+}
+
+.orgName {
+  font-family: var(--font-display);
+  font-size: 1.625rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.orgId {
+  margin-top: 5px;
+  color: var(--admin-muted-2);
+  font-family: var(--admin-mono);
+  font-size: 0.75rem;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-1);
+  margin-top: var(--sp-3);
+}
+
+.grantGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+
+.span2 {
+  grid-column: 1 / -1;
+}
+
+.panel.dangerZone {
+  border-color: color-mix(in oklch, var(--danger), transparent 62%);
+}
+
+.dangerZone .panelHead {
+  border-bottom-color: color-mix(in oklch, var(--danger), transparent 74%);
+}
+
+.dangerZone .panelHead h2 {
+  color: var(--danger);
+}
+
+.dangerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.dangerRow p {
+  max-width: 60ch;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+/* ---- states ----------------------------------------------------------- */
+
+.state {
+  display: grid;
+  gap: 11px;
+  justify-items: center;
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+}
+
+.state h2 {
+  max-width: 540px;
+  font-family: var(--font-display);
+  font-size: 1.625rem;
+  letter-spacing: -0.025em;
+}
+
+.state p {
+  max-width: 500px;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.stateCompact {
+  padding: var(--sp-5) var(--sp-4);
+}
+
+.stateCompact h2 {
+  font-size: var(--fs-h3);
+}
+
+.panel.stateIdle {
+  border-style: dashed;
+}
+
+.stateIdle .eyebrow {
+  color: var(--info);
+}
+
+.stateEmpty .eyebrow {
+  color: var(--admin-muted-2);
+}
+
+.panel.stateError {
+  border-color: color-mix(in oklch, var(--danger), transparent 56%);
+}
+
+.stateError .eyebrow {
+  color: var(--danger);
+}
+
+/* ---- responsive -------------------------------------------------------- */
+
+@media (max-width: 1180px) {
+  .accessGrid,
+  .config,
+  .provision {
+    grid-template-columns: 1fr;
+  }
+
+  .g4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .facts {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .applyCell {
+    grid-column: 1 / -1;
+  }
+
+  .funnelRow {
+    grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
+  }
+
+  .funnelValue {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 860px) {
+  .g3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .g2,
+  .g3,
+  .g4,
+  .facts,
+  .grantGrid,
+  .filters {
+    grid-template-columns: 1fr;
+  }
+
+  .splitRow {
+    grid-template-columns: 80px minmax(0, 1fr);
+  }
+
+  .splitValue {
+    grid-column: 1 / -1;
+  }
+
+  .funnelRow {
+    grid-template-columns: 1fr;
+  }
+
+  .state {
+    padding: var(--sp-5) var(--sp-3);
+  }
+}

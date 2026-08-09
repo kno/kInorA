@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { fetchProfile } from "../../auth/profile-client";
 import { LogsView } from "./LogsView";
+import { AdminPageShell } from "../AdminPageShell";
 
 /**
  * Admin observability logs page — /admin/logs (GH #310, Slice 2).
@@ -14,9 +15,13 @@ import { LogsView } from "./LogsView";
  *     `isAdmin` — the SAME superadmin guard the /admin landing and
  *     /admin/tenants pages use, so a non-admin never sees this panel.
  *  3. Renders the client LogsView (filters → results table → load more).
+ *
+ * Layout follows the Open Design `web-admin-logs.html` screen
+ * (kno/kInorA#414). The design's "6 errors in 24h" topbar pill is not
+ * rendered: this route has no aggregate endpoint (kno/kInorA#411).
  */
 export default async function AdminLogsPage() {
-  const t = await getTranslations("logs");
+  const t = await getTranslations();
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
 
@@ -26,14 +31,13 @@ export default async function AdminLogsPage() {
   }
 
   return (
-    <main className="kin-page">
-      <div className="kin-stack kin-stack--center">
-        <h1 className="kin-title">{t("title")}</h1>
-        <p className="kin-text kin-muted" style={{ marginBottom: "1.5rem" }}>
-          {t("description")}
-        </p>
-        <LogsView />
-      </div>
-    </main>
+    <AdminPageShell
+      eyebrow={t("admin.sectionEyebrow")}
+      title={t("logs.title")}
+      description={t("logs.description")}
+      backLabel={t("admin.pageTitle")}
+    >
+      <LogsView />
+    </AdminPageShell>
   );
 }
