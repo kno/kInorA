@@ -437,6 +437,51 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
     });
     expect(renderedText(es)).toContain("No pudimos cargar la sesión. Inténtalo de nuevo.");
   });
+
+  // 17d PR C: PR B's `409 plan_archived` reaches this client as a plain
+  // `message: "plan_archived"`. Left in the generic branch it rendered
+  // "We couldn't start the session. Please try again." next to a Retry —
+  // a retry that can never succeed, because the refusal is a state the user
+  // has to change on the plans list, not a transient failure.
+  it("explains a refused start on an archived plan, in EN and ES, and offers no futile retry", async () => {
+    startWorkoutSession.mockResolvedValue({
+      kind: "error",
+      message: "plan_archived",
+      code: "VALIDATION",
+    });
+
+    const en = renderScreen("en", { planId: "p1", day: 1 });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const enText = renderedText(en);
+    expect(enText).toContain("This plan is archived");
+    expect(enText).toContain("Unarchive it from your plans list");
+    expect(enText).not.toContain("We couldn't start the session. Please try again.");
+    expect(enText).not.toContain("Retry");
+
+    const es = renderScreen("es", { planId: "p1", day: 1 });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(renderedText(es)).toContain("Este plan está archivado");
+  });
+
+  it("still offers a retry for a genuinely transient start failure", async () => {
+    startWorkoutSession.mockResolvedValue({
+      kind: "error",
+      message: "workout_session_request_failed",
+      code: "UNREACHABLE",
+    });
+
+    const en = renderScreen("en", { planId: "p1", day: 1 });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const enText = renderedText(en);
+    expect(enText).toContain("We couldn't start the session. Please try again.");
+    expect(enText).toContain("Retry");
+  });
 });
 
 // 14b-v1.1 Slice B: mobile RPE capture — the set-record submit must carry the

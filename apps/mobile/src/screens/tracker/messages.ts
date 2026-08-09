@@ -69,6 +69,12 @@ export const messages = defineMessages({
   conflictDiscardFailed: { id: "mobileTracker.conflict.discardFailed" },
   errorStart: { id: "mobileTracker.error.start" },
   errorLoad: { id: "mobileTracker.error.load" },
+  /**
+   * 17d: the plan was archived, so the API refused a NEW session (409
+   * `plan_archived`). Not a transient failure — retrying cannot help, so this
+   * state points at the plans list instead of offering a retry.
+   */
+  errorPlanArchived: { id: "mobileTracker.error.planArchived" },
   errorRecord: { id: "mobileTracker.error.record" },
   errorComplete: { id: "mobileTracker.error.complete" },
   retry: { id: "mobileTracker.retry" },

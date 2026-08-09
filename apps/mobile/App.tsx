@@ -65,6 +65,7 @@ import ClientCreatePlanScreen, {
   type ClientCreatePlanRouteParams,
 } from "./src/screens/clients/ClientCreatePlanScreen";
 import ProfileScreen from "./src/screens/profile/ProfileScreen";
+import PlansScreen from "./src/screens/plans/PlansScreen";
 
 import {
   getSessionToken,
@@ -92,6 +93,8 @@ type RootStackParamList = {
   ClientList: undefined;
   ClientCreatePlan: ClientCreatePlanRouteParams;
   Profile: undefined;
+  /** 17d PR C — the plans list, reached from the HomeScreen hub. */
+  Plans: undefined;
 };
 
 /** Routes that require an authenticated session; auth routes are never guarded. */
@@ -106,6 +109,7 @@ const PROTECTED_ROUTES: (keyof RootStackParamList)[] = [
   "ClientList",
   "ClientCreatePlan",
   "Profile",
+  "Plans",
 ];
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -252,6 +256,11 @@ export default function App() {
             name="Profile"
             component={ProfileScreen}
             options={{ title: "Profile" }}
+          />
+          <Stack.Screen
+            name="Plans"
+            component={PlansScreen}
+            options={{ title: "Plans" }}
           />
         </Stack.Navigator>
       </NavigationContainer>

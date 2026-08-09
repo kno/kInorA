@@ -96,6 +96,9 @@ vi.mock("../screens/clients/ClientCreatePlanScreen", () => ({
 vi.mock("../screens/profile/ProfileScreen", () => ({
   default: stubScreen("Profile"),
 }));
+vi.mock("../screens/plans/PlansScreen", () => ({
+  default: stubScreen("Plans"),
+}));
 
 async function renderApp() {
   const App = (await import("../../App")).default;
@@ -115,5 +118,18 @@ describe("App navigator (17c PR5 — profile screen registration)", () => {
     const ProfileScreen = (await import("../screens/profile/ProfileScreen"))
       .default;
     expect(profileRoute?.component).toBe(ProfileScreen);
+  });
+});
+
+describe("App navigator (17d PR C — plans screen registration)", () => {
+  it("registers the Plans route pointing at PlansScreen", async () => {
+    registeredScreens.length = 0;
+    await renderApp();
+
+    const plansRoute = registeredScreens.find((s) => s.name === "Plans");
+    expect(plansRoute).toBeTruthy();
+
+    const PlansScreen = (await import("../screens/plans/PlansScreen")).default;
+    expect(plansRoute?.component).toBe(PlansScreen);
   });
 });
