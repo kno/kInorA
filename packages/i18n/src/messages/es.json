@@ -723,7 +723,10 @@
     "viewAllExercises": "Ver los 6 ejercicios",
     "emptyTitle": "Aún no hay entrenamientos",
     "emptyBody": "Crea un plan o empieza un entrenamiento para ver tu progreso aquí.",
-    "emptyCta": "Crear plan"
+    "emptyCta": "Crear plan",
+    "errorTitle": "No pudimos cargar tu panel",
+    "errorBody": "Algo salió mal al obtener tu progreso. Inténtalo de nuevo.",
+    "retry": "Inténtalo de nuevo"
   },
   "home": {
     "title": "Bienvenido a kInorA",
@@ -968,6 +971,7 @@
   "stats": {
     "title": "Estadísticas",
     "description": "Sigue tu progreso y revisa tu historial de entrenamiento.",
+    "error": "No pudimos cargar tus estadísticas. Inténtalo de nuevo.",
     "rangeWeek": "Semana",
     "rangeMonth": "Mes",
     "rangeYear": "Año",
@@ -1021,7 +1025,8 @@
       "down": "Volumen baja {volume} kg frente a la sesión anterior",
       "flat": "Volumen sin cambios frente a la sesión anterior"
     },
-    "loadMore": "Cargar más"
+    "loadMore": "Cargar más",
+    "error": "No pudimos cargar tu historial de entrenamientos. Inténtalo de nuevo."
   },
   "profile": {
     "title": "Perfil",
@@ -1592,7 +1597,8 @@
     "errors": {
       "conflict": "Este subdominio ya está en uso.",
       "invalid": "Revisa los colores e inténtalo de nuevo.",
-      "generic": "Algo salió mal. Inténtalo de nuevo."
+      "generic": "Algo salió mal. Inténtalo de nuevo.",
+      "loadFailed": "No se pudo cargar tu marca actual. El guardado está deshabilitado hasta que se cargue correctamente."
     }
   },
   "logs": {
@@ -1631,6 +1637,11 @@
       "forbidden": "Acceso denegado.",
       "invalid": "Revisa los filtros e inténtalo de nuevo.",
       "generic": "Se produjo un error. Inténtalo de nuevo."
+    }
+  },
+  "aiConfig": {
+    "errors": {
+      "loadFailed": "No se pudo cargar la configuración de IA actual. El guardado está deshabilitado hasta que se cargue correctamente."
     }
   },
   "platformStats": {

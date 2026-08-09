@@ -45,6 +45,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   const range = normalizeRange(params.range);
   const t = await getTranslations();
   const result = await getStatsAction(range);
+  const loadFailed = result.kind === "error";
   const summary = result.kind === "ok" ? result.summary : undefined;
 
   return (
@@ -65,7 +66,15 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
         </nav>
       </div>
 
-      {summary ? StatsBody({ summary, t }) : <p className="kin-text kin-muted">{t("stats.description")}</p>}
+      {loadFailed ? (
+        <p className="kin-text" role="alert" data-testid="stats-page-error">
+          {t("stats.error")}
+        </p>
+      ) : summary ? (
+        StatsBody({ summary, t })
+      ) : (
+        <p className="kin-text kin-muted">{t("stats.description")}</p>
+      )}
     </main>
   );
 }

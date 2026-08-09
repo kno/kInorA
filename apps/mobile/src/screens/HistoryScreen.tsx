@@ -32,6 +32,7 @@ export default function HistoryScreen() {
   const intl = useIntl();
   const [entries, setEntries] = useState<WorkoutHistoryEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +40,12 @@ export default function HistoryScreen() {
     (async () => {
       const result = await getWorkoutHistory({ limit: PAGE_SIZE, offset: 0 });
       if (cancelled) return;
-      setEntries(result.kind === "ok" ? result.entries : []);
+      if (result.kind === "ok") {
+        setEntries(result.entries);
+        setLoadFailed(false);
+      } else {
+        setLoadFailed(true);
+      }
       setLoaded(true);
     })();
 
@@ -52,7 +58,13 @@ export default function HistoryScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>{intl.formatMessage({ id: "history.title" })}</Text>
 
-      {loaded && entries.length === 0 && (
+      {loaded && loadFailed && (
+        <Text style={styles.empty} accessibilityRole="alert" testID="history-load-error">
+          {intl.formatMessage({ id: "history.error" })}
+        </Text>
+      )}
+
+      {loaded && !loadFailed && entries.length === 0 && (
         <Text style={styles.empty}>{intl.formatMessage({ id: "history.empty" })}</Text>
       )}
 
