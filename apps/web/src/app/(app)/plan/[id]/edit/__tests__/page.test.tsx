@@ -71,6 +71,7 @@ const readyPlan = {
   status: "ready",
   name: "Summer Cut",
   updatedAt: "2026-08-09T10:00:00.000Z",
+  version: 3,
   program: {
     weeklySessions: [
       {
@@ -117,7 +118,7 @@ describe("ProgramEditPage (17d PR D)", () => {
   it("refuses to edit a ready plan that has no stored program", async () => {
     fetchPlanStatus.mockResolvedValue({
       kind: "ok",
-      plan: { id: "plan-1", status: "ready", updatedAt: "2026-08-09T10:00:00.000Z" },
+      plan: { id: "plan-1", status: "ready", version: 3 },
     });
 
     const page = await ProgramEditPage({ params });
@@ -126,7 +127,7 @@ describe("ProgramEditPage (17d PR D)", () => {
   });
 
   it("refuses to edit when the version token is missing, rather than saving blind", async () => {
-    const { updatedAt: _dropped, ...withoutVersion } = readyPlan;
+    const { version: _dropped, ...withoutVersion } = readyPlan;
     fetchPlanStatus.mockResolvedValue({ kind: "ok", plan: withoutVersion });
 
     const page = await ProgramEditPage({ params });
@@ -142,7 +143,7 @@ describe("ProgramEditPage (17d PR D)", () => {
     const editor = findFirst(page, (el) => el.type === ProgramEditor);
     expect(editor).toBeDefined();
     expect(editor?.props?.program).toEqual(readyPlan.program);
-    expect(editor?.props?.updatedAt).toBe(readyPlan.updatedAt);
+    expect(editor?.props?.version).toBe(readyPlan.version);
     expect(editor?.props?.planName).toBe("Summer Cut");
   });
 });

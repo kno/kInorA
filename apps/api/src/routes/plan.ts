@@ -55,12 +55,18 @@ interface PlanRecord {
   name?: string;
   /** 17d PR B — threaded into GET /workout-plans/:id's response DTO. */
   archivedAt?: Date | null;
+  /** 17d PR D — instant of the last write, surfaced for display/audit only. */
+  updatedAt?: Date;
   /**
-   * 17d PR D — the optimistic-concurrency version token for a program edit.
+   * #421 — the optimistic-concurrency version token for a program edit. A
+   * monotonic counter, NOT a timestamp: `updatedAt` held this role until two
+   * successive defects proved that a clock reading cannot be a version (see
+   * `WorkoutPlanRepository.updateProgram`).
+   *
    * Optional here only so existing route tests that stub a bare plan record
    * keep compiling; the edit route treats a missing value as a stale one.
    */
-  updatedAt?: Date;
+  version?: number;
 }
 
 /** Lightweight plan summary for the list endpoint. */
@@ -172,7 +178,7 @@ export interface PlanRouteRepo {
   ): Promise<{ id: string; archivedAt: Date | null } | undefined>;
   /**
    * 17d PR D — replace `program_json` for one ready plan owned by the caller,
-   * conditioned on `expectedUpdatedAt` still matching the stored row. Resolves
+   * conditioned on `expectedVersion` still matching the stored row. Resolves
    * to `undefined` when 0 rows are updated — ambiguous between not-found,
    * not-ready and a stale version, which the route disambiguates by re-reading
    * the scoped row. Optional (alongside `findConfirmedSpecById`) so existing
@@ -184,7 +190,7 @@ export interface PlanRouteRepo {
     userId: string,
     id: string,
     program: WorkoutProgram,
-    expectedUpdatedAt: Date
+    expectedVersion: number
   ): Promise<PlanRecord | undefined>;
   /**
    * 17d PR D — the caller's CONFIRMED plan spec, read to derive the exercise
@@ -412,18 +418,24 @@ function draftChanged(next: PlanSpecDraft, prev: PlanSpecDraft): boolean {
 /**
  * Envelope schema for `PUT /workout-plans/:id/program` (17d PR D) — step 1 of
  * the seven ordered steps. It guards only the ENVELOPE: both fields present,
- * `program` an object, `expectedUpdatedAt` a string, nothing else accepted.
- * The program's own shape is deliberately NOT expressed here — that is
- * `WorkoutProgramSchema`'s job in step 2, and duplicating it would leave two
+ * `program` an object, `expectedVersion` an integer of at least 1, nothing else
+ * accepted. The program's own shape is deliberately NOT expressed here — that
+ * is `WorkoutProgramSchema`'s job in step 2, and duplicating it would leave two
  * definitions to drift apart.
+ *
+ * #421: `expectedVersion` replaced an ISO-8601 `expectedUpdatedAt`. Because the
+ * token is now an integer rather than a string that has to be parsed into a
+ * `Date`, "unusable token" collapses into "malformed envelope" and the schema
+ * is the only place that has to say so — there is no second, hand-written
+ * validity check in the handler for it to disagree with.
  */
 const updateProgramSchema = {
   body: {
     type: "object",
-    required: ["program", "expectedUpdatedAt"],
+    required: ["program", "expectedVersion"],
     properties: {
       program: { type: "object" },
-      expectedUpdatedAt: { type: "string" },
+      expectedVersion: { type: "integer", minimum: 1 },
     },
     additionalProperties: false,
   },
@@ -1286,10 +1298,14 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         // Archiving does not affect this deep link's reachability, only
         // /plans' default list visibility.
         archivedAt: plan.archivedAt ?? null,
-        // 17d PR D — the optimistic-concurrency token the program editor loads
-        // and sends back as `expectedUpdatedAt`. Without it the editor has no
-        // way to detect that another tab saved first.
+        // 17d PR D — instant of the last write, for display/audit.
         updatedAt: plan.updatedAt?.toISOString(),
+        // #421 — the optimistic-concurrency token the program editor loads and
+        // sends back as `expectedVersion`. Without it the editor has no way to
+        // detect that another tab saved first. `updatedAt` above used to serve
+        // this purpose and could not do it correctly; see
+        // `WorkoutPlanRepository.updateProgram`.
+        version: plan.version,
       });
     }
   );
@@ -1348,7 +1364,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   // PUT /workout-plans/:id/program  (17d PR D)
   //
   // Hand-edit a ready plan's program. A FULL-DOCUMENT replace, never a patch:
-  // the client sends the whole `WorkoutProgram` it edited plus the `updatedAt`
+  // the client sends the whole `WorkoutProgram` it edited plus the `version`
   // it loaded, and the server stores the whole thing or nothing.
   //
   // Editing does NOT rewrite history. `session_exercises` snapshots every
@@ -1367,10 +1383,10 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   //   5. resolve catalog ids against the spec's FULL equipment vocabulary
   //      (never the prompt-capped subset — the cap is a token budget and an
   //      edit has no prompt), reusing `resolveProgramCatalogIds` verbatim
-  //   6. updateProgram, guarded on `expectedUpdatedAt` → 200 | undefined
+  //   6. updateProgram, guarded on `expectedVersion` → 200 | undefined
   //   7. on undefined, re-read the scoped row to disambiguate
   //      404 / 409 plan_not_ready / 409 edit_conflict (with the CURRENT
-  //      updatedAt, so the losing writer can reload to exactly that version)
+  //      version, so the losing writer can reload to exactly that version)
   //
   // Registered only when the repo exposes both the write and the spec read.
   if (repo.updateProgram && repo.findConfirmedById) {
@@ -1384,14 +1400,12 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       async (request: FastifyRequest, reply: FastifyReply) => {
         const { tenantId, userId } = request.authContext!;
         const { id } = request.params as { id: string };
-        const body = request.body as { program: unknown; expectedUpdatedAt: string };
+        const body = request.body as { program: unknown; expectedVersion: number };
 
-        // Step 1 (continued): the schema proves the field is a string; only a
-        // parseable instant is a usable version token.
-        const expectedUpdatedAt = new Date(body.expectedUpdatedAt);
-        if (Number.isNaN(expectedUpdatedAt.getTime())) {
-          return reply.code(400).send({ error: "invalid_expected_updated_at" });
-        }
+        // #421: no second parse step. The schema above already proved
+        // `expectedVersion` is an integer >= 1, which is the whole of what makes
+        // a version token usable — unlike an ISO-8601 instant, which was
+        // well-typed as a string and still unusable if unparseable.
 
         // Step 2.
         const parsed = WorkoutProgramSchema.safeParse(body.program);
@@ -1436,7 +1450,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         };
 
         // Step 6.
-        const updated = await updateProgram(tenantId, userId, id, next, expectedUpdatedAt);
+        const updated = await updateProgram(tenantId, userId, id, next, body.expectedVersion);
 
         // Step 7: 0 rows updated is ambiguous between three causes, so re-read
         // the scoped row (no status/version filter) and say which one it was.
@@ -1450,7 +1464,7 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
           }
           return reply.code(409).send({
             error: "edit_conflict",
-            currentUpdatedAt: current.updatedAt?.toISOString() ?? null,
+            currentVersion: current.version ?? null,
           });
         }
 
@@ -1478,6 +1492,10 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
           id: updated.id,
           program: updated.programJson ?? next,
           updatedAt: updated.updatedAt?.toISOString(),
+          // #421 — the NEXT token, exactly one past the submitted one. The
+          // editor adopts it so a second save from the same open tab is not
+          // rejected as its own conflict.
+          version: updated.version,
         });
       }
     );
