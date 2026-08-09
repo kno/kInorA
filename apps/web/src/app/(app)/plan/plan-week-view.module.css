@@ -520,11 +520,13 @@
   height: 16px;
 }
 
-/* Panel (web-plan.html `.panel`) */
+/* Panel (web-plan.html `.panel`).
+ *
+ * The surface itself now lives in `globals.css` as `.kin-surface` — the same
+ * rule `.kin-card` uses, so the app has ONE card surface instead of this one
+ * plus a divergent global. Only the panel-specific clipping stays here. */
 .panel {
-  background: color-mix(in oklch, var(--surface) 92%, transparent);
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
+  composes: kin-surface from global;
   overflow: hidden;
 }
 

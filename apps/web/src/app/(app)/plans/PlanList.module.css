@@ -4,27 +4,99 @@
  * custom properties `globals.css` already defines, per the design's grep-
  * first instruction. `.kin-btn--primary` renders transparent in this repo
  * (undefined class) — every button here uses `.kin-btn--accent` instead.
+ *
+ * Issue #413: the card surface itself is NOT defined here. It comes from
+ * `.kin-card`, which now paints one for the whole app; this module only
+ * arranges the cards and gives the currently-followed plan its two-column
+ * treatment.
  */
 
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: var(--sp-3);
+  align-items: start;
 }
 
-/* The plan currently being followed spans two columns of the grid. */
+/* The grid track already sizes each card. `.kin-card`'s 24rem cap is for
+ * free-standing cards centred in a `.kin-page`; left in place here it would
+ * leave every wide column half-empty and stop the current plan from ever
+ * looking bigger than the rest. */
+.card {
+  max-width: none;
+}
+
+/* The plan currently being followed: the primary object on the page, not a
+ * wider row. Full grid width (`1 / -1` holds at any column count, unlike
+ * `span 2`, which overflowed a single-column layout) and a media column
+ * beside the body. */
 .currentPlan {
-  grid-column: span 2;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .currentPlan {
+    grid-template-columns: 1fr;
+  }
+}
+
+.media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 8rem;
+  height: 100%;
+  border-radius: calc(var(--r-card) - 6px);
+  background: linear-gradient(
+    140deg,
+    color-mix(in oklch, var(--accent) 22%, var(--surface-2)),
+    var(--surface-2)
+  );
+  color: var(--accent);
+}
+
+.mediaMark {
+  width: 55%;
+  max-width: 6rem;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
 }
 
 .badge {
-  display: inline-block;
+  align-self: flex-start;
   padding: 2px var(--sp-2);
   border-radius: var(--r-pill);
   background: var(--accent-dim);
   color: var(--accent);
   font-size: var(--fs-sm);
   font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: var(--sp-1);
+}
+
+.archivedSection {
+  margin-top: var(--sp-4);
+}
+
+.separator {
+  margin: var(--sp-3) 0;
+  border: 0;
+  border-top: 1px solid var(--border);
 }
 
 .lastTrainedRecent {
@@ -37,4 +109,22 @@
 
 .lastTrainedStale {
   color: var(--muted);
+}
+
+/* ---- Archive confirmation modal (issue #412) ---- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-3);
+  background: color-mix(in oklch, var(--bg) 70%, transparent);
+}
+
+.dialog {
+  max-width: 26rem;
+  gap: var(--sp-3);
 }
