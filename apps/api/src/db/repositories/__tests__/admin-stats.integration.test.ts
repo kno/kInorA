@@ -541,6 +541,14 @@ describe.skipIf(!hasDb)("AdminStatsRepository (real Postgres)", () => {
   });
 
   it("counts observability events + errors in the last 24 hours and excludes older rows", async () => {
+    // The lower bounds below hold under CONCURRENT INSERTS from other suites,
+    // but not under concurrent DELETES: a row counted in `before` that vanishes
+    // before `after` drives the count DOWN and fails `>= before + 1`. That is
+    // exactly what used to happen — `observability-events.integration.test.ts`
+    // ran an unscoped `DELETE FROM observability_events` in `beforeEach` (#405).
+    // It now scopes itself to private tenant ids instead. Nothing in the
+    // integration directory may wipe this table; a suite that needs a clean
+    // slate must carve out a private scope, not empty a shared one.
     const before = await repo.getPlatformStats(NOW);
     const inWindow = new Date(NOW.getTime() - 3600_000);
     const old = new Date(NOW.getTime() - 48 * 3600_000);

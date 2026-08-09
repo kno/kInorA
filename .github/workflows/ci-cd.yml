@@ -13,6 +13,34 @@ jobs:
   ci:
     name: CI
     runs-on: ubuntu-latest
+    # Postgres exists here for ONE step: Coverage. Every `*.integration.test.ts`
+    # is gated behind `describe.skipIf(!process.env.DATABASE_URL)`, so a
+    # coverage run without a database skips all of them and reports the code
+    # they exercise as almost untested — `billing-admin.ts` read 22% functions
+    # while its integration suite covered it against real Postgres (#404). The
+    # measurement has to run where the suites run.
+    #
+    # DATABASE_URL is deliberately set at STEP level on Coverage only, never on
+    # the job. `test:e2e` below brings up its OWN ephemeral Postgres on host
+    # port 5433 and injects its own DATABASE_URL; a job-level variable would
+    # leak into that stack. The plain `Test` step stays hermetic and keeps
+    # `apps/mobile` (which has no `test:coverage` script) in the gate.
+    services:
+      postgres:
+        # pgvector/pgvector:pg17, not plain postgres:17 — `db:migrate` applies
+        # 0010_vector_memory.sql, which runs `CREATE EXTENSION vector`.
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: kinora
+          POSTGRES_USER: kinora
+          POSTGRES_PASSWORD: kinora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kinora -d kinora"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,8 +65,22 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Run database migrations
+        run: pnpm --filter api db:migrate
+        env:
+          DATABASE_URL: postgres://kinora:kinora@localhost:5432/kinora
+
       - name: Coverage
+        # With DATABASE_URL present the integration suites run instead of
+        # skipping, so the coverage report reflects the code they genuinely
+        # exercise. This also picks up the five integration suites that live
+        # OUTSIDE `src/db/repositories/__tests__` (routes, tenant provisioning,
+        # the seat-sync sweep) and therefore fall outside the
+        # `billing-integration` job's glob — until now they ran with a database
+        # in no job at all.
         run: pnpm test:coverage
+        env:
+          DATABASE_URL: postgres://kinora:kinora@localhost:5432/kinora
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
