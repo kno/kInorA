@@ -153,7 +153,10 @@ describe("@kinora/i18n package assembly", () => {
         // 16a-v3-gym-white-label: the `brandingStudio.*` /branding white-label
         // studio namespace has its own scoped count test below, per the
         // frozen-total convention.
-        !key.startsWith("brandingStudio."),
+        !key.startsWith("brandingStudio.") &&
+        // 17d PR A: the `plans.*` /plans list namespace has its own scoped
+        // count test below, per the frozen-total convention.
+        !key.startsWith("plans."),
     );
     // +1 `tracker.restartLabel` authored for #251 (restart-timer control on
     // the live tracker topbar; pause/restart now persist across navigation).
@@ -228,7 +231,12 @@ describe("@kinora/i18n package assembly", () => {
     // `brandingStudio.errors.loadFailed` (kno/kInorA#378, a sixth
     // collapsed-error site) is NOT counted here — `brandingStudio.*` has its
     // own scoped count test below, per the frozen-total convention.
-    expect(nonBillingKeys).toHaveLength(801);
+    // +2 `plan.nav.loadError.{title,desc}` (17d PR A) — the `/plan` page's
+    // swallowed-error fix: a distinguishable error state, separate from the
+    // pre-existing `plan.nav.empty.*` genuinely-zero-plans copy.
+    // `plans.*` itself is NOT counted here — it has its own scoped count
+    // test below, per the frozen-total convention.
+    expect(nonBillingKeys).toHaveLength(803);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
@@ -466,13 +474,37 @@ describe("@kinora/i18n package assembly", () => {
     // conditional Admin nav entry in SidebarNav + MobileNav's overflow menu).
     // + 1 `appNav.branding` authored for the gym Branding Studio nav entry
     // (conditional entry visible only to gym-tier tenants, mirroring admin).
-    expect(appNavKeys).toHaveLength(11);
+    // + 1 `appNav.plans` authored for 17d PR A (the /plans nav entry, shared
+    // SidebarNav.NAV_ITEMS + MobileNav.SECONDARY_TABS).
+    expect(appNavKeys).toHaveLength(12);
     expect(flat["appNav.dashboard"]).toBe("Dashboard");
     expect(flattenMessages(catalogs.es)["appNav.dashboard"]).toBe("Panel");
     expect(flat["appNav.admin"]).toBeTruthy();
     expect(flattenMessages(catalogs.es)["appNav.admin"]).toBeTruthy();
     expect(flat["appNav.branding"]).toBeTruthy();
     expect(flattenMessages(catalogs.es)["appNav.branding"]).toBeTruthy();
+    expect(flat["appNav.plans"]).toBe("Plans");
+    expect(flattenMessages(catalogs.es)["appNav.plans"]).toBe("Planes");
+  });
+
+  it("the plans namespace is present with EN+ES parity (17d PR A — /plans list)", () => {
+    expect(catalogs.en.plans).toBeDefined();
+    expect(catalogs.es.plans).toBeDefined();
+
+    const result = validateCatalogParity(catalogs.en, catalogs.es);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+
+    const flat = flattenMessages(catalogs.en);
+    const plansKeys = Object.keys(flat).filter((key) => key.startsWith("plans."));
+    // title, description, error = 3 scalar + empty.{title,desc,cta} = 3 +
+    // list.{currentlyFollowing,daysPerWeek,completedSessions,lastTrained,
+    // neverTrained,open} = 6 + list.openDisabled.{generating,failed} = 2.
+    expect(plansKeys).toHaveLength(14);
+    expect(flat["plans.title"]).toBe("Plans");
+    expect(flattenMessages(catalogs.es)["plans.title"]).toBe("Planes");
+    expect(flat["plans.list.neverTrained"]).toBe("Never trained");
+    expect(flattenMessages(catalogs.es)["plans.list.neverTrained"]).toBe("Nunca entrenado");
   });
 
   it("the admin namespace is present with EN+ES parity (GH #306 — admin backoffice access point)", () => {

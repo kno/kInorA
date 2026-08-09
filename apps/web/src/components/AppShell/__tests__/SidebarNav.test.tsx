@@ -35,9 +35,9 @@ describe("SidebarNav", () => {
     expect(html).toContain("kInorA");
   });
 
-  it("renders all 6 navigation items with correct labels", () => {
+  it("renders all 7 navigation items with correct labels", () => {
     const html = renderToStringWithIntl(<SidebarNav />);
-    const labels = ["Dashboard", "Plan", "Statistics", "History", "Create Plan", "Exercises"];
+    const labels = ["Dashboard", "Plan", "Plans", "Statistics", "History", "Create Plan", "Exercises"];
     for (const label of labels) {
       expect(html).toContain(label);
     }
@@ -56,7 +56,7 @@ describe("SidebarNav", () => {
 
   it("renders all nav links with correct href values", () => {
     const html = renderToStringWithIntl(<SidebarNav />);
-    const expectedHrefs = ["/dashboard", "/plan", "/stats", "/history", "/create-plan", "/exercises"];
+    const expectedHrefs = ["/dashboard", "/plan", "/plans", "/stats", "/history", "/create-plan", "/exercises"];
     for (const href of expectedHrefs) {
       expect(html).toContain(`href="${href}"`);
     }
@@ -66,7 +66,7 @@ describe("SidebarNav", () => {
     const html = renderToStringWithIntl(<SidebarNav />);
 
     const iconCount = (html.match(/focusable="false"/g) || []).length;
-    expect(iconCount).toBe(7);
+    expect(iconCount).toBe(8);
   });
 
   it("renders a user area with placeholder initials when no user prop is given", () => {

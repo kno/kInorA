@@ -321,6 +321,10 @@ describe("shared contracts boundary", () => {
       status: string;
       createdAt: string;
       name?: string;
+      /** 17d PR A — `?progress=1` only, absent when unknown, never 0/a fabricated date. */
+      daysPerWeek?: number;
+      completedSessions?: number;
+      lastTrainedAt?: string;
     }>();
     expectTypeOf<WorkoutPlanDetail>().toEqualTypeOf<{
       id: string;
