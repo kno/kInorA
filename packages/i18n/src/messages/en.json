@@ -1771,13 +1771,26 @@
       "unarchiveAction": "Unarchive",
       "showToggle": "Show archived ({count})",
       "hideToggle": "Hide archived",
-      "sectionHeading": "Archived plans"
+      "sectionHeading": "Archived plans",
+      "bulk": {
+        "selectLabel": "Select {name}",
+        "selectedCount": "{count, plural, one {# plan selected} other {# plans selected}}",
+        "action": "Archive selected",
+        "clear": "Clear selection",
+        "confirmTitle": "{count, plural, one {Archive this plan?} other {Archive these # plans?}}",
+        "confirmBody": "{count, plural, one {Archiving hides this plan from your list. Every session and stat is kept — nothing is deleted, and you can unarchive it anytime.} other {Archiving hides these # plans from your list. Every session and stat is kept — nothing is deleted, and you can unarchive them anytime.}}",
+        "successBody": "{count, plural, one {# plan archived.} other {# plans archived.}}",
+        "resultTitle": "Some plans were not archived",
+        "resultArchived": "Archived: {names}",
+        "resultFailed": "Not archived: {names}. Try again, or archive them one at a time."
+      }
     }
   },
   "planEdit": {
     "title": "Edit program",
     "description": "Change the days and exercises in this program. Your training history is untouched — sessions you already trained keep exactly what they recorded, and any session in progress right now keeps the workout it started with. Edits apply to the next session you start.",
     "openAction": "Edit program",
+    "nameLabel": "Plan name",
     "dayNumberLabel": "Day of the week (1-7)",
     "dayTitleLabel": "Day title",
     "exerciseNameLabel": "Exercise",
@@ -1796,7 +1809,9 @@
       "empty_program": "Keep at least one training day — a program with no days cannot be started.",
       "duplicate_day": "Two days share the same day of the week. Give each one its own.",
       "invalid_day": "Every day of the week must be between 1 and 7.",
-      "empty_session": "Every day needs at least one exercise."
+      "empty_session": "Every day needs at least one exercise.",
+      "plan_name_empty": "Give this plan a name — a blank one gets labelled with its creation date instead.",
+      "plan_name_too_long": "This name is too long. Keep it to 120 characters or fewer."
     },
     "conflict": {
       "title": "This plan changed somewhere else",

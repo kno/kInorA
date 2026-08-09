@@ -16,6 +16,10 @@
  *    start; this asserts the rows are byte-identical before and after the
  *    edit, which is the behavioural half of the same guarantee the tracker's
  *    source-scan guard pins structurally.
+ * 4. Renaming a plan (#415) changes the name column and NOTHING else — the
+ *    same byte-identical snapshot comparison as (3), run over a pure rename
+ *    rather than a program edit, because that is the acceptance criterion the
+ *    issue actually states.
  *
  * Opt-in via `DATABASE_URL` (podman pgvector:pg17 harness, the same pattern as
  * `workout-plan-archive.integration.test.ts`) — skipped when no real Postgres
@@ -340,6 +344,147 @@ describe.skipIf(!hasDb)("Program edit end-to-end (real Postgres, 17d PR D)", () 
 
     expect(firstRows.map((row) => row.name)).toEqual(["Original Exercise 1"]);
     expect(secondRows.map((row) => row.name)).toEqual(["Edited Day Two"]);
+  });
+
+  // #415 — renaming rides `updateProgram`, so the claim "renaming alters no
+  // session, set record, or derived statistic" is a claim about real rows and
+  // only real rows can settle it.
+  describe("rename (#415)", () => {
+    it("persists the new name", async () => {
+      const { tenantId, userId } = await seedOwner();
+      const plan = await seedReadyPlan(tenantId, userId, programOf(1));
+
+      const updated = await planRepo.updateProgram(
+        tenantId,
+        userId,
+        plan.id,
+        programOf(1),
+        plan.version,
+        "Winter Bulk",
+      );
+
+      expect(updated!.name).toBe("Winter Bulk");
+      const reread = await planRepo.findById(tenantId, userId, plan.id);
+      expect(reread!.name).toBe("Winter Bulk");
+    });
+
+    it("leaves the stored name alone when no name is submitted", async () => {
+      const { tenantId, userId } = await seedOwner();
+      const plan = await seedReadyPlan(tenantId, userId, programOf(1));
+      const named = await planRepo.updateProgram(
+        tenantId,
+        userId,
+        plan.id,
+        programOf(1),
+        plan.version,
+        "Winter Bulk",
+      );
+
+      await planRepo.updateProgram(
+        tenantId,
+        userId,
+        plan.id,
+        programOf(1),
+        named!.version,
+      );
+
+      const after = await planRepo.findById(tenantId, userId, plan.id);
+      expect(after!.name).toBe("Winter Bulk");
+    });
+
+    // The acceptance criterion, stated as rows: rename a plan that has a
+    // FINISHED session with set records behind it, then prove every one of
+    // those rows is byte-identical afterwards.
+    it("alters no session, no set record, and nothing derived from them", async () => {
+      const { tenantId, userId } = await seedOwner();
+      const plan = await seedReadyPlan(tenantId, userId, programOf(2));
+
+      const started = await sessionRepo.startSession(tenantId, userId, plan.id, 1);
+      const sessionId = started && "session" in started ? started.session.id : undefined;
+      expect(sessionId).toBeDefined();
+
+      const before = await snapshotOf(sessionId!);
+      expect(before.exercises.length).toBeGreaterThan(0);
+      expect(before.sets.length).toBeGreaterThan(0);
+
+      // The program is submitted UNCHANGED — this is a pure rename, which is
+      // the case the acceptance criterion is actually about.
+      const current = await planRepo.findById(tenantId, userId, plan.id);
+      const renamed = await planRepo.updateProgram(
+        tenantId,
+        userId,
+        plan.id,
+        programOf(2),
+        current!.version,
+        "Winter Bulk",
+      );
+      expect(renamed!.name).toBe("Winter Bulk");
+
+      // Byte-identical is the right claim HERE: both sides are the same rows
+      // read back the same way, so any difference is a real difference.
+      const after = await snapshotOf(sessionId!);
+      expect(JSON.stringify(after)).toBe(JSON.stringify(before));
+
+      // And the program itself is still the one that was there.
+      //
+      // `toEqual`, NOT a JSON.stringify comparison: `program_json` is `jsonb`,
+      // and Postgres normalizes object key order on the way in (by key length,
+      // then bytewise). A literal written `{ name, sets, reps, restSeconds }`
+      // comes back as `{ name, reps, sets, restSeconds }` — same document,
+      // different bytes. Stringify-comparing a jsonb round-trip against a JS
+      // literal asserts Postgres's storage order, not the program's content.
+      expect(renamed!.programJson).toEqual(programOf(2));
+    });
+
+    // Deterministic since #426: the token is a monotonic integer, so the first
+    // write moves `version` from N to N+1 and the replay of N cannot match. No
+    // clock is involved and no timing window exists — this passes or fails for
+    // one reason, on any machine, at any speed.
+    it("a rename on a stale token loses the race like any other edit", async () => {
+      const { tenantId, userId } = await seedOwner();
+      const plan = await seedReadyPlan(tenantId, userId, programOf(1));
+
+      const first = await planRepo.updateProgram(
+        tenantId,
+        userId,
+        plan.id,
+        programOf(1),
+        plan.version,
+        "First Writer",
+      );
+      const lost = await planRepo.updateProgram(
+        tenantId,
+        userId,
+        plan.id,
+        programOf(1),
+        plan.version,
+        "Second Writer",
+      );
+
+      expect(first!.version).toBe(plan.version + 1);
+      expect(lost).toBeUndefined();
+      const reread = await planRepo.findById(tenantId, userId, plan.id);
+      expect(reread!.name).toBe("First Writer");
+    });
+
+    it("cannot rename another user's plan", async () => {
+      const owner = await seedOwner();
+      const intruder = await seedOwner();
+      const plan = await seedReadyPlan(owner.tenantId, owner.userId, programOf(1));
+
+      const result = await planRepo.updateProgram(
+        intruder.tenantId,
+        intruder.userId,
+        plan.id,
+        programOf(1),
+        plan.version,
+        "Stolen",
+      );
+
+      expect(result).toBeUndefined();
+      const reread = await planRepo.findById(owner.tenantId, owner.userId, plan.id);
+      expect(reread!.name).toBeNull();
+    });
   });
 });
 

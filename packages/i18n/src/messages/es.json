@@ -1771,13 +1771,26 @@
       "unarchiveAction": "Desarchivar",
       "showToggle": "Ver archivados ({count})",
       "hideToggle": "Ocultar archivados",
-      "sectionHeading": "Planes archivados"
+      "sectionHeading": "Planes archivados",
+      "bulk": {
+        "selectLabel": "Seleccionar {name}",
+        "selectedCount": "{count, plural, one {# plan seleccionado} other {# planes seleccionados}}",
+        "action": "Archivar seleccionados",
+        "clear": "Quitar selección",
+        "confirmTitle": "{count, plural, one {¿Archivar este plan?} other {¿Archivar estos # planes?}}",
+        "confirmBody": "{count, plural, one {Archivar oculta este plan de tu lista. Cada sesión y estadística se conserva — no se elimina nada, y puedes desarchivarlo cuando quieras.} other {Archivar oculta estos # planes de tu lista. Cada sesión y estadística se conserva — no se elimina nada, y puedes desarchivarlos cuando quieras.}}",
+        "successBody": "{count, plural, one {# plan archivado.} other {# planes archivados.}}",
+        "resultTitle": "Algunos planes no se archivaron",
+        "resultArchived": "Archivados: {names}",
+        "resultFailed": "Sin archivar: {names}. Inténtalo de nuevo, o archívalos de uno en uno."
+      }
     }
   },
   "planEdit": {
     "title": "Editar programa",
     "description": "Cambia los días y ejercicios de este programa. Tu historial de entrenamiento no se toca: las sesiones que ya entrenaste conservan exactamente lo que registraron, y una sesión en curso conserva el entrenamiento con el que empezó. Los cambios se aplican a la siguiente sesión que inicies.",
     "openAction": "Editar programa",
+    "nameLabel": "Nombre del plan",
     "dayNumberLabel": "Día de la semana (1-7)",
     "dayTitleLabel": "Título del día",
     "exerciseNameLabel": "Ejercicio",
@@ -1796,7 +1809,9 @@
       "empty_program": "Mantén al menos un día de entrenamiento: un programa sin días no se puede iniciar.",
       "duplicate_day": "Dos días comparten el mismo día de la semana. Asigna uno distinto a cada uno.",
       "invalid_day": "Cada día de la semana debe estar entre 1 y 7.",
-      "empty_session": "Cada día necesita al menos un ejercicio."
+      "empty_session": "Cada día necesita al menos un ejercicio.",
+      "plan_name_empty": "Ponle un nombre a este plan: si lo dejas en blanco se etiquetará con su fecha de creación.",
+      "plan_name_too_long": "Este nombre es demasiado largo. Usa 120 caracteres o menos."
     },
     "conflict": {
       "title": "Este plan cambió en otro sitio",

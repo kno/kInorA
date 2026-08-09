@@ -111,16 +111,26 @@ function buildPlanRepo(overrides: PlanRepoMock = {}): PlanRepoMock {
     findConfirmedById: vi.fn().mockResolvedValue({ equipment: [] }),
     updateProgram: vi
       .fn()
-      .mockImplementation((_t: string, _u: string, id: string, program: WorkoutProgram) =>
-        Promise.resolve({
-          id,
-          status: "ready",
-          planSpecId: SPEC_A,
-          name: "Summer Cut",
-          programJson: program,
-          updatedAt: SAVED_UPDATED_AT,
-          version: SAVED_VERSION,
-        }),
+      .mockImplementation(
+        (
+          _t: string,
+          _u: string,
+          id: string,
+          program: WorkoutProgram,
+          _expectedVersion: number,
+          name?: string,
+        ) =>
+          Promise.resolve({
+            id,
+            status: "ready",
+            planSpecId: SPEC_A,
+            // Stands in for the real adapter, which writes the name only when
+            // one was submitted and resolves it through `defaultPlanName`.
+            name: name ?? "Summer Cut",
+            programJson: program,
+            updatedAt: SAVED_UPDATED_AT,
+            version: SAVED_VERSION,
+          }),
       ),
     ...overrides,
   };
@@ -645,6 +655,165 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
       // Kept as free text with no id, exactly as generation does.
       expect(written.weeklySessions[0]!.exercises[0]!.name).toBe("Wubbawubba Curl");
       expect(written.weeklySessions[0]!.exercises[0]!.catalogId).toBeUndefined();
+    });
+  });
+
+  // #415 — renaming rides this same route, this same envelope and this same
+  // version guard, so these assertions are about the seam: what reaches the
+  // write, what the response says the plan is now called, and what a name the
+  // rules refuse does to the program that came with it.
+  describe("rename (#415)", () => {
+    const NAME_ARG = 5;
+
+    it("passes a submitted name through to the guarded write", async () => {
+      const repo = buildPlanRepo();
+      app = await buildTestApp(repo);
+
+      const res = await put(app, {
+        program: editedProgram(),
+        expectedVersion: LOADED_VERSION,
+        name: "Winter Bulk",
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(repo.updateProgram!.mock.calls[0]![NAME_ARG]).toBe("Winter Bulk");
+      expect(res.json().name).toBe("Winter Bulk");
+    });
+
+    it("stores the trimmed name, because the trimmed name is what was validated", async () => {
+      const repo = buildPlanRepo();
+      app = await buildTestApp(repo);
+
+      const res = await put(app, {
+        program: editedProgram(),
+        expectedVersion: LOADED_VERSION,
+        name: "   Winter Bulk   ",
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(repo.updateProgram!.mock.calls[0]![NAME_ARG]).toBe("Winter Bulk");
+    });
+
+    // Absent and blank are NOT the same request. A program-only save must
+    // leave the stored name alone rather than overwrite it with anything.
+    it("passes undefined when the body carries no name at all", async () => {
+      const repo = buildPlanRepo();
+      app = await buildTestApp(repo);
+
+      const res = await put(app, {
+        program: editedProgram(),
+        expectedVersion: LOADED_VERSION,
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(repo.updateProgram!.mock.calls[0]![NAME_ARG]).toBeUndefined();
+    });
+
+    it("422s a whitespace-only name instead of storing a blank the default layer would rename", async () => {
+      const repo = buildPlanRepo();
+      app = await buildTestApp(repo);
+
+      const res = await put(app, {
+        program: editedProgram(),
+        expectedVersion: LOADED_VERSION,
+        name: "   ",
+      });
+
+      expect(res.statusCode).toBe(422);
+      expect(res.json()).toEqual({
+        error: "plan_name_empty",
+        issues: ["plan_name_empty"],
+      });
+      expect(repo.updateProgram).not.toHaveBeenCalled();
+    });
+
+    it("422s a name past the column bound rather than letting the INSERT fail as a 500", async () => {
+      const repo = buildPlanRepo();
+      app = await buildTestApp(repo);
+
+      const res = await put(app, {
+        program: editedProgram(),
+        expectedVersion: LOADED_VERSION,
+        name: "a".repeat(121),
+      });
+
+      expect(res.statusCode).toBe(422);
+      expect(res.json().issues).toEqual(["plan_name_too_long"]);
+      expect(repo.updateProgram).not.toHaveBeenCalled();
+    });
+
+    // One save is one transaction in both directions: a refused name must not
+    // let the program through, and a refused program must not let the name
+    // through. Both report through the same `issues` array.
+    it("a refused name blocks the program it was submitted with", async () => {
+      const repo = buildPlanRepo();
+      app = await buildTestApp(repo);
+
+      const res = await put(app, {
+        program: editedProgram(),
+        expectedVersion: LOADED_VERSION,
+        name: "",
+      });
+
+      expect(res.statusCode).toBe(422);
+      expect(repo.updateProgram).not.toHaveBeenCalled();
+    });
+
+    it("a refused program blocks the rename it was submitted with", async () => {
+      const repo = buildPlanRepo();
+      app = await buildTestApp(repo);
+
+      const res = await put(app, {
+        program: editedProgram({ weeklySessions: [] }),
+        expectedVersion: LOADED_VERSION,
+        name: "Winter Bulk",
+      });
+
+      expect(res.statusCode).toBe(422);
+      expect(res.json().issues).toEqual(["empty_program"]);
+      expect(repo.updateProgram).not.toHaveBeenCalled();
+    });
+
+    // The point of not giving rename its own endpoint: it inherits a guard
+    // that is already correct, so a stale token loses the same way.
+    it("a rename on a stale version loses the race like any other edit", async () => {
+      const repo = buildPlanRepo({
+        updateProgram: vi.fn().mockResolvedValue(undefined),
+        findPlanById: vi.fn().mockResolvedValue(readyPlan()),
+      });
+      app = await buildTestApp(repo);
+
+      const res = await put(app, {
+        program: editedProgram(),
+        expectedVersion: LOADED_VERSION - 1,
+        name: "Winter Bulk",
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toEqual({
+        error: "edit_conflict",
+        currentVersion: LOADED_VERSION,
+      });
+    });
+
+    // Renaming reaches ONE repository method, and it is the plan write. There
+    // is no session, set-record or statistics call anywhere on this path — the
+    // structural half of "renaming alters no training history".
+    it("touches no repository beyond the guarded plan write", async () => {
+      const repo = buildPlanRepo();
+      app = await buildTestApp(repo);
+
+      await put(app, {
+        program: editedProgram(),
+        expectedVersion: LOADED_VERSION,
+        name: "Winter Bulk",
+      });
+
+      const called = Object.entries(repo)
+        .filter(([, fn]) => fn && (fn as ReturnType<typeof vi.fn>).mock?.calls.length > 0)
+        .map(([method]) => method)
+        .sort();
+      expect(called).toEqual(["findConfirmedById", "findPlanById", "updateProgram"]);
     });
   });
 });

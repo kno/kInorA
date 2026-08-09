@@ -14,6 +14,13 @@ export { derivePreferenceScores } from "./derive-preference-scores.js";
 export { defaultPlanName } from "./default-plan-name.js";
 
 export {
+  PLAN_NAME_MAX_LENGTH,
+  normalizePlanName,
+  validatePlanName,
+} from "./plan-name.js";
+export type { PlanNameIssue } from "./plan-name.js";
+
+export {
   SESSION_DURATION_LIMITS,
   validateSessionDuration,
 } from "./session-duration.js";
