@@ -1,14 +1,21 @@
 "use client";
 
 /**
- * plan-presentational.tsx — presentational-only building blocks for the
- * `/plan` cockpit, built 1:1 to `screens/web-plan.html`.
+ * plan-presentational.tsx — building blocks for the `/plan` cockpit, laid out
+ * to `screens/web-plan.html`.
  *
- * IMPORTANT: every export in this file is presentational only — no data model
- * yet. The copy is static (sourced from the i18n catalog) and the interactive
- * bits (toast buttons, coach actions) mirror the mockup's inline script. There
- * is no server action, API call, or domain data behind any of them. The real
- * data-wired surfaces live in `PlanWeekView` (metrics), `DayDetailPanel`
+ * `PlanHero` is NO LONGER presentational (#411). It used to render the mockup's
+ * session copy — a fixed date, "68 min", "6 exercises", a session title — as if
+ * it were the user's data, next to a "Move to Saturday" button whose toast said
+ * the session had been moved when nothing was written. Everything it renders is
+ * now either derived from the real program (`PlanWeekView` passes it down) or
+ * gone. A missing feature is honest; a lying one is not.
+ *
+ * `PlanSideRail` IS still presentational only — no data model yet. Its copy is
+ * static and its coach actions mirror the mockup's inline script with no
+ * coaching engine behind them. That is tracked separately from this fix.
+ *
+ * The data-wired surfaces live in `PlanWeekView` (metrics), `DayDetailPanel`
  * (7-tile board + per-day detail) and `PlanTrackerClient` (session lifecycle).
  */
 
@@ -24,9 +31,11 @@ import styles from "./plan-week-view.module.css";
  * client `PlanTrackerClient` as part of its `children` slot, so it cannot
  * receive the session-start handler as an ordinary prop. `PlanTrackerClient`
  * publishes the real handler through this context; when it is present, the hero
- * CTA invokes it (actually starting the recommended session) INSTEAD of raising
- * the presentational toast. When absent (PlanHero used without a start
- * capability), the CTA keeps its original toast-only fallback.
+ * renders its "Start session" CTA and the CTA invokes it.
+ *
+ * When absent (PlanHero used without a start capability) the CTA is NOT
+ * rendered at all. It previously fell back to a toast reading "Session started"
+ * — a button that reported starting a session it never started (#411).
  */
 const HeroStartContext = React.createContext<(() => void) | undefined>(undefined);
 
@@ -54,39 +63,65 @@ function useToast(): [string | null, (message: string) => void] {
 }
 
 /**
- * Topbar actions — presentational only, no data model yet. "Edit plan" is a
- * real link to /create-plan; "Rebalance week" raises an ephemeral toast like
- * the mockup, with no plan mutation behind it.
+ * Topbar actions. "Edit plan" is a real link to /create-plan.
+ *
+ * The mockup's "Rebalance week" button was removed for #411: it raised a toast
+ * reading "Week rebalanced: HIIT eases and strength keeps priority" and mutated
+ * nothing. Rebalancing a week is a real feature that needs its own model (what
+ * moves, what displaces what, how it survives a plan edit), not a button that
+ * claims to have done it.
  */
 export function PlanToolbar() {
   const t = useTranslations("plan.hero");
-  const [toast, flash] = useToast();
   return (
     <div className={styles.topbarActions}>
-      <button type="button" className={styles.btn} onClick={() => flash(t("rebalanceToast"))}>
-        {t("rebalanceCta")}
-      </button>
       <a className={`${styles.btn} ${styles.btnPrimary}`} href="/create-plan">
         {t("editCta")}
       </a>
-      {toast ? (
-        <div className={styles.toast} role="status" aria-live="polite">
-          {toast}
-        </div>
-      ) : null}
     </div>
   );
 }
 
+/** The recommended session, reduced to exactly what the hero can truthfully show. */
+export interface PlanHeroSession {
+  /** `WorkoutSession.title` verbatim. */
+  title: string;
+  /** `estimateSessionMinutes(session.exercises)` — the same estimator the metrics tile uses. */
+  durationMinutes: number;
+  /** `session.exercises.length`. */
+  exerciseCount: number;
+}
+
+export interface PlanHeroProps {
+  /**
+   * The real current date, already locale-formatted by `PlanWeekView` via the
+   * shared `formatToday` (the same formatter the dashboard topbar pill uses).
+   * Formatted upstream because this is a client component and the locale is
+   * only resolvable server-side.
+   */
+  todayLabel: string;
+  /**
+   * The recommended session — the SAME one the Start CTA begins. Absent only
+   * when the program has no sessions at all, in which case the hero says so
+   * instead of inventing one.
+   */
+  session?: PlanHeroSession;
+  /** DATA-WIRED metrics grid rendered by `PlanWeekView` (kept as server JSX). */
+  children?: React.ReactNode;
+}
+
 /**
- * Hero panel — presentational only, no data model yet. Renders the session
- * meta pills, session copy, action buttons (toast) and the muscle body-map.
- * The `children` slot carries the DATA-WIRED metrics grid rendered by
- * `PlanWeekView` (kept as literal server JSX so it stays server-derived).
+ * Hero panel. Every value it renders is derived from the real program or the
+ * real clock (#411).
+ *
+ * Removed rather than wired, because no data model backs them:
+ *  - the muscle body-map (a fixed illustration, a "Push active" badge and a
+ *    "Chest · shoulders · triceps" focus line, none of which follow the plan)
+ *  - the session lead paragraph and the "Push + pull" focus pill
+ *  - the "Move to Saturday" button, whose toast said the session had been moved
  */
-export function PlanHero({ children }: { children?: React.ReactNode }) {
+export function PlanHero({ todayLabel, session, children }: PlanHeroProps) {
   const t = useTranslations("plan.hero");
-  const [toast, flash] = useToast();
   // Real start handler published by PlanTrackerClient (see HeroStartContext).
   // Present on the wired `/plan` cockpit; absent for any presentational-only use.
   const onStart = React.useContext(HeroStartContext);
@@ -94,79 +129,39 @@ export function PlanHero({ children }: { children?: React.ReactNode }) {
   return (
     <section className={`${styles.panel} ${styles.hero}`} aria-labelledby="plan-hero-title">
       <div className={styles.heroBody}>
-        {/* presentational only — no data model yet (session meta pills) */}
         <div className={styles.sessionMeta}>
-          <span className={`${styles.pill} ${styles.pillActive}`}>{t("pillToday")}</span>
-          <span className={styles.pill}>{t("pillDuration")}</span>
-          <span className={styles.pill}>{t("pillExercises")}</span>
-          <span className={styles.pill}>{t("pillFocus")}</span>
+          <span className={`${styles.pill} ${styles.pillActive}`}>
+            {t("pillToday", { date: todayLabel })}
+          </span>
+          {session && (
+            <span className={styles.pill}>
+              {t("pillDuration", { minutes: session.durationMinutes })}
+            </span>
+          )}
+          {session && (
+            <span className={styles.pill}>
+              {t("pillExercises", { count: session.exerciseCount })}
+            </span>
+          )}
         </div>
-        {/* presentational only — no data model yet (today session copy) */}
         <h2 className={styles.heroTitle} id="plan-hero-title">
-          {t("sessionTitle")}
+          {session ? session.title : t("noSessionTitle")}
         </h2>
-        <p className={styles.heroLead}>{t("sessionLead")}</p>
-        {/* presentational only — no data model yet (hero actions/toasts) */}
-        <div className={styles.heroActions}>
-          <button
-            type="button"
-            className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={onStart ?? (() => flash(t("startToast")))}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true">
-              <polygon points="7 4 20 12 7 20" />
-            </svg>
-            {t("startCta")}
-          </button>
-          <button type="button" className={styles.btn} onClick={() => flash(t("swapToast"))}>
-            {t("swapCta")}
-          </button>
-        </div>
+        {/* The CTA renders ONLY when a real start handler is wired — see
+            HeroStartContext. No handler means no button, not a fake one. */}
+        {onStart && (
+          <div className={styles.heroActions}>
+            <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={onStart}>
+              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true">
+                <polygon points="7 4 20 12 7 20" />
+              </svg>
+              {t("startCta")}
+            </button>
+          </div>
+        )}
         {/* DATA-WIRED metrics grid (rendered by PlanWeekView, passed as children) */}
         {children}
       </div>
-
-      {/* presentational only — no data model yet (muscle body-map + images) */}
-      <aside className={styles.bodyMap} aria-label={t("focusLabel")}>
-        <div className={styles.muscleShot}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/plan/pilot-push-male.png" alt={t("imageAlt")} />
-          <div className={styles.muscleBadge}>{t("badge")}</div>
-        </div>
-        <div className={styles.mapLabel}>
-          <div className={styles.focusRow}>
-            <strong>{t("focusLabel")}</strong>
-            <span className={styles.muted}>{t("focusValue")}</span>
-          </div>
-          <div className={styles.loadBar} aria-hidden="true">
-            <span />
-          </div>
-          <div className={styles.imageStrip}>
-            <div className={styles.imageChip}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/plan/pilot-push-male.png" alt={t("chipTodayAlt")} />
-              <span>
-                <b>{t("chipTodayLabel")}</b>
-                {t("chipTodayText")}
-              </span>
-            </div>
-            <div className={styles.imageChip}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/plan/pilot-leg-female.png" alt={t("chipNextAlt")} />
-              <span>
-                <b>{t("chipNextLabel")}</b>
-                {t("chipNextText")}
-              </span>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {toast ? (
-        <div className={styles.toast} role="status" aria-live="polite">
-          {toast}
-        </div>
-      ) : null}
     </section>
   );
 }

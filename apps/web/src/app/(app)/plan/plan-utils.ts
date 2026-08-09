@@ -73,6 +73,26 @@ export function sessionLoadBars(
 }
 
 /**
+ * The session the plan page recommends next: the first planned training day
+ * this week NOT yet completed, falling back to the first planned session when
+ * every planned day is done or no weekly overview is available.
+ *
+ * Extracted here for #411 so the hero COPY and the hero START CTA are derived
+ * from the same call. Before this, `PlanTrackerClient` computed the started day
+ * and the hero described a hardcoded mockup session, so a user could read one
+ * session and start a different one.
+ *
+ * `overviewDays` is `WeeklyOverviewDTO.days` (a 7-entry, Monday-first array),
+ * so `day` N maps to index N-1.
+ */
+export function recommendedSession(
+  sessions: WorkoutSession[],
+  overviewDays?: Array<{ status: WeeklyDayStatus }>,
+): WorkoutSession | undefined {
+  return sessions.find((s) => overviewDays?.[s.day - 1]?.status !== "done") ?? sessions[0];
+}
+
+/**
  * One slot of the 7-tile Monday–Sunday weekly board (spec-fidelity fix,
  * 09c-v1-progress-dashboard-stats). Every calendar day gets a tile, whether
  * or not it is one of the plan's training days.

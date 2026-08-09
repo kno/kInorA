@@ -254,7 +254,24 @@ describe("@kinora/i18n package assembly", () => {
     // +6 `aiConfig.*` (kno/kInorA#414) — the /admin/ai-config panel gained an
     // API-keys notice and a server-configuration summary, both of which needed
     // real catalog copy instead of more hardcoded literals.
-    expect(nonBillingKeys).toHaveLength(813);
+    // -16 `plan.hero.*` (kno/kInorA#411) — the plan hero shipped the Open
+    // Design mockup's copy as if it were the user's data. 17 keys removed:
+    // the fabricated session copy (`sessionTitle`, `sessionLead`, `pillFocus`),
+    // the whole muscle body-map (`badge`, `imageAlt`, `focusValue`,
+    // `chip{Today,Next}{Label,Text,Alt}`), and three controls that reported
+    // success for actions that wrote nothing (`swapCta`/`swapToast`
+    // "Move to Saturday", `rebalanceCta`/`rebalanceToast` "Rebalance week",
+    // and `startToast`, the toast a start button raised when no real start
+    // handler was wired). +1 `noSessionTitle` for the honest empty case.
+    // The three surviving value keys (`pillToday`, `pillDuration`,
+    // `pillExercises`) became ICU templates fed by the real clock and the
+    // real recommended session. Net 25 -> 9.
+    //
+    // NOTE: this total is the one line every concurrent branch edits, so a
+    // merge that takes either side wholesale stays GREEN on a number matching
+    // whichever catalog survived. It is derived from the merged catalogs, never
+    // carried over from one side: 813 (post-#409/#414) - 16 = 797.
+    expect(nonBillingKeys).toHaveLength(797);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
