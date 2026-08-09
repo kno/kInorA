@@ -411,6 +411,9 @@
     },
     "branding": {
       "byTrainer": "De {trainerName}"
+    },
+    "archived": {
+      "badge": "Archivado"
     }
   },
   "tracker": {
@@ -1730,6 +1733,17 @@
         "generating": "Este plan todavía se está generando",
         "failed": "Este plan no se pudo generar"
       }
+    },
+    "archive": {
+      "action": "Archivar",
+      "confirmTitle": "¿Archivar este plan?",
+      "confirmBody": "Archivar oculta este plan de tu lista. Cada sesión y estadística se conserva — no se elimina nada, y puedes desarchivarlo cuando quieras.",
+      "confirm": "Archivar",
+      "cancel": "Cancelar",
+      "unarchiveAction": "Desarchivar",
+      "showToggle": "Ver archivados ({count})",
+      "hideToggle": "Ocultar archivados",
+      "sectionHeading": "Planes archivados"
     }
   }
 }

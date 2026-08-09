@@ -236,7 +236,9 @@ describe("@kinora/i18n package assembly", () => {
     // pre-existing `plan.nav.empty.*` genuinely-zero-plans copy.
     // `plans.*` itself is NOT counted here — it has its own scoped count
     // test below, per the frozen-total convention.
-    expect(nonBillingKeys).toHaveLength(803);
+    // +1 `plan.archived.badge` (17d PR B) — the archived-plan week-view
+    // indicator shown when a plan reached via `/plan?planId=X` is archived.
+    expect(nonBillingKeys).toHaveLength(804);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
@@ -499,12 +501,19 @@ describe("@kinora/i18n package assembly", () => {
     const plansKeys = Object.keys(flat).filter((key) => key.startsWith("plans."));
     // title, description, error = 3 scalar + empty.{title,desc,cta} = 3 +
     // list.{currentlyFollowing,daysPerWeek,completedSessions,lastTrained,
-    // neverTrained,open} = 6 + list.openDisabled.{generating,failed} = 2.
-    expect(plansKeys).toHaveLength(14);
+    // neverTrained,open} = 6 + list.openDisabled.{generating,failed} = 2
+    // (14, 17d PR A) + archive.{action,confirmTitle,confirmBody,confirm,
+    // cancel,unarchiveAction,showToggle,hideToggle,sectionHeading} = 9
+    // (17d PR B — the show-archived toggle + per-row archive/unarchive).
+    expect(plansKeys).toHaveLength(23);
     expect(flat["plans.title"]).toBe("Plans");
     expect(flattenMessages(catalogs.es)["plans.title"]).toBe("Planes");
     expect(flat["plans.list.neverTrained"]).toBe("Never trained");
     expect(flattenMessages(catalogs.es)["plans.list.neverTrained"]).toBe("Nunca entrenado");
+    expect(flat["plans.archive.confirmBody"]).toContain("nothing is deleted");
+    expect(flattenMessages(catalogs.es)["plans.archive.confirmBody"]).toContain(
+      "no se elimina nada",
+    );
   });
 
   it("the admin namespace is present with EN+ES parity (GH #306 — admin backoffice access point)", () => {
