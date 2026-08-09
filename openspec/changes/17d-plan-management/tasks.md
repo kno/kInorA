@@ -469,13 +469,13 @@ Affect An In-Progress Session (ADDED).
 
 ### The pure validator
 
-- [ ] D.1 RED: `packages/domain/src/plan/__tests__/edited-program.test.ts` — every branch of
+- [x] D.1 RED: `packages/domain/src/plan/__tests__/edited-program.test.ts` — every branch of
       `validateEditedProgram`, exhaustively (this function falls under the global 100% functions
       threshold, not apps/api's 85%): zero sessions → `["empty_program"]`; two sessions claiming the
       same day → `["duplicate_day"]`; day `0` and day `8` → `["invalid_day"]` each; a day with zero
       exercises → `["empty_session"]`; multiple simultaneous issues all reported, in document order; a
       fully valid program → `[]`
-- [ ] D.2 GREEN: create `packages/domain/src/plan/edited-program.ts` exporting
+- [x] D.2 GREEN: create `packages/domain/src/plan/edited-program.ts` exporting
       `EditedProgramIssue = "empty_program" | "duplicate_day" | "invalid_day" | "empty_session"` and
       `validateEditedProgram(program: WorkoutProgram): EditedProgramIssue[]` — pure, total, no I/O, no
       throw; `invalid_day`'s bound (`1..7`) copied from the start route's own `day: { minimum: 1,
@@ -484,27 +484,27 @@ Affect An In-Progress Session (ADDED).
 
 ### Contracts: the edit + conflict DTOs
 
-- [ ] D.3 RED: extend `contracts.test.ts` — compile-time checks for `UpdatePlanProgramRequest { program,
+- [x] D.3 RED: extend `contracts.test.ts` — compile-time checks for `UpdatePlanProgramRequest { program,
       expectedUpdatedAt }`, `UpdatePlanProgramResponse { id, program, updatedAt }`, and
       `PlanEditConflictResponse { error: "edit_conflict"; currentUpdatedAt }`
-- [ ] D.4 GREEN: add the three types from D.3 to `packages/contracts/src/index.ts`; confirm D.3 is green
+- [x] D.4 GREEN: add the three types from D.3 to `packages/contracts/src/index.ts`; confirm D.3 is green
       and the runtime export list is unedited
 
 ### Repository: `updateProgram`
 
-- [ ] D.5 RED: `apps/api/src/db/repositories/__tests__/workout-plan.test.ts` — `updateProgram` succeeds
+- [x] D.5 RED: `apps/api/src/db/repositories/__tests__/workout-plan.test.ts` — `updateProgram` succeeds
       only when `tenant + user + id` match, `status = 'ready'`, and `updated_at` equals the caller's
       `expectedUpdatedAt`; returns `undefined` on any mismatch (0 rows updated) without distinguishing
       the cause at this layer (disambiguation is the route's job, D.7); a successful call advances
       `updatedAt` past the submitted value
-- [ ] D.6 GREEN: in `apps/api/src/db/repositories/workout-plan.ts` — add
+- [x] D.6 GREEN: in `apps/api/src/db/repositories/workout-plan.ts` — add
       `updateProgram(tenantId, userId, id, program, expectedUpdatedAt): Promise<WorkoutPlanRecord |
       undefined>` conditioning the `UPDATE` on `tenant_id AND user_id AND id AND status='ready' AND
       updated_at=$expectedUpdatedAt`, `SET program_json, updated_at=now()`; confirm D.5 is green
 
 ### The route: seven ordered steps
 
-- [ ] D.7 RED: `apps/api/src/routes/__tests__/plan-edit.test.ts` — a submitted `catalogId` never
+- [x] D.7 RED: `apps/api/src/routes/__tests__/plan-edit.test.ts` — a submitted `catalogId` never
       survives into what reaches the repository (asserted on the captured `updateProgram` call
       argument, not just the response — Zod's default object strip-by-default is the mechanism, and
       this test is what would fail if a global `.passthrough()` were ever introduced); the
@@ -516,7 +516,7 @@ Affect An In-Progress Session (ADDED).
       `expectedUpdatedAt`; a matching `expectedUpdatedAt` succeeds and the response's `updatedAt`
       advances past it; on 0 rows updated, the route re-reads the scoped row to disambiguate
       404/409-not-ready/409-conflict rather than returning a generic failure
-- [ ] D.8 GREEN: in `apps/api/src/routes/plan.ts` — register `PUT /workout-plans/:id/program`
+- [x] D.8 GREEN: in `apps/api/src/routes/plan.ts` — register `PUT /workout-plans/:id/program`
       implementing the seven ordered steps: (1) Fastify JSON schema → 400 on a malformed envelope; (2)
       `WorkoutProgramSchema.parse` → 422 `invalid_program` (strips `catalogId` structurally); (3)
       `validateEditedProgram` → 422 with the specific issue; (4) load the plan (tenant+user+id) → 404
@@ -534,7 +534,7 @@ Affect An In-Progress Session (ADDED).
 
 ### The web editor UI
 
-- [ ] D.9 RED: RTL + jsdom component test for a new
+- [x] D.9 RED: RTL + jsdom component test for a new
       `apps/web/src/app/(app)/plan/[id]/edit/__tests__/ProgramEditor.test.tsx` — loads the current
       program and its `updatedAt`; submits an edit carrying that `updatedAt` back as
       `expectedUpdatedAt`; on a `409 edit_conflict` response, renders a message distinct from a
@@ -542,14 +542,14 @@ Affect An In-Progress Session (ADDED).
       `failed` plan cannot be edited; a submission removing every session is blocked client-side before
       the request (surfacing `validateEditedProgram`'s "keep at least one session" rule early, though
       the server remains the source of truth)
-- [ ] D.10 GREEN: create `apps/web/src/app/(app)/plan/[id]/edit/{page.tsx,ProgramEditor.tsx,
+- [x] D.10 GREEN: create `apps/web/src/app/(app)/plan/[id]/edit/{page.tsx,ProgramEditor.tsx,
       program-edit-client.ts,actions.ts}`; no edit affordance renders on an archived row per PR B's
       list UI (archive is allowed server-side but inert without a session — no new client-side gate
       needed beyond simply not rendering the control there); confirm D.9 is green
 
 ### The tracker invariant guard
 
-- [ ] D.11 RED then GREEN, one commit (the guard is the deliverable — no production code change):
+- [x] D.11 RED then GREEN, one commit (the guard is the deliverable — no production code change):
       `apps/web/src/app/(app)/plan/[id]/tracker/__tests__/tracker-model.invariant.test.ts` — a
       source-scan asserting `tracker-model.ts` contains no `programJson`/`WorkoutProgram`/`plan.program`
       reference; stated in the guard's own comment as a lint pinning a structural guarantee, not a type
@@ -558,7 +558,7 @@ Affect An In-Progress Session (ADDED).
 
 ### End-to-end proof
 
-- [ ] D.12 RED then GREEN:
+- [x] D.12 RED then GREEN:
       `apps/api/src/db/repositories/__tests__/workout-plan-edit.integration.test.ts` — seed a ready
       plan, `updateProgram` with a changed exercise name, `startSession` the same day, assert the new
       `session_exercises` row carries the edited name (the "next start reflects the edit" acceptance
@@ -571,13 +571,13 @@ Affect An In-Progress Session (ADDED).
 
 ### i18n
 
-- [ ] D.13 GREEN: add `planEdit.*` (form labels, conflict message, not-ready message, remove-day
+- [x] D.13 GREEN: add `planEdit.*` (form labels, conflict message, not-ready message, remove-day
       validation message) to `packages/i18n/src/messages/{en,es}.json`, both locales; bump the
       leaf-key-count canary; rebuild before manual verification
 
 ### PR D verification
 
-- [ ] D.14 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green (apps/api functions
+- [x] D.14 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green (apps/api functions
       ≥85%, apps/web functions ≥90%, `packages/domain` under the global 100% functions threshold);
       `pnpm type-check` clean; `pnpm build` succeeds
 
