@@ -86,12 +86,16 @@ describe("HistoryPage", () => {
     expect(textOf(page)).toContain("No completed sessions yet.");
   });
 
-  it("falls back to an empty list when the action errors (fail-open, matches listPlansAction pattern)", async () => {
+  it("shows a visible error state (not the empty state) when the action errors", async () => {
     getWorkoutHistoryAction.mockResolvedValue({ kind: "error", message: "api_unreachable" });
 
     const page = await HistoryPage({ searchParams: Promise.resolve({}) });
+    const text = textOf(page);
 
-    expect(textOf(page)).toContain("No completed sessions yet.");
+    expect(text).not.toContain("No completed sessions yet.");
+    const error = findFirst(page, (el) => el.props?.["data-testid"] === "history-error");
+    expect(error).toBeDefined();
+    expect(error?.props?.role).toBe("alert");
   });
 
   it("renders duration and average RPE for a completed session", async () => {
@@ -137,6 +141,24 @@ describe("HistoryPage", () => {
 });
 
 // --- React tree inspection helpers ---
+
+function findFirst(
+  node: ReactNode,
+  match: (el: AnyElement) => boolean,
+): AnyElement | undefined {
+  if (isReactElement(node)) {
+    if (match(node)) return node;
+    const inChildren = findFirst(node.props.children, match);
+    if (inChildren) return inChildren;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findFirst(child, match);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
 
 function textOf(node: ReactNode): string {
   if (typeof node === "string") return node;
