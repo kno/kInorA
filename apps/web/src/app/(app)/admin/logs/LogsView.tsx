@@ -9,13 +9,19 @@ import {
   type LogLevel,
 } from "./logs-constants";
 import { fetchLogsAction } from "./actions";
+import styles from "../admin.module.css";
 
 type Status = { kind: "idle" } | { kind: "loading" } | { kind: "error"; message: string };
 
-const LEVEL_COLOR: Record<LogLevel, string> = {
-  info: "#2563eb",
-  warn: "#d97706",
-  error: "#dc2626",
+/**
+ * Level badge classes. These used to be raw hex literals applied as an inline
+ * `color`, which is why levels never matched the product palette; they now
+ * resolve through the `--info` / `--warning` / `--danger` design tokens.
+ */
+const LEVEL_CLASS: Record<LogLevel, string | undefined> = {
+  info: styles.levelInfo,
+  warn: styles.levelWarn,
+  error: styles.levelError,
 };
 
 /**
@@ -97,177 +103,214 @@ export function LogsView() {
   const loading = status.kind === "loading";
 
   return (
-    <div style={{ maxWidth: 960 }}>
-      <form onSubmit={handleApply} className="kin-card" style={{ marginBottom: "1rem" }}>
-        <div style={{ display: "grid", gap: "0.75rem" }}>
-          <div>
-            <label htmlFor="logs-level" style={{ display: "block", marginBottom: "0.25rem" }}>
-              {t("filters.level")}
-            </label>
-            <select
-              id="logs-level"
-              data-testid="logs-filter-level"
-              value={level}
-              onChange={(e) => setLevel(e.target.value as LogLevel | "")}
-              className="kin-input"
-              style={{ width: "100%" }}
-            >
-              <option value="">{t("filters.levelAll")}</option>
-              {LOG_LEVELS.map((value) => (
-                <option key={value} value={value}>
-                  {t(`level.${value}`)}
-                </option>
-              ))}
-            </select>
-          </div>
+    <div>
+      <section className={`${styles.panel} ${styles.section}`} aria-labelledby="logs-filters-title">
+        <div className={styles.panelHead}>
+          <h2 id="logs-filters-title">{t("filtersTitle")}</h2>
+        </div>
+        <form onSubmit={handleApply} className={styles.panelBody}>
+          <div className={styles.filters}>
+            <div className={styles.field}>
+              <label htmlFor="logs-level">{t("filters.level")}</label>
+              <select
+                id="logs-level"
+                data-testid="logs-filter-level"
+                value={level}
+                onChange={(e) => setLevel(e.target.value as LogLevel | "")}
+                className="kin-input"
+              >
+                <option value="">{t("filters.levelAll")}</option>
+                {LOG_LEVELS.map((value) => (
+                  <option key={value} value={value}>
+                    {t(`level.${value}`)}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div>
-            <label htmlFor="logs-event" style={{ display: "block", marginBottom: "0.25rem" }}>
-              {t("filters.event")}
-            </label>
-            <input
-              id="logs-event"
-              data-testid="logs-filter-event"
-              type="text"
-              value={event}
-              onChange={(e) => setEvent(e.target.value)}
-              className="kin-input"
-              style={{ width: "100%" }}
-              placeholder={t("filters.eventPlaceholder")}
-            />
-          </div>
+            <div className={styles.field}>
+              <label htmlFor="logs-event">{t("filters.event")}</label>
+              <input
+                id="logs-event"
+                data-testid="logs-filter-event"
+                type="text"
+                value={event}
+                onChange={(e) => setEvent(e.target.value)}
+                className="kin-input"
+                placeholder={t("filters.eventPlaceholder")}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </div>
 
-          <div>
-            <label htmlFor="logs-tenant" style={{ display: "block", marginBottom: "0.25rem" }}>
-              {t("filters.tenantId")}
-            </label>
-            <input
-              id="logs-tenant"
-              data-testid="logs-filter-tenant"
-              type="text"
-              value={tenantId}
-              onChange={(e) => setTenantId(e.target.value)}
-              className="kin-input"
-              style={{ width: "100%" }}
-              placeholder={t("filters.tenantIdPlaceholder")}
-            />
-          </div>
+            <div className={styles.field}>
+              <label htmlFor="logs-tenant">{t("filters.tenantId")}</label>
+              <input
+                id="logs-tenant"
+                data-testid="logs-filter-tenant"
+                type="text"
+                value={tenantId}
+                onChange={(e) => setTenantId(e.target.value)}
+                className="kin-input"
+                placeholder={t("filters.tenantIdPlaceholder")}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </div>
 
-          <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "1fr 1fr" }}>
-            <div>
-              <label htmlFor="logs-from" style={{ display: "block", marginBottom: "0.25rem" }}>
-                {t("filters.from")}
-              </label>
+            <div className={styles.field}>
+              <label htmlFor="logs-from">{t("filters.from")}</label>
               <input
                 id="logs-from"
                 data-testid="logs-filter-from"
                 type="datetime-local"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
-                className="kin-input"
-                style={{ width: "100%" }}
+                className={`kin-input ${styles.dateInput}`}
               />
             </div>
-            <div>
-              <label htmlFor="logs-to" style={{ display: "block", marginBottom: "0.25rem" }}>
-                {t("filters.to")}
-              </label>
+
+            <div className={styles.field}>
+              <label htmlFor="logs-to">{t("filters.to")}</label>
               <input
                 id="logs-to"
                 data-testid="logs-filter-to"
                 type="datetime-local"
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
-                className="kin-input"
-                style={{ width: "100%" }}
+                className={`kin-input ${styles.dateInput}`}
               />
             </div>
+
+            <div className={styles.applyCell}>
+              <button
+                type="submit"
+                data-testid="logs-apply"
+                disabled={loading}
+                className="kin-btn kin-btn--primary"
+              >
+                {loading ? t("filters.applying") : t("filters.apply")}
+              </button>
+            </div>
           </div>
+        </form>
+      </section>
 
-          <button
-            type="submit"
-            data-testid="logs-apply"
-            disabled={loading}
-            className="kin-btn kin-btn--primary"
-          >
-            {loading ? t("filters.applying") : t("filters.apply")}
-          </button>
-        </div>
-      </form>
-
-      {status.kind === "error" && (
-        <p role="alert" style={{ color: "red" }}>
+      {/*
+       * Three states that must not be confused with one another. Before this
+       * change "no query has been run yet" and "the query returned zero rows"
+       * rendered the SAME sentence under the SAME test id, so an admin who had
+       * not pressed Apply was told there were no matching events. Nothing had
+       * been asked of the API at that point.
+       */}
+      {status.kind === "error" && events.length > 0 && (
+        <p className={`${styles.banner} ${styles.bannerDanger}`} role="alert">
           {status.message}
         </p>
       )}
 
-      {applied && status.kind !== "error" && events.length === 0 ? (
-        <p data-testid="logs-empty" className="kin-muted">
-          {t("empty")}
-        </p>
-      ) : null}
-
-      {!applied ? (
-        <p data-testid="logs-empty" className="kin-muted">
-          {t("empty")}
-        </p>
+      {status.kind === "error" && events.length === 0 ? (
+        <section className={`${styles.panel} ${styles.state} ${styles.stateError}`} role="alert">
+          <div className={styles.eyebrow}>{t("errorEyebrow")}</div>
+          <p>{status.message}</p>
+        </section>
+      ) : !applied ? (
+        <section
+          className={`${styles.panel} ${styles.state} ${styles.stateIdle}`}
+          data-testid="logs-idle"
+        >
+          <div className={styles.eyebrow}>{t("idle.eyebrow")}</div>
+          <h2>{t("idle.title")}</h2>
+          <p>{t("idle.description")}</p>
+        </section>
+      ) : events.length === 0 ? (
+        <section
+          className={`${styles.panel} ${styles.state} ${styles.stateEmpty}`}
+          data-testid="logs-empty"
+        >
+          <div className={styles.eyebrow}>{t("emptyEyebrow")}</div>
+          <h2>{t("emptyTitle")}</h2>
+          <p>{t("emptyDescription")}</p>
+        </section>
       ) : null}
 
       {events.length > 0 && (
-        <div className="kin-card" style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8125rem" }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: "left" }}>{t("columns.time")}</th>
-                <th style={{ textAlign: "left" }}>{t("columns.level")}</th>
-                <th style={{ textAlign: "left" }}>{t("columns.event")}</th>
-                <th style={{ textAlign: "left" }}>{t("columns.tenant")}</th>
-                <th style={{ textAlign: "left" }}>{t("columns.actor")}</th>
-                <th style={{ textAlign: "left" }}>{t("columns.outcome")}</th>
-                <th style={{ textAlign: "left" }}>{t("columns.metadata")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((row) => (
-                <tr key={row.id} data-testid="log-row">
-                  <td>{new Date(row.createdAt).toLocaleString()}</td>
-                  <td>
-                    <span
-                      data-testid="log-level"
-                      style={{ color: LEVEL_COLOR[row.level], fontWeight: 600 }}
-                    >
-                      {t(`level.${row.level}`)}
-                    </span>
-                  </td>
-                  <td>{row.event}</td>
-                  <td title={row.tenantId ?? undefined} style={{ fontFamily: "monospace" }}>
-                    {row.tenantId ? `${row.tenantId.slice(0, 8)}…` : "—"}
-                  </td>
-                  <td title={row.actorUserId ?? undefined} style={{ fontFamily: "monospace" }}>
-                    {row.actorUserId ? `${row.actorUserId.slice(0, 8)}…` : "—"}
-                  </td>
-                  <td>{row.outcome ?? "—"}</td>
-                  <td style={{ fontFamily: "monospace", whiteSpace: "pre-wrap" }}>
-                    {JSON.stringify(row.metadata)}
-                  </td>
+        <section className={styles.panel} aria-labelledby="logs-results-title">
+          <div className={styles.panelHead}>
+            <h2 id="logs-results-title">{t("resultsTitle")}</h2>
+          </div>
+          <div className={styles.tableWrap}>
+            <table className={`${styles.table} ${styles.tableLogs}`}>
+              <thead>
+                <tr>
+                  <th scope="col">{t("columns.time")}</th>
+                  <th scope="col">{t("columns.level")}</th>
+                  <th scope="col">{t("columns.event")}</th>
+                  <th scope="col">{t("columns.tenant")}</th>
+                  <th scope="col">{t("columns.actor")}</th>
+                  <th scope="col">{t("columns.outcome")}</th>
+                  <th scope="col">{t("columns.metadata")}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {events.map((row) => (
+                  <tr key={row.id} data-testid="log-row">
+                    <td className={styles.cellTime}>{new Date(row.createdAt).toLocaleString()}</td>
+                    <td>
+                      <span
+                        data-testid="log-level"
+                        className={`${styles.level} ${LEVEL_CLASS[row.level]}`}
+                      >
+                        {t(`level.${row.level}`)}
+                      </span>
+                    </td>
+                    <td className={styles.cellEvent}>{row.event}</td>
+                    <td>
+                      {row.tenantId ? (
+                        <span className={styles.uuid} title={row.tenantId}>
+                          {`${row.tenantId.slice(0, 8)}…`}
+                        </span>
+                      ) : (
+                        <span className={`${styles.uuid} ${styles.uuidNone}`}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      {row.actorUserId ? (
+                        <span className={styles.uuid} title={row.actorUserId}>
+                          {`${row.actorUserId.slice(0, 8)}…`}
+                        </span>
+                      ) : (
+                        <span className={`${styles.uuid} ${styles.uuidNone}`}>—</span>
+                      )}
+                    </td>
+                    {/* `outcome` is free-form text from the API, not an enum,
+                        so it is rendered neutrally rather than colour-coded on
+                        a guessed value. */}
+                    <td>
+                      <span className={styles.outcome}>{row.outcome ?? "—"}</span>
+                    </td>
+                    <td className={styles.meta}>{JSON.stringify(row.metadata)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-          {nextCursor && (
-            <button
-              type="button"
-              data-testid="logs-load-more"
-              className="kin-btn"
-              style={{ marginTop: "0.75rem" }}
-              onClick={handleLoadMore}
-              disabled={loading}
-            >
-              {loading ? t("loadingMore") : t("loadMore")}
-            </button>
-          )}
-        </div>
+          <div className={styles.tableFoot}>
+            <span className={styles.note}>{t("cursorNote")}</span>
+            {nextCursor && (
+              <button
+                type="button"
+                data-testid="logs-load-more"
+                className="kin-btn"
+                onClick={handleLoadMore}
+                disabled={loading}
+              >
+                {loading ? t("loadingMore") : t("loadMore")}
+              </button>
+            )}
+          </div>
+        </section>
       )}
     </div>
   );

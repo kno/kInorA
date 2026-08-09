@@ -251,7 +251,10 @@ describe("@kinora/i18n package assembly", () => {
     // `404 day_not_in_plan`, which the web plan editor made reachable by
     // removing a day. Two keys because the refusal has two shapes: some days
     // remain (name them) or none do.
-    expect(nonBillingKeys).toHaveLength(807);
+    // +6 `aiConfig.*` (kno/kInorA#414) — the /admin/ai-config panel gained an
+    // API-keys notice and a server-configuration summary, both of which needed
+    // real catalog copy instead of more hardcoded literals.
+    expect(nonBillingKeys).toHaveLength(813);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
@@ -589,8 +592,10 @@ describe("@kinora/i18n package assembly", () => {
     const flat = flattenMessages(catalogs.en);
     const adminKeys = Object.keys(flat).filter((key) => key.startsWith("admin."));
     // pageTitle, pageDescription, comingSoon (3) + 4 sections x {title,
-    // description} (8) = 11 keys for the /admin landing page.
-    expect(adminKeys).toHaveLength(11);
+    // description} (8) = 11, + eyebrow, sectionEyebrow, open and notice x2 (5)
+    // for the Open Design chrome (kno/kInorA#414) = 16 keys for the /admin
+    // landing page and the shared backoffice page shell.
+    expect(adminKeys).toHaveLength(16);
     expect(flat["admin.pageTitle"]).toBeTruthy();
     expect(flattenMessages(catalogs.es)["admin.pageTitle"]).toBeTruthy();
     expect(flat["admin.sections.aiConfig.title"]).toBeTruthy();
@@ -610,8 +615,10 @@ describe("@kinora/i18n package assembly", () => {
     const flat = flattenMessages(catalogs.en);
     const keys = Object.keys(flat).filter((key) => key.startsWith("tenantProvisioning."));
     // title, description (2) + search x6 + state x5 + grant x11 + revoke x2 +
-    // errors x5 = 31 keys for the /admin/tenants provisioning panel.
-    expect(keys).toHaveLength(31);
+    // errors x5 = 31, + 13 step/heading/empty-state/hint keys for the Open
+    // Design three-step layout (kno/kInorA#414) = 44 keys for the
+    // /admin/tenants provisioning panel.
+    expect(keys).toHaveLength(44);
     expect(flat["tenantProvisioning.title"]).toBeTruthy();
     expect(flattenMessages(catalogs.es)["tenantProvisioning.title"]).toBeTruthy();
     expect(flat["tenantProvisioning.grant.submit"]).toBeTruthy();
@@ -629,9 +636,11 @@ describe("@kinora/i18n package assembly", () => {
     const flat = flattenMessages(catalogs.en);
     const keys = Object.keys(flat).filter((key) => key.startsWith("logs."));
     // title, description (2) + filters x10 + level x3 + columns x7 +
-    // loadMore, loadingMore (2) + empty (1) + errors x3 = 28 keys for the
-    // /admin/logs observability panel.
-    expect(keys).toHaveLength(28);
+    // loadMore, loadingMore (2) + empty (1) + errors x3 = 28, + 10 keys for the
+    // panel headings and the three now-distinct result states (kno/kInorA#414:
+    // idle x3, empty x3, errorEyebrow, filtersTitle, resultsTitle, cursorNote)
+    // = 38 keys for the /admin/logs observability panel.
+    expect(keys).toHaveLength(38);
     expect(flat["logs.title"]).toBeTruthy();
     expect(flattenMessages(catalogs.es)["logs.title"]).toBeTruthy();
     expect(flat["logs.columns.metadata"]).toBeTruthy();
@@ -652,7 +661,9 @@ describe("@kinora/i18n package assembly", () => {
     // tiers x4 + billing x4 + usage x5 + retention x12 + observability x2 = 43
     // keys for the /admin/stats platform-statistics panel (retention funnel
     // added by GH #353).
-    expect(keys).toHaveLength(43);
+    // + errorEyebrow, funnelTitle and cohortsTitle (3) for the Open Design
+    // layout (kno/kInorA#414) = 46.
+    expect(keys).toHaveLength(46);
     expect(flat["platformStats.title"]).toBeTruthy();
     expect(flattenMessages(catalogs.es)["platformStats.title"]).toBeTruthy();
     expect(flat["platformStats.billing.effectiveTier"]).toBeTruthy();

@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='11' fill='%2309090C'/%3E%3Ccircle cx='24' cy='25' r='12.5' fill='none' stroke='%23696964' stroke-width='5'/%3E%3Ccircle cx='24' cy='11' r='8' fill='%23A8F060'/%3E%3C/svg%3E" />
+  <title>kInorA — Estadísticas de la plataforma</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
+    :root {
+      --bg: oklch(5% 0.006 270);
+      --surface: oklch(11% 0.006 270);
+      --surface-2: oklch(15% 0.006 270);
+      --surface-3: oklch(18% 0.008 270);
+      --border: oklch(24% 0.006 270);
+      --fg: oklch(96% 0.002 270);
+      --muted: oklch(66% 0.006 270);
+      --muted-2: oklch(48% 0.008 270);
+      --accent: oklch(89% 0.20 128);
+      --accent-fg: oklch(5% 0.006 270);
+      --accent-dim: oklch(89% 0.20 128 / 0.12);
+      --success: oklch(89% 0.20 128);
+      --warning: oklch(84% 0.14 90);
+      --danger: oklch(68% 0.19 25);
+      --info: oklch(72% 0.13 250);
+      --font-display: 'Space Grotesk', system-ui, sans-serif;
+      --font-body: 'DM Sans', -apple-system, system-ui, sans-serif;
+      --font-mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', Menlo, monospace;
+      --r-card: 20px;
+      --r-btn: 12px;
+      --r-pill: 999px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { background: var(--bg); }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 58% 8%, oklch(89% 0.20 128 / 0.08), transparent 34%),
+        radial-gradient(circle at 90% 80%, oklch(72% 0.13 250 / 0.055), transparent 32%),
+        var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.025em; line-height: 1.04; }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; }
+    .num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+    .muted { color: var(--muted); }
+    .eyebrow { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+    .app { display: flex; min-height: 100vh; }
+    .sidebar {
+      position: fixed; inset: 0 auto 0 0; width: 248px;
+      background: color-mix(in oklch, var(--surface) 92%, transparent);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; z-index: 10;
+      backdrop-filter: blur(18px);
+    }
+    .sidebar-top { padding: 24px 20px; }
+    .wordmark { display: flex; align-items: center; gap: 9px; margin-bottom: 28px; font-family: var(--font-display); font-size: 19px; font-weight: 700; letter-spacing: -.03em; }
+    .wordmark svg { width: 22px; height: 22px; }
+    .nav { display: flex; flex-direction: column; gap: 3px; }
+    .nav-item { position: relative; display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 14px; border-radius: 10px; color: var(--muted); font-size: 14px; font-weight: 600; transition: .15s ease; }
+    .nav-item:hover { background: var(--surface-2); color: var(--fg); }
+    .nav-item.active { background: var(--accent-dim); color: var(--accent); }
+    .nav-item.active::before { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: var(--accent); }
+    .nav-item svg { width: 18px; height: 18px; }
+    .nav-split { margin: 12px 0 6px; padding: 0 14px; color: var(--muted-2); font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    .sidebar-bottom { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); display: grid; place-items: center; font-family: var(--font-display); font-size: 13px; font-weight: 700; }
+    .user-info { min-width: 0; flex: 1; }
+    .user-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-plan { color: var(--muted); font-size: 11px; font-weight: 700; }
+
+    .main { margin-left: 248px; width: calc(100% - 248px); padding: 30px; }
+    .frame { max-width: 1420px; margin: 0 auto; }
+    .crumbs { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; color: var(--muted-2); font-size: 12px; font-weight: 700; }
+    .crumbs a:hover { color: var(--fg); }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
+    .topbar h1 { font-size: clamp(30px, 3.2vw, 52px); }
+    .topbar-copy { max-width: 720px; }
+    .topbar-copy p { margin-top: 8px; color: var(--muted); font-size: 15px; }
+    .topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    .btn { min-height: 42px; border: 1px solid var(--border); background: var(--surface-2); color: var(--fg); border-radius: var(--r-btn); padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; font-size: 14px; font-weight: 700; transition: transform .08s ease, background .15s ease, border-color .15s ease; }
+    .btn:hover { background: var(--surface-3); border-color: color-mix(in oklch, var(--border), var(--fg) 14%); }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+    .btn-sm { min-height: 36px; padding: 0 13px; font-size: 13px; }
+    .btn svg { width: 16px; height: 16px; }
+
+    .panel { background: color-mix(in oklch, var(--surface) 92%, transparent); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+    .panel-head { padding: 15px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+    .panel-head h2 { font-size: 18px; }
+    .panel-body { padding: 18px; }
+    .pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border: 1px solid var(--border); border-radius: var(--r-pill); color: var(--muted); font-size: 12px; font-weight: 700; }
+    .pill-active { background: var(--accent-dim); border-color: transparent; color: var(--accent); }
+    .pill-active::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 12px var(--accent); }
+    .mono { font-family: var(--font-mono); font-size: 12px; letter-spacing: -.01em; }
+
+    /* ---- rejillas de métricas ----------------------------------------- */
+    .section { margin-bottom: 16px; }
+    .grid { display: grid; gap: 10px; }
+    .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .metric { padding: 16px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); min-width: 0; }
+    .metric .value { margin-top: 8px; font-family: var(--font-display); font-size: 30px; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1.05; }
+    .metric .sub { color: var(--muted-2); font-size: 12px; margin-top: 3px; }
+    .metric.lead { background: var(--surface-2); }
+    .metric.alert .value { color: var(--danger); }
+
+    /* ---- barras de reparto -------------------------------------------- */
+    .split { display: grid; gap: 12px; }
+    .split-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; gap: 14px; align-items: center; }
+    .split-name { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+    .split-track { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+    .split-track span { display: block; height: 100%; border-radius: inherit; background: color-mix(in oklch, var(--fg), transparent 62%); }
+    .split-track.blue span { background: color-mix(in oklch, var(--info), transparent 26%); }
+    .split-value { font-family: var(--font-display); font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .split-value small { color: var(--muted-2); font-family: var(--font-body); font-size: 12px; font-weight: 600; margin-left: 6px; }
+
+    /* ---- embudo: SIEMPRE "N de M" y el % pegado al lado --------------- */
+    .funnel { display: grid; gap: 12px; }
+    .funnel-row { display: grid; grid-template-columns: minmax(150px, 230px) minmax(0, 1fr) minmax(190px, auto); gap: 16px; align-items: center; }
+    .funnel-label { font-size: 13px; font-weight: 700; }
+    .funnel-label small { display: block; color: var(--muted-2); font-size: 11px; font-weight: 600; }
+    .funnel-track { height: 26px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
+    .funnel-track span { display: block; height: 100%; background: color-mix(in oklch, var(--info), transparent 32%); border-right: 1px solid color-mix(in oklch, var(--info), transparent 10%); }
+    .funnel-row.origin .funnel-track span { background: var(--accent-dim); border-right-color: var(--accent); }
+    .funnel-value { display: flex; align-items: baseline; gap: 10px; justify-content: flex-end; white-space: nowrap; }
+    .funnel-value strong { font-family: var(--font-display); font-size: 15px; font-variant-numeric: tabular-nums; }
+    .funnel-value em { font-style: normal; color: var(--muted); font-family: var(--font-display); font-size: 13px; font-variant-numeric: tabular-nums; padding-left: 10px; border-left: 1px solid var(--border); }
+    .funnel-row.origin .funnel-value strong { color: var(--accent); }
+
+    /* ---- tablas -------------------------------------------------------- */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 860px; }
+    th { text-align: left; padding: 11px 16px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; background: var(--surface-2); border-bottom: 1px solid var(--border); white-space: nowrap; }
+    td { padding: 13px 16px; border-bottom: 1px solid var(--border); font-size: 13px; white-space: nowrap; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover td { background: color-mix(in oklch, var(--surface-2) 60%, transparent); }
+    td .cell { display: flex; align-items: baseline; gap: 8px; }
+    td .cell strong { font-family: var(--font-display); font-size: 13px; font-variant-numeric: tabular-nums; }
+    td .cell em { font-style: normal; color: var(--muted-2); font-family: var(--font-display); font-size: 12px; font-variant-numeric: tabular-nums; }
+    td.week { font-weight: 700; }
+
+    /* ---- carga y error -------------------------------------------------- */
+    .sk-grid { display: grid; gap: 10px; }
+    .sk { border-radius: 16px; background: linear-gradient(100deg, var(--surface) 30%, var(--surface-2) 50%, var(--surface) 70%); background-size: 240% 100%; animation: shimmer 1.4s linear infinite; border: 1px solid var(--border); }
+    .sk.h-metric { height: 108px; }
+    .sk.h-panel { height: 260px; border-radius: var(--r-card); }
+    @keyframes shimmer { 0% { background-position: 140% 0; } 100% { background-position: -40% 0; } }
+    @media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+
+    .state { padding: 58px 28px; text-align: center; display: grid; gap: 12px; justify-items: center; }
+    .state h2 { font-size: 28px; max-width: 540px; }
+    .state p { color: var(--muted); max-width: 500px; font-size: 15px; }
+    .state .btn { margin-top: 8px; }
+    .state-icon { width: 58px; height: 58px; border-radius: 18px; display: grid; place-items: center; margin-bottom: 4px; }
+    .state-error { border-color: color-mix(in oklch, var(--danger), transparent 56%); background: radial-gradient(circle at 50% 0%, oklch(68% 0.19 25 / .10), transparent 58%), color-mix(in oklch, var(--surface) 92%, transparent); }
+    .state-error .state-icon { color: var(--danger); border: 1px solid color-mix(in oklch, var(--danger), transparent 56%); background: color-mix(in oklch, var(--danger), transparent 90%); }
+    .state-error .eyebrow { color: var(--danger); }
+
+    .preview { position: fixed; left: 268px; bottom: 20px; z-index: 25; display: flex; align-items: center; gap: 4px; padding: 6px; border-radius: var(--r-pill); border: 1px solid var(--border); background: oklch(11% 0.006 270 / .94); backdrop-filter: blur(14px); }
+    .preview span { padding: 0 8px; color: var(--muted-2); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    .preview button { border: 0; background: transparent; color: var(--muted); border-radius: 999px; padding: 7px 11px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .preview button:hover { color: var(--fg); }
+    .preview button[aria-pressed="true"] { background: var(--surface-3); color: var(--fg); }
+
+    @media (max-width: 1180px) {
+      .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .funnel-row { grid-template-columns: minmax(140px, 200px) minmax(0, 1fr); }
+      .funnel-value { grid-column: 1 / -1; justify-content: flex-start; }
+    }
+    @media (max-width: 860px) {
+      .sidebar { display: none; }
+      .main { width: 100%; margin-left: 0; padding: 18px 18px 92px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .g3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .preview { left: 14px; right: 14px; bottom: 14px; justify-content: center; }
+    }
+    @media (max-width: 520px) {
+      .g2, .g3, .g4 { grid-template-columns: 1fr; }
+      .split-row { grid-template-columns: 80px minmax(0, 1fr); }
+      .split-value { grid-column: 1 / -1; }
+      .funnel-row { grid-template-columns: 1fr; }
+      .state { padding: 38px 20px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" aria-label="Navegación principal">
+    <div class="sidebar-top">
+      <div class="wordmark">
+        <svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><circle cx="24" cy="24" r="15" stroke="var(--border)" stroke-width="4"/><path d="M24 9 A15 15 0 0 1 38 19" stroke="var(--muted)" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="9" r="5.5" fill="var(--accent)"/></svg>
+        kInorA
+      </div>
+      <div class="nav">
+        <a href="web-dashboard.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Inicio</a>
+        <a href="web-plan.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Mi plan</a>
+        <a href="web-stats.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 20h18M7 14v6M12 9v11M17 4v16"/></svg>Estadísticas</a>
+        <a href="web-create-plan.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Crear plan</a>
+        <a href="desktop-tracker.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 4v16M18 4v16M6 12h12M2 7h4M18 7h4M2 17h4M18 17h4"/></svg>Tracker</a>
+        <div class="nav-split">Plataforma</div>
+        <a href="web-admin.html" class="nav-item active" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7.5 3v5.5c0 4.4-3.1 8.3-7.5 9.5-4.4-1.2-7.5-5.1-7.5-9.5V6L12 3Z"/><path d="M9.5 12.2l1.9 1.9 3.6-3.9"/></svg>Administración</a>
+      </div>
+    </div>
+    <div class="sidebar-bottom"><div class="avatar">LF</div><div class="user-info"><div class="user-name">Lucía Fernández</div><div class="user-plan">Superadministradora</div></div></div>
+  </nav>
+
+  <main class="main">
+    <div class="frame">
+      <nav class="crumbs" aria-label="Ruta"><a href="web-admin.html">Administración</a><span aria-hidden="true">/</span><span class="muted">Estadísticas de la plataforma</span></nav>
+
+      <header class="topbar">
+        <div class="topbar-copy">
+          <div class="eyebrow">Plataforma</div>
+          <h1>Estadísticas de la plataforma</h1>
+          <p>Consulta métricas de uso y estado en toda la plataforma. Datos agregados: no incluye desglose por organización ni por usuario.</p>
+        </div>
+        <div class="topbar-actions">
+          <span class="pill pill-active">Actualizado · 09/08/2026 12:04</span>
+          <button class="btn" type="button" id="refreshBtn">Actualizar</button>
+        </div>
+      </header>
+
+      <!-- ---- datos cargados ------------------------------------------- -->
+      <div id="statsView">
+
+        <section class="section panel" aria-labelledby="s-orgs">
+          <div class="panel-head"><h2 id="s-orgs">Organizaciones</h2><span class="pill">Acumulado</span></div>
+          <div class="panel-body">
+            <div class="grid g3">
+              <div class="metric lead"><div class="eyebrow">Total</div><div class="value">128</div><div class="sub">organizaciones registradas</div></div>
+              <div class="metric"><div class="eyebrow">Altas 7 días</div><div class="value">6</div><div class="sub">últimos 7 días</div></div>
+              <div class="metric"><div class="eyebrow">Altas 30 días</div><div class="value">21</div><div class="sub">últimos 30 días</div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section panel" aria-labelledby="s-users">
+          <div class="panel-head"><h2 id="s-users">Usuarios</h2><span class="pill">Acumulado</span></div>
+          <div class="panel-body">
+            <div class="grid g3">
+              <div class="metric lead"><div class="eyebrow">Total</div><div class="value">4 210</div><div class="sub">usuarios registrados</div></div>
+              <div class="metric"><div class="eyebrow">Altas 7 días</div><div class="value">184</div><div class="sub">últimos 7 días</div></div>
+              <div class="metric"><div class="eyebrow">Altas 30 días</div><div class="value">622</div><div class="sub">últimos 30 días</div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section panel" aria-labelledby="s-members">
+          <div class="panel-head"><h2 id="s-members">Membresías activas por rol</h2><span class="pill">4 210 membresías</span></div>
+          <div class="panel-body">
+            <div class="grid g3">
+              <div class="metric"><div class="eyebrow">Propietario</div><div class="value">128</div><div class="sub">membresías activas</div></div>
+              <div class="metric"><div class="eyebrow">Miembro</div><div class="value">3 640</div><div class="sub">membresías activas</div></div>
+              <div class="metric"><div class="eyebrow">Entrenador</div><div class="value">442</div><div class="sub">membresías activas</div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section panel" aria-labelledby="s-billing">
+          <div class="panel-head"><h2 id="s-billing">Facturación</h2><span class="pill">128 organizaciones</span></div>
+          <div class="panel-body" style="display:grid; gap:20px">
+            <div>
+              <div class="eyebrow" style="margin-bottom:12px">Reparto por tier efectivo</div>
+              <div class="split" id="tierSplit"></div>
+            </div>
+            <div class="grid g2">
+              <div class="metric"><div class="eyebrow">Suscripciones de Stripe activas</div><div class="value">29</div><div class="sub">organizaciones con suscripción viva</div></div>
+              <div class="metric"><div class="eyebrow">Pruebas en curso</div><div class="value">7</div><div class="sub">periodos de prueba sin terminar</div></div>
+            </div>
+            <div>
+              <div class="eyebrow" style="margin-bottom:12px">Overrides activos por tier</div>
+              <div class="grid g4">
+                <div class="metric"><div class="eyebrow mono">free</div><div class="value">0</div><div class="sub">overrides activos</div></div>
+                <div class="metric"><div class="eyebrow mono">pro</div><div class="value">2</div><div class="sub">overrides activos</div></div>
+                <div class="metric"><div class="eyebrow mono">trainer</div><div class="value">11</div><div class="sub">overrides activos</div></div>
+                <div class="metric"><div class="eyebrow mono">gym</div><div class="value">3</div><div class="sub">overrides activos</div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section panel" aria-labelledby="s-usage">
+          <div class="panel-head"><h2 id="s-usage">Uso</h2><span class="pill">Periodo actual · 01–09 ago 2026</span></div>
+          <div class="panel-body">
+            <div class="grid g4">
+              <div class="metric"><div class="eyebrow">Generación de plan</div><div class="value">1 284</div><div class="sub">operaciones en el periodo</div></div>
+              <div class="metric"><div class="eyebrow">Regeneración de plan</div><div class="value">402</div><div class="sub">operaciones en el periodo</div></div>
+              <div class="metric"><div class="eyebrow">Escritura de memoria</div><div class="value">9 611</div><div class="sub">operaciones en el periodo</div></div>
+              <div class="metric"><div class="eyebrow">Recuperación de memoria</div><div class="value">24 380</div><div class="sub">operaciones en el periodo</div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section panel" aria-labelledby="s-retention">
+          <div class="panel-head">
+            <h2 id="s-retention">Retención</h2>
+            <span class="pill">Ventana · 4 semanas</span>
+          </div>
+          <div class="panel-body" style="display:grid; gap:22px">
+            <div>
+              <!-- Regla innegociable: cada paso se lee "N de M" y el porcentaje
+                   solo aparece AL LADO de ese "N de M", nunca solo. -->
+              <div class="eyebrow" style="margin-bottom:14px">Embudo de la cohorte · 622 altas en la ventana</div>
+              <div class="funnel" id="funnel"></div>
+            </div>
+
+            <div class="grid g2">
+              <div class="metric"><div class="eyebrow">Altas patrocinadas por entrenador</div><div class="value">88 <span class="muted" style="font-size:15px; font-weight:600">de 622</span> <span class="muted" style="font-size:15px; font-weight:600">· 14,1 %</span></div><div class="sub">altas llegadas a través de un entrenador</div></div>
+              <div class="metric"><div class="eyebrow">Sesiones abandonadas</div><div class="value">143</div><div class="sub">sin cerrar tras 6 h desde la última serie</div></div>
+            </div>
+
+            <div>
+              <div class="eyebrow" style="margin-bottom:14px">Cohortes semanales · mismo embudo por semana de inicio</div>
+              <div class="panel" style="border-radius:16px">
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th scope="col">Semana de inicio</th>
+                        <th scope="col">Altas</th>
+                        <th scope="col">Han creado plan</th>
+                        <th scope="col">1.er entreno</th>
+                        <th scope="col">2.º entreno en 7 d</th>
+                        <th scope="col">Activos semana 2</th>
+                        <th scope="col">Activos semana 4</th>
+                      </tr>
+                    </thead>
+                    <tbody id="cohorts"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section panel" aria-labelledby="s-obs">
+          <div class="panel-head">
+            <h2 id="s-obs">Observabilidad</h2>
+            <a class="btn btn-sm" href="web-admin-logs.html">Ver logs</a>
+          </div>
+          <div class="panel-body">
+            <div class="grid g2">
+              <div class="metric alert"><div class="eyebrow">Errores en 24 h</div><div class="value">6</div><div class="sub">eventos de nivel error</div></div>
+              <div class="metric"><div class="eyebrow">Eventos en 24 h</div><div class="value">18 402</div><div class="sub">eventos registrados en total</div></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ---- carga ----------------------------------------------------- -->
+      <div id="loadingView" hidden aria-hidden="true">
+        <div class="sk-grid g3" style="grid-template-columns: repeat(3, minmax(0,1fr)); margin-bottom:16px">
+          <div class="sk h-metric"></div><div class="sk h-metric"></div><div class="sk h-metric"></div>
+        </div>
+        <div class="sk h-panel" style="margin-bottom:16px"></div>
+        <div class="sk h-panel"></div>
+      </div>
+
+      <!-- ---- error de lectura ------------------------------------------ -->
+      <section class="panel state state-error" id="errorView" role="alert" hidden>
+        <div class="state-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4.5M12 17.5h.01"/></svg>
+        </div>
+        <div class="eyebrow">Error de lectura</div>
+        <h2>No hemos podido leer las métricas de la plataforma</h2>
+        <p>No mostramos nada antes que mostrar cifras a medias: un panel parcial se lee como si fuera el dato real. La consulta ha fallado por nuestro lado; los datos siguen intactos.</p>
+        <button class="btn btn-primary" type="button" id="retryBtn">Reintentar</button>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="preview" role="group" aria-label="Vista previa de estados (prototipo)">
+  <span>Estado</span>
+  <button type="button" data-state="stats" aria-pressed="true">Cargado</button>
+  <button type="button" data-state="loading" aria-pressed="false">Cargando</button>
+  <button type="button" data-state="error" aria-pressed="false">Error de lectura</button>
+</div>
+
+<script>
+  (function () {
+    const TIERS = [
+      { name: 'free', count: 96 },
+      { name: 'pro', count: 21 },
+      { name: 'trainer', count: 8 },
+      { name: 'gym', count: 3 }
+    ];
+    const TOTAL_ORGS = 128;
+
+    // Cohorte de la ventana: 622 altas. Todos los pasos posteriores se miden
+    // contra ese mismo denominador, y así el "N de M" nunca cambia de base.
+    const COHORT = 622;
+    const FUNNEL = [
+      { label: 'Altas', sub: 'Cohorte inicial de la ventana', n: 622, m: null },
+      { label: 'Han creado plan', sub: 'Al menos un plan generado', n: 486, m: COHORT },
+      { label: 'Han completado el primer entreno', sub: 'Al menos una sesión cerrada', n: 391, m: COHORT },
+      { label: 'Segundo entreno en 7 días', sub: 'Dos sesiones en la primera semana', n: 268, m: COHORT },
+      { label: 'Activos en la semana 2', sub: 'Alguna sesión en la semana 2', n: 244, m: COHORT },
+      { label: 'Activos en la semana 4', sub: 'Alguna sesión en la semana 4', n: 171, m: COHORT }
+    ];
+    const COHORTS = [
+      { week: 'Semana del 13 jul', altas: 141, steps: [109, 88, 61, 55, 38] },
+      { week: 'Semana del 20 jul', altas: 158, steps: [126, 101, 70, 63, 44] },
+      { week: 'Semana del 27 jul', altas: 166, steps: [130, 104, 71, 64, 45] },
+      { week: 'Semana del 3 ago', altas: 157, steps: [121, 98, 66, 62, 44] }
+    ];
+
+    const pct = (n, m) => `${((n / m) * 100).toFixed(1).replace('.', ',')} %`;
+    const fmt = (n) => n.toLocaleString('es-ES').replace(/ /g, ' ');
+
+    document.getElementById('tierSplit').innerHTML = TIERS.map((tier) => `
+      <div class="split-row">
+        <span class="split-name">${tier.name}</span>
+        <span class="split-track blue"><span style="width:${(tier.count / TOTAL_ORGS) * 100}%"></span></span>
+        <span class="split-value">${tier.count} de ${TOTAL_ORGS}<small>${pct(tier.count, TOTAL_ORGS)}</small></span>
+      </div>`).join('');
+
+    document.getElementById('funnel').innerHTML = FUNNEL.map((step) => {
+      const width = step.m ? (step.n / step.m) * 100 : 100;
+      // El primer paso no tiene denominador: es un recuento simple y se dice.
+      const value = step.m
+        ? `<strong class="num">${fmt(step.n)} de ${fmt(step.m)}</strong><em>${pct(step.n, step.m)}</em>`
+        : `<strong class="num">${fmt(step.n)} altas</strong><em>recuento</em>`;
+      return `
+        <div class="funnel-row ${step.m ? '' : 'origin'}">
+          <div class="funnel-label">${step.label}<small>${step.sub}</small></div>
+          <div class="funnel-track" aria-hidden="true"><span style="width:${width}%"></span></div>
+          <div class="funnel-value">${value}</div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('cohorts').innerHTML = COHORTS.map((row) => `
+      <tr>
+        <td class="week">${row.week}</td>
+        <td><div class="cell"><strong>${row.altas} altas</strong><em>recuento</em></div></td>
+        ${row.steps.map((n) => `<td><div class="cell"><strong>${n} de ${row.altas}</strong><em>${pct(n, row.altas)}</em></div></td>`).join('')}
+      </tr>`).join('');
+
+    const views = {
+      stats: document.getElementById('statsView'),
+      loading: document.getElementById('loadingView'),
+      error: document.getElementById('errorView')
+    };
+    function setView(view) {
+      Object.entries(views).forEach(([key, el]) => { el.hidden = key !== view; });
+      document.querySelectorAll('.preview button').forEach((b) => {
+        b.setAttribute('aria-pressed', String(b.dataset.state === view));
+      });
+    }
+    document.querySelectorAll('.preview button').forEach((button) => {
+      button.addEventListener('click', () => setView(button.dataset.state));
+    });
+    document.getElementById('retryBtn').addEventListener('click', () => {
+      setView('loading');
+      setTimeout(() => setView('stats'), 1000);
+    });
+    document.getElementById('refreshBtn').addEventListener('click', () => {
+      setView('loading');
+      setTimeout(() => setView('stats'), 800);
+    });
+
+    setView('stats');
+  })();
+</script>
+</body>
+</html>

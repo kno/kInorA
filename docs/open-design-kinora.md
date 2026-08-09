@@ -8,13 +8,13 @@ The current design has been pulled into the repo at `docs/open-design/kinora/`. 
 
 | Field | Value |
 |---|---|
-| Refreshed at | `2026-07-01T15:25:00Z` |
-| Refresh source | Live Open Design MCP via sidecar stdio |
+| Refreshed at | `2026-08-09T00:00:00Z` |
+| Refresh source | Open Design project store (release-stable namespace), read on disk — the `open-design` MCP server was not reachable from this client |
 | Source project | `kiNorA` (`ceeff5f6-0930-4e48-a0b0-17a6a5c9b9ad`) |
 | Source evidence | `get_project` + `list_files` over `OD_SIDECAR_IPC_PATH=/tmp/open-design/ipc/release-stable/daemon.sock` |
 | Entry file | `index.html` |
 | Snapshot proof | `docs/open-design/kinora/snapshot-manifest.json`, `project.json`, `files.json` |
-| Latest change | Create-plan equipment step (Paso 4) equipment photos extended to full per-item coverage: 11 photos total (`assets/equip-*.webp`, 294x294) covering 10 of the 11 app equipment values (`smith_machine` has no matching source image and stays photo-less). App copies live in `apps/web/public/equipment/`. UI wiring tracked under issue #54. |
+| Latest change | Five backoffice screens added (`screens/web-admin*.html`, generated 2026-08-09) and implemented under kno/kInorA#414. |
 
 ## Mandatory workflow
 
@@ -66,6 +66,11 @@ The last successful live refresh used the configured `open-design` MCP server ov
 | Web weekly plan | `screens/web-plan.html` | Training agenda by day with expandable detail |
 | Web statistics | `screens/web-stats.html` | Volume analytics, muscle groups, records, chart behavior |
 | Web create plan | `screens/web-create-plan.html` | Card-based plan creation plus conversational assistant and extracted-data panel |
+| Backoffice landing | `screens/web-admin.html` | Superadmin notice plus the four platform-tool entry cards |
+| Admin AI config | `screens/web-admin-ai-config.html` | Provider/model form, API-keys notice, server-configuration summary |
+| Admin tenants | `screens/web-admin-tenants.html` | Three-step search → detail → grant flow with a revoke danger zone |
+| Admin statistics | `screens/web-admin-stats.html` | Metric panels, effective-tier split, retention funnel |
+| Admin logs | `screens/web-admin-logs.html` | Filter panel, results table, and three distinct idle/empty/error states |
 | Mobile dashboard | `screens/mobile-dashboard.html` | Main mobile daily view |
 | Mobile create plan | `screens/mobile-create-plan.html` | Mobile plan-building flow |
 | Mobile voice assistant | `screens/mobile-voice.html` | Voice interaction with the AI trainer |

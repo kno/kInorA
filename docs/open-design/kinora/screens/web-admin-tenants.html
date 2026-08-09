@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='11' fill='%2309090C'/%3E%3Ccircle cx='24' cy='25' r='12.5' fill='none' stroke='%23696964' stroke-width='5'/%3E%3Ccircle cx='24' cy='11' r='8' fill='%23A8F060'/%3E%3C/svg%3E" />
+  <title>kInorA — Aprovisionamiento de organizaciones</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
+    :root {
+      --bg: oklch(5% 0.006 270);
+      --surface: oklch(11% 0.006 270);
+      --surface-2: oklch(15% 0.006 270);
+      --surface-3: oklch(18% 0.008 270);
+      --border: oklch(24% 0.006 270);
+      --fg: oklch(96% 0.002 270);
+      --muted: oklch(66% 0.006 270);
+      --muted-2: oklch(48% 0.008 270);
+      --accent: oklch(89% 0.20 128);
+      --accent-fg: oklch(5% 0.006 270);
+      --accent-dim: oklch(89% 0.20 128 / 0.12);
+      --success: oklch(89% 0.20 128);
+      --warning: oklch(84% 0.14 90);
+      --danger: oklch(68% 0.19 25);
+      --info: oklch(72% 0.13 250);
+      --font-display: 'Space Grotesk', system-ui, sans-serif;
+      --font-body: 'DM Sans', -apple-system, system-ui, sans-serif;
+      --font-mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', Menlo, monospace;
+      --r-card: 20px;
+      --r-btn: 12px;
+      --r-pill: 999px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { background: var(--bg); }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 58% 8%, oklch(89% 0.20 128 / 0.08), transparent 34%),
+        radial-gradient(circle at 90% 80%, oklch(72% 0.13 250 / 0.055), transparent 32%),
+        var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.025em; line-height: 1.04; }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; }
+    .num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+    .muted { color: var(--muted); }
+    .eyebrow { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+    .app { display: flex; min-height: 100vh; }
+    .sidebar {
+      position: fixed; inset: 0 auto 0 0; width: 248px;
+      background: color-mix(in oklch, var(--surface) 92%, transparent);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; z-index: 10;
+      backdrop-filter: blur(18px);
+    }
+    .sidebar-top { padding: 24px 20px; }
+    .wordmark { display: flex; align-items: center; gap: 9px; margin-bottom: 28px; font-family: var(--font-display); font-size: 19px; font-weight: 700; letter-spacing: -.03em; }
+    .wordmark svg { width: 22px; height: 22px; }
+    .nav { display: flex; flex-direction: column; gap: 3px; }
+    .nav-item { position: relative; display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 14px; border-radius: 10px; color: var(--muted); font-size: 14px; font-weight: 600; transition: .15s ease; }
+    .nav-item:hover { background: var(--surface-2); color: var(--fg); }
+    .nav-item.active { background: var(--accent-dim); color: var(--accent); }
+    .nav-item.active::before { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: var(--accent); }
+    .nav-item svg { width: 18px; height: 18px; }
+    .nav-split { margin: 12px 0 6px; padding: 0 14px; color: var(--muted-2); font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    .sidebar-bottom { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); display: grid; place-items: center; font-family: var(--font-display); font-size: 13px; font-weight: 700; }
+    .user-info { min-width: 0; flex: 1; }
+    .user-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-plan { color: var(--muted); font-size: 11px; font-weight: 700; }
+
+    .main { margin-left: 248px; width: calc(100% - 248px); padding: 30px; }
+    .frame { max-width: 1420px; margin: 0 auto; }
+    .crumbs { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; color: var(--muted-2); font-size: 12px; font-weight: 700; }
+    .crumbs a:hover { color: var(--fg); }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
+    .topbar h1 { font-size: clamp(30px, 3.2vw, 52px); }
+    .topbar-copy { max-width: 720px; }
+    .topbar-copy p { margin-top: 8px; color: var(--muted); font-size: 15px; }
+    .topbar-actions { display: flex; align-items: center; gap: 10px; }
+
+    .btn { min-height: 42px; border: 1px solid var(--border); background: var(--surface-2); color: var(--fg); border-radius: var(--r-btn); padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; font-size: 14px; font-weight: 700; transition: transform .08s ease, background .15s ease, border-color .15s ease; }
+    .btn:hover { background: var(--surface-3); border-color: color-mix(in oklch, var(--border), var(--fg) 14%); }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+    .btn-primary:hover { background: var(--accent); filter: brightness(1.04); }
+    .btn-sm { min-height: 36px; padding: 0 13px; font-size: 13px; }
+    .btn[disabled] { opacity: .36; cursor: not-allowed; }
+    .btn[disabled]:hover { background: var(--surface-2); border-color: var(--border); filter: none; }
+    .btn-primary[disabled]:hover { background: var(--accent); }
+    .btn-danger { color: var(--danger); border-color: color-mix(in oklch, var(--danger), transparent 62%); background: color-mix(in oklch, var(--danger), transparent 92%); }
+    .btn-danger:hover { background: color-mix(in oklch, var(--danger), transparent 84%); border-color: var(--danger); }
+    .btn-danger-solid { background: var(--danger); border-color: var(--danger); color: oklch(98% 0.01 25); }
+    .btn-danger-solid:hover { background: var(--danger); filter: brightness(1.06); }
+    .btn svg { width: 16px; height: 16px; }
+
+    .panel { background: color-mix(in oklch, var(--surface) 92%, transparent); border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+    .panel-head { padding: 15px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+    .panel-body { padding: 18px; }
+    .step-badge { width: 26px; height: 26px; flex: none; border-radius: 9px; display: grid; place-items: center; background: var(--surface-3); border: 1px solid var(--border); color: var(--muted); font-family: var(--font-display); font-size: 12px; font-weight: 700; }
+    .panel-head h2 { font-size: 17px; flex: 1; }
+    .pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border: 1px solid var(--border); border-radius: var(--r-pill); color: var(--muted); font-size: 12px; font-weight: 700; }
+    .pill-active { background: var(--accent-dim); border-color: transparent; color: var(--accent); }
+    .pill-active::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 12px var(--accent); }
+    .pill-info { color: var(--info); border-color: color-mix(in oklch, var(--info), transparent 62%); background: color-mix(in oklch, var(--info), transparent 92%); }
+    .pill-warning { color: var(--warning); border-color: color-mix(in oklch, var(--warning), transparent 62%); background: color-mix(in oklch, var(--warning), transparent 92%); }
+    .mono { font-family: var(--font-mono); font-size: 12px; letter-spacing: -.01em; }
+
+    /* ---- feedback tipado: cada resultado con su propio tratamiento ---- */
+    .banner { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 16px; border: 1px solid var(--border); background: var(--surface-2); font-size: 14px; color: var(--muted); margin-bottom: 16px; }
+    .banner svg { flex: none; width: 20px; height: 20px; margin-top: 1px; }
+    .banner b { display: block; color: var(--fg); font-family: var(--font-display); font-size: 15px; margin-bottom: 3px; }
+    .banner code { font-family: var(--font-mono); font-size: 12px; color: var(--fg); }
+    .banner-success { border-color: color-mix(in oklch, var(--success), transparent 58%); background: color-mix(in oklch, var(--success), transparent 93%); }
+    .banner-success svg { color: var(--success); }
+    .banner-info { border-color: color-mix(in oklch, var(--info), transparent 60%); background: color-mix(in oklch, var(--info), transparent 92%); }
+    .banner-info svg { color: var(--info); }
+    .banner-warning { border-color: color-mix(in oklch, var(--warning), transparent 58%); background: color-mix(in oklch, var(--warning), transparent 92%); }
+    .banner-warning svg { color: var(--warning); }
+    .banner-danger { border-color: color-mix(in oklch, var(--danger), transparent 54%); background: color-mix(in oklch, var(--danger), transparent 91%); }
+    .banner-danger svg { color: var(--danger); }
+    .banner-neutral { border-style: dashed; }
+    .banner-neutral svg { color: var(--muted-2); }
+
+    /* ---- layout tres pasos -------------------------------------------- */
+    .provision { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 16px; align-items: start; }
+    .col { display: grid; gap: 16px; }
+
+    .search-box { position: relative; }
+    .search-box svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: var(--muted-2); pointer-events: none; }
+    input[type="text"], input[type="date"], select, textarea {
+      width: 100%; min-height: 46px; background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--r-btn); color: var(--fg); padding: 0 14px; font: inherit; font-size: 14px; font-weight: 600;
+      transition: border-color .15s ease, background .15s ease;
+    }
+    .search-box input { padding-left: 40px; }
+    input::placeholder { color: var(--muted-2); font-weight: 500; }
+    input:hover, select:hover, textarea:hover { border-color: color-mix(in oklch, var(--border), var(--fg) 16%); }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: color-mix(in oklch, var(--fg), transparent 55%); background: var(--surface-3); }
+    textarea { min-height: 92px; padding: 12px 14px; font-weight: 500; resize: vertical; line-height: 1.45; }
+    select { appearance: none; cursor: pointer; padding-right: 42px; }
+    input[type="date"] { color-scheme: dark; font-family: var(--font-mono); font-size: 13px; }
+    .control { position: relative; }
+    .control.sel::after { content: ''; position: absolute; right: 16px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+    .field { display: grid; gap: 7px; }
+    .field > label { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 7px; }
+    .req { color: var(--danger); font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+    .hint { color: var(--muted-2); font-size: 12px; }
+    .field.invalid textarea, .field.invalid input { border-color: var(--danger); background: color-mix(in oklch, var(--danger), transparent 94%); }
+    .field-error { color: var(--danger); font-size: 12px; font-weight: 700; }
+
+    .results { display: grid; }
+    .result { display: grid; gap: 3px; width: 100%; text-align: left; padding: 13px 18px; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--fg); cursor: pointer; transition: background .14s ease; }
+    .result:first-child { border-top: 0; }
+    .result:hover { background: var(--surface-2); }
+    .result[aria-selected="true"] { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--fg); }
+    .result-name { font-weight: 700; font-size: 14px; }
+    .result-id { color: var(--muted-2); font-family: var(--font-mono); font-size: 11px; }
+    .result-tier { color: var(--muted); font-size: 12px; }
+
+    .searching { display: grid; gap: 10px; padding: 18px; }
+    .sk-row { height: 42px; border-radius: 12px; background: linear-gradient(100deg, var(--surface-2) 30%, var(--surface-3) 50%, var(--surface-2) 70%); background-size: 240% 100%; animation: shimmer 1.4s linear infinite; }
+    @keyframes shimmer { 0% { background-position: 140% 0; } 100% { background-position: -40% 0; } }
+    @media (prefers-reduced-motion: reduce) { .sk-row { animation: none; } }
+
+    .empty { padding: 34px 22px; text-align: center; display: grid; gap: 8px; justify-items: center; color: var(--muted); font-size: 14px; }
+    .empty .state-icon { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted-2); }
+    .empty strong { color: var(--fg); font-family: var(--font-display); font-size: 17px; }
+
+    /* ---- detalle de organización -------------------------------------- */
+    .org-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .org-name { font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: -.025em; }
+    .org-id { color: var(--muted-2); font-family: var(--font-mono); font-size: 12px; margin-top: 5px; }
+    .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+    .metric { padding: 15px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); min-width: 0; }
+    .metric .value { margin-top: 7px; font-family: var(--font-display); font-size: 21px; font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
+    .metric .sub { color: var(--muted-2); font-size: 12px; margin-top: 3px; }
+    .metric.absent .value { color: var(--muted-2); }
+    .metric.override-on { border-color: color-mix(in oklch, var(--accent), transparent 60%); background: color-mix(in oklch, var(--surface), var(--accent) 5%); }
+    .metric.override-on .value { color: var(--accent); }
+
+    .grant-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .grant-grid .span2 { grid-column: 1 / -1; }
+    .grant-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+    /* ---- zona de riesgo ------------------------------------------------ */
+    .danger-zone { border-color: color-mix(in oklch, var(--danger), transparent 62%); background: linear-gradient(180deg, color-mix(in oklch, var(--danger), transparent 95%), transparent 60%), color-mix(in oklch, var(--surface) 92%, transparent); }
+    .danger-zone .panel-head { border-bottom-color: color-mix(in oklch, var(--danger), transparent 74%); }
+    .danger-zone .panel-head h2 { color: var(--danger); }
+    .danger-zone .step-badge { color: var(--danger); border-color: color-mix(in oklch, var(--danger), transparent 62%); background: color-mix(in oklch, var(--danger), transparent 88%); }
+    .danger-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+    .danger-row p { color: var(--muted); font-size: 13px; max-width: 60ch; }
+    .confirm { display: grid; gap: 12px; padding: 15px; border-radius: 16px; border: 1px solid color-mix(in oklch, var(--danger), transparent 54%); background: color-mix(in oklch, var(--danger), transparent 92%); }
+    .confirm b { font-family: var(--font-display); font-size: 15px; }
+    .confirm p { color: var(--muted); font-size: 13px; }
+    .confirm-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .preview { position: fixed; left: 268px; bottom: 20px; z-index: 25; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 6px; border-radius: var(--r-pill); border: 1px solid var(--border); background: oklch(11% 0.006 270 / .94); backdrop-filter: blur(14px); max-width: calc(100vw - 300px); }
+    .preview span { padding: 0 8px; color: var(--muted-2); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    .preview button { border: 0; background: transparent; color: var(--muted); border-radius: 999px; padding: 7px 11px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .preview button:hover { color: var(--fg); }
+    .preview button[aria-pressed="true"] { background: var(--surface-3); color: var(--fg); }
+
+    @media (max-width: 1180px) {
+      .provision { grid-template-columns: 1fr; }
+      .facts { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 860px) {
+      .sidebar { display: none; }
+      .main { width: 100%; margin-left: 0; padding: 18px 18px 110px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .preview { left: 14px; right: 14px; bottom: 14px; max-width: none; justify-content: center; }
+    }
+    @media (max-width: 520px) {
+      .facts, .grant-grid { grid-template-columns: 1fr; }
+      .grant-foot .btn, .confirm-actions .btn, .danger-row .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" aria-label="Navegación principal">
+    <div class="sidebar-top">
+      <div class="wordmark">
+        <svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><circle cx="24" cy="24" r="15" stroke="var(--border)" stroke-width="4"/><path d="M24 9 A15 15 0 0 1 38 19" stroke="var(--muted)" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="9" r="5.5" fill="var(--accent)"/></svg>
+        kInorA
+      </div>
+      <div class="nav">
+        <a href="web-dashboard.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Inicio</a>
+        <a href="web-plan.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Mi plan</a>
+        <a href="web-stats.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 20h18M7 14v6M12 9v11M17 4v16"/></svg>Estadísticas</a>
+        <a href="web-create-plan.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Crear plan</a>
+        <a href="desktop-tracker.html" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 4v16M18 4v16M6 12h12M2 7h4M18 7h4M2 17h4M18 17h4"/></svg>Tracker</a>
+        <div class="nav-split">Plataforma</div>
+        <a href="web-admin.html" class="nav-item active" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7.5 3v5.5c0 4.4-3.1 8.3-7.5 9.5-4.4-1.2-7.5-5.1-7.5-9.5V6L12 3Z"/><path d="M9.5 12.2l1.9 1.9 3.6-3.9"/></svg>Administración</a>
+      </div>
+    </div>
+    <div class="sidebar-bottom"><div class="avatar">LF</div><div class="user-info"><div class="user-name">Lucía Fernández</div><div class="user-plan">Superadministradora</div></div></div>
+  </nav>
+
+  <main class="main">
+    <div class="frame">
+      <nav class="crumbs" aria-label="Ruta"><a href="web-admin.html">Administración</a><span aria-hidden="true">/</span><span class="muted">Aprovisionamiento de organizaciones</span></nav>
+
+      <header class="topbar">
+        <div class="topbar-copy">
+          <div class="eyebrow">Plataforma</div>
+          <h1>Aprovisionamiento de organizaciones</h1>
+          <p>Aprovisiona y gestiona organizaciones en toda la plataforma. Busca la organización, revisa su tier efectivo y concede o revoca su override.</p>
+        </div>
+        <div class="topbar-actions">
+          <span class="pill">128 organizaciones · 16 con override</span>
+        </div>
+      </header>
+
+      <div id="feedbackSlot"></div>
+
+      <div class="provision">
+
+        <!-- PASO 1 · buscar ------------------------------------------------ -->
+        <div class="col">
+          <section class="panel" aria-labelledby="step1">
+            <div class="panel-head">
+              <span class="step-badge" aria-hidden="true">1</span>
+              <h2 id="step1">Buscar organización</h2>
+            </div>
+            <div class="panel-body" style="padding-bottom:14px">
+              <div class="search-box">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M16.2 16.2 21 21"/></svg>
+                <input type="text" id="searchInput" placeholder="Nombre de la organización" autocomplete="off" spellcheck="false" aria-label="Buscar organización por nombre" aria-describedby="searchHint" />
+              </div>
+              <p class="hint" id="searchHint" style="margin-top:8px">La búsqueda es por nombre. El identificador se muestra en cada resultado.</p>
+            </div>
+
+            <!-- buscando -->
+            <div class="searching" id="searching" hidden aria-hidden="true">
+              <div class="sk-row"></div><div class="sk-row"></div><div class="sk-row"></div>
+            </div>
+
+            <!-- sin resultados -->
+            <div class="empty" id="noResults" hidden>
+              <div class="state-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M16.2 16.2 21 21M8.5 11h5"/></svg></div>
+              <strong>Sin coincidencias</strong>
+              <span>Ninguna organización coincide con <span class="mono" id="noResultsTerm"></span>. Revisa el nombre o prueba con menos palabras.</span>
+            </div>
+
+            <!-- estado inicial -->
+            <div class="empty" id="searchIdle">
+              <div class="state-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21V7l7-4v18"/><path d="M10 9h7a2 2 0 0 1 2 2v10M2 21h20"/></svg></div>
+              <strong>Empieza por buscar</strong>
+              <span>Escribe el nombre de una organización para ver su tier efectivo y su override.</span>
+            </div>
+
+            <div class="results" id="results" role="listbox" aria-label="Resultados de búsqueda" hidden></div>
+          </section>
+        </div>
+
+        <!-- PASOS 2 y 3 ----------------------------------------------------- -->
+        <div class="col">
+
+          <!-- sin selección -->
+          <section class="panel" id="noSelection">
+            <div class="panel-head">
+              <span class="step-badge" aria-hidden="true">2</span>
+              <h2>Detalle de la organización</h2>
+            </div>
+            <div class="empty" style="padding:56px 24px">
+              <div class="state-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg></div>
+              <strong>Ninguna organización seleccionada</strong>
+              <span>Selecciona un resultado de la izquierda para ver su tier efectivo, su facturación y su override.</span>
+            </div>
+          </section>
+
+          <div id="selectionBlock" hidden>
+            <!-- PASO 2 · detalle -->
+            <section class="panel" aria-labelledby="step2" style="margin-bottom:16px">
+              <div class="panel-head">
+                <span class="step-badge" aria-hidden="true">2</span>
+                <h2 id="step2">Detalle de la organización</h2>
+                <span class="pill" id="overridePill" hidden></span>
+              </div>
+              <div class="panel-body">
+                <div class="org-head">
+                  <div>
+                    <div class="org-name" id="orgName">—</div>
+                    <div class="org-id" id="orgId">—</div>
+                  </div>
+                </div>
+                <div class="facts">
+                  <div class="metric">
+                    <div class="eyebrow">Tier efectivo</div>
+                    <div class="value" id="factTier">—</div>
+                    <div class="sub" id="factTierSub">—</div>
+                  </div>
+                  <div class="metric" id="factBillingBox">
+                    <div class="eyebrow">Facturación</div>
+                    <div class="value" id="factBilling">—</div>
+                    <div class="sub" id="factBillingSub">—</div>
+                  </div>
+                  <div class="metric" id="factOverrideBox">
+                    <div class="eyebrow">Override</div>
+                    <div class="value" id="factOverride">—</div>
+                    <div class="sub" id="factOverrideSub">—</div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- PASO 3 · conceder -->
+            <section class="panel" aria-labelledby="step3" style="margin-bottom:16px">
+              <div class="panel-head">
+                <span class="step-badge" aria-hidden="true">3</span>
+                <h2 id="step3">Conceder acceso</h2>
+              </div>
+              <form class="panel-body" id="grantForm" novalidate>
+                <div class="grant-grid">
+                  <div class="field">
+                    <label for="tierSelect">Tier</label>
+                    <div class="control sel">
+                      <select id="tierSelect">
+                        <option value="trainer">trainer</option>
+                        <option value="gym">gym</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label for="startDate">Fecha de inicio <span class="hint" style="font-weight:600">· opcional</span></label>
+                    <input type="date" id="startDate" />
+                  </div>
+                  <div class="field span2" id="reasonField">
+                    <label for="reason">Motivo <span class="req">Obligatorio</span></label>
+                    <textarea id="reason" placeholder="Por qué se concede este acceso y quién lo ha pedido." required></textarea>
+                    <p class="hint">Queda registrado junto al override y se puede consultar en Logs y observabilidad.</p>
+                    <p class="field-error" id="reasonError" hidden>El motivo es obligatorio.</p>
+                  </div>
+                  <div class="field">
+                    <label for="endDate">Fecha de fin <span class="hint" style="font-weight:600">· opcional</span></label>
+                    <input type="date" id="endDate" />
+                    <p class="hint">Sin fecha de fin, el override no caduca.</p>
+                  </div>
+                </div>
+                <div class="grant-foot">
+                  <button class="btn btn-primary" type="submit" id="grantBtn">Conceder</button>
+                  <span class="hint" id="grantNote">Sustituye al override activo, si lo hay.</span>
+                </div>
+              </form>
+            </section>
+
+            <!-- Revocar: solo visible cuando hay override activo -->
+            <section class="panel danger-zone" id="revokeSection" aria-labelledby="revoke-title" hidden>
+              <div class="panel-head">
+                <span class="step-badge" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 5l14 14M19 5 5 19"/></svg>
+                </span>
+                <h2 id="revoke-title">Revocar override</h2>
+              </div>
+              <div class="panel-body">
+                <div class="danger-row" id="revokeRow">
+                  <p>La organización volverá inmediatamente a su tier de facturación. Los usuarios pierden el acceso a las funciones del tier concedido. La acción queda registrada.</p>
+                  <button class="btn btn-danger" type="button" id="revokeBtn">Revocar override</button>
+                </div>
+                <div class="confirm" id="revokeConfirm" hidden>
+                  <b>Confirma la revocación</b>
+                  <p>Vas a revocar el override <span class="mono" id="confirmTier"></span> de <span class="mono" id="confirmOrg"></span>. No se puede deshacer desde aquí: para restaurarlo habría que concederlo de nuevo.</p>
+                  <div class="confirm-actions">
+                    <button class="btn btn-danger-solid" type="button" id="confirmRevoke">Sí, revocar</button>
+                    <button class="btn" type="button" id="cancelRevoke">Cancelar</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="preview" role="group" aria-label="Vista previa de resultados (prototipo)">
+  <span>Resultado</span>
+  <button type="button" data-result="none" aria-pressed="true">Ninguno</button>
+  <button type="button" data-result="granted" aria-pressed="false">Concesión OK</button>
+  <button type="button" data-result="revoked" aria-pressed="false">Revocación OK</button>
+  <button type="button" data-result="forbidden" aria-pressed="false">Sin permisos</button>
+  <button type="button" data-result="notFound" aria-pressed="false">No encontrado</button>
+  <button type="button" data-result="conflict" aria-pressed="false">Conflicto</button>
+  <button type="button" data-result="invalid" aria-pressed="false">Datos inválidos</button>
+  <button type="button" data-result="error" aria-pressed="false">Error genérico</button>
+</div>
+
+<script>
+  (function () {
+    const ORGS = [
+      { id: '3f2a91c4-77b1-4e0d-9c31-0b8d2a55e410', name: 'Atlas Performance Club', tier: 'gym', billing: { status: 'Suscripción activa', detail: 'Stripe · gym · renueva 01/09/2026' }, override: { tier: 'gym', from: '01/06/2026', to: '31/12/2026', reason: 'Acuerdo comercial piloto.' } },
+      { id: '9b40d6e2-1c85-42fa-a7d9-6e5f0c31b284', name: 'Atlas Studio Norte', tier: 'pro', billing: { status: 'Suscripción activa', detail: 'Stripe · pro · renueva 14/08/2026' }, override: null },
+      { id: 'c17e58aa-9d33-4b62-8f10-2a7c94dd0e5b', name: 'Atlética Vallecas', tier: 'free', billing: null, override: null },
+      { id: '58d0b3f7-6a24-49c1-b0e8-71f3ac92d6aa', name: 'Trainers Atlántico', tier: 'trainer', billing: { status: 'Prueba en curso', detail: 'Stripe · trainer · termina 21/08/2026' }, override: { tier: 'trainer', from: '15/07/2026', to: 'sin fecha de fin', reason: 'Onboarding asistido.' } }
+    ];
+
+    const ICON = {
+      ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12.4l2.6 2.6L16 9.6"/></svg>',
+      undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8h10a6 6 0 0 1 0 12H7"/><path d="M7 4 3 8l4 4"/></svg>',
+      lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10.5" width="16" height="10.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>',
+      search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M16.2 16.2 21 21M8.5 11h5"/></svg>',
+      branch: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2.4"/><circle cx="6" cy="19" r="2.4"/><circle cx="18" cy="12" r="2.4"/><path d="M6 7.4v9.2M8.4 5H14a4 4 0 0 1 4 4v.6"/></svg>',
+      alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4.5M12 17.5h.01"/></svg>',
+      form: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8h8M8 12h8M8 16h4"/></svg>'
+    };
+
+    // Cada resultado tiene su propio color, icono y tono. No se pintan todos igual:
+    // un conflicto no es un fallo del servidor, y "sin permisos" no es "no existe".
+    const FEEDBACK = {
+      granted: () => `<div class="banner banner-success" role="status">${ICON.ok}<div><b>Acceso concedido</b>
+        <span id="fbBody"></span></div></div>`,
+      revoked: () => `<div class="banner banner-info" role="status">${ICON.undo}<div><b>Override revocado</b>
+        <span id="fbBody"></span></div></div>`,
+      forbidden: () => `<div class="banner banner-warning" role="alert">${ICON.lock}<div><b>No tienes permisos para esta acción</b>
+        Conceder o revocar overrides requiere rol de superadministración. Tu sesión no lo tiene, así que no se ha modificado nada.</div></div>`,
+      notFound: () => `<div class="banner banner-neutral" role="alert">${ICON.search}<div><b>La organización ya no existe</b>
+        El identificador seleccionado no corresponde a ninguna organización activa. Puede haberse eliminado desde que hiciste la búsqueda: vuelve a buscarla.</div></div>`,
+      conflict: () => `<div class="banner banner-info" role="alert">${ICON.branch}<div><b>Ya hay un override activo</b>
+        Otra sesión ha concedido un override a esta organización mientras rellenabas el formulario. Revisa el detalle antes de volver a conceder: no hemos sobrescrito nada.</div></div>`,
+      invalid: () => `<div class="banner banner-danger" role="alert">${ICON.form}<div><b>Revisa los datos del formulario</b>
+        El motivo es obligatorio y la fecha de fin no puede ser anterior a la de inicio. Los campos afectados están marcados abajo.</div></div>`,
+      error: () => `<div class="banner banner-danger" role="alert">${ICON.alert}<div><b>No hemos podido completar la operación</b>
+        Ha fallado algo por nuestro lado y la organización se ha quedado como estaba. Puedes reintentarlo. Referencia: <code>req_8f42c1a9</code></div></div>`
+    };
+
+    const searchInput = document.getElementById('searchInput');
+    const results = document.getElementById('results');
+    const searching = document.getElementById('searching');
+    const noResults = document.getElementById('noResults');
+    const searchIdle = document.getElementById('searchIdle');
+    const noSelection = document.getElementById('noSelection');
+    const selectionBlock = document.getElementById('selectionBlock');
+    const revokeSection = document.getElementById('revokeSection');
+    const revokeRow = document.getElementById('revokeRow');
+    const revokeConfirm = document.getElementById('revokeConfirm');
+    const feedbackSlot = document.getElementById('feedbackSlot');
+    const reasonField = document.getElementById('reasonField');
+    const reasonError = document.getElementById('reasonError');
+    const grantBtn = document.getElementById('grantBtn');
+    let selected = null;
+    let searchTimer;
+
+    function showFeedback(kind, body) {
+      if (!kind || kind === 'none') { feedbackSlot.innerHTML = ''; }
+      else {
+        feedbackSlot.innerHTML = FEEDBACK[kind]();
+        const slot = document.getElementById('fbBody');
+        if (slot) slot.textContent = body || '';
+      }
+      reasonField.classList.toggle('invalid', kind === 'invalid');
+      reasonError.hidden = kind !== 'invalid';
+      document.querySelectorAll('.preview button').forEach((b) => {
+        b.setAttribute('aria-pressed', String(b.dataset.result === (kind || 'none')));
+      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function setPanels({ idle, loading, empty, list }) {
+      searchIdle.hidden = !idle;
+      searching.hidden = !loading;
+      noResults.hidden = !empty;
+      results.hidden = !list;
+    }
+
+    function renderResults(matches) {
+      results.innerHTML = matches.map((org) => `
+        <button class="result" type="button" role="option" aria-selected="false" data-id="${org.id}">
+          <span class="result-name">${org.name}</span>
+          <span class="result-id">${org.id}</span>
+          <span class="result-tier">Tier efectivo · ${org.tier}${org.override ? ' · con override' : ''}</span>
+        </button>`).join('');
+      setPanels({ list: true });
+    }
+
+    searchInput.addEventListener('input', () => {
+      const term = searchInput.value.trim();
+      clearTimeout(searchTimer);
+      if (!term) { setPanels({ idle: true }); return; }
+      setPanels({ loading: true });
+      searchTimer = setTimeout(() => {
+        const matches = ORGS.filter((o) => o.name.toLowerCase().includes(term.toLowerCase()));
+        if (matches.length === 0) {
+          document.getElementById('noResultsTerm').textContent = `«${term}»`;
+          setPanels({ empty: true });
+        } else {
+          renderResults(matches);
+        }
+      }, 550);
+    });
+
+    results.addEventListener('click', (event) => {
+      const option = event.target.closest('.result');
+      if (!option) return;
+      results.querySelectorAll('.result').forEach((r) => r.setAttribute('aria-selected', String(r === option)));
+      select(ORGS.find((o) => o.id === option.dataset.id));
+    });
+
+    function select(org) {
+      selected = org;
+      noSelection.hidden = true;
+      selectionBlock.hidden = false;
+      document.getElementById('orgName').textContent = org.name;
+      document.getElementById('orgId').textContent = org.id;
+
+      document.getElementById('factTier').textContent = org.tier;
+      document.getElementById('factTierSub').textContent = org.override ? 'Determinado por el override' : 'Determinado por la facturación';
+
+      const billingBox = document.getElementById('factBillingBox');
+      // El estado de facturación puede no existir: se dice, no se deja en blanco.
+      billingBox.classList.toggle('absent', !org.billing);
+      document.getElementById('factBilling').textContent = org.billing ? org.billing.status : 'Sin datos';
+      document.getElementById('factBillingSub').textContent = org.billing ? org.billing.detail : 'La organización no tiene facturación registrada';
+
+      const overrideBox = document.getElementById('factOverrideBox');
+      overrideBox.classList.toggle('override-on', Boolean(org.override));
+      document.getElementById('factOverride').textContent = org.override ? org.override.tier : 'Sin override';
+      document.getElementById('factOverrideSub').textContent = org.override
+        ? `Desde ${org.override.from} · hasta ${org.override.to}`
+        : 'La organización usa su tier de facturación';
+
+      const pill = document.getElementById('overridePill');
+      pill.hidden = !org.override;
+      pill.className = 'pill pill-active';
+      pill.textContent = org.override ? 'Override activo' : '';
+
+      revokeSection.hidden = !org.override;
+      revokeRow.hidden = false;
+      revokeConfirm.hidden = true;
+      if (org.override) {
+        document.getElementById('confirmTier').textContent = org.override.tier;
+        document.getElementById('confirmOrg').textContent = org.name;
+      }
+      document.getElementById('grantNote').textContent = org.override
+        ? 'Sustituirá al override activo de esta organización.'
+        : 'Sustituye al override activo, si lo hay.';
+    }
+
+    document.getElementById('grantForm').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const reason = document.getElementById('reason').value.trim();
+      if (!reason) { showFeedback('invalid'); return; }
+      grantBtn.disabled = true;
+      grantBtn.textContent = 'Concediendo…';
+      setTimeout(() => {
+        grantBtn.disabled = false;
+        grantBtn.textContent = 'Conceder';
+        const tier = document.getElementById('tierSelect').value;
+        showFeedback('granted', `${selected.name} pasa a tier ${tier}. El override queda registrado con tu motivo y ya es efectivo para sus usuarios.`);
+      }, 900);
+    });
+
+    document.getElementById('revokeBtn').addEventListener('click', () => {
+      revokeRow.hidden = true;
+      revokeConfirm.hidden = false;
+    });
+    document.getElementById('cancelRevoke').addEventListener('click', () => {
+      revokeConfirm.hidden = true;
+      revokeRow.hidden = false;
+    });
+    document.getElementById('confirmRevoke').addEventListener('click', () => {
+      const name = selected ? selected.name : 'La organización';
+      revokeConfirm.hidden = true;
+      revokeRow.hidden = false;
+      showFeedback('revoked', `${name} vuelve a su tier de facturación. Sus usuarios ya no tienen acceso a las funciones del tier concedido.`);
+    });
+
+    document.querySelectorAll('.preview button').forEach((button) => {
+      button.addEventListener('click', () => {
+        const kind = button.dataset.result;
+        if (kind === 'granted') showFeedback('granted', 'Atlas Studio Norte pasa a tier trainer. El override queda registrado con tu motivo y ya es efectivo para sus usuarios.');
+        else if (kind === 'revoked') showFeedback('revoked', 'Trainers Atlántico vuelve a su tier de facturación. Sus usuarios ya no tienen acceso a las funciones del tier concedido.');
+        else showFeedback(kind);
+      });
+    });
+
+    setPanels({ idle: true });
+  })();
+</script>
+</body>
+</html>

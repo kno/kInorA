@@ -5,6 +5,8 @@ import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { fetchAiConfig } from "./ai-config-client";
 import { AiConfigForm } from "./AiConfigForm";
 import type { AiProvider } from "./ai-config-client";
+import { AdminPageShell } from "../AdminPageShell";
+import styles from "../admin.module.css";
 
 /**
  * AI Provider Admin Config page — /admin/ai-config
@@ -16,6 +18,14 @@ import type { AiProvider } from "./ai-config-client";
  *  4. Renders AiConfigForm with the current config (SC-14)
  *
  * API keys are NEVER shown in this panel — only provider + model.
+ *
+ * Layout follows the Open Design `web-admin-ai-config.html` screen
+ * (kno/kInorA#414): form on the left, an API-keys notice and a server-side
+ * summary aside. The design's "last updated / updated by" rows and its
+ * per-variable "defined / not defined" list are deliberately NOT rendered —
+ * the API exposes neither, and inventing them would be design copy shipped as
+ * data (kno/kInorA#411). The keys panel keeps the warning without claiming to
+ * know which environment variables are set.
  */
 export default async function AiConfigPage() {
   const t = await getTranslations();
@@ -39,24 +49,61 @@ export default async function AiConfigPage() {
   const config = result.kind === "ok" ? result.config : null;
 
   return (
-    <main className="kin-page">
-      <div className="kin-stack kin-stack--center">
-        <h1 className="kin-title">AI Provider Settings</h1>
-        <p className="kin-text kin-muted" style={{ marginBottom: "1.5rem" }}>
-          Select the active AI provider and model for plan generation.
-          API keys are managed via server environment variables — not here.
+    <AdminPageShell
+      eyebrow={t("admin.sectionEyebrow")}
+      title={t("admin.sections.aiConfig.title")}
+      description={t("admin.sections.aiConfig.description")}
+      backLabel={t("admin.pageTitle")}
+    >
+      {loadFailed && (
+        <p
+          className={`${styles.banner} ${styles.bannerDanger}`}
+          role="alert"
+          data-testid="ai-config-error"
+        >
+          {t("aiConfig.errors.loadFailed")}
         </p>
-        {loadFailed && (
-          <p className="kin-text" role="alert" data-testid="ai-config-error" style={{ marginBottom: "1rem" }}>
-            {t("aiConfig.errors.loadFailed")}
-          </p>
-        )}
+      )}
+
+      <div className={styles.config}>
         <AiConfigForm
           initialProvider={config?.provider as AiProvider | undefined}
           initialModel={config?.model}
           loadFailed={loadFailed}
         />
+
+        <aside className={styles.aside}>
+          <section className={`${styles.panel} ${styles.keys}`} aria-labelledby="keys-title">
+            <div className={styles.keysTop}>
+              <span className={styles.keysIcon} aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <circle cx="8" cy="14" r="4.2" />
+                  <path d="M11.2 11.2 19 3.4M16.4 6.2l2.2 2.2M14.2 8.4l2.2 2.2" />
+                </svg>
+              </span>
+              <div>
+                <h2 id="keys-title">{t("aiConfig.keysTitle")}</h2>
+                <p>{t("aiConfig.keysLead")}</p>
+              </div>
+            </div>
+            <p>{t("aiConfig.keysBody")}</p>
+          </section>
+
+          <section className={`${styles.panel} ${styles.summary}`} aria-labelledby="summary-title">
+            <h2 id="summary-title">{t("aiConfig.summaryTitle")}</h2>
+            <div>
+              <div className={styles.kv}>
+                <span>{t("aiConfig.providerLabel")}</span>
+                <strong data-testid="ai-config-summary-provider">{config?.provider ?? "—"}</strong>
+              </div>
+              <div className={styles.kv}>
+                <span>{t("aiConfig.modelLabel")}</span>
+                <strong data-testid="ai-config-summary-model">{config?.model ?? "—"}</strong>
+              </div>
+            </div>
+          </section>
+        </aside>
       </div>
-    </main>
+    </AdminPageShell>
   );
 }
