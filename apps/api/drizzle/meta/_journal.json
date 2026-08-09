@@ -211,6 +211,13 @@
       "when": 1785929846859,
       "tag": "0029_workout_plan_archived_at",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1785929906859,
+      "tag": "0030_workout_plan_version",
+      "breakpoints": true
     }
   ]
 }

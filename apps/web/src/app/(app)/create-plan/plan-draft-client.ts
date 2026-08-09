@@ -317,12 +317,15 @@ export interface PlanStatusResponse {
   name?: string;
   /** 17d PR B. ISO-8601 instant, or null/absent when the plan is active. */
   archivedAt?: string | null;
-  /**
-   * 17d PR D. ISO-8601 instant of the last write — the program editor loads it
-   * and sends it back as `expectedUpdatedAt` so a concurrent save is detected
-   * rather than silently overwritten.
-   */
+  /** 17d PR D. ISO-8601 instant of the last write, for display/audit. */
   updatedAt?: string;
+  /**
+   * #421. The optimistic-concurrency token — the program editor loads it and
+   * sends it back as `expectedVersion` so a concurrent save is detected rather
+   * than silently overwritten. `updatedAt` above carried this until a timestamp
+   * proved unable to be a version token (see the API repository comment).
+   */
+  version?: number;
 }
 
 export type FetchPlanResult =

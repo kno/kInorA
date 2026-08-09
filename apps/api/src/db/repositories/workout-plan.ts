@@ -61,6 +61,12 @@ export interface WorkoutPlanRecord {
   errorMessage: string | null;
   createdAt: Date;
   updatedAt: Date;
+  /**
+   * #421: monotonic optimistic-concurrency token. Advances by exactly one on
+   * every guarded `updateProgram`; see the column comment in `schema.ts` for
+   * why this is not `updatedAt`.
+   */
+  version: number;
 }
 
 /**
@@ -429,7 +435,7 @@ export class WorkoutPlanRepository {
    * The SECOND write path for this column, and deliberately narrower than
    * `markReady`: scoped by tenant AND user (the id is client-supplied), guarded
    * on `status = 'ready'` so it can never race an in-flight generation's
-   * `markReady`, and guarded on `expectedUpdatedAt` so it can never silently
+   * `markReady`, and guarded on `expectedVersion` so it can never silently
    * overwrite a concurrent edit (Judgment Day finding 1) — the caller's version
    * of the row must still be current.
    *
@@ -442,47 +448,56 @@ export class WorkoutPlanRepository {
    * does not disambiguate: the route re-reads the scoped row and maps it to
    * 404 / 409 `plan_not_ready` / 409 `edit_conflict`.
    *
-   * ## Why the version guard truncates to milliseconds
+   * ## Why the version token is an integer and not `updated_at` (#421)
    *
-   * `updated_at` is `timestamptz`, which Postgres stores to MICROSECOND
-   * precision — `defaultNow()` populates it that way on insert. Drizzle reads
-   * the column in `mode: "date"`, so it arrives as a JS `Date`, which cannot
-   * represent anything finer than a millisecond; the ISO-8601 string the API
-   * hands the editor is millisecond-precision too. The caller therefore CANNOT
-   * send back the exact stored value, and a plain `updated_at = $expected`
-   * matches zero rows for any row whose microseconds are non-zero — every edit
-   * would answer `409 edit_conflict` forever, with no way for the user to
-   * recover, because reloading returns the same truncated token.
+   * This guard was built on `updated_at` and broke twice, both times for the
+   * same reason: a timestamp is a clock reading, so making it a version makes
+   * CLOCK PRECISION a correctness property.
    *
-   * Truncating the column to the precision the wire format can actually carry
-   * makes the comparison correct by construction instead of by the accident of
-   * which write path last touched the row. It stays a strict version check:
-   * millisecond granularity is what the client observes, and a successful
-   * update immediately moves `updated_at`, so a second writer holding the same
-   * token still finds no matching row. The `id` predicate keeps this a primary
-   * key lookup, so wrapping the column in a function costs no index.
+   * 1. Postgres stores `timestamptz` to microseconds, while a JS `Date` and an
+   *    ISO-8601 string carry milliseconds. The caller could never send back the
+   *    exact stored value, so `updated_at = $expected` matched zero rows and
+   *    every edit answered `409 edit_conflict` forever — a false negative.
+   * 2. Comparing both sides truncated to milliseconds fixed that and opened the
+   *    mirror defect: an update landing in the SAME millisecond as the token
+   *    left `date_trunc('milliseconds', updated_at)` still equal to it, so a
+   *    stale token matched and overwrote a fresh edit with no `409` and no
+   *    error — a silent lost update, which is worse than no guard at all,
+   *    because the UI promises protection it is not delivering.
+   *
+   * `version` has no such window. It is not derived from a clock: the update
+   * sets it to `expectedVersion + 1` under a `version = expectedVersion`
+   * predicate, so the row's token strictly advances on every successful write
+   * and a replay of a consumed token matches zero rows NO MATTER how fast the
+   * two writes arrive — even within the same microsecond, even if `updated_at`
+   * were identical before and after. This is the pattern `plan_drafts.version`
+   * / `commitWithVersion` already uses (#215).
+   *
+   * `updated_at` still moves on every edit, but it is now purely an audit
+   * timestamp with no role in correctness. The `id` predicate keeps this a
+   * primary key lookup.
    */
   async updateProgram(
     tenantId: string,
     userId: string,
     id: string,
     program: WorkoutProgram,
-    expectedUpdatedAt: Date
+    expectedVersion: number
   ): Promise<WorkoutPlanRecord | undefined> {
     const rows = await this.db
       .update(workoutPlans)
-      .set({ programJson: program, updatedAt: new Date() })
+      .set({
+        programJson: program,
+        updatedAt: new Date(),
+        version: expectedVersion + 1,
+      })
       .where(
         and(
           eq(workoutPlans.tenantId, tenantId),
           eq(workoutPlans.userId, userId),
           eq(workoutPlans.id, id),
           eq(workoutPlans.status, "ready"),
-          // The parameter is sent as an explicit ISO-8601 instant and cast,
-          // rather than relying on how the driver happens to serialise a JS
-          // Date inside a raw template: both sides of this comparison are then
-          // visibly millisecond-precision UTC in the code itself.
-          sql`date_trunc('milliseconds', ${workoutPlans.updatedAt}) = ${expectedUpdatedAt.toISOString()}::timestamptz`
+          eq(workoutPlans.version, expectedVersion)
         )
       )
       .returning();

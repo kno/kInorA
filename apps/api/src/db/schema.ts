@@ -680,6 +680,27 @@ export const workoutPlans = pgTable(
      * introduces no DELETE route).
      */
     archivedAt: timestamp("archived_at", { withTimezone: true }),
+    /**
+     * #421: the optimistic-concurrency token for `updateProgram`, and the ONLY
+     * thing that guards it.
+     *
+     * `updated_at` used to play this role and produced two defects in a row,
+     * both from the same root cause: a timestamp is a CLOCK READING, so using
+     * it as a version makes clock precision a correctness property. Postgres
+     * stores `timestamptz` to microseconds, a JS `Date` and an ISO-8601 string
+     * carry milliseconds, and two writes inside one millisecond are
+     * indistinguishable — first every edit conflicted, then a stale token
+     * could be replayed over a fresh edit.
+     *
+     * A monotonic counter has no such window: it advances by exactly one on
+     * every guarded write, regardless of how fast the writes arrive. This
+     * mirrors `plan_drafts.version` / `commitWithVersion` (#215).
+     *
+     * Existing rows backfill to 1, which is correct: any token a client is
+     * holding from before this column existed was a timestamp and is no longer
+     * accepted by the API, so no in-flight edit can be validated against it.
+     */
+    version: integer("version").notNull().default(1),
   },
   (table) => ({
     tenantSpecIdx: index("workout_plans_tenant_spec_idx").on(
