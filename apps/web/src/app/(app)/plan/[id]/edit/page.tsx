@@ -51,7 +51,11 @@ export default async function ProgramEditPage({ params }: ProgramEditPageProps) 
   // A plan without a stored program has nothing to edit, and neither does one
   // that is still generating or has failed — the server refuses both with a
   // 409, so saying so here saves a pointless round-trip.
-  if (plan.status !== "ready" || !program || !plan.updatedAt) {
+  //
+  // A missing `version` (#421) lands here too, and deliberately: without a
+  // token the editor cannot make a guarded save, and offering an unguarded one
+  // is exactly the silent overwrite the guard exists to prevent.
+  if (plan.status !== "ready" || !program || typeof plan.version !== "number") {
     return (
       <main className="kin-page">
         <div className="kin-card kin-card--center">
@@ -70,7 +74,7 @@ export default async function ProgramEditPage({ params }: ProgramEditPageProps) 
         planId={plan.id}
         planName={plan.name}
         program={program}
-        updatedAt={plan.updatedAt}
+        version={plan.version}
       />
     </main>
   );

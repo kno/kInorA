@@ -246,11 +246,17 @@ export interface WorkoutPlanDetail {
   name?: string;
   /** 17d PR B — threaded into PlanWeekView's archived-plan indicator. */
   archivedAt?: string | null;
-  /**
-   * 17d PR D — ISO-8601 instant of the last write, and the optimistic-
-   * concurrency token the program editor sends back as `expectedUpdatedAt`.
-   */
+  /** 17d PR D — ISO-8601 instant of the last write, for display/audit. */
   updatedAt?: string;
+  /**
+   * #421 — the optimistic-concurrency token the program editor sends back as
+   * `expectedVersion`. A monotonic counter that advances by exactly one on each
+   * successful edit. `updatedAt` above filled this role until two successive
+   * defects showed that a clock reading cannot be a version token: at
+   * microsecond storage vs millisecond wire precision it first rejected every
+   * edit, then silently accepted a replayed stale token.
+   */
+  version?: number;
 }
 
 /**
@@ -277,11 +283,12 @@ export interface PlanArchiveResponse {
 export interface UpdatePlanProgramRequest {
   program: WorkoutProgram;
   /**
-   * 17d, Judgment Day finding 1: the `updatedAt` the editor loaded — the
+   * 17d, Judgment Day finding 1 / #421: the `version` the editor loaded — the
    * optimistic-concurrency precondition. The update applies only while the row
    * still carries this exact value, so two tabs cannot silently lose an edit.
+   * An integer of at least 1; anything else is a malformed envelope (`400`).
    */
-  expectedUpdatedAt: string;
+  expectedVersion: number;
 }
 
 /** 17d PR D: `200` body of a successful program edit. */
@@ -289,20 +296,25 @@ export interface UpdatePlanProgramResponse {
   id: string;
   /** The STORED program: server-resolved `catalogId`s, carried-over warnings. */
   program: WorkoutProgram;
-  /** The NEW `updatedAt`, strictly after the submitted `expectedUpdatedAt`. */
+  /** The new instant of the last write, for display/audit. */
   updatedAt: string;
+  /**
+   * #421: the NEW token, exactly `expectedVersion + 1`. The editor adopts it so
+   * a second save from the same tab is not rejected as its own conflict.
+   */
+  version: number;
 }
 
 /**
- * 17d PR D, Judgment Day finding 1: `409` body when `expectedUpdatedAt` no
+ * 17d PR D, Judgment Day finding 1: `409` body when `expectedVersion` no
  * longer matches — another edit landed first. Deliberately a different shape
  * from `409 { error: "plan_not_ready" }`, so the losing writer is told WHICH
- * of the two conflicts occurred instead of guessing. `currentUpdatedAt` is the
+ * of the two conflicts occurred instead of guessing. `currentVersion` is the
  * row's value right now, so the client can reload to exactly that version.
  */
 export interface PlanEditConflictResponse {
   error: "edit_conflict";
-  currentUpdatedAt: string;
+  currentVersion: number;
 }
 
 export { WorkoutProgramSchema } from "./workout-program.schema.js";

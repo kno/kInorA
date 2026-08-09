@@ -18,12 +18,12 @@ import { updatePlanProgram, type UpdateProgramResult } from "./program-edit-clie
 export async function updatePlanProgramAction(
   planId: string,
   program: WorkoutProgram,
-  expectedUpdatedAt: string,
+  expectedVersion: number,
 ): Promise<UpdateProgramResult> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
 
-  const result = await updatePlanProgram(planId, program, expectedUpdatedAt, token);
+  const result = await updatePlanProgram(planId, program, expectedVersion, token);
   if (result.kind === "ok") {
     revalidatePath("/plan");
     revalidatePath("/plans");
