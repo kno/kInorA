@@ -219,7 +219,13 @@ describe("@kinora/i18n package assembly", () => {
     // first-entry volume-shift notice on the web weight-entry form.
     // +1 `profile.weightEntry.loadError` (kno/kInorA#378) — distinguishes a
     // failed weight-history fetch from an empty list on mobile ProfileScreen.
-    expect(nonBillingKeys).toHaveLength(795);
+    // +6 `dashboard.{errorTitle,errorBody,retry}`, `history.error`,
+    // `stats.error`, `aiConfig.errors.loadFailed` (kno/kInorA#378) — the
+    // remaining five collapsed-error sites (web dashboard/history/stats,
+    // mobile history, and the admin AI-config panel) now render a visible,
+    // distinguishable error instead of silently falling back to an empty or
+    // default state.
+    expect(nonBillingKeys).toHaveLength(801);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
