@@ -22,6 +22,9 @@ import type {
   MembershipStatus,
   OidcCallbackParams,
   PlanArchiveResponse,
+  PlanEditConflictResponse,
+  UpdatePlanProgramRequest,
+  UpdatePlanProgramResponse,
   PlanGoal,
   PlanLimitation,
   PlanPreferenceScores,
@@ -348,6 +351,8 @@ describe("shared contracts boundary", () => {
       name?: string;
       /** 17d PR B — threaded into PlanWeekView's archived-plan indicator. */
       archivedAt?: string | null;
+      /** 17d PR D — the program editor's optimistic-concurrency token. */
+      updatedAt?: string;
     }>();
   });
 
@@ -360,6 +365,46 @@ describe("shared contracts boundary", () => {
     expectTypeOf<PlanArchiveResponse>().toEqualTypeOf<{
       id: string;
       archivedAt: string | null;
+    }>();
+  });
+
+  it("defines the program-edit request/response DTOs (17d PR D)", () => {
+    const request: UpdatePlanProgramRequest = {
+      program: {} as WorkoutProgram,
+      expectedUpdatedAt: "2026-08-09T10:00:00.000Z",
+    };
+    const response: UpdatePlanProgramResponse = {
+      id: "plan-1",
+      program: {} as WorkoutProgram,
+      updatedAt: "2026-08-09T10:05:00.000Z",
+    };
+
+    expect(request.expectedUpdatedAt).toBe("2026-08-09T10:00:00.000Z");
+    expect(response.updatedAt).toBe("2026-08-09T10:05:00.000Z");
+    expectTypeOf<UpdatePlanProgramRequest>().toEqualTypeOf<{
+      program: WorkoutProgram;
+      expectedUpdatedAt: string;
+    }>();
+    expectTypeOf<UpdatePlanProgramResponse>().toEqualTypeOf<{
+      id: string;
+      program: WorkoutProgram;
+      updatedAt: string;
+    }>();
+  });
+
+  it("defines the edit-conflict DTO with a literal error discriminant (17d PR D)", () => {
+    const conflict: PlanEditConflictResponse = {
+      error: "edit_conflict",
+      currentUpdatedAt: "2026-08-09T10:05:00.000Z",
+    };
+
+    expect(conflict.error).toBe("edit_conflict");
+    // The literal type is the point: `plan_not_ready` shares the 409 status but
+    // not this body shape, so a client can discriminate on it.
+    expectTypeOf<PlanEditConflictResponse["error"]>().toEqualTypeOf<"edit_conflict">();
+    expectTypeOf<PlanEditConflictResponse>().toEqualTypeOf<{
+      error: "edit_conflict";
+      currentUpdatedAt: string;
     }>();
   });
 

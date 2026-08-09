@@ -243,4 +243,42 @@ describe("PlanList", () => {
       expect(screen.queryByTestId("plan-card-archived-plan-2")).toBeNull();
     });
   });
+
+  describe("edit affordance (17d PR D)", () => {
+    it("links a ready plan to its program editor", () => {
+      renderWithIntl(<PlanList plans={[plan({ id: "plan-1", status: "ready" })]} now={NOW} />);
+
+      const link = screen.getByTestId("plan-edit-plan-1");
+      expect(link.getAttribute("href")).toBe("/plan/plan-1/edit");
+    });
+
+    it("renders no edit affordance on a generating or failed plan", () => {
+      renderWithIntl(
+        <PlanList
+          plans={[
+            plan({ id: "plan-1", status: "generating" }),
+            plan({ id: "plan-2", status: "failed" }),
+          ]}
+          now={NOW}
+        />,
+      );
+
+      expect(screen.queryByTestId("plan-edit-plan-1")).toBeNull();
+      expect(screen.queryByTestId("plan-edit-plan-2")).toBeNull();
+    });
+
+    it("renders no edit affordance on an archived row", () => {
+      renderWithIntl(
+        <PlanList
+          plans={[plan({ id: "plan-3", archivedAt: "2026-08-01T00:00:00.000Z" })]}
+          now={NOW}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /show archived/i }));
+
+      expect(screen.getByTestId("plan-card-archived-plan-3")).toBeTruthy();
+      expect(screen.queryByTestId("plan-edit-plan-3")).toBeNull();
+    });
+  });
 });

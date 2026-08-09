@@ -22,6 +22,12 @@ export type { SessionDurationValidation } from "./session-duration.js";
 export { validateRpe } from "./rpe.js";
 export type { RpeValidation } from "./rpe.js";
 
+export {
+  EDITED_PROGRAM_DAY_BOUNDS,
+  validateEditedProgram,
+} from "./edited-program.js";
+export type { EditedProgramIssue } from "./edited-program.js";
+
 export { injectLimitationWarnings } from "./limitation-warnings.js";
 export type { WarningLocale } from "./limitation-warnings.js";
 export { assertNoDiagnosticLanguage } from "./diagnostic-guard.js";

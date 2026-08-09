@@ -10,8 +10,9 @@ import {
 } from "../plan/boundary.js";
 import { withCatalogLinks } from "../plan/catalog-links.js";
 import { derivePreferenceScores } from "@kinora/domain";
-import { mergePlanSpecDraft } from "@kinora/domain/plan";
-import type { MergePlanSpecDraftResult } from "@kinora/domain/plan";
+import { mergePlanSpecDraft, validateEditedProgram } from "@kinora/domain/plan";
+import type { EditedProgramIssue, MergePlanSpecDraftResult } from "@kinora/domain/plan";
+import { WorkoutProgramSchema } from "@kinora/contracts";
 import type {
   BillingFeature,
   DashboardSummaryDTO,
@@ -19,7 +20,11 @@ import type {
   PlanSpec,
   PlanSpecDraft,
   UserId,
+  WorkoutProgram,
 } from "@kinora/contracts";
+import { resolveExerciseVocabulary } from "../ai/exercise-vocabulary.js";
+import { resolveProgramCatalogIds } from "../ai/catalog-resolution.js";
+import type { ObservabilityLogger } from "../observability/event-logger.js";
 import type { WarningLocale } from "@kinora/domain";
 import type { PlanGenerationService } from "../ai/generation-service.js";
 import type { ConsumeDecision } from "../billing/types.js";
@@ -50,6 +55,12 @@ interface PlanRecord {
   name?: string;
   /** 17d PR B — threaded into GET /workout-plans/:id's response DTO. */
   archivedAt?: Date | null;
+  /**
+   * 17d PR D — the optimistic-concurrency version token for a program edit.
+   * Optional here only so existing route tests that stub a bare plan record
+   * keep compiling; the edit route treats a missing value as a stale one.
+   */
+  updatedAt?: Date;
 }
 
 /** Lightweight plan summary for the list endpoint. */
@@ -159,6 +170,33 @@ export interface PlanRouteRepo {
     userId: string,
     id: string
   ): Promise<{ id: string; archivedAt: Date | null } | undefined>;
+  /**
+   * 17d PR D — replace `program_json` for one ready plan owned by the caller,
+   * conditioned on `expectedUpdatedAt` still matching the stored row. Resolves
+   * to `undefined` when 0 rows are updated — ambiguous between not-found,
+   * not-ready and a stale version, which the route disambiguates by re-reading
+   * the scoped row. Optional (alongside `findConfirmedSpecById`) so existing
+   * tests that never exercise editing do not have to stub it; the edit route
+   * is registered only when it and `findConfirmedById` are both present.
+   */
+  updateProgram?(
+    tenantId: string,
+    userId: string,
+    id: string,
+    program: WorkoutProgram,
+    expectedUpdatedAt: Date
+  ): Promise<PlanRecord | undefined>;
+  /**
+   * 17d PR D — the caller's CONFIRMED plan spec, read to derive the exercise
+   * vocabulary an edit's `catalogId`s resolve against. The real method name is
+   * `findConfirmedById` on `PlanSpecRepository`; only `equipment` is consumed
+   * here, so the port narrows to it.
+   */
+  findConfirmedById?(
+    tenantId: string,
+    userId: string,
+    id: string
+  ): Promise<{ equipment?: readonly string[] } | undefined>;
   /**
    * 14a-v1.1 Slice B1 — in-place, tenant/user-scoped write of
    * `spec_json.daysPerWeek` on the caller's confirmed plan_specs row (the
@@ -305,6 +343,14 @@ export interface PlanRoutesOptions {
    * role/tier/assignment checks.
    */
   trainerAccess?: OwnerAccessDeps;
+  /**
+   * 17d PR D — observability seam for `PUT /workout-plans/:id/program`. An
+   * edited exercise the catalog cannot account for is reported here (ids and
+   * the exercise name only, the same payload discipline generation applies),
+   * so unresolved rates on hand edits are measurable rather than invisible.
+   * Absent, the edit route still works and simply records nothing.
+   */
+  observability?: Pick<ObservabilityLogger, "recordEvent">;
 }
 
 /**
@@ -362,6 +408,26 @@ function draftChanged(next: PlanSpecDraft, prev: PlanSpecDraft): boolean {
     (f) => JSON.stringify(next[f] ?? null) !== JSON.stringify(prev[f] ?? null),
   );
 }
+
+/**
+ * Envelope schema for `PUT /workout-plans/:id/program` (17d PR D) — step 1 of
+ * the seven ordered steps. It guards only the ENVELOPE: both fields present,
+ * `program` an object, `expectedUpdatedAt` a string, nothing else accepted.
+ * The program's own shape is deliberately NOT expressed here — that is
+ * `WorkoutProgramSchema`'s job in step 2, and duplicating it would leave two
+ * definitions to drift apart.
+ */
+const updateProgramSchema = {
+  body: {
+    type: "object",
+    required: ["program", "expectedUpdatedAt"],
+    properties: {
+      program: { type: "object" },
+      expectedUpdatedAt: { type: "string" },
+    },
+    additionalProperties: false,
+  },
+};
 
 /** HTTP header carrying the caller's app locale for localized plan copy (#260). */
 export const LOCALE_HEADER = "x-kinora-locale";
@@ -1220,6 +1286,10 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         // Archiving does not affect this deep link's reachability, only
         // /plans' default list visibility.
         archivedAt: plan.archivedAt ?? null,
+        // 17d PR D — the optimistic-concurrency token the program editor loads
+        // and sends back as `expectedUpdatedAt`. Without it the editor has no
+        // way to detect that another tab saved first.
+        updatedAt: plan.updatedAt?.toISOString(),
       });
     }
   );
@@ -1270,6 +1340,144 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         return reply.code(200).send({
           id: result.id,
           archivedAt: result.archivedAt ? result.archivedAt.toISOString() : null,
+        });
+      }
+    );
+  }
+
+  // PUT /workout-plans/:id/program  (17d PR D)
+  //
+  // Hand-edit a ready plan's program. A FULL-DOCUMENT replace, never a patch:
+  // the client sends the whole `WorkoutProgram` it edited plus the `updatedAt`
+  // it loaded, and the server stores the whole thing or nothing.
+  //
+  // Editing does NOT rewrite history. `session_exercises` snapshots every
+  // exercise at the moment a session starts, so a past — or in-progress —
+  // session is built from its own snapshot and is untouched by this write. The
+  // edit takes effect on the NEXT `startSession`.
+  //
+  // Seven ordered steps; the order IS the design:
+  //   1. Fastify JSON schema        → 400 on a malformed envelope
+  //   2. WorkoutProgramSchema.parse → 422 invalid_program. Zod strips unknown
+  //      keys by default and the schema has no `catalogId` member, so a
+  //      client-supplied `catalogId` cannot survive this parse — the server is
+  //      the only author of that field.
+  //   3. validateEditedProgram      → 422 with the specific structural issue
+  //   4. load the plan (tenant+user+id) → 404 not_found | 409 plan_not_ready
+  //   5. resolve catalog ids against the spec's FULL equipment vocabulary
+  //      (never the prompt-capped subset — the cap is a token budget and an
+  //      edit has no prompt), reusing `resolveProgramCatalogIds` verbatim
+  //   6. updateProgram, guarded on `expectedUpdatedAt` → 200 | undefined
+  //   7. on undefined, re-read the scoped row to disambiguate
+  //      404 / 409 plan_not_ready / 409 edit_conflict (with the CURRENT
+  //      updatedAt, so the losing writer can reload to exactly that version)
+  //
+  // Registered only when the repo exposes both the write and the spec read.
+  if (repo.updateProgram && repo.findConfirmedById) {
+    const updateProgram = repo.updateProgram.bind(repo);
+    const findConfirmedById = repo.findConfirmedById.bind(repo);
+    const observability = options.observability;
+
+    fastify.put(
+      "/workout-plans/:id/program",
+      { schema: updateProgramSchema, preHandler: requireAuth() },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        const { tenantId, userId } = request.authContext!;
+        const { id } = request.params as { id: string };
+        const body = request.body as { program: unknown; expectedUpdatedAt: string };
+
+        // Step 1 (continued): the schema proves the field is a string; only a
+        // parseable instant is a usable version token.
+        const expectedUpdatedAt = new Date(body.expectedUpdatedAt);
+        if (Number.isNaN(expectedUpdatedAt.getTime())) {
+          return reply.code(400).send({ error: "invalid_expected_updated_at" });
+        }
+
+        // Step 2.
+        const parsed = WorkoutProgramSchema.safeParse(body.program);
+        if (!parsed.success) {
+          return reply.code(422).send({ error: "invalid_program" });
+        }
+        const submitted = parsed.data as WorkoutProgram;
+
+        // Step 3.
+        const issues: EditedProgramIssue[] = validateEditedProgram(submitted);
+        if (issues.length > 0) {
+          return reply.code(422).send({ error: issues[0], issues });
+        }
+
+        // Step 4.
+        const plan = await repo.findPlanById(tenantId, userId, id);
+        if (!plan) {
+          return reply.code(404).send({ error: "not_found" });
+        }
+        if (plan.status !== "ready") {
+          return reply.code(409).send({ error: "plan_not_ready" });
+        }
+
+        // Step 5. A missing confirmed spec is treated exactly like a missing
+        // plan: every `ready` plan references a spec that was confirmed before
+        // generation started, so this should be unreachable.
+        const spec = await findConfirmedById(tenantId, userId, plan.planSpecId);
+        if (!spec) {
+          return reply.code(404).send({ error: "not_found" });
+        }
+        const { exercises } = resolveExerciseVocabulary(spec.equipment);
+        const allowedIds = new Set(exercises.map((record) => record.id));
+        const { program: linked, unresolved } = resolveProgramCatalogIds(submitted, allowedIds);
+
+        // `limitationWarnings` are derived from the spec's limitations at
+        // generation time, not user-editable copy: carry the STORED ones over
+        // and ignore whatever the body claimed.
+        const storedProgram = plan.programJson as WorkoutProgram | null | undefined;
+        const next: WorkoutProgram = {
+          ...linked,
+          limitationWarnings: storedProgram?.limitationWarnings ?? [],
+        };
+
+        // Step 6.
+        const updated = await updateProgram(tenantId, userId, id, next, expectedUpdatedAt);
+
+        // Step 7: 0 rows updated is ambiguous between three causes, so re-read
+        // the scoped row (no status/version filter) and say which one it was.
+        if (!updated) {
+          const current = await repo.findPlanById(tenantId, userId, id);
+          if (!current) {
+            return reply.code(404).send({ error: "not_found" });
+          }
+          if (current.status !== "ready") {
+            return reply.code(409).send({ error: "plan_not_ready" });
+          }
+          return reply.code(409).send({
+            error: "edit_conflict",
+            currentUpdatedAt: current.updatedAt?.toISOString() ?? null,
+          });
+        }
+
+        // Ids and the exercise name only — the same payload discipline
+        // `linkToCatalog` applies on the generation path. A miss never fails an
+        // edit any more than it fails a generation.
+        for (const miss of unresolved) {
+          observability?.recordEvent({
+            tenantId,
+            actorUserId: userId,
+            level: "warn",
+            event: "plan.edit_exercise_unresolved",
+            outcome: miss.reason,
+            metadata: {
+              planId: id,
+              planSpecId: plan.planSpecId,
+              exerciseName: miss.name,
+              day: miss.day,
+              exerciseIndex: miss.index,
+            },
+          });
+        }
+
+        return reply.code(200).send({
+          id: updated.id,
+          program: updated.programJson ?? next,
+          updatedAt: updated.updatedAt?.toISOString(),
         });
       }
     );

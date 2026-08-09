@@ -1746,5 +1746,44 @@
       "hideToggle": "Ocultar archivados",
       "sectionHeading": "Planes archivados"
     }
+  },
+  "planEdit": {
+    "title": "Editar programa",
+    "description": "Cambia los días y ejercicios de este programa. Tu historial de entrenamiento no se toca: las sesiones que ya entrenaste conservan exactamente lo que registraron, y una sesión en curso conserva el entrenamiento con el que empezó. Los cambios se aplican a la siguiente sesión que inicies.",
+    "openAction": "Editar programa",
+    "dayNumberLabel": "Día de la semana (1-7)",
+    "dayTitleLabel": "Título del día",
+    "exerciseNameLabel": "Ejercicio",
+    "exerciseSetsLabel": "Series",
+    "exerciseRepsLabel": "Repeticiones",
+    "exerciseRestLabel": "Descanso (segundos)",
+    "addDay": "Añadir un día",
+    "addExercise": "Añadir un ejercicio",
+    "removeDay": "Quitar este día",
+    "removeExercise": "Quitar",
+    "save": "Guardar programa",
+    "saving": "Guardando…",
+    "saved": "Programa guardado. Tu próxima sesión lo usará.",
+    "validationTitle": "Este programa aún no se puede guardar:",
+    "issues": {
+      "empty_program": "Mantén al menos un día de entrenamiento: un programa sin días no se puede iniciar.",
+      "duplicate_day": "Dos días comparten el mismo día de la semana. Asigna uno distinto a cada uno.",
+      "invalid_day": "Cada día de la semana debe estar entre 1 y 7.",
+      "empty_session": "Cada día necesita al menos un ejercicio."
+    },
+    "conflict": {
+      "title": "Este plan cambió en otro sitio",
+      "desc": "Alguien guardó una versión más reciente de este programa mientras editabas. Recarga para verla y vuelve a aplicar tus cambios: no se guardó nada de lo tuyo.",
+      "reload": "Recargar la última versión"
+    },
+    "notReady": {
+      "title": "Este plan no se puede editar",
+      "desc": "Solo se puede editar un plan que terminó de generarse. Un plan que aún se está generando, o que falló, todavía no tiene programa que cambiar."
+    },
+    "loadError": {
+      "title": "No pudimos cargar este programa",
+      "desc": "No pudimos leer este plan, así que no hay nada que editar de forma segura. Inténtalo de nuevo."
+    },
+    "error": "No pudimos guardar tus cambios. Inténtalo de nuevo."
   }
 }
