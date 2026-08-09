@@ -32,9 +32,29 @@ function makeEvent(overrides: Partial<LogEvent> = {}): LogEvent {
 }
 
 describe("LogsView", () => {
-  it("renders the empty state before any query is applied", () => {
+  /**
+   * "Nothing has been asked yet" and "the query returned zero rows" are
+   * different facts and now render as different states (kno/kInorA#414). Before
+   * pressing Apply the view must NOT claim there are no matching events — it
+   * has not asked the API anything.
+   */
+  it("renders the not-queried-yet state, not the empty state, before any query is applied", () => {
     renderWithIntl(<LogsView />);
-    expect(screen.getByTestId("logs-empty")).toBeDefined();
+    expect(screen.getByTestId("logs-idle")).toBeDefined();
+    expect(screen.queryByTestId("logs-empty")).toBeNull();
+    expect(screen.queryByTestId("log-row")).toBeNull();
+  });
+
+  it("renders the empty state once a query has been applied and returned no rows", async () => {
+    fetchLogsAction.mockResolvedValue({ kind: "ok", events: [], nextCursor: undefined });
+
+    renderWithIntl(<LogsView />);
+    fireEvent.click(screen.getByTestId("logs-apply"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("logs-empty")).toBeDefined();
+    });
+    expect(screen.queryByTestId("logs-idle")).toBeNull();
     expect(screen.queryByTestId("log-row")).toBeNull();
   });
 
