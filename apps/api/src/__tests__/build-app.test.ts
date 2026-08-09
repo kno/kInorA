@@ -276,4 +276,48 @@ describe("buildApp composition root", () => {
 
     await expect(app.close()).resolves.toBeUndefined();
   });
+
+  it(
+    "registers no DELETE route on /workout-plans* or /plan-specs* (17d PR B, Judgment Day finding 2)",
+    async () => {
+      // workout_plans.plan_spec_id -> plan_specs.id is ON DELETE CASCADE, and
+      // workout_plans.id -> workout_sessions -> session_exercises -> set_records
+      // cascade onward. A DELETE anywhere on that chain would destroy training
+      // history and every derived statistic — including a future
+      // `DELETE /plan-specs/:id` that never touches /workout-plans* at all and
+      // would therefore pass a guard scoped to /workout-plans* alone (the
+      // original, too-narrow wording this test replaces).
+      const app = await buildTestApp();
+      try {
+        const routes = app.printRoutes({ commonPrefix: false });
+
+        // printRoutes groups each top-level path with its nested children
+        // indented beneath it; parse it into one block of text per top-level
+        // route so a DELETE nested under /workout-plans/:id or
+        // /plan-specs/:id/... is caught, not just a DELETE at the exact
+        // top-level path.
+        const blocks = new Map<string, string[]>();
+        let currentKey: string | undefined;
+        for (const line of routes.split("\n")) {
+          const topLevel = line.match(/^(?:├── |└── )(\S+)/);
+          if (topLevel) {
+            currentKey = topLevel[1];
+            blocks.set(currentKey, [line]);
+          } else if (currentKey && line.trim().length > 0) {
+            blocks.get(currentKey)!.push(line);
+          }
+        }
+
+        const workoutPlansBlock = blocks.get("/workout-plans");
+        const planSpecsBlock = blocks.get("/plan-specs");
+        expect(workoutPlansBlock, "/workout-plans route block not found").toBeDefined();
+        expect(planSpecsBlock, "/plan-specs route block not found").toBeDefined();
+
+        expect(workoutPlansBlock!.join("\n")).not.toContain("DELETE");
+        expect(planSpecsBlock!.join("\n")).not.toContain("DELETE");
+      } finally {
+        await app.close();
+      }
+    },
+  );
 });

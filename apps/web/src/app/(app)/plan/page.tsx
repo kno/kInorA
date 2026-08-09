@@ -128,6 +128,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
         planName={plan.name}
         planId={resolvedId}
         weekStart={params.weekStart}
+        archivedAt={plan.archivedAt}
       />
     </main>
   );

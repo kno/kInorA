@@ -57,6 +57,13 @@ export interface PlanWeekViewProps {
    * Absent branding renders exactly as before this slice (safe rollback).
    */
   branding?: PlanBranding;
+  /**
+   * 17d PR B. ISO-8601 instant when the plan is archived, or `null`/absent
+   * when active. Archiving controls `/plans`' default list visibility, NOT
+   * this deep link's reachability — `/plan?planId=X` still resolves and
+   * renders fully, but visibly says so, per the corrected requirement.
+   */
+  archivedAt?: string | null;
 }
 
 export async function PlanWeekView({
@@ -65,6 +72,7 @@ export async function PlanWeekView({
   planId,
   weekStart,
   branding,
+  archivedAt,
 }: PlanWeekViewProps) {
   const t = await getTranslations();
 
@@ -126,6 +134,11 @@ export async function PlanWeekView({
       <div className={styles.topbarCopy}>
         <div className={styles.eyebrow}>{t("plan.hero.eyebrow")}</div>
         {displayTitle && <h1 className={styles.pageTitle}>{displayTitle}</h1>}
+        {archivedAt && (
+          <span className={styles.archivedBadge} data-testid="plan-archived-badge">
+            {t("plan.archived.badge")}
+          </span>
+        )}
         {branding?.trainerName && (
           <p className={styles.brandingByline}>
             {t("plan.branding.byTrainer", { trainerName: branding.trainerName })}

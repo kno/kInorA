@@ -334,6 +334,56 @@ describe("PlanWeekView — interactive day grid + start CTA (#93 Slice 3)", () =
   });
 });
 
+describe("PlanWeekView — archived-plan indicator (17d PR B)", () => {
+  it("renders a visible archived badge when archivedAt is present", async () => {
+    const view = await PlanWeekView({
+      program: twoSessionProgram,
+      planName: "Summer Cut",
+      planId: "plan-x",
+      archivedAt: "2026-08-01T00:00:00.000Z",
+    });
+    renderWithIntl(<>{view}</>);
+
+    expect(screen.getByText(/archived/i)).toBeDefined();
+  });
+
+  it("renders no archived badge when archivedAt is absent (active plan)", async () => {
+    const view = await PlanWeekView({
+      program: twoSessionProgram,
+      planName: "Summer Cut",
+      planId: "plan-x",
+    });
+    renderWithIntl(<>{view}</>);
+
+    expect(screen.queryByText(/archived/i)).toBeNull();
+  });
+
+  it("renders no archived badge when archivedAt is explicitly null", async () => {
+    const view = await PlanWeekView({
+      program: twoSessionProgram,
+      planName: "Summer Cut",
+      planId: "plan-x",
+      archivedAt: null,
+    });
+    renderWithIntl(<>{view}</>);
+
+    expect(screen.queryByText(/archived/i)).toBeNull();
+  });
+
+  it("the week view still renders normally (fully functional) for an archived plan — deep links stay live", async () => {
+    const view = await PlanWeekView({
+      program: twoSessionProgram,
+      planName: "Summer Cut",
+      planId: "plan-x",
+      archivedAt: "2026-08-01T00:00:00.000Z",
+    });
+    renderWithIntl(<>{view}</>);
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("Summer Cut");
+    expect(screen.getByRole("button", { name: "Day 1" })).toBeDefined();
+  });
+});
+
 describe("PlanWeekView — trainer branding render (15b-v2 S4)", () => {
   // `--plan-accent` is a CSS custom property applied to a "use client"
   // descendant's DOM output (`PlanTrackerClient`'s root `.frame` div), which

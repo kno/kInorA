@@ -94,6 +94,30 @@ function progressDb(q1Rows: unknown[], q2Rows: unknown[] = [], q3Rows: unknown[]
   return { select, q1, q2, q3 };
 }
 
+/**
+ * Recursively walks a drizzle SQL node's `queryChunks` looking for a
+ * Column named `archived_at` immediately followed by a StringChunk
+ * containing " is null" — the shape `isNull(workoutPlans.archivedAt)`
+ * compiles to. Used to prove the default-filtered branch appends the
+ * condition and the `includeArchived: true` branch omits it, without
+ * a real Postgres to execute against.
+ */
+function sqlContainsArchivedAtIsNull(node: unknown): boolean {
+  if (!node || typeof node !== "object") return false;
+  const chunks = (node as { queryChunks?: unknown[] }).queryChunks;
+  if (!Array.isArray(chunks)) return false;
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i] as { name?: string };
+    if (chunk?.name === "archived_at") {
+      const next = chunks[i + 1] as { value?: unknown };
+      const text = Array.isArray(next?.value) ? next.value.join("") : "";
+      if (text.includes("is null")) return true;
+    }
+  }
+  return chunks.some((chunk) => sqlContainsArchivedAtIsNull(chunk));
+}
+
 describe("WorkoutPlanRepository", () => {
   describe("createGenerating", () => {
     it("inserts a row with status 'generating' and returns { id, status }", async () => {
@@ -402,6 +426,115 @@ describe("WorkoutPlanRepository", () => {
       const result = await repo.findLatestByPlanSpec(TENANT_B, SPEC_A);
 
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe("findAllByUser — archive filter (17d PR B)", () => {
+    it("appends an archived_at IS NULL condition to the WHERE clause by default", async () => {
+      const { select, where } = selectChainOrderOnly([]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      await repo.findAllByUser(TENANT_A, USER_A);
+
+      const whereArg = (where as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sqlContainsArchivedAtIsNull(whereArg)).toBe(true);
+    });
+
+    it("omits the archived_at filter when includeArchived: true is passed", async () => {
+      const { select, where } = selectChainOrderOnly([]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      await repo.findAllByUser(TENANT_A, USER_A, { includeArchived: true });
+
+      const whereArg = (where as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sqlContainsArchivedAtIsNull(whereArg)).toBe(false);
+    });
+
+    it("returns archived plans when includeArchived: true is passed", async () => {
+      const archivedRow = {
+        id: "plan-archived",
+        status: "ready" as const,
+        createdAt: new Date("2026-06-29T10:00:00Z"),
+        archivedAt: new Date("2026-07-01T10:00:00Z"),
+      };
+      const { select } = selectChainOrderOnly([archivedRow]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.findAllByUser(TENANT_A, USER_A, { includeArchived: true });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].archivedAt).toEqual(archivedRow.archivedAt);
+    });
+  });
+
+  describe("setArchived (17d PR B)", () => {
+    it("archives a plan: sets archived_at via COALESCE(archived_at, now())", async () => {
+      const archivedAt = new Date("2026-08-09T10:00:00Z");
+      const { update, set, where, returning } = updateChain([{ id: PLAN_ID, archivedAt }]);
+      const repo = new WorkoutPlanRepository({ update } as never);
+
+      const result = await repo.setArchived(TENANT_A, USER_A, PLAN_ID, true);
+
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(set).toHaveBeenCalledTimes(1);
+      expect(where).toHaveBeenCalledTimes(1);
+      expect(returning).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ id: PLAN_ID, archivedAt });
+    });
+
+    it("is idempotent: a repeat archive does not move the timestamp (COALESCE keeps the existing value)", async () => {
+      // COALESCE(archived_at, now()) is expressed in the SET clause itself, so
+      // a repeated archive call against an already-archived row updates 0
+      // semantic rows worth of change but the RETURNING still reflects the
+      // UNCHANGED existing archivedAt (never a new now()).
+      const firstArchivedAt = new Date("2026-08-01T10:00:00Z");
+      const { update } = updateChain([{ id: PLAN_ID, archivedAt: firstArchivedAt }]);
+      const repo = new WorkoutPlanRepository({ update } as never);
+
+      const result = await repo.setArchived(TENANT_A, USER_A, PLAN_ID, true);
+
+      expect(result?.archivedAt).toEqual(firstArchivedAt);
+    });
+
+    it("unarchives a plan: clears archived_at to null", async () => {
+      const { update, set } = updateChain([{ id: PLAN_ID, archivedAt: null }]);
+      const repo = new WorkoutPlanRepository({ update } as never);
+
+      const result = await repo.setArchived(TENANT_A, USER_A, PLAN_ID, false);
+
+      expect(result).toEqual({ id: PLAN_ID, archivedAt: null });
+      const setPayload = (set as ReturnType<typeof vi.fn>).mock.calls[0][0] as Record<
+        string,
+        unknown
+      >;
+      expect(setPayload.archivedAt).toBeNull();
+    });
+
+    it("unarchive is idempotent: unarchiving an already-active plan stays null", async () => {
+      const { update } = updateChain([{ id: PLAN_ID, archivedAt: null }]);
+      const repo = new WorkoutPlanRepository({ update } as never);
+
+      const result = await repo.setArchived(TENANT_A, USER_A, PLAN_ID, false);
+
+      expect(result?.archivedAt).toBeNull();
+    });
+
+    it("cross-user/cross-tenant id resolves to undefined (no IDOR leak)", async () => {
+      const { update } = updateChain([]);
+      const repo = new WorkoutPlanRepository({ update } as never);
+
+      const result = await repo.setArchived(TENANT_B, USER_B, PLAN_ID, true);
+
+      expect(result).toBeUndefined();
+    });
+
+    it("scopes the update by tenant AND user AND id", async () => {
+      const { update, where } = updateChain([{ id: PLAN_ID, archivedAt: new Date() }]);
+      const repo = new WorkoutPlanRepository({ update } as never);
+
+      await repo.setArchived(TENANT_A, USER_A, PLAN_ID, true);
+
+      expect(where).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -825,6 +958,35 @@ describe("WorkoutPlanRepository", () => {
 
       expect(result).toEqual([]);
       expect(select).toHaveBeenCalledTimes(1);
+    });
+
+    it("hides archived plans by default via the same archived_at IS NULL filter as findAllByUser", async () => {
+      const { select, q1 } = progressDb([]);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      await repo.listPlansWithProgress(TENANT_A, USER_A);
+
+      const whereArg = (q1.where as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sqlContainsArchivedAtIsNull(whereArg)).toBe(true);
+    });
+
+    it("includes archived plans when includeArchived: true is passed", async () => {
+      const archivedPlan = {
+        id: "plan-archived",
+        status: "ready" as const,
+        createdAt: new Date("2026-06-29T10:00:00Z"),
+        name: null,
+        planSpecId: SPEC_A,
+        archivedAt: new Date("2026-07-01T10:00:00Z"),
+      };
+      const { select, q1 } = progressDb([archivedPlan], [], []);
+      const repo = new WorkoutPlanRepository({ select } as never);
+
+      const result = await repo.listPlansWithProgress(TENANT_A, USER_A, { includeArchived: true });
+
+      const whereArg = (q1.where as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sqlContainsArchivedAtIsNull(whereArg)).toBe(false);
+      expect(result[0]?.archivedAt).toEqual(archivedPlan.archivedAt);
     });
   });
 });
