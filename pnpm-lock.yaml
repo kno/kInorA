@@ -126,6 +126,9 @@ importers:
       '@expo-google-fonts/space-grotesk':
         specifier: ^0.4.1
         version: 0.4.1
+      '@formatjs/intl-listformat':
+        specifier: ^8.3.13
+        version: 8.3.13
       '@formatjs/intl-locale':
         specifier: ^5.3.10
         version: 5.3.10
@@ -940,11 +943,11 @@ packages:
 
   '@esbuild-kit/core-utils@3.3.2':
     resolution: {integrity: sha512-sPRAnw9CdSsRmEtnsl2WXWdyquogVpB3yZ3dgwJfe8zrOzTsV7cJvmwrKVa+0ma5BoiGJ+BoqkMvawbayKUsqQ==}
-    deprecated: 'Merged into tsx: https://tsx.is'
+    deprecated: 'Merged into tsx: https://tsx.hirok.io'
 
   '@esbuild-kit/esm-loader@2.6.5':
     resolution: {integrity: sha512-FxEMIkJKnodyA1OaCUoEvbYRkoZlLZ4d/eXFu9Fh8CbBBgP5EmZxrfTRyN0qpXZ4vOvqnE5YdRdcrmUUXuU+dA==}
-    deprecated: 'Merged into tsx: https://tsx.is'
+    deprecated: 'Merged into tsx: https://tsx.hirok.io'
 
   '@esbuild/aix-ppc64@0.25.12':
     resolution: {integrity: sha512-Hhmwd6CInZ3dwpuGTF8fJG6yoWmsToE+vYgD4nytZVxcu1ulHpUQRAB1UJ8+N1Am3Mz4+xOByoQoSZf4D+CpkA==}
@@ -1689,6 +1692,9 @@ packages:
 
   '@formatjs/intl-getcanonicallocales@3.2.11':
     resolution: {integrity: sha512-3FX+dgs+n7IZ6LGewqKV+JhAN7PeknS17j2QH0Qq4yQ64QJCmd8ST5FIRRvVgM93T6L2sARpcSH1gNiVMgVy6w==}
+
+  '@formatjs/intl-listformat@8.3.13':
+    resolution: {integrity: sha512-BTyqgBrZJdNM0CKIpsRXyuaSWAQ5Y+wP94cQTadTtT4XogvNh9YjnqLqgez6vQS4dTFgqOz5y/gP9rms4C1k1w==}
 
   '@formatjs/intl-locale@5.3.10':
     resolution: {integrity: sha512-JAlo479jZagR6Ze7EI4HGcV8Fi0PYVvEYmsis7c5i7I9Wa5d1Cbo+ThvDikhkQi6Gt86fpGriDOiOQP8CT2WZA==}
@@ -7193,6 +7199,10 @@ snapshots:
   '@formatjs/icu-skeleton-parser@2.1.10': {}
 
   '@formatjs/intl-getcanonicallocales@3.2.11': {}
+
+  '@formatjs/intl-listformat@8.3.13':
+    dependencies:
+      '@formatjs/intl-localematcher': 0.8.13
 
   '@formatjs/intl-locale@5.3.10':
     dependencies:

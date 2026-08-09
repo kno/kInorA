@@ -71,6 +71,17 @@ export type WorkoutSessionResult =
       activeSessionId?: string;
       activeStartedAt?: string;
       /**
+       * 17d (kno/kInorA#409): the days that DO exist in the plan, carried by
+       * the API's `404 day_not_in_plan` refusal. Populated only alongside
+       * `day_not_in_plan` — the requested day was removed from the plan (the
+       * web plan editor can do that), so the screen names the days that
+       * remain instead of collapsing the refusal into a generic failure.
+       *
+       * An empty array is a legitimate value (a plan with no days left), and
+       * is deliberately distinct from `undefined` (this is not that refusal).
+       */
+      availableDays?: number[];
+      /**
        * Discriminated flush-failure taxonomy (Phase 5 mobile offline,
        * 09b-v1 design "Error discrimination through the Server Actions /
        * API client boundary"). Previously this client held the HTTP status
@@ -150,6 +161,7 @@ async function parseResponse(res: Response): Promise<WorkoutSessionResult> {
       activeDay?: number | null;
       activeSessionId?: string;
       activeStartedAt?: string;
+      availableDays?: unknown;
     };
     if (res.status === 409 && payload.error === "active_session_conflict") {
       return {
@@ -159,6 +171,22 @@ async function parseResponse(res: Response): Promise<WorkoutSessionResult> {
         activeDay: payload.activeDay ?? null,
         activeSessionId: payload.activeSessionId,
         activeStartedAt: payload.activeStartedAt,
+      };
+    }
+    // 17d (kno/kInorA#409): `404 day_not_in_plan` carries `availableDays`.
+    // The generic mapping below flattens an error response to `message` +
+    // `code` and drops every sibling field, so without this branch the days
+    // the API deliberately sends never reach the screen.
+    if (res.status === 404 && payload.error === "day_not_in_plan") {
+      return {
+        kind: "error",
+        message: "day_not_in_plan",
+        availableDays: Array.isArray(payload.availableDays)
+          ? payload.availableDays.filter(
+              (candidate): candidate is number => typeof candidate === "number",
+            )
+          : [],
+        code: flushErrorCodeFromStatus(res.status),
       };
     }
     return {

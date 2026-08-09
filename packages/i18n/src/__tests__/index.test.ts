@@ -246,7 +246,12 @@ describe("@kinora/i18n package assembly", () => {
     // the generic "couldn't start the session, try again" and invited a retry
     // that can never succeed. `mobileTracker.*` is counted BOTH here and in
     // its own scoped test below, so both numbers move together.
-    expect(nonBillingKeys).toHaveLength(805);
+    // +2 `mobileTracker.error.{dayNotInPlan,dayNotInPlanNoDays}`
+    // (kno/kInorA#409) — the mobile tracker's words for the API's
+    // `404 day_not_in_plan`, which the web plan editor made reachable by
+    // removing a day. Two keys because the refusal has two shapes: some days
+    // remain (name them) or none do.
+    expect(nonBillingKeys).toHaveLength(807);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
@@ -436,10 +441,21 @@ describe("@kinora/i18n package assembly", () => {
     // the full-screen conflict state and the auto-close notice text.
     // 17d PR C: +1 `mobileTracker.error.planArchived` — the tracker's own
     // words for PR B's `409 plan_archived` start refusal.
-    expect(mobileTrackerKeys).toHaveLength(32);
+    // kno/kInorA#409: +2 `mobileTracker.error.{dayNotInPlan,
+    // dayNotInPlanNoDays}` — the sibling `404 day_not_in_plan` refusal, in
+    // its two shapes (some days remain, or none do).
+    expect(mobileTrackerKeys).toHaveLength(34);
     expect(flat["mobileTracker.error.planArchived"]).toContain("archived");
     expect(flattenMessages(catalogs.es)["mobileTracker.error.planArchived"]).toContain(
       "archivado",
+    );
+    // Both `day_not_in_plan` messages name the requested day; only the
+    // some-days-remain variant interpolates the list-formatted `{days}`.
+    expect(flat["mobileTracker.error.dayNotInPlan"]).toContain("{days}");
+    expect(flattenMessages(catalogs.es)["mobileTracker.error.dayNotInPlan"]).toContain("{days}");
+    expect(flat["mobileTracker.error.dayNotInPlanNoDays"]).not.toContain("{days}");
+    expect(flattenMessages(catalogs.es)["mobileTracker.error.dayNotInPlanNoDays"]).not.toContain(
+      "{days}",
     );
     expect(flat["mobileTracker.retry"]).toBe("Retry");
     expect(flattenMessages(catalogs.es)["mobileTracker.retry"]).toBe("Reintentar");

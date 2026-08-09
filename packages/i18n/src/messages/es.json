@@ -1315,7 +1315,9 @@
       "start": "No pudimos iniciar la sesión. Inténtalo de nuevo.",
       "record": "No pudimos guardar la serie. Inténtalo de nuevo.",
       "complete": "No pudimos finalizar la sesión. Inténtalo de nuevo.",
-      "planArchived": "Este plan está archivado, así que no se puede iniciar una sesión nueva. Desarchívalo desde tu lista de planes para volver a entrenarlo."
+      "planArchived": "Este plan está archivado, así que no se puede iniciar una sesión nueva. Desarchívalo desde tu lista de planes para volver a entrenarlo.",
+      "dayNotInPlan": "El día {day} ya no forma parte de este plan; puedes entrenar {count, plural, one {el día {days}} other {los días {days}}}.",
+      "dayNotInPlanNoDays": "El día {day} ya no forma parte de este plan y no queda ningún día para entrenar. Edita el plan para añadir uno."
     },
     "reps": {
       "decrease": "Reducir repetición",
