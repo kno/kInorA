@@ -46,11 +46,12 @@ describe("MobileNav", () => {
     expect(screen.getByRole("button", { name: /More/i })).toBeTruthy();
   });
 
-  it("does NOT render Statistics/Exercises/Profile/Memory/Billing as bar tabs by default", () => {
+  it("does NOT render Plans/Statistics/Exercises/Profile/Memory/Billing as bar tabs by default", () => {
     renderWithIntl(<MobileNav memoryNavLabel="Memory" billingNavLabel="Billing" />);
 
     // The overflow menu is closed, so these must not be exposed in the
     // accessibility tree as bar tabs (they live in the hidden panel).
+    expect(screen.queryByRole("link", { name: /^Plans$/i })).toBeNull();
     expect(screen.queryByRole("link", { name: /^Statistics$/i })).toBeNull();
     expect(screen.queryByRole("link", { name: /^Exercises$/i })).toBeNull();
     expect(screen.queryByRole("link", { name: /^Profile$/i })).toBeNull();
@@ -65,7 +66,7 @@ describe("MobileNav", () => {
     );
   });
 
-  it("clicking More reveals the overflow menu with Statistics, Exercises, Profile and Log out", () => {
+  it("clicking More reveals the overflow menu with Plans, Statistics, Exercises, Profile and Log out", () => {
     renderWithIntl(<MobileNav />);
 
     const moreButton = screen.getByRole("button", { name: /More/i });
@@ -74,6 +75,9 @@ describe("MobileNav", () => {
     fireEvent.click(moreButton);
 
     expect(moreButton.getAttribute("aria-expanded")).toBe("true");
+    const plansItem = screen.getByRole("menuitem", { name: /^Plans$/i });
+    expect(plansItem).toBeTruthy();
+    expect(plansItem.getAttribute("href")).toBe("/plans");
     expect(screen.getByRole("menuitem", { name: /Statistics/i })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: /Exercises/i })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: /Profile/i })).toBeTruthy();

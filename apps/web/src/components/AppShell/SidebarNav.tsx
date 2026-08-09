@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { BrandingIcon, CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, StatsIcon, UserIcon } from "@/components/icons";
+import { BrandingIcon, CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, PlansIcon, StatsIcon, UserIcon } from "@/components/icons";
 import { isActivePath } from "./nav-utils";
 import { logoutAction } from "@/app/(app)/dashboard/actions";
 import styles from "./SidebarNav.module.css";
@@ -14,7 +14,7 @@ interface NavItem {
   labelKey?: string;
   label?: string;
   href: string;
-  icon: "home" | "plan" | "stats" | "history" | "create" | "exercises" | "memory" | "billing" | "admin" | "branding";
+  icon: "home" | "plan" | "plans" | "stats" | "history" | "create" | "exercises" | "memory" | "billing" | "admin" | "branding";
 }
 
 /** Minimal identity shape for the sidebar user area. */
@@ -34,6 +34,7 @@ const FALLBACK_USER: SidebarUser = {
 const NAV_ITEMS: NavItem[] = [
   { labelKey: "appNav.dashboard", href: "/dashboard", icon: "home" },
   { labelKey: "appNav.plan", href: "/plan", icon: "plan" },
+  { labelKey: "appNav.plans", href: "/plans", icon: "plans" },
   { labelKey: "appNav.statistics", href: "/stats", icon: "stats" },
   { labelKey: "appNav.history", href: "/history", icon: "history" },
   { labelKey: "appNav.createPlan", href: "/create-plan", icon: "create" },
@@ -149,6 +150,8 @@ function NavIcon({ name }: { name: NavItem["icon"] }) {
       return <HomeIcon className={styles.icon} size={20} />;
     case "plan":
       return <PlanIcon className={styles.icon} size={20} />;
+    case "plans":
+      return <PlansIcon className={styles.icon} size={20} />;
     case "stats":
       return <StatsIcon className={styles.icon} size={20} />;
     case "history":
