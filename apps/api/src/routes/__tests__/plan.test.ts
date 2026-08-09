@@ -860,6 +860,120 @@ describe("Plan routes", () => {
     });
   });
 
+  // --- GET /workout-plans?progress=1 (17d PR A) ---
+
+  describe("GET /workout-plans?progress=1", () => {
+    it("returns the three extra progress fields per plan", async () => {
+      const progressSummaries = [
+        {
+          id: "plan-1",
+          status: "ready",
+          createdAt: new Date("2026-06-29T10:00:00Z"),
+          name: "Summer Cut",
+          daysPerWeek: 4,
+          completedSessions: 3,
+          lastTrainedAt: new Date("2026-07-01T10:00:00Z"),
+        },
+      ];
+      const repo = buildPlanRepo({
+        listPlansWithProgress: vi.fn().mockResolvedValue(progressSummaries),
+      });
+      app = await buildTestApp(buildSessionDb(), repo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/workout-plans?progress=1",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as Array<{
+        id: string;
+        daysPerWeek?: number;
+        completedSessions?: number;
+        lastTrainedAt?: string;
+      }>;
+      expect(body[0].daysPerWeek).toBe(4);
+      expect(body[0].completedSessions).toBe(3);
+      expect(body[0].lastTrainedAt).toBeDefined();
+    });
+
+    it("without the param, the response is byte-identical to today's (no progress fields, findAllPlansByUser called)", async () => {
+      const summaries = [
+        { id: "plan-1", status: "ready", createdAt: new Date("2026-06-29T10:00:00Z"), name: "Summer Cut" },
+      ];
+      const repo = buildPlanRepo({
+        findAllPlansByUser: vi.fn().mockResolvedValue(summaries),
+        listPlansWithProgress: vi.fn().mockResolvedValue([]),
+      });
+      app = await buildTestApp(buildSessionDb(), repo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/workout-plans",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as Array<Record<string, unknown>>;
+      expect(Object.keys(body[0]).sort()).toEqual(["createdAt", "id", "name", "status"].sort());
+      expect(repo.findAllPlansByUser).toHaveBeenCalledTimes(1);
+      expect(repo.listPlansWithProgress).not.toHaveBeenCalled();
+    });
+
+    it("returns 401 unauthenticated", async () => {
+      const repo = buildPlanRepo({ listPlansWithProgress: vi.fn().mockResolvedValue([]) });
+      app = await buildTestApp(buildUnauthDb(), repo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/workout-plans?progress=1",
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(repo.listPlansWithProgress).not.toHaveBeenCalled();
+    });
+
+    it("cross-tenant/cross-user isolation: calls listPlansWithProgress with the caller's own tenantId+userId", async () => {
+      const repo = buildPlanRepo({ listPlansWithProgress: vi.fn().mockResolvedValue([]) });
+      app = await buildTestApp(buildSessionDb(TENANT_B, USER_A), repo);
+
+      await app.inject({
+        method: "GET",
+        url: "/workout-plans?progress=1",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      expect(repo.listPlansWithProgress).toHaveBeenCalledWith(TENANT_B, USER_A);
+    });
+
+    it("a plan never trained omits daysPerWeek/lastTrainedAt rather than sending 0/a fabricated date", async () => {
+      const progressSummaries = [
+        {
+          id: "plan-1",
+          status: "ready",
+          createdAt: new Date("2026-06-29T10:00:00Z"),
+          completedSessions: 0,
+        },
+      ];
+      const repo = buildPlanRepo({
+        listPlansWithProgress: vi.fn().mockResolvedValue(progressSummaries),
+      });
+      app = await buildTestApp(buildSessionDb(), repo);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/workout-plans?progress=1",
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      });
+
+      const body = response.json() as Array<Record<string, unknown>>;
+      expect(body[0].completedSessions).toBe(0);
+      expect("daysPerWeek" in body[0]).toBe(false);
+      expect("lastTrainedAt" in body[0]).toBe(false);
+    });
+  });
+
   // --- GET /workout-plans/:id ---
 
   describe("GET /workout-plans/:id", () => {

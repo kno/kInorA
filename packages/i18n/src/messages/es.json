@@ -27,7 +27,8 @@
     "more": "Más",
     "logout": "Cerrar sesión",
     "admin": "Administración",
-    "branding": "Marca"
+    "branding": "Marca",
+    "plans": "Planes"
   },
   "hero": {
     "eyebrow": "Entrenador con IA",
@@ -263,6 +264,10 @@
         "title": "Sin plan todavía",
         "desc": "Crea tu plan de entrenamiento personalizado para comenzar.",
         "cta": "Crear tu plan"
+      },
+      "loadError": {
+        "title": "No se pudieron cargar tus planes",
+        "desc": "Algo falló al cargar tus planes. Inténtalo de nuevo."
       }
     },
     "selector": {
@@ -1703,6 +1708,28 @@
     "observability": {
       "errors24h": "Errores (24 h)",
       "events24h": "Eventos (24 h)"
+    }
+  },
+  "plans": {
+    "title": "Planes",
+    "description": "Todos los planes que has generado, en un solo lugar.",
+    "empty": {
+      "title": "Todavía no tienes planes",
+      "desc": "Crea tu plan de entrenamiento personalizado para comenzar.",
+      "cta": "Crear tu plan"
+    },
+    "error": "No se pudieron cargar tus planes. Inténtalo de nuevo.",
+    "list": {
+      "currentlyFollowing": "Siguiendo ahora",
+      "daysPerWeek": "{days} días/semana",
+      "completedSessions": "{count} completadas",
+      "lastTrained": "Último entreno {date}",
+      "neverTrained": "Nunca entrenado",
+      "open": "Abrir",
+      "openDisabled": {
+        "generating": "Este plan todavía se está generando",
+        "failed": "Este plan no se pudo generar"
+      }
     }
   }
 }

@@ -139,15 +139,17 @@ describe("PlanPage — empty state (SC-12, SC-21)", () => {
     expect(selector).toBeUndefined();
   });
 
-  it("renders anchor to /create-plan when listPlansAction returns an error (SC-21, fail-open)", async () => {
+  it("renders a distinguishable role=alert error state — NOT the empty-account CTA — when listPlansAction fails (SC-21 corrected, the swallowed-error fix)", async () => {
     listPlansAction.mockResolvedValue({ kind: "error", message: "api_unreachable" });
 
     const page = await PlanPage({ searchParams: Promise.resolve({}) });
+    const alert = findFirst(page, (el) => el.props?.role === "alert");
+    expect(alert).toBeDefined();
     const link = findFirst(
       page,
       (el) => el.type === "a" && el.props?.href === "/create-plan"
     );
-    expect(link).toBeDefined();
+    expect(link).toBeUndefined();
   });
 
   it("does not call getPlanStatusAction when list is empty", async () => {

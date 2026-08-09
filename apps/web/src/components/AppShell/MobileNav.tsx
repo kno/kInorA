@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { BrandingIcon, CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, StatsIcon, UserIcon } from "@/components/icons";
+import { BrandingIcon, CreateIcon, ExercisesIcon, HistoryIcon, HomeIcon, PlanIcon, PlansIcon, StatsIcon, UserIcon } from "@/components/icons";
 import { isActivePath } from "./nav-utils";
 import { logoutAction } from "@/app/(app)/dashboard/actions";
 import styles from "./MobileNav.module.css";
@@ -13,7 +13,7 @@ interface TabItem {
   labelKey: string;
   label?: string;
   href: string;
-  icon: "home" | "plan" | "stats" | "history" | "exercises" | "profile" | "memory" | "billing" | "admin" | "branding";
+  icon: "home" | "plan" | "plans" | "stats" | "history" | "exercises" | "profile" | "memory" | "billing" | "admin" | "branding";
 }
 
 // Primary destinations always visible in the bottom bar.
@@ -23,8 +23,12 @@ const PRIMARY_TABS: TabItem[] = [
   { labelKey: "appNav.history", href: "/history", icon: "history" },
 ];
 
-// Secondary destinations tucked behind the "More" overflow menu.
+// Secondary destinations tucked behind the "More" overflow menu. `/plans`
+// (17d) lands here, not in PRIMARY_TABS — the bar's fixed
+// slice(0,2) + FAB + slice(2) layout cannot take a fourth primary tab
+// without a layout change (GH #294's "never overflow" invariant).
 const SECONDARY_TABS: TabItem[] = [
+  { labelKey: "appNav.plans", href: "/plans", icon: "plans" },
   { labelKey: "appNav.statistics", href: "/stats", icon: "stats" },
   { labelKey: "appNav.exercises", href: "/exercises", icon: "exercises" },
   { labelKey: "appNav.profile", href: "/profile", icon: "profile" },
@@ -239,6 +243,8 @@ function TabIcon({ name }: { name: TabItem["icon"] }) {
       return <HomeIcon className={styles.icon} size={22} />;
     case "plan":
       return <PlanIcon className={styles.icon} size={22} />;
+    case "plans":
+      return <PlansIcon className={styles.icon} size={22} />;
     case "stats":
       return <StatsIcon className={styles.icon} size={22} />;
     case "history":

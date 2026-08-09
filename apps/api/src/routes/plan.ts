@@ -60,6 +60,22 @@ interface PlanSummary {
 }
 
 /**
+ * `listPlansWithProgress`'s row shape (17d PR A) — `PlanSummary` plus the
+ * three `?progress=1`-only fields. Optional/absent, never a fabricated 0 or
+ * date — see `WorkoutPlanProgressSummary` in the repository layer.
+ */
+interface PlanProgressSummary extends PlanSummary {
+  daysPerWeek?: number;
+  completedSessions?: number;
+  lastTrainedAt?: Date;
+}
+
+/** Querystring for `GET /workout-plans` (17d PR A adds `progress`). */
+interface WorkoutPlansQuerystring {
+  progress?: string;
+}
+
+/**
  * Route port for the plan wizard + generation endpoints. Encapsulates the
  * draft/spec/plan reads and — critically — the cross-repo atomic promote
  * (promoteDraftToSpec), whose db.transaction lives in the app.ts adapter. The
@@ -109,6 +125,17 @@ export interface PlanRouteRepo {
     specId: string
   ): Promise<PlanRecord | undefined>;
   findAllPlansByUser(tenantId: string, userId: string): Promise<PlanSummary[]>;
+  /**
+   * 17d PR A — the `/plans` list read: the plan summary plus days-per-week,
+   * completed-session-count and last-trained-date. Optional so existing
+   * tests/callers that never exercise `?progress=1` do not have to stub it;
+   * the progress branch of `GET /workout-plans` is simply unavailable
+   * (falls back to `findAllPlansByUser`) when absent.
+   */
+  listPlansWithProgress?(
+    tenantId: string,
+    userId: string
+  ): Promise<PlanProgressSummary[]>;
   /**
    * 14a-v1.1 Slice B1 — in-place, tenant/user-scoped write of
    * `spec_json.daysPerWeek` on the caller's confirmed plan_specs row (the
@@ -1090,11 +1117,33 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   // Ordered newest-first (createdAt DESC). Returns [] when no plans exist.
   // Returns: 200 Array<{ id, status, createdAt }> — newest first; [] when none
   // Returns: 401 if not authenticated
-  fastify.get(
+  //
+  // 17d PR A: `?progress=1` opts into the `/plans` list projection (three
+  // extra fields, three bounded queries server-side via
+  // `repo.listPlansWithProgress`). Without the param the response stays
+  // BYTE-IDENTICAL to today's — same fields, same order, same
+  // `findAllPlansByUser` call — so `/plan`'s selector pays no extra cost.
+  fastify.get<{ Querystring: WorkoutPlansQuerystring }>(
     "/workout-plans",
     { preHandler: requireAuth() },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request, reply) => {
       const { tenantId, userId } = request.authContext!;
+
+      if (request.query.progress && repo.listPlansWithProgress) {
+        const summaries = await repo.listPlansWithProgress(tenantId, userId);
+        return reply.code(200).send(
+          summaries.map((s) => ({
+            id: s.id,
+            status: s.status,
+            createdAt: s.createdAt,
+            name: s.name,
+            ...(s.daysPerWeek !== undefined ? { daysPerWeek: s.daysPerWeek } : {}),
+            completedSessions: s.completedSessions ?? 0,
+            ...(s.lastTrainedAt !== undefined ? { lastTrainedAt: s.lastTrainedAt } : {}),
+          }))
+        );
+      }
+
       const summaries = await repo.findAllPlansByUser(tenantId, userId);
       return reply.code(200).send(
         summaries.map((s) => ({

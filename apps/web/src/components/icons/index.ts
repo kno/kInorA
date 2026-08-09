@@ -7,6 +7,7 @@ export {
   KinIcon,
   OrbitLogoIcon,
   PlanIcon,
+  PlansIcon,
   StatsIcon,
   UserIcon,
   createLibraryIconEntry,

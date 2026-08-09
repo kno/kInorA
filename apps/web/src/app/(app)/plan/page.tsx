@@ -31,9 +31,25 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   const params = await searchParams;
   const t = await getTranslations();
 
-  // 1. List all plans (fail-open: error → empty state)
+  // 1. List all plans. 17d PR A: a failed fetch is NO LONGER collapsed into
+  // `[]` — a distinguishable error state renders instead, so a genuine
+  // fetch failure is never mistaken for "this account has zero plans".
   const listResult = await listPlansAction();
-  const summaries = listResult.kind === "ok" ? listResult.plans : [];
+
+  if (listResult.kind !== "ok") {
+    return (
+      <main className="kin-page">
+        <div className="kin-card kin-card--center">
+          <h1 className="kin-title">{t("plan.nav.loadError.title")}</h1>
+          <p className="kin-error" role="alert" data-testid="plan-list-error">
+            {t("plan.nav.loadError.desc")}
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  const summaries = listResult.plans;
 
   // 2. Empty state — no plans
   if (summaries.length === 0) {

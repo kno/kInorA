@@ -190,6 +190,18 @@ export const kinIconRegistry = {
       <path className={className} d="M12 7V12L16 14.5" />
     </>
   )),
+  // 17d: a list-of-plans glyph (bulleted rows), distinct from `plan`'s
+  // single calendar rect — reused adjacent to it in SidebarNav/MobileNav.
+  planList: createOpenDesignIcon("Plans", ({ className }) => (
+    <>
+      <circle cx="4" cy="6" r="1.4" fill="currentColor" stroke="none" />
+      <path className={className} d="M8 6H20" />
+      <circle cx="4" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <path className={className} d="M8 12H20" />
+      <circle cx="4" cy="18" r="1.4" fill="currentColor" stroke="none" />
+      <path className={className} d="M8 18H20" />
+    </>
+  )),
   // Paint palette glyph for the gym Branding Studio nav entry (GH #322).
   palette: createOpenDesignIcon("Branding", ({ className }) => (
     <>
@@ -259,3 +271,4 @@ export const OrbitLogoIcon = (props: Omit<KinIconProps, "name" | "size"> & { siz
   <KinIcon name="orbitLogo" size={props.size ?? 24} {...props} />
 );
 export const BrandingIcon = (props: Omit<KinIconProps, "name">) => <KinIcon name="palette" {...props} />;
+export const PlansIcon = (props: Omit<KinIconProps, "name">) => <KinIcon name="planList" {...props} />;
