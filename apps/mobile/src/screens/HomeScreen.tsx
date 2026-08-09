@@ -83,6 +83,9 @@ export default function HomeScreen({
   // 17c PR5: profile nav entry — reuses web's existing app-nav label, no new
   // catalog key needed (mirrors `ProfileScreen`'s own messages.ts approach).
   const profileLabel = intl.formatMessage({ id: "appNav.profile" });
+  // 17d PR C: plans-list nav entry. Native has no tab bar, so this hub menu is
+  // the nav seam — reusing web's existing `appNav.plans` label, no new key.
+  const plansLabel = intl.formatMessage({ id: "appNav.plans" });
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [summary, setSummary] = useState<DashboardSummaryDTO | undefined>();
@@ -200,6 +203,16 @@ export default function HomeScreen({
         accessibilityLabel={voiceLabel}
       >
         <Text style={styles.historyText}>{voiceLabel}</Text>
+      </Pressable>
+
+      <Pressable
+        testID="home-plans"
+        style={({ pressed }) => [styles.historyButton, pressed && styles.historyButtonPressed]}
+        onPress={() => navigationRef.current.navigate("Plans")}
+        accessibilityRole="button"
+        accessibilityLabel={plansLabel}
+      >
+        <Text style={styles.historyText}>{plansLabel}</Text>
       </Pressable>
 
       <Pressable
