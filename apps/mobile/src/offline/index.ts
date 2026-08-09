@@ -18,6 +18,7 @@ export {
   writeActiveSessionPointer,
   readActiveSessionPointer,
   clearActiveSessionPointer,
+  discardTerminalSession,
 } from "./snapshot";
 export { ensureIdentityScope, clearIdentityScope, resolveIdentityKey } from "./identity";
 export { createConnectivityMonitor } from "./connectivity";
