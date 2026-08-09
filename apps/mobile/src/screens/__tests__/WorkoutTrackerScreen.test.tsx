@@ -467,6 +467,108 @@ describe("WorkoutTrackerScreen (migrated off trackerCopy — 10.1.2/10.1.3)", ()
     expect(renderedText(es)).toContain("Este plan está archivado");
   });
 
+  // kno/kInorA#409: the web plan editor can remove a day, which makes the
+  // API's `404 day_not_in_plan` reachable through a user action. Left in the
+  // generic branch it rendered "We couldn't start the session. Please try
+  // again." next to a Retry that can never succeed, and dropped the
+  // `availableDays` the API sends precisely so the screen can say more.
+  it("names the days that remain when the requested day was removed, in EN and ES", async () => {
+    startWorkoutSession.mockResolvedValue({
+      kind: "error",
+      message: "day_not_in_plan",
+      availableDays: [1, 2, 4],
+      code: "NOT_FOUND",
+    });
+
+    const en = renderScreen("en", { planId: "p1", day: 3 });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const enText = renderedText(en);
+    expect(enText).toContain("Day 3 is no longer part of this plan");
+    expect(enText).toMatch(/you can train days 1, 2,? and 4/);
+    expect(enText).not.toContain("We couldn't start the session. Please try again.");
+
+    const es = renderScreen("es", { planId: "p1", day: 3 });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const esText = renderedText(es);
+    expect(esText).toContain("El día 3 ya no forma parte de este plan");
+    expect(esText).toContain("puedes entrenar los días 1, 2 y 4");
+  });
+
+  // The affordance, not only the copy: a Retry here re-sends the exact same
+  // start and gets the exact same refusal, forever.
+  it("offers no retry control for a removed day, only a way back to the plan", async () => {
+    startWorkoutSession.mockResolvedValue({
+      kind: "error",
+      message: "day_not_in_plan",
+      availableDays: [1, 2, 4],
+      code: "NOT_FOUND",
+    });
+
+    const en = renderScreen("en", { planId: "p1", day: 3 });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(en.root.findAllByProps({ testID: "tracker-retry" })).toHaveLength(0);
+    expect(renderedText(en)).not.toContain("Retry");
+
+    const back = en.root.findByProps({ testID: "day-not-in-plan-back" });
+    navigation.goBack.mockClear();
+    act(() => {
+      back.props.onPress();
+    });
+    expect(navigation.goBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so plainly when the plan has no days left at all", async () => {
+    startWorkoutSession.mockResolvedValue({
+      kind: "error",
+      message: "day_not_in_plan",
+      availableDays: [],
+      code: "NOT_FOUND",
+    });
+
+    const en = renderScreen("en", { planId: "p1", day: 3 });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const enText = renderedText(en);
+    expect(enText).toContain("no days are left to train");
+    expect(enText).not.toContain("you can train");
+    expect(en.root.findAllByProps({ testID: "tracker-retry" })).toHaveLength(0);
+
+    const es = renderScreen("es", { planId: "p1", day: 3 });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(renderedText(es)).toContain("no queda ningún día para entrenar");
+  });
+
+  it("uses the singular when exactly one day remains", async () => {
+    startWorkoutSession.mockResolvedValue({
+      kind: "error",
+      message: "day_not_in_plan",
+      availableDays: [2],
+      code: "NOT_FOUND",
+    });
+
+    const en = renderScreen("en", { planId: "p1", day: 3 });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(renderedText(en)).toContain("you can train day 2");
+
+    const es = renderScreen("es", { planId: "p1", day: 3 });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(renderedText(es)).toContain("puedes entrenar el día 2");
+  });
+
   it("still offers a retry for a genuinely transient start failure", async () => {
     startWorkoutSession.mockResolvedValue({
       kind: "error",

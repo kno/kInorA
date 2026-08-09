@@ -75,6 +75,18 @@ export const messages = defineMessages({
    * state points at the plans list instead of offering a retry.
    */
   errorPlanArchived: { id: "mobileTracker.error.planArchived" },
+  /**
+   * kno/kInorA#409: the requested day was removed from the plan by the web
+   * plan editor, so the API refused the start with `404 day_not_in_plan` and
+   * the days that DO remain. Same shape of refusal as `errorPlanArchived` —
+   * a state the user changes on the plan, never a transient failure — so it
+   * names those days and offers no retry.
+   *
+   * `errorDayNotInPlanNoDays` covers the degenerate case where the plan has
+   * no days left at all, which would otherwise render an empty day list.
+   */
+  errorDayNotInPlan: { id: "mobileTracker.error.dayNotInPlan" },
+  errorDayNotInPlanNoDays: { id: "mobileTracker.error.dayNotInPlanNoDays" },
   errorRecord: { id: "mobileTracker.error.record" },
   errorComplete: { id: "mobileTracker.error.complete" },
   retry: { id: "mobileTracker.retry" },
