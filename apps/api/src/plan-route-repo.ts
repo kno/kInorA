@@ -32,7 +32,11 @@ export function createPlanRouteRepo(deps: {
   >;
   workoutPlanRepo: Pick<
     WorkoutPlanRepository,
-    "findById" | "findLatestByPlanSpec" | "findAllByUser" | "listPlansWithProgress"
+    | "findById"
+    | "findLatestByPlanSpec"
+    | "findAllByUser"
+    | "listPlansWithProgress"
+    | "setArchived"
   >;
 }): PlanRouteRepo {
   const { database, planSpecRepo, planDraftRepo, workoutPlanRepo } = deps;
@@ -74,6 +78,10 @@ export function createPlanRouteRepo(deps: {
           ? { ...row, name: defaultPlanName(row.name, row.createdAt) }
           : row
       ),
+    // 17d PR B: the sole write path for archived_at, wired straight through.
+    archivePlan: (tenantId, userId, id) => workoutPlanRepo.setArchived(tenantId, userId, id, true),
+    unarchivePlan: (tenantId, userId, id) =>
+      workoutPlanRepo.setArchived(tenantId, userId, id, false),
     findLatestPlanBySpec: (tenantId, userId, specId) =>
       workoutPlanRepo.findLatestByPlanSpec(tenantId, userId, specId).then((row) =>
         row
@@ -89,8 +97,8 @@ export function createPlanRouteRepo(deps: {
       ),
     // 17d PR A: the `/plans` list read, same single default-name layer as
     // findAllPlansByUser above — every list consumer renders the SAME label.
-    listPlansWithProgress: (tenantId, userId) =>
-      workoutPlanRepo.listPlansWithProgress(tenantId, userId).then((rows) =>
+    listPlansWithProgress: (tenantId, userId, options) =>
+      workoutPlanRepo.listPlansWithProgress(tenantId, userId, options).then((rows) =>
         rows.map((row) => ({
           ...row,
           name: defaultPlanName(row.name, row.createdAt),
