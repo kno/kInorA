@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type Stripe from "stripe";
-import { StripeApiGateway, UnconfiguredPriceGateway } from "../stripe-gateway.js";
+import {
+  StripeApiGateway,
+  UnconfiguredCheckoutGateway,
+  UnconfiguredPortalInvoiceGateway,
+  UnconfiguredPriceGateway,
+} from "../stripe-gateway.js";
 import { StripeGatewayUnconfiguredError } from "../../../billing/stripe-gateway.js";
 
 // ---------------------------------------------------------------------------
@@ -477,5 +482,132 @@ describe("StripeApiGateway.createCheckoutSession — line_items quantity (16c v3
         line_items: [{ price: "price_seat_m", quantity: 3 }],
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// StripeApiGateway.validatePromotionCode (11b Slice 3) — no test previously
+// exercised the real implementation: it must accept an active promotion code
+// whose coupon is still valid, and reject an absent/inactive code or one
+// whose coupon has expired/hit its redemption cap.
+// ---------------------------------------------------------------------------
+
+function fakePromotionCodesClient(
+  promos: Array<Partial<Stripe.PromotionCode> & { coupon?: { valid?: boolean } }>,
+): { client: Stripe; list: ReturnType<typeof vi.fn> } {
+  const list = vi.fn(async () => ({ data: promos }));
+  return { client: { promotionCodes: { list } } as unknown as Stripe, list };
+}
+
+describe("StripeApiGateway.validatePromotionCode (11b Slice 3)", () => {
+  it("returns valid: true with the promotion code id when an active code with a valid coupon is found", async () => {
+    const { client, list } = fakePromotionCodesClient([
+      { id: "promo_1", active: true, coupon: { valid: true } },
+    ]);
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client);
+
+    const result = await gateway.validatePromotionCode("SAVE10");
+
+    expect(list).toHaveBeenCalledWith({ code: "SAVE10", active: true, limit: 1 });
+    expect(result).toEqual({ valid: true, promotionCodeId: "promo_1" });
+  });
+
+  it("returns valid: false when no promotion code matches", async () => {
+    const { client } = fakePromotionCodesClient([]);
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client);
+
+    expect(await gateway.validatePromotionCode("MISSING")).toEqual({
+      valid: false,
+      promotionCodeId: null,
+    });
+  });
+
+  it("returns valid: false when the matched code is not active", async () => {
+    const { client } = fakePromotionCodesClient([{ id: "promo_2", active: false }]);
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client);
+
+    expect(await gateway.validatePromotionCode("INACTIVE")).toEqual({
+      valid: false,
+      promotionCodeId: null,
+    });
+  });
+
+  it("returns valid: false when the code is active but its coupon has expired/hit its redemption cap", async () => {
+    const { client } = fakePromotionCodesClient([
+      { id: "promo_3", active: true, coupon: { valid: false } },
+    ]);
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "", client);
+
+    expect(await gateway.validatePromotionCode("EXPIRED")).toEqual({
+      valid: false,
+      promotionCodeId: null,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// StripeApiGateway.createPortalSession (11b Slice 4) — no test previously
+// exercised the real implementation: it must pass the customer id and the
+// configured return URL through to Stripe and surface the hosted URL.
+// ---------------------------------------------------------------------------
+
+describe("StripeApiGateway.createPortalSession (11b Slice 4)", () => {
+  it("passes the customer id and return_url built from returnUrl to the Stripe SDK and returns the hosted url", async () => {
+    const createSpy = vi.fn(async () => ({ url: "https://billing.stripe.test/portal/1" }));
+    const client = { billingPortal: { sessions: { create: createSpy } } } as unknown as Stripe;
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "https://app.test", client);
+
+    const session = await gateway.createPortalSession("cus_portal_1");
+
+    expect(createSpy).toHaveBeenCalledWith({
+      customer: "cus_portal_1",
+      return_url: "https://app.test/billing",
+    });
+    expect(session).toEqual({ url: "https://billing.stripe.test/portal/1" });
+  });
+
+  it("throws when Stripe returns no url", async () => {
+    const client = {
+      billingPortal: { sessions: { create: vi.fn(async () => ({ url: null })) } },
+    } as unknown as Stripe;
+    const gateway = new StripeApiGateway("sk_test_unused", "whsec_test_unused", "https://app.test", client);
+
+    await expect(gateway.createPortalSession("cus_portal_2")).rejects.toThrow(/did not return a url/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fail-closed gateways used when Stripe env is unconfigured. Each method must
+// throw StripeGatewayUnconfiguredError so the corresponding route fails
+// closed (5xx) rather than silently pretending Stripe is reachable.
+// ---------------------------------------------------------------------------
+
+describe("UnconfiguredCheckoutGateway (11b Slice 3)", () => {
+  it("validatePromotionCode throws StripeGatewayUnconfiguredError", async () => {
+    const gateway = new UnconfiguredCheckoutGateway();
+    await expect(gateway.validatePromotionCode()).rejects.toBeInstanceOf(
+      StripeGatewayUnconfiguredError,
+    );
+  });
+
+  it("createCheckoutSession throws StripeGatewayUnconfiguredError", async () => {
+    const gateway = new UnconfiguredCheckoutGateway();
+    await expect(gateway.createCheckoutSession()).rejects.toBeInstanceOf(
+      StripeGatewayUnconfiguredError,
+    );
+  });
+});
+
+describe("UnconfiguredPortalInvoiceGateway (11b Slice 4)", () => {
+  it("createPortalSession throws StripeGatewayUnconfiguredError", async () => {
+    const gateway = new UnconfiguredPortalInvoiceGateway();
+    await expect(gateway.createPortalSession()).rejects.toBeInstanceOf(
+      StripeGatewayUnconfiguredError,
+    );
+  });
+
+  it("listInvoices throws StripeGatewayUnconfiguredError", async () => {
+    const gateway = new UnconfiguredPortalInvoiceGateway();
+    await expect(gateway.listInvoices()).rejects.toBeInstanceOf(StripeGatewayUnconfiguredError);
   });
 });

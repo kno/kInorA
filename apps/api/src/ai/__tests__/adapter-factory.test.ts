@@ -17,12 +17,14 @@ vi.mock("@langchain/openai", () => ({
   ChatOpenAI: MockChatOpenAI,
 }));
 
+const MockChatAnthropic = vi.fn(() => ({ withStructuredOutput: mockWithStructuredOutput }));
 vi.mock("@langchain/anthropic", () => ({
-  ChatAnthropic: vi.fn(() => ({ withStructuredOutput: mockWithStructuredOutput })),
+  ChatAnthropic: MockChatAnthropic,
 }));
 
+const MockChatGoogleGenerativeAI = vi.fn(() => ({ withStructuredOutput: mockWithStructuredOutput }));
 vi.mock("@langchain/google-genai", () => ({
-  ChatGoogleGenerativeAI: vi.fn(() => ({ withStructuredOutput: mockWithStructuredOutput })),
+  ChatGoogleGenerativeAI: MockChatGoogleGenerativeAI,
 }));
 
 // ---------------------------------------------------------------------------
@@ -115,6 +117,102 @@ describe("openrouter adapter still uses jsonSchema", () => {
     expect(mockWithStructuredOutput).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ method: "jsonSchema" })
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// anthropic / google adapters — mirror the openrouter/openai coverage above.
+// Both read their key from a provider-specific env var at call time and use
+// jsonSchema structured output, same as openai/openrouter.
+// ---------------------------------------------------------------------------
+
+describe("createAnthropicAdapter (via buildAdapters)", () => {
+  it("constructs ChatAnthropic with the model and reads ANTHROPIC_API_KEY at call time", async () => {
+    process.env["ANTHROPIC_API_KEY"] = "sk-ant-test";
+    const adapters = buildAdapters();
+    const factory = adapters["anthropic"];
+    if (!factory) throw new Error("anthropic adapter not registered");
+
+    const adapter = factory("claude-sonnet-test");
+    await adapter.generate(baseSpec);
+
+    expect(MockChatAnthropic).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: "sk-ant-test", model: "claude-sonnet-test" })
+    );
+    delete process.env["ANTHROPIC_API_KEY"];
+  });
+
+  it("falls back to a placeholder key when ANTHROPIC_API_KEY is absent (does not throw at construction)", () => {
+    delete process.env["ANTHROPIC_API_KEY"];
+    const adapters = buildAdapters();
+    const factory = adapters["anthropic"]!;
+
+    expect(() => factory("claude-sonnet-test")).not.toThrow();
+    expect(MockChatAnthropic).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: "placeholder-key" })
+    );
+  });
+
+  it("uses jsonSchema structured output and produces the parsed program via the shared invoke path", async () => {
+    const adapters = buildAdapters();
+    const adapter = adapters["anthropic"]!("claude-sonnet-test");
+
+    const program = await adapter.generate(baseSpec);
+
+    expect(mockWithStructuredOutput).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ method: "jsonSchema" })
+    );
+    expect(program).toEqual(mockProgram);
+    const config = mockInvoke.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(config).toEqual(
+      expect.objectContaining({ metadata: expect.objectContaining({ provider: "anthropic", model: "claude-sonnet-test" }) })
+    );
+  });
+});
+
+describe("createGoogleAdapter (via buildAdapters)", () => {
+  it("constructs ChatGoogleGenerativeAI with the model and reads GOOGLE_GENERATIVE_AI_API_KEY at call time", async () => {
+    process.env["GOOGLE_GENERATIVE_AI_API_KEY"] = "gg-test-key";
+    const adapters = buildAdapters();
+    const factory = adapters["google"];
+    if (!factory) throw new Error("google adapter not registered");
+
+    const adapter = factory("gemini-test");
+    await adapter.generate(baseSpec);
+
+    expect(MockChatGoogleGenerativeAI).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: "gg-test-key", model: "gemini-test" })
+    );
+    delete process.env["GOOGLE_GENERATIVE_AI_API_KEY"];
+  });
+
+  it("falls back to a placeholder key when GOOGLE_GENERATIVE_AI_API_KEY is absent (does not throw at construction)", () => {
+    delete process.env["GOOGLE_GENERATIVE_AI_API_KEY"];
+    const adapters = buildAdapters();
+    const factory = adapters["google"]!;
+
+    expect(() => factory("gemini-test")).not.toThrow();
+    expect(MockChatGoogleGenerativeAI).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: "placeholder-key" })
+    );
+  });
+
+  it("uses jsonSchema structured output and produces the parsed program via the shared invoke path", async () => {
+    const adapters = buildAdapters();
+    const adapter = adapters["google"]!("gemini-test");
+
+    const program = await adapter.generate(baseSpec);
+
+    expect(mockWithStructuredOutput).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ method: "jsonSchema" })
+    );
+    expect(program).toEqual(mockProgram);
+    const config = mockInvoke.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(config).toEqual(
+      expect.objectContaining({ metadata: expect.objectContaining({ provider: "google", model: "gemini-test" }) })
     );
   });
 });
