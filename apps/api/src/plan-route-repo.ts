@@ -24,7 +24,10 @@ export function createPlanRouteRepo(deps: {
   database: Pick<Database, "transaction">;
   planSpecRepo: Pick<
     PlanSpecRepository,
-    "create" | "updateSpecDaysPerWeek" | "updateSpecIntensityBias"
+    | "create"
+    | "updateSpecDaysPerWeek"
+    | "updateSpecIntensityBias"
+    | "findConfirmedById"
   >;
   planDraftRepo: Pick<
     PlanDraftRepository,
@@ -37,6 +40,7 @@ export function createPlanRouteRepo(deps: {
     | "findAllByUser"
     | "listPlansWithProgress"
     | "setArchived"
+    | "updateProgram"
   >;
 }): PlanRouteRepo {
   const { database, planSpecRepo, planDraftRepo, workoutPlanRepo } = deps;
@@ -78,6 +82,25 @@ export function createPlanRouteRepo(deps: {
           ? { ...row, name: defaultPlanName(row.name, row.createdAt) }
           : row
       ),
+    // 17d PR D: the program-edit write, wired straight through — the route
+    // owns the ordering, the validation and the 404/409 disambiguation, so
+    // there is nothing for this adapter to add beyond the delegation.
+    // The same single default-name layer every other plan read goes through,
+    // so the edit response labels the plan exactly as the list and detail do.
+    updateProgram: (tenantId, userId, id, program, expectedUpdatedAt) =>
+      workoutPlanRepo
+        .updateProgram(tenantId, userId, id, program, expectedUpdatedAt)
+        .then((row) =>
+          row ? { ...row, name: defaultPlanName(row.name, row.createdAt) } : row
+        ),
+    // 17d PR D: the confirmed spec behind a plan, read ONLY for its equipment
+    // list (the edit's catalog vocabulary). Reuses the exact same
+    // `findConfirmedById` every other confirmed-spec read uses — including its
+    // `confirmed: true` requirement and its tenant+user scoping.
+    findConfirmedById: (tenantId, userId, id) =>
+      planSpecRepo
+        .findConfirmedById(tenantId, userId, id)
+        .then((row) => (row ? { equipment: row.specJson?.equipment } : undefined)),
     // 17d PR B: the sole write path for archived_at, wired straight through.
     archivePlan: (tenantId, userId, id) => workoutPlanRepo.setArchived(tenantId, userId, id, true),
     unarchivePlan: (tenantId, userId, id) =>
