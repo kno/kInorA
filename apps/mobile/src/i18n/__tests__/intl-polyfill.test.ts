@@ -22,4 +22,16 @@ describe("intl-polyfill", () => {
     expect(new Intl.PluralRules("en").select(1)).toBe("one");
     expect(new Intl.PluralRules("en").select(3)).toBe("other");
   });
+
+  // kno/kInorA#409: the tracker names the days a plan still has through
+  // `intl.formatList`, which resolves `Intl.ListFormat`. Same caveat as the
+  // plural cases above — Node is not Hermes, so this guards the polyfill's
+  // data and load order, not the Hermes gap itself.
+  it("joins a list with each locale's own conjunction, in EN and ES", () => {
+    const join = (locale: string) =>
+      new Intl.ListFormat(locale, { type: "conjunction" }).format(["1", "2", "4"]);
+
+    expect(join("en")).toMatch(/^1, 2,? and 4$/);
+    expect(join("es")).toBe("1, 2 y 4");
+  });
 });

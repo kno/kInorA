@@ -213,6 +213,10 @@ export default function WorkoutTrackerScreen({
   const [session, setSession] = useState<WorkoutSessionRecord | undefined>();
   const [loading, setLoading] = useState(true);
   const [errorKey, setErrorKey] = useState<string | undefined>();
+  // kno/kInorA#409: the days that remain in the plan, carried by the API's
+  // `404 day_not_in_plan`. Only ever set alongside `errorKey ===
+  // "errorDayNotInPlan"`; an empty array means the plan has no days left.
+  const [availableDays, setAvailableDays] = useState<number[] | undefined>();
   const [conflict, setConflict] = useState<ConflictState | undefined>();
   // 17b scope A: one required confirmation step before Discard takes effect,
   // and feedback when the abandon call itself fails/no-ops.
@@ -434,6 +438,7 @@ export default function WorkoutTrackerScreen({
   const loadSession = useCallback(async () => {
     setLoading(true);
     setErrorKey(undefined);
+    setAvailableDays(undefined);
     setConflict(undefined);
 
     // Resolve/prepare the offline context (best-effort — degrades to the
@@ -572,6 +577,13 @@ export default function WorkoutTrackerScreen({
       // changes on the plans list, not a transient failure — so it gets its
       // own message and NO retry, which could never succeed.
       setErrorKey("errorPlanArchived");
+    } else if (result.message === "day_not_in_plan") {
+      // kno/kInorA#409: the day was removed from the plan (the web plan
+      // editor can do that). Same class of refusal as `plan_archived`
+      // directly above — the user changes it on the plan, not by retrying —
+      // so it names the days that DO remain and offers no retry.
+      setAvailableDays(result.availableDays ?? []);
+      setErrorKey("errorDayNotInPlan");
     } else {
       setErrorKey(sessionId ? "errorLoad" : "errorStart");
     }
@@ -1090,24 +1102,60 @@ export default function WorkoutTrackerScreen({
 
   if (errorKey && !session) {
     const planArchived = errorKey === "errorPlanArchived";
+    const dayNotInPlan = errorKey === "errorDayNotInPlan";
+    const remainingDays = availableDays ?? [];
     const errorMsg = planArchived
       ? M.errorPlanArchived
-      : errorKey === "errorLoad"
-        ? M.errorLoad
-        : M.errorStart;
+      : dayNotInPlan
+        ? remainingDays.length > 0
+          ? M.errorDayNotInPlan
+          : M.errorDayNotInPlanNoDays
+        : errorKey === "errorLoad"
+          ? M.errorLoad
+          : M.errorStart;
+    // "1, 2 and 4" / "1, 2 y 4" — locale-aware, so the separator and the
+    // final conjunction are never hardcoded per language.
+    const formattedDays = dayNotInPlan
+      ? intl.formatList(
+          remainingDays.map((remaining) => String(remaining)),
+          { type: "conjunction" },
+        )
+      : "";
     return (
       <View style={[styles.centered, { paddingTop: insets.top }]}>
         <StatusBar style="light" />
         <Text style={[styles.stateText, styles.errorText]}>
-          <FormattedMessage {...errorMsg} />
+          <FormattedMessage
+            {...errorMsg}
+            values={{ day, days: formattedDays, count: remainingDays.length }}
+          />
         </Text>
-        {/* An archived plan cannot be started however many times it is
-            retried, so this state offers no retry — the message says what
-            to change instead. */}
-        {!planArchived && (
-          <Pressable style={styles.secondaryBtn} onPress={loadSession} accessibilityRole="button">
+        {/* Neither an archived plan nor a day the plan no longer has can be
+            started however many times the start is retried, so these states
+            offer no retry — the message says what to change instead. */}
+        {!planArchived && !dayNotInPlan && (
+          <Pressable
+            style={styles.secondaryBtn}
+            onPress={loadSession}
+            accessibilityRole="button"
+            testID="tracker-retry"
+          >
             <Text style={styles.secondaryBtnText}>
               <FormattedMessage {...M.retry} />
+            </Text>
+          </Pressable>
+        )}
+        {/* The removed day is fixed on the plan, so the one useful action
+            here is going back to it. */}
+        {dayNotInPlan && (
+          <Pressable
+            style={styles.secondaryBtn}
+            onPress={goHome}
+            accessibilityRole="button"
+            testID="day-not-in-plan-back"
+          >
+            <Text style={styles.secondaryBtnText}>
+              <FormattedMessage {...M.backHome} />
             </Text>
           </Pressable>
         )}

@@ -121,6 +121,48 @@ describe("workout-session client", () => {
     });
   });
 
+  // kno/kInorA#409: the generic error mapping keeps only `error` + the HTTP
+  // status, so `availableDays` was dropped and the screen could not name the
+  // days that remain. These two cases pin it to the typed outcome.
+  it("carries availableDays through a 404 day_not_in_plan", async () => {
+    const fetchImpl = mockFetch(
+      jsonResponse({ error: "day_not_in_plan", availableDays: [1, 2, 4] }, 404),
+    );
+    const res = await startWorkoutSession("plan_1", 3, { getToken: token, fetchImpl });
+    expect(res).toEqual({
+      kind: "error",
+      message: "day_not_in_plan",
+      availableDays: [1, 2, 4],
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("falls back to an empty availableDays when the 404 omits or malforms it", async () => {
+    const missing = await startWorkoutSession("plan_1", 3, {
+      getToken: token,
+      fetchImpl: mockFetch(jsonResponse({ error: "day_not_in_plan" }, 404)),
+    });
+    expect(missing).toMatchObject({ message: "day_not_in_plan", availableDays: [] });
+
+    const malformed = await startWorkoutSession("plan_1", 3, {
+      getToken: token,
+      fetchImpl: mockFetch(
+        jsonResponse({ error: "day_not_in_plan", availableDays: [1, "2", null] }, 404),
+      ),
+    });
+    expect(malformed).toMatchObject({ message: "day_not_in_plan", availableDays: [1] });
+  });
+
+  it("leaves a bare 404 (no such plan) on the generic mapping, with no availableDays", async () => {
+    const fetchImpl = mockFetch(jsonResponse({ error: "not_found" }, 404));
+    const res = await startWorkoutSession("plan_1", 3, { getToken: token, fetchImpl });
+    expect(res).toEqual({
+      kind: "error",
+      message: "not_found",
+      code: "NOT_FOUND",
+    });
+  });
+
   it("carries the additive autoClosedSession sibling key on a 200 response, when present", async () => {
     const fetchImpl = mockFetch(
       jsonResponse({
