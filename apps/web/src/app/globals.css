@@ -1109,13 +1109,32 @@ a {
   text-align: center;
 }
 
-.kin-btn--accent {
+/*
+ * `--primary` is the historical spelling of `--accent` and is the MORE common
+ * one in the app (24 call sites against 19). It was never defined here, so
+ * every one of those primary calls-to-action rendered with no background and
+ * no border — `.kin-btn` base sets `border: 1px solid transparent` and no
+ * background-color — making them visually identical to secondary buttons.
+ * Save, Create plan, Start session: all invisible as primary actions.
+ *
+ * Both spellings now resolve to the same declaration, so the fix reaches every
+ * existing call site without touching 24 of them. The gym white-label
+ * fallbacks apply to both, which they must: a dead class was also silently
+ * opting those buttons out of tenant branding.
+ *
+ * `globals.test.ts` asserts that every `kin-btn--*` modifier used anywhere in
+ * the app has a matching rule here, so the next dead modifier fails CI instead
+ * of shipping invisible.
+ */
+.kin-btn--accent,
+.kin-btn--primary {
   /* 16a-v3-gym-white-label, Slice 4: --gym-* fallbacks (see body above). */
   background-color: var(--gym-accent, var(--accent));
   color: var(--gym-accent-fg, var(--accent-fg));
 }
 
-.kin-btn--accent:hover {
+.kin-btn--accent:hover,
+.kin-btn--primary:hover {
   background-color: color-mix(in oklch, var(--gym-accent, var(--accent)) 88%, white 12%);
 }
 
@@ -1124,7 +1143,15 @@ a {
   color: var(--fg);
 }
 
-.kin-btn--ghost {
+/*
+ * `--secondary` was the second dead modifier the guard test found: used in
+ * three files, never defined, so those buttons rendered with no background and
+ * no border at all. `--ghost` is precisely what a secondary button means here
+ * — surface fill, normal text, a visible border — so both spellings resolve to
+ * it rather than inventing a third neutral style.
+ */
+.kin-btn--ghost,
+.kin-btn--secondary {
   background-color: var(--gym-surface, var(--surface));
   color: var(--gym-fg, var(--fg));
   border-color: var(--border);
