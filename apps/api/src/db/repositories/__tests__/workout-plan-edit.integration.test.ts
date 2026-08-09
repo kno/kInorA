@@ -23,7 +23,7 @@
  * by the CI integration glob; no workflow edit needed.
  */
 import { afterAll, describe, expect, it } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { createDbClient } from "../../client.js";
 import {
   planSpecs,
@@ -144,6 +144,58 @@ describe.skipIf(!hasDb)("Program edit end-to-end (real Postgres, 17d PR D)", () 
       .from(sessionExercises)
       .where(eq(sessionExercises.workoutSessionId, sessionId!));
     expect(rows.map((row) => row.title)).toEqual(["Edited Exercise"]);
+  });
+
+  it("accepts a version token that lost sub-millisecond precision on the way out", async () => {
+    // The bug this pins, caught by this suite's very first CI run: `updated_at`
+    // is timestamptz and Postgres stores MICROSECONDS, but the token the client
+    // sends back has been through a JS Date and an ISO-8601 string and carries
+    // milliseconds at best. A raw `updated_at = $expected` therefore matched
+    // zero rows and every edit answered 409 edit_conflict — unrecoverably, since
+    // reloading returns the same truncated value.
+    //
+    // The microsecond remainder is forced here rather than left to `now()`, so
+    // this fails deterministically if the truncation is ever removed instead of
+    // roughly 999 runs in 1000.
+    const { tenantId, userId } = await seedOwner();
+    const plan = await seedReadyPlan(tenantId, userId, programOf(1));
+    await db.execute(
+      sql`update workout_plans set updated_at = timestamptz '2026-08-09 10:00:00.123456+00' where id = ${plan.id}`,
+    );
+
+    // Read it back the way the API does — a JS Date, truncated to .123.
+    const asTheEditorSeesIt = await planRepo.findById(tenantId, userId, plan.id);
+    expect(asTheEditorSeesIt!.updatedAt.toISOString()).toBe("2026-08-09T10:00:00.123Z");
+
+    const updated = await planRepo.updateProgram(
+      tenantId,
+      userId,
+      plan.id,
+      programOf(1),
+      asTheEditorSeesIt!.updatedAt,
+    );
+
+    expect(updated).toBeDefined();
+  });
+
+  it("still rejects a token that is wrong by a whole millisecond", async () => {
+    // The truncation must not become a tolerance: a stale token one millisecond
+    // off is a genuine conflict and has to stay one.
+    const { tenantId, userId } = await seedOwner();
+    const plan = await seedReadyPlan(tenantId, userId, programOf(1));
+    await db.execute(
+      sql`update workout_plans set updated_at = timestamptz '2026-08-09 10:00:00.123456+00' where id = ${plan.id}`,
+    );
+
+    const offByOneMs = await planRepo.updateProgram(
+      tenantId,
+      userId,
+      plan.id,
+      programOf(1),
+      new Date("2026-08-09T10:00:00.124Z"),
+    );
+
+    expect(offByOneMs).toBeUndefined();
   });
 
   it("a successful edit advances updated_at, so the same token cannot be replayed", async () => {

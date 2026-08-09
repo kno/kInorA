@@ -148,6 +148,31 @@ function sqlEqualityBindings(node: unknown): Array<{ column: string; value: unkn
   return bindings;
 }
 
+/**
+ * Flatten a SQL node to its literal text, columns rendered as `<name>` and
+ * parameters as `?`. Lets a test assert the SHAPE of a predicate that is not a
+ * plain `column = value` — specifically `updateProgram`'s millisecond
+ * truncation, which a db double cannot evaluate but which is load-bearing.
+ */
+function sqlText(node: unknown): string {
+  const chunks = (node as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
+
+  return chunks
+    .map((chunk) => {
+      const asColumn = chunk as { name?: string };
+      if (typeof asColumn.name === "string") return `<${asColumn.name}>`;
+      const value = (chunk as { value?: unknown }).value;
+      if (Array.isArray(value)) return value.join("");
+      if (value !== undefined) return "?";
+      // A nested SQL node recurses; anything else is an interpolated value
+      // drizzle will bind as a parameter.
+      const nested = sqlText(chunk);
+      return nested === "" ? "?" : nested;
+    })
+    .join("");
+}
+
 describe("WorkoutPlanRepository", () => {
   describe("createGenerating", () => {
     it("inserts a row with status 'generating' and returns { id, status }", async () => {
@@ -641,7 +666,7 @@ describe("WorkoutPlanRepository", () => {
       expect(payload.updatedAt.getTime()).toBeGreaterThan(EXPECTED_UPDATED_AT.getTime());
     });
 
-    it("conditions the update on tenant AND user AND id AND status='ready' AND the expected updated_at", async () => {
+    it("conditions the update on tenant AND user AND id AND status='ready'", async () => {
       const { update, where } = updateChain([updatedRow()]);
       const repo = new WorkoutPlanRepository({ update } as never);
 
@@ -653,8 +678,48 @@ describe("WorkoutPlanRepository", () => {
         { column: "user_id", value: USER_A },
         { column: "id", value: PLAN_ID },
         { column: "status", value: "ready" },
-        { column: "updated_at", value: EXPECTED_UPDATED_AT },
       ]);
+    });
+
+    it("guards on updated_at TRUNCATED to milliseconds, not on raw equality", async () => {
+      // Not a stylistic preference: `updated_at` is timestamptz (microsecond
+      // precision in Postgres, populated that way by `defaultNow()`), while the
+      // caller's token has travelled through a JS Date and an ISO-8601 string
+      // and cannot carry anything finer than a millisecond. Raw equality
+      // therefore matches ZERO rows for any row with non-zero microseconds, and
+      // every edit answers 409 edit_conflict with no way to recover. The real
+      // Postgres suite proves the behaviour; this pins the mechanism so a
+      // "simplification" back to `eq(...)` fails here first.
+      const { update, where } = updateChain([updatedRow()]);
+      const repo = new WorkoutPlanRepository({ update } as never);
+
+      await repo.updateProgram(TENANT_A, USER_A, PLAN_ID, editedProgram, EXPECTED_UPDATED_AT);
+
+      const text = sqlText((where as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+      expect(text).toContain("date_trunc('milliseconds', <updated_at>) = ?::timestamptz");
+    });
+
+    it("binds the caller's expectedUpdatedAt as the version parameter", async () => {
+      const { update, where } = updateChain([updatedRow()]);
+      const repo = new WorkoutPlanRepository({ update } as never);
+
+      await repo.updateProgram(TENANT_A, USER_A, PLAN_ID, editedProgram, EXPECTED_UPDATED_AT);
+
+      // The truncated predicate is built with a raw `sql` template, so the
+      // parameter sits outside `sqlEqualityBindings`' reach — assert it
+      // directly, or the guard could bind the wrong value and still look right.
+      const instants: string[] = [];
+      const collect = (node: unknown): void => {
+        const chunks = (node as { queryChunks?: unknown[] })?.queryChunks;
+        if (!Array.isArray(chunks)) return;
+        for (const chunk of chunks) {
+          if (typeof chunk === "string") instants.push(chunk);
+          collect(chunk);
+        }
+      };
+      collect((where as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+
+      expect(instants).toEqual([EXPECTED_UPDATED_AT.toISOString()]);
     });
 
     it("returns undefined on 0 rows updated, without saying which guard failed", async () => {

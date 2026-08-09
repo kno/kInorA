@@ -441,6 +441,26 @@ export class WorkoutPlanRepository {
    * causes — not found, not ready, stale version — and this layer deliberately
    * does not disambiguate: the route re-reads the scoped row and maps it to
    * 404 / 409 `plan_not_ready` / 409 `edit_conflict`.
+   *
+   * ## Why the version guard truncates to milliseconds
+   *
+   * `updated_at` is `timestamptz`, which Postgres stores to MICROSECOND
+   * precision — `defaultNow()` populates it that way on insert. Drizzle reads
+   * the column in `mode: "date"`, so it arrives as a JS `Date`, which cannot
+   * represent anything finer than a millisecond; the ISO-8601 string the API
+   * hands the editor is millisecond-precision too. The caller therefore CANNOT
+   * send back the exact stored value, and a plain `updated_at = $expected`
+   * matches zero rows for any row whose microseconds are non-zero — every edit
+   * would answer `409 edit_conflict` forever, with no way for the user to
+   * recover, because reloading returns the same truncated token.
+   *
+   * Truncating the column to the precision the wire format can actually carry
+   * makes the comparison correct by construction instead of by the accident of
+   * which write path last touched the row. It stays a strict version check:
+   * millisecond granularity is what the client observes, and a successful
+   * update immediately moves `updated_at`, so a second writer holding the same
+   * token still finds no matching row. The `id` predicate keeps this a primary
+   * key lookup, so wrapping the column in a function costs no index.
    */
   async updateProgram(
     tenantId: string,
@@ -458,7 +478,11 @@ export class WorkoutPlanRepository {
           eq(workoutPlans.userId, userId),
           eq(workoutPlans.id, id),
           eq(workoutPlans.status, "ready"),
-          eq(workoutPlans.updatedAt, expectedUpdatedAt)
+          // The parameter is sent as an explicit ISO-8601 instant and cast,
+          // rather than relying on how the driver happens to serialise a JS
+          // Date inside a raw template: both sides of this comparison are then
+          // visibly millisecond-precision UTC in the code itself.
+          sql`date_trunc('milliseconds', ${workoutPlans.updatedAt}) = ${expectedUpdatedAt.toISOString()}::timestamptz`
         )
       )
       .returning();
