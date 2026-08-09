@@ -150,7 +150,9 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
       const { workoutPlanId, day } = request.body;
 
       const outcome = await repo.startSession(tenantId, userId, workoutPlanId, day);
-      // undefined → plan not ready / day not in program (unchanged 404 contract).
+      // undefined → the plan is missing or not ready (unchanged 404 contract).
+      // "day not in program" is no longer part of this branch: since 17d PR B
+      // it is the typed `day_not_in_plan` outcome handled below, still at 404.
       if (!outcome) {
         return reply.code(404).send({ error: "not_found" });
       }

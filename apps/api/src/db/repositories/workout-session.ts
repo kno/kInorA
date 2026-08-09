@@ -347,8 +347,10 @@ export class WorkoutSessionRepository {
    * trailing so the age branch is testable without mocking the clock,
    * matching `getWeeklyOverview`'s own precedent.
    *
-   * Returns `undefined` only when the plan is not ready or the requested day
-   * is not part of the program (the route maps this to 404, unchanged).
+   * Returns `undefined` only when the plan is missing or not ready (the route
+   * maps this to a bare 404, unchanged). Since 17d PR B the two refusals the
+   * client can act on are typed instead: `day_not_in_plan` (still 404, now
+   * carrying `availableDays`) and `plan_archived` (409).
    */
   async startSession(
     tenantId: string,
