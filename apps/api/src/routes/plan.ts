@@ -10,8 +10,17 @@ import {
 } from "../plan/boundary.js";
 import { withCatalogLinks } from "../plan/catalog-links.js";
 import { derivePreferenceScores } from "@kinora/domain";
-import { mergePlanSpecDraft, validateEditedProgram } from "@kinora/domain/plan";
-import type { EditedProgramIssue, MergePlanSpecDraftResult } from "@kinora/domain/plan";
+import {
+  mergePlanSpecDraft,
+  normalizePlanName,
+  validateEditedProgram,
+  validatePlanName,
+} from "@kinora/domain/plan";
+import type {
+  EditedProgramIssue,
+  MergePlanSpecDraftResult,
+  PlanNameIssue,
+} from "@kinora/domain/plan";
 import { WorkoutProgramSchema } from "@kinora/contracts";
 import type {
   BillingFeature,
@@ -184,13 +193,18 @@ export interface PlanRouteRepo {
    * the scoped row. Optional (alongside `findConfirmedSpecById`) so existing
    * tests that never exercise editing do not have to stub it; the edit route
    * is registered only when it and `findConfirmedById` are both present.
+   *
+   * #415 — `name`, when present, is written by the SAME guarded statement, so
+   * a rename inherits this guard instead of introducing a second one. Omitted
+   * means "leave the stored name alone".
    */
   updateProgram?(
     tenantId: string,
     userId: string,
     id: string,
     program: WorkoutProgram,
-    expectedVersion: number
+    expectedVersion: number,
+    name?: string
   ): Promise<PlanRecord | undefined>;
   /**
    * 17d PR D — the caller's CONFIRMED plan spec, read to derive the exercise
@@ -423,6 +437,12 @@ function draftChanged(next: PlanSpecDraft, prev: PlanSpecDraft): boolean {
  * is `WorkoutProgramSchema`'s job in step 2, and duplicating it would leave two
  * definitions to drift apart.
  *
+ * #415 adds an OPTIONAL `name`. Optional, not required, because the same
+ * envelope is what a program-only save sends: a client that omits it means
+ * "leave the name alone", which is not the same as sending a blank one. The
+ * name's own rules (trimmed, non-empty, bounded) are `validatePlanName`'s job
+ * in step 3, for the same no-two-definitions reason.
+ *
  * #421: `expectedVersion` replaced an ISO-8601 `expectedUpdatedAt`. Because the
  * token is now an integer rather than a string that has to be parsed into a
  * `Date`, "unusable token" collapses into "malformed envelope" and the schema
@@ -436,6 +456,7 @@ const updateProgramSchema = {
     properties: {
       program: { type: "object" },
       expectedVersion: { type: "integer", minimum: 1 },
+      name: { type: "string" },
     },
     additionalProperties: false,
   },
@@ -1367,6 +1388,12 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   // the client sends the whole `WorkoutProgram` it edited plus the `version`
   // it loaded, and the server stores the whole thing or nothing.
   //
+  // #415: the plan's NAME rides the same envelope and the same statement. It
+  // is the other field the editor shows, and it needs the very version guard
+  // this route already carries — a second endpoint would have meant a second
+  // guard, and this one took two corrections (#408, #421) before it was right.
+  // One save, one guard, one round-trip.
+  //
   // Editing does NOT rewrite history. `session_exercises` snapshots every
   // exercise at the moment a session starts, so a past — or in-progress —
   // session is built from its own snapshot and is untouched by this write. The
@@ -1378,7 +1405,8 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
   //      keys by default and the schema has no `catalogId` member, so a
   //      client-supplied `catalogId` cannot survive this parse — the server is
   //      the only author of that field.
-  //   3. validateEditedProgram      → 422 with the specific structural issue
+  //   3. validateEditedProgram (+ validatePlanName when the body carries a
+  //      `name`, #415) → 422 with the specific structural issue
   //   4. load the plan (tenant+user+id) → 404 not_found | 409 plan_not_ready
   //   5. resolve catalog ids against the spec's FULL equipment vocabulary
   //      (never the prompt-capped subset — the cap is a token budget and an
@@ -1400,7 +1428,11 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       async (request: FastifyRequest, reply: FastifyReply) => {
         const { tenantId, userId } = request.authContext!;
         const { id } = request.params as { id: string };
-        const body = request.body as { program: unknown; expectedVersion: number };
+        const body = request.body as {
+          program: unknown;
+          expectedVersion: number;
+          name?: string;
+        };
 
         // #421: no second parse step. The schema above already proved
         // `expectedVersion` is an integer >= 1, which is the whole of what makes
@@ -1414,11 +1446,23 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         }
         const submitted = parsed.data as WorkoutProgram;
 
-        // Step 3.
-        const issues: EditedProgramIssue[] = validateEditedProgram(submitted);
+        // Step 3. Program rules and (when a rename was submitted) name rules
+        // are reported through ONE `issues` array, because the client shows
+        // one validation list and a save is one transaction: a rename cannot
+        // land while the program it was submitted with is refused, and vice
+        // versa. `name` absent means "leave it alone" and is not validated.
+        const issues: (EditedProgramIssue | PlanNameIssue)[] =
+          validateEditedProgram(submitted);
+        if (body.name !== undefined) {
+          issues.push(...validatePlanName(body.name));
+        }
         if (issues.length > 0) {
           return reply.code(422).send({ error: issues[0], issues });
         }
+        // Trimmed, because the trimmed value is what was validated. Renaming
+        // to blank is refused above rather than stored — the blank→default
+        // layer in `plan-route-repo` stays the ONE rule for names nobody typed.
+        const nextName = body.name === undefined ? undefined : normalizePlanName(body.name);
 
         // Step 4.
         const plan = await repo.findPlanById(tenantId, userId, id);
@@ -1450,7 +1494,14 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         };
 
         // Step 6.
-        const updated = await updateProgram(tenantId, userId, id, next, body.expectedVersion);
+        const updated = await updateProgram(
+          tenantId,
+          userId,
+          id,
+          next,
+          body.expectedVersion,
+          nextName,
+        );
 
         // Step 7: 0 rows updated is ambiguous between three causes, so re-read
         // the scoped row (no status/version filter) and say which one it was.
@@ -1490,6 +1541,10 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
 
         return reply.code(200).send({
           id: updated.id,
+          // #415 — the name AS RESOLVED by the same blank→default layer every
+          // other plan read goes through, so the editor header and the list
+          // cannot disagree about what this plan is called.
+          name: updated.name,
           program: updated.programJson ?? next,
           updatedAt: updated.updatedAt?.toISOString(),
           // #421 — the NEXT token, exactly one past the submitted one. The

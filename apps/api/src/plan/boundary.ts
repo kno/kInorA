@@ -1,4 +1,5 @@
 import type { IntensityBias, PlanSpec } from "@kinora/contracts";
+import { PLAN_NAME_MAX_LENGTH } from "@kinora/domain/plan";
 
 const VALID_INTENSITY_BIASES: readonly IntensityBias[] = ["reduce", "maintain", "increase"];
 
@@ -8,8 +9,13 @@ const VALID_INTENSITY_BIASES: readonly IntensityBias[] = ["reduce", "maintain", 
  * `422 plan_name_too_long` instead of blowing up the DB INSERT as a 500. The
  * name is trimmed BEFORE this bound is applied. Consumed by the route, not the
  * type validators below.
+ *
+ * #415 moved the constant itself into `@kinora/domain/plan`, beside
+ * `validatePlanName`, so the rename path in the browser and both name-writing
+ * routes read ONE bound. Re-exported here so this module's existing consumers
+ * and their `plan_name_too_long` error code are unchanged.
  */
-export const PLAN_NAME_MAX_LENGTH = 120;
+export { PLAN_NAME_MAX_LENGTH };
 
 /**
  * Validates the optional plan `name` TYPE (#93): when present it must be a

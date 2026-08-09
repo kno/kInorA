@@ -111,6 +111,26 @@
   color: var(--muted);
 }
 
+/* ---- Bulk selection (issue #412) ---- */
+
+/* Sizing only. The card surface around it comes from `.kin-card`, per #413 —
+ * nothing here paints a surface of its own. */
+.select {
+  align-self: flex-start;
+  width: 1.15rem;
+  height: 1.15rem;
+  cursor: pointer;
+}
+
+/* The bulk action bar, above the grid. Layout only, for the same reason. */
+.bulkBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+  margin-bottom: var(--sp-3);
+}
+
 /* ---- Archive confirmation modal (issue #412) ---- */
 
 .overlay {

@@ -476,13 +476,21 @@ export class WorkoutPlanRepository {
    * `updated_at` still moves on every edit, but it is now purely an audit
    * timestamp with no role in correctness. The `id` predicate keeps this a
    * primary key lookup.
+   *
+   * #415 adds an OPTIONAL `name` to the same statement rather than a second
+   * write path. The editor already holds the plan's version token and already
+   * saves the whole editable document in one call; giving the name its own
+   * endpoint would mean a second optimistic-concurrency guard, and this one
+   * needed two corrections before it was right. Undefined leaves `name`
+   * exactly as stored, so every existing caller keeps its behaviour.
    */
   async updateProgram(
     tenantId: string,
     userId: string,
     id: string,
     program: WorkoutProgram,
-    expectedVersion: number
+    expectedVersion: number,
+    name?: string
   ): Promise<WorkoutPlanRecord | undefined> {
     const rows = await this.db
       .update(workoutPlans)
@@ -490,6 +498,9 @@ export class WorkoutPlanRepository {
         programJson: program,
         updatedAt: new Date(),
         version: expectedVersion + 1,
+        // Only when the caller actually submitted one: `set({ name: undefined })`
+        // and "leave the name alone" must not be the same statement by accident.
+        ...(name === undefined ? {} : { name }),
       })
       .where(
         and(

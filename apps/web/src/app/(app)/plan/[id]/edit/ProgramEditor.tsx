@@ -30,7 +30,13 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { WorkoutProgram, WorkoutSession } from "@kinora/contracts";
-import { validateEditedProgram, type EditedProgramIssue } from "@kinora/domain/plan";
+import {
+  PLAN_NAME_MAX_LENGTH,
+  validateEditedProgram,
+  validatePlanName,
+  type EditedProgramIssue,
+  type PlanNameIssue,
+} from "@kinora/domain/plan";
 import styles from "./ProgramEditor.module.css";
 import { updatePlanProgramAction } from "./actions";
 import type { UpdateProgramResult } from "./program-edit-types";
@@ -46,14 +52,18 @@ export interface ProgramEditorProps {
     planId: string,
     program: WorkoutProgram,
     expectedVersion: number,
+    name?: string,
   ) => Promise<UpdateProgramResult>;
 }
+
+/** Everything a save can be refused for, program rules and name rules alike. */
+type PlanEditIssue = EditedProgramIssue | PlanNameIssue;
 
 type SaveState =
   | { kind: "idle" }
   | { kind: "saving" }
   | { kind: "saved" }
-  | { kind: "invalid"; issues: EditedProgramIssue[] }
+  | { kind: "invalid"; issues: PlanEditIssue[] }
   | { kind: "conflict" }
   | { kind: "not_ready" }
   | { kind: "error" };
@@ -84,6 +94,19 @@ export function ProgramEditor({
   const [program, setProgram] = React.useState<WorkoutProgram>(initialProgram);
   const [expectedVersion, setExpectedVersion] = React.useState(initialVersion);
   const [state, setState] = React.useState<SaveState>({ kind: "idle" });
+  // #415. Seeded from the name the server already resolved, so the field opens
+  // showing what every other surface shows — including the date-based fallback
+  // for a plan nobody ever named, which is then a real starting point to edit
+  // rather than an empty box.
+  //
+  // `savedName` is what the server last confirmed. A save sends `name` ONLY
+  // when the two differ, which is what makes a program-only save leave the
+  // stored name alone rather than rewriting it with the same value — and what
+  // keeps the name rules from refusing a program edit on a plan whose name was
+  // never loaded in the first place.
+  const [name, setName] = React.useState(planName ?? "");
+  const [savedName, setSavedName] = React.useState(planName ?? "");
+  const nameChanged = name !== savedName;
 
   function updateSessions(next: WorkoutSession[]) {
     setProgram((prev) => ({ ...prev, weeklySessions: next }));
@@ -111,19 +134,30 @@ export function ProgramEditor({
   }
 
   async function handleSave() {
-    // Pre-flight only: the server runs this same function and decides.
-    const issues = validateEditedProgram(program);
+    // Pre-flight only: the server runs these same functions and decides.
+    const issues: PlanEditIssue[] = [
+      ...validateEditedProgram(program),
+      ...(nameChanged ? validatePlanName(name) : []),
+    ];
     if (issues.length > 0) {
       setState({ kind: "invalid", issues });
       return;
     }
 
     setState({ kind: "saving" });
-    const result = await onSave(planId, program, expectedVersion);
+    const result = await onSave(
+      planId,
+      program,
+      expectedVersion,
+      nameChanged ? name : undefined,
+    );
 
     if (result.kind === "ok") {
       setProgram(result.program);
       setExpectedVersion(result.version);
+      // The SERVER's resolved name, not the typed one: trimming happens there.
+      setName(result.name);
+      setSavedName(result.name);
       setState({ kind: "saved" });
       return;
     }
@@ -136,7 +170,7 @@ export function ProgramEditor({
       return;
     }
     if (result.kind === "invalid") {
-      setState({ kind: "invalid", issues: result.issues as EditedProgramIssue[] });
+      setState({ kind: "invalid", issues: result.issues as PlanEditIssue[] });
       return;
     }
     setState({ kind: "error" });
@@ -144,8 +178,31 @@ export function ProgramEditor({
 
   return (
     <div data-testid="program-editor">
-      <h1 className="kin-title">{planName ?? t("planEdit.title")}</h1>
+      <h1 className="kin-title">{name.trim() === "" ? t("planEdit.title") : name}</h1>
       <p className="kin-text kin-muted">{t("planEdit.description")}</p>
+
+      {/* #415. The plan's name was the one field this editor showed and would
+          not let you change. It lives here, in the header, and not on the
+          `/plans` row: the editor already holds the plan's version token, so a
+          rename saves through the guard this surface already has instead of
+          needing one of its own. */}
+      <div className="kin-field">
+        <label className="kin-label" htmlFor="plan-name">
+          {t("planEdit.nameLabel")}
+        </label>
+        <input
+          id="plan-name"
+          data-testid="plan-name"
+          className="kin-input"
+          type="text"
+          maxLength={PLAN_NAME_MAX_LENGTH}
+          value={name}
+          onChange={(event) => {
+            setName(event.target.value);
+            setState({ kind: "idle" });
+          }}
+        />
+      </div>
 
       {program.weeklySessions.map((session, sessionIndex) => (
         <section
