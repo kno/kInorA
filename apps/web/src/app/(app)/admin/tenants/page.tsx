@@ -27,7 +27,7 @@ export default async function TenantProvisioningPage() {
 
   return (
     <main className="kin-page">
-      <div className="kin-card kin-card--center">
+      <div className="kin-stack kin-stack--center">
         <h1 className="kin-title">{t("title")}</h1>
         <p className="kin-text kin-muted" style={{ marginBottom: "1.5rem" }}>
           {t("description")}
