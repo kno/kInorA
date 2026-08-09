@@ -266,6 +266,36 @@ describe("HomeScreen (C3 — dashboard fetch + plan-status nav entry)", () => {
     expect(navigation.navigate).toHaveBeenCalledWith("Profile");
   });
 
+  // 17d PR C: the plans list is reachable from the hub. Native has no tab bar,
+  // so `HomeScreen`'s secondary menu is the nav seam — the same placement web
+  // chose when it put /plans in `MobileNav.SECONDARY_TABS` rather than adding a
+  // fourth primary tab.
+  it("navigates to the Plans list when the Plans nav entry is pressed", async () => {
+    const { renderer, navigation } = renderScreen();
+    await settle();
+
+    const plansButton = renderer.root.find((n) => n.props.testID === "home-plans");
+    plansButton.props.onPress();
+    expect(navigation.navigate).toHaveBeenCalledWith("Plans");
+  });
+
+  it("leaves the existing plan entry into PlanStatus untouched by the Plans entry", async () => {
+    const client = makeClient({
+      fetchDashboardSummary: vi.fn(async () => dashboard(okWithPlan("spec_5"))),
+    });
+    const { renderer, navigation } = renderScreen({ client });
+    await settle();
+
+    expect(has(renderer, "home-plans")).toBe(true);
+    const entry = renderer.root.find((n) => n.props.testID === "home-view-plan");
+    await act(async () => {
+      await entry.props.onPress();
+    });
+    expect(navigation.navigate).toHaveBeenCalledWith("PlanStatus", {
+      planSpecId: "spec_5",
+    });
+  });
+
   // 15b/#294: the Clients/Trainer-plan nav entries are trainer-only, gated on
   // the dashboard summary's `viewerIsTrainer` (attached by the API from the
   // authenticated membership role — no extra request).

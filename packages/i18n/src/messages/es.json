@@ -1314,7 +1314,8 @@
       "load": "No pudimos cargar la sesión. Inténtalo de nuevo.",
       "start": "No pudimos iniciar la sesión. Inténtalo de nuevo.",
       "record": "No pudimos guardar la serie. Inténtalo de nuevo.",
-      "complete": "No pudimos finalizar la sesión. Inténtalo de nuevo."
+      "complete": "No pudimos finalizar la sesión. Inténtalo de nuevo.",
+      "planArchived": "Este plan está archivado, así que no se puede iniciar una sesión nueva. Desarchívalo desde tu lista de planes para volver a entrenarlo."
     },
     "reps": {
       "decrease": "Reducir repetición",

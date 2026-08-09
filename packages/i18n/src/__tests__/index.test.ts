@@ -241,7 +241,12 @@ describe("@kinora/i18n package assembly", () => {
     // test below, per the frozen-total convention.
     // +1 `plan.archived.badge` (17d PR B) — the archived-plan week-view
     // indicator shown when a plan reached via `/plan?planId=X` is archived.
-    expect(nonBillingKeys).toHaveLength(804);
+    // +1 `mobileTracker.error.planArchived` (17d PR C) — the mobile tracker's
+    // message for PR B's `409 plan_archived`, which otherwise collapsed into
+    // the generic "couldn't start the session, try again" and invited a retry
+    // that can never succeed. `mobileTracker.*` is counted BOTH here and in
+    // its own scoped test below, so both numbers move together.
+    expect(nonBillingKeys).toHaveLength(805);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
@@ -429,7 +434,13 @@ describe("@kinora/i18n package assembly", () => {
     // `mobileTracker.conflict.{resume,discard,discardConfirm,
     // discardConfirmYes,discardCancel,discardFailed}` — Resume/Discard on
     // the full-screen conflict state and the auto-close notice text.
-    expect(mobileTrackerKeys).toHaveLength(31);
+    // 17d PR C: +1 `mobileTracker.error.planArchived` — the tracker's own
+    // words for PR B's `409 plan_archived` start refusal.
+    expect(mobileTrackerKeys).toHaveLength(32);
+    expect(flat["mobileTracker.error.planArchived"]).toContain("archived");
+    expect(flattenMessages(catalogs.es)["mobileTracker.error.planArchived"]).toContain(
+      "archivado",
+    );
     expect(flat["mobileTracker.retry"]).toBe("Retry");
     expect(flattenMessages(catalogs.es)["mobileTracker.retry"]).toBe("Reintentar");
   });
