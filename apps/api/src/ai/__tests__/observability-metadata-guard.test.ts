@@ -38,6 +38,31 @@ const EXEMPT_BASENAMES = new Set([
 /** A key matching this shape inside a `metadata:` object literal is a body-metric value. */
 const BODY_METRIC_KEY_PATTERN = /^(weightKg|heightCm|selfDescribedSex|bodyweight)/i;
 
+/**
+ * Timeout for the source-tree scan below (#423).
+ *
+ * This guard walks `apps/api/src` and brace-scans every `metadata:` literal in
+ * it. Measured on this tree:
+ *
+ * | condition                        | duration |
+ * |----------------------------------|----------|
+ * | standalone                       | 49–92ms  |
+ * | under the parallel coverage run  | 474–1454ms (two identical runs) |
+ *
+ * Standalone it is nowhere near 5s, so unlike its sibling in `packages/domain`
+ * this one has not been observed failing. What it HAS shown is the same
+ * sensitivity: a 15x spread between the quiet case and `pnpm -r --if-present
+ * test:coverage`, from page-cache misses and CPU contention rather than from
+ * any work it does. 1454ms under load with a 5s ceiling is a 3.4x margin, and
+ * the margin narrows every time a package or a source file is added.
+ *
+ * Raised to the same 30s for the same reason and stated honestly: this is
+ * pre-emptive, sized from measurement rather than from a failure. A scan of
+ * one app's `src` that takes 30s is a real signal; one that takes 1.5s on a
+ * busy machine is not.
+ */
+const SCAN_TIMEOUT_MS = 30_000;
+
 function walk(dir: string, files: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
@@ -77,7 +102,10 @@ function metadataLiteralBodies(source: string): string[] {
 }
 
 describe("observability metadata guard — no body-metric key in a metadata: literal", () => {
-  it("scans every apps/api/src/**/*.ts file and finds no body-metric-shaped metadata key", () => {
+  // The timeout is on THIS test only. The no-op check below operates on a
+  // string literal with no I/O and stays at the default 5s, as does every
+  // other test in the package.
+  it("scans every apps/api/src/**/*.ts file and finds no body-metric-shaped metadata key", { timeout: SCAN_TIMEOUT_MS }, () => {
     const offenders: { file: string; body: string }[] = [];
 
     for (const file of walk(srcDir)) {
