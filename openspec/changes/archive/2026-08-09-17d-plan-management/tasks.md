@@ -585,21 +585,34 @@ Affect An In-Progress Session (ADDED).
 
 ## Final Verification (run once the full chain has landed)
 
-- [ ] `pnpm -r test` — full suite green, hermetic
-- [ ] `pnpm -r --if-present test:coverage` — apps/api functions ≥85%, apps/web functions ≥90%, global
-      functions 100%
-- [ ] `pnpm type-check` — no errors, all workspaces
-- [ ] `pnpm build` — CI's real gate, succeeds (also confirms `packages/i18n` rebuild picked up every new
+- [x] `pnpm -r test` — full suite green, hermetic. Run at archive time as `test:coverage` (the row
+      below), which executes the same suites with instrumentation: 189 API files / 2348 tests, 166 web
+      files / 1816 tests, plus domain, contracts, i18n, exercise-catalog — all passing
+- [x] `pnpm -r --if-present test:coverage` — apps/api functions **91.51%** (≥85), apps/web functions
+      **93.56%** (≥90), domain / contracts / i18n / exercise-catalog functions **100%**. Exit 0
+- [x] `pnpm type-check` — no errors, all workspaces. Exit 0
+- [x] `pnpm build` — CI's real gate, succeeds (also confirms `packages/i18n` rebuild picked up every new
       catalog entry across PRs A, B, and D)
-- [ ] Grep confirms the migration journal entry `idx: 29` is present and contiguous with `idx: 28`
-- [ ] Grep confirms the no-DELETE guard names both `/workout-plans*` and `/plan-specs*`
-- [ ] Grep confirms no `catalogId` literal reaches `repo.updateProgram`'s call site from the raw request
-      body (D.7's structural proof, re-checked manually once)
-- [ ] Grep confirms `tracker-model.ts` still contains no `programJson`/`WorkoutProgram`/`plan.program`
-      reference (D.11, re-checked manually once)
-- [ ] Manual: open `gh issue view 399` (or the MCP equivalent) and confirm nothing was added to the
+- [x] Grep confirms the migration journal entry `idx: 29` is present and contiguous with `idx: 28` —
+      `apps/api/drizzle/meta/_journal.json` ends `…, idx 28 (0028_user_weight_entries),
+      idx 29 (0029_workout_plan_archived_at)`
+- [x] Grep confirms the no-DELETE guard names both `/workout-plans*` and `/plan-specs*` —
+      `apps/api/src/__tests__/build-app.test.ts`, test "registers no DELETE route on /workout-plans* or
+      /plan-specs* (17d PR B, Judgment Day finding 2)"
+- [x] Grep confirms no `catalogId` literal reaches `repo.updateProgram`'s call site from the raw request
+      body (D.7's structural proof, re-checked manually once) — the only `catalogId` mentions in
+      `routes/plan.ts` are the comments at 1276 and 1362-1363 explaining why the schema has no
+      `catalogId` member; the call at 1439 passes the parsed `next`, never the raw body
+- [x] Grep confirms `tracker-model.ts` still contains no `programJson`/`WorkoutProgram`/`plan.program`
+      reference (D.11, re-checked manually once) — zero hits in
+      `apps/web/src/app/(app)/plan/[id]/tracker/tracker-model.ts`; the only hits are inside its own
+      invariant test, which names the forbidden tokens in order to assert their absence
+- [x] Manual: open `gh issue view 399` (or the MCP equivalent) and confirm nothing was added to the
       issue after `proposal.md` was written — flagged as unconfirmed in `design.md`'s open questions
-      because that phase had no shell access
-- [ ] Manual: confirm `?progress=1` has no effect on trainer-facing plan reads — `findLatestReadyByOwner`
+      because that phase had no shell access. Confirmed: issue #399 has **zero comments**; body
+      unchanged since 2026-08-09
+- [x] Manual: confirm `?progress=1` has no effect on trainer-facing plan reads — `findLatestReadyByOwner`
       is untouched by this change, but no trainer surface should be found calling `findAllByUser` in a
-      way that would silently start hiding an archived client's plan from a trainer view
+      way that would silently start hiding an archived client's plan from a trainer view. Confirmed:
+      `workout-plan.ts:369-386` shows `findLatestReadyByOwner` with no `archived_at` predicate, and the
+      only trainer call site (`routes/trainer.ts:308`) uses it, not `findAllByUser`
