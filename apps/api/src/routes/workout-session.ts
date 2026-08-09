@@ -171,6 +171,22 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
         });
       }
 
+      // 17d PR B: a NEW session was requested against an archived plan — a
+      // state conflict, the same class as active_session_conflict. In-progress
+      // sessions on the plan are unaffected (the resume branches above return
+      // before the repo's archived check ever runs).
+      if (outcome.kind === "plan_archived") {
+        return reply.code(409).send({ error: "plan_archived" });
+      }
+
+      // 17d PR B: the plan is ready but the requested day is not part of the
+      // program. Kept at 404 (not 409) so web/mobile's existing 404-branching
+      // in the offline flush taxonomy needs no status-code migration — only
+      // the body key changes.
+      if (outcome.kind === "day_not_in_plan") {
+        return reply.code(404).send({ error: "day_not_in_plan", availableDays: outcome.availableDays });
+      }
+
       // started | resumed → 200 with the session snapshot (unchanged shape).
       // 17b: additive `autoClosedSession` sibling key, present only when
       // this "started" call auto-closed a stale session — a resume never
