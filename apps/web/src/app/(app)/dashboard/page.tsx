@@ -1,5 +1,6 @@
 import { getLocale, getTranslations } from "next-intl/server";
 import type { DashboardSummaryDTO } from "@kinora/contracts";
+import { formatToday, todayIndex, weekdayLabel } from "@/lib/week-dates";
 import { getDashboardAction, adaptPlanAction } from "./actions";
 import { DashboardCoachCard } from "./DashboardCoachCard";
 import { DashboardTodayBlock } from "./DashboardTodayBlock";
@@ -234,23 +235,4 @@ function ProgressPanel({ summary, t }: ProgressPanelProps) {
       </article>
     </div>
   );
-}
-
-/** 0-based Monday-first weekday index for "today" (UTC), matching the DTO convention. */
-function todayIndex(): number {
-  return (new Date().getUTCDay() + 6) % 7;
-}
-
-/** 0-based Monday-first weekday index (design.md convention) -> a locale-formatted short weekday label. */
-function weekdayLabel(dayIndex: number, locale: string): string {
-  const reference = new Date();
-  const mondayOffset = (reference.getUTCDay() + 6) % 7;
-  const monday = new Date(reference.getTime() - mondayOffset * 24 * 60 * 60 * 1000);
-  const day = new Date(monday.getTime() + dayIndex * 24 * 60 * 60 * 1000);
-  return new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" }).format(day);
-}
-
-/** Locale-formatted "weekday, day month" label for the topbar date pill. */
-function formatToday(locale: string): string {
-  return new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(new Date());
 }

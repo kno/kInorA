@@ -7,6 +7,7 @@ import {
   EXECUTION_OVERHEAD_SECONDS,
   buildWeekTiles,
   estimateSessionMinutes,
+  recommendedSession,
   restDays,
   sessionLoadBars,
 } from "../plan-utils";
@@ -205,5 +206,49 @@ describe("plan-utils — buildWeekTiles (spec-fidelity fix: full 7-tile Mon–Su
     // still carries its session data (title/exercises) unchanged.
     expect(tiles[0]!.status).toBe("rest");
     expect(tiles[0]!.session?.title).toBe("Push Day");
+  });
+});
+
+describe("plan-utils — recommendedSession (kno/kInorA#411)", () => {
+  const sessions = [
+    { day: 1, title: "Push Day", exercises: [] },
+    { day: 3, title: "Pull Day", exercises: [] },
+    { day: 5, title: "Leg Day", exercises: [] },
+  ];
+
+  /** 7-entry Monday-first overview with the given days marked done. */
+  function overview(...doneDays: number[]) {
+    return Array.from({ length: 7 }, (_, i) => ({
+      status: (doneDays.includes(i + 1) ? "done" : "soon") as "done" | "soon",
+    }));
+  }
+
+  it("recommends the first planned day when nothing is done yet", () => {
+    expect(recommendedSession(sessions, overview())?.title).toBe("Push Day");
+  });
+
+  it("skips a completed day and recommends the next planned one", () => {
+    expect(recommendedSession(sessions, overview(1))?.title).toBe("Pull Day");
+  });
+
+  it("skips several completed days (triangulation)", () => {
+    expect(recommendedSession(sessions, overview(1, 3))?.title).toBe("Leg Day");
+  });
+
+  it("ignores a completed day that is not a planned training day", () => {
+    // Day 2 is a rest day here; marking it done must not shift the recommendation.
+    expect(recommendedSession(sessions, overview(2))?.title).toBe("Push Day");
+  });
+
+  it("falls back to the first planned session when every planned day is done", () => {
+    expect(recommendedSession(sessions, overview(1, 3, 5))?.title).toBe("Push Day");
+  });
+
+  it("recommends the first planned session when no overview is available", () => {
+    expect(recommendedSession(sessions)?.title).toBe("Push Day");
+  });
+
+  it("returns undefined for a program with no sessions", () => {
+    expect(recommendedSession([])).toBeUndefined();
   });
 });

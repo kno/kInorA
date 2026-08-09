@@ -33,6 +33,7 @@ import styles from "./plan-week-view.module.css";
 import { DayDetailPanel } from "./DayDetailPanel";
 import { TrackerPanel } from "./[id]/TrackerPanel";
 import { PlanHeroStartProvider } from "./plan-presentational";
+import { recommendedSession } from "./plan-utils";
 import { useWorkoutSession } from "./use-workout-session";
 
 export interface PlanTrackerClientProps {
@@ -128,14 +129,10 @@ export function PlanTrackerClient({
     </p>
   );
 
-  // recommendedDay: the first planned training day this week NOT yet completed
-  // (weeklyOverview.days is Monday-first, so day N maps to index N-1); falls
-  // back to the first planned session when every planned day is done or no
-  // weekly overview is available.
-  const recommendedDay =
-    program.weeklySessions.find(
-      (s) => weeklyOverview?.days[s.day - 1]?.status !== "done",
-    )?.day ?? program.weeklySessions[0]?.day;
+  // The day the hero's Start CTA begins. Shared with `PlanWeekView`, which
+  // derives the hero's session copy from the same call so the two can never
+  // disagree about which session the button starts (#411).
+  const recommendedDay = recommendedSession(program.weeklySessions, weeklyOverview?.days)?.day;
 
   // Session active → the tracker takes over the whole view (no navigation).
   // The identity header re-supplies the plan name + day, since `children`

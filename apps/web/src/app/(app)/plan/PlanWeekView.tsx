@@ -9,24 +9,27 @@
  *
  * DATA-WIRED (derived from the WorkoutProgram / WeeklyOverviewDTO props):
  *   - the 4 metric tiles (sessions / rest / est. duration / volume placeholder)
+ *   - the hero session copy: title, est. duration and exercise count of the
+ *     recommended session, plus the real current date (#411)
  *   - the limitation-warning banner
  *   - the 7-tile Mon–Sun board with real day states + week navigation
  *     (rendered by PlanTrackerClient → DayDetailPanel)
  *
  * PRESENTATIONAL ONLY (no data model yet — see plan-presentational.tsx):
- *   - the topbar actions, the hero session copy + body-map, and the side rail.
+ *   - the side rail (readiness ring, today's blocks, Coach AI).
  *
  * No "use client" directive: this is a pure server component. The only server
  * call is `getWeeklyOverviewAction` (a Server Action); the browser never sees
  * API_BASE_URL.
  */
 
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import type { PlanBranding, WorkoutProgram } from "@kinora/contracts";
+import { formatToday } from "@/lib/week-dates";
 import styles from "./plan-week-view.module.css";
 import { PlanTrackerClient } from "./PlanTrackerClient";
 import { PlanHero, PlanSideRail, PlanToolbar } from "./plan-presentational";
-import { estimateSessionMinutes, restDays } from "./plan-utils";
+import { estimateSessionMinutes, recommendedSession, restDays } from "./plan-utils";
 import { cleanLimitationNotes } from "./limitation-notes";
 import { getWeeklyOverviewAction } from "./actions";
 
@@ -75,6 +78,7 @@ export async function PlanWeekView({
   archivedAt,
 }: PlanWeekViewProps) {
   const t = await getTranslations();
+  const locale = await getLocale();
 
   // Fail-open: an unreachable/erroring overview fetch leaves `weeklyOverview`
   // undefined, and `DayDetailPanel` falls back to its Slice-4a rendering
@@ -92,6 +96,16 @@ export async function PlanWeekView({
   const hasWarnings =
     Array.isArray(program.limitationWarnings) &&
     program.limitationWarnings.length > 0;
+
+  // Hero session copy (#411) — derived from the SAME `recommendedSession` call
+  // `PlanTrackerClient` uses to pick the day its Start CTA begins, so the hero
+  // can never describe one session while the button starts another.
+  const recommended = recommendedSession(sessions, weeklyOverview?.days);
+  const heroSession = recommended && {
+    title: recommended.title,
+    durationMinutes: estimateSessionMinutes(recommended.exercises),
+    exerciseCount: recommended.exercises.length,
+  };
 
   // DATA-WIRED metrics grid — kept as literal server JSX so the values stay
   // server-derived. Passed into the (presentational) hero panel via children.
@@ -161,8 +175,11 @@ export async function PlanWeekView({
       sideRail={<PlanSideRail />}
       branding={branding}
     >
-      {/* Hero panel (presentational) wrapping the DATA-WIRED metrics grid. */}
-      <PlanHero>{metrics}</PlanHero>
+      {/* Hero panel wrapping the DATA-WIRED metrics grid. `todayLabel` is the
+          real current date via the shared dashboard formatter (#411). */}
+      <PlanHero todayLabel={formatToday(locale)} session={heroSession}>
+        {metrics}
+      </PlanHero>
 
       {/* Limitation warning banner — shown above the board when warnings present.
           Presentation-only fix (issue #250): the generator emits one localized
