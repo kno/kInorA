@@ -579,6 +579,10 @@ export async function buildApp(
       entitlementReader: billingStateReader,
       observability: observabilityLogger,
     },
+    // 17d PR D — `PUT /workout-plans/:id/program` reports every hand-edited
+    // exercise the catalog could not account for through the SAME logger every
+    // other domain event uses.
+    observability: observabilityLogger,
   });
 
   await app.register(workoutSessionRoutes, {

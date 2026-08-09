@@ -176,6 +176,20 @@ export function PlanList({
             </button>
           )}
 
+          {/* 17d PR D: editing is a ready-plan action, and it is deliberately
+              absent on an archived row — the server allows the edit, but a
+              plan you have put away is not one you are shaping. Absent, not
+              disabled: unlike Open, there is nothing to explain here. */}
+          {plan.status === "ready" && !options.archived && (
+            <a
+              href={`/plan/${plan.id}/edit`}
+              className="kin-btn kin-btn--ghost"
+              data-testid={`plan-edit-${plan.id}`}
+            >
+              {t("planEdit.openAction")}
+            </a>
+          )}
+
           {options.archived ? (
             <button
               type="button"

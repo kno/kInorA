@@ -1,0 +1,39 @@
+/**
+ * 17d PR D — the program editor. Scoped module, no new global tokens: the
+ * surface reuses `.kin-card`, `.kin-field`, `.kin-label`, `.kin-input`,
+ * `.kin-btn` and the existing `--surface-2`/`--border`/`--sp-*` custom properties
+ * that `globals.css` already defines, so the editor reads as the same app as
+ * `/plans` rather than a second visual grammar.
+ */
+
+.day {
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: var(--sp-3);
+  margin-top: var(--sp-3);
+  background: var(--surface-2);
+}
+
+.dayHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: flex-end;
+}
+
+.exercise {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: flex-end;
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border);
+  margin-top: var(--sp-2);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
