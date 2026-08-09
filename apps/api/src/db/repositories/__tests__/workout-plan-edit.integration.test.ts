@@ -77,7 +77,7 @@ describe.skipIf(!hasDb)("Program edit end-to-end (real Postgres, 17d PR D)", () 
     tenantId: string,
     userId: string,
     program: WorkoutProgram,
-  ): Promise<{ id: string; updatedAt: Date }> {
+  ): Promise<{ id: string; updatedAt: Date; version: number }> {
     const [spec] = await db
       .insert(planSpecs)
       .values({ tenantId, userId, specJson: {}, confirmed: true })
@@ -91,8 +91,12 @@ describe.skipIf(!hasDb)("Program edit end-to-end (real Postgres, 17d PR D)", () 
         status: "ready",
         programJson: program,
       })
-      .returning({ id: workoutPlans.id, updatedAt: workoutPlans.updatedAt });
-    return { id: plan!.id, updatedAt: plan!.updatedAt };
+      .returning({
+        id: workoutPlans.id,
+        updatedAt: workoutPlans.updatedAt,
+        version: workoutPlans.version,
+      });
+    return { id: plan!.id, updatedAt: plan!.updatedAt, version: plan!.version };
   }
 
   /**
@@ -131,7 +135,7 @@ describe.skipIf(!hasDb)("Program edit end-to-end (real Postgres, 17d PR D)", () 
       userId,
       plan.id,
       edited,
-      plan.updatedAt,
+      plan.version,
     );
     expect(updated).toBeDefined();
 
@@ -146,59 +150,20 @@ describe.skipIf(!hasDb)("Program edit end-to-end (real Postgres, 17d PR D)", () 
     expect(rows.map((row) => row.title)).toEqual(["Edited Exercise"]);
   });
 
-  it("accepts a version token that lost sub-millisecond precision on the way out", async () => {
-    // The bug this pins, caught by this suite's very first CI run: `updated_at`
-    // is timestamptz and Postgres stores MICROSECONDS, but the token the client
-    // sends back has been through a JS Date and an ISO-8601 string and carries
-    // milliseconds at best. A raw `updated_at = $expected` therefore matched
-    // zero rows and every edit answered 409 edit_conflict — unrecoverably, since
-    // reloading returns the same truncated value.
-    //
-    // The microsecond remainder is forced here rather than left to `now()`, so
-    // this fails deterministically if the truncation is ever removed instead of
-    // roughly 999 runs in 1000.
+  it("a fresh row carries the token the editor reads back", async () => {
+    // #421: the token is a column the editor loads verbatim, not a value it has
+    // to reconstruct from a serialised timestamp. Nothing is lost on the way
+    // out, so there is no precision class of bug left to pin.
     const { tenantId, userId } = await seedOwner();
     const plan = await seedReadyPlan(tenantId, userId, programOf(1));
-    await db.execute(
-      sql`update workout_plans set updated_at = timestamptz '2026-08-09 10:00:00.123456+00' where id = ${plan.id}`,
-    );
 
-    // Read it back the way the API does — a JS Date, truncated to .123.
     const asTheEditorSeesIt = await planRepo.findById(tenantId, userId, plan.id);
-    expect(asTheEditorSeesIt!.updatedAt.toISOString()).toBe("2026-08-09T10:00:00.123Z");
 
-    const updated = await planRepo.updateProgram(
-      tenantId,
-      userId,
-      plan.id,
-      programOf(1),
-      asTheEditorSeesIt!.updatedAt,
-    );
-
-    expect(updated).toBeDefined();
+    expect(asTheEditorSeesIt!.version).toBe(plan.version);
+    expect(plan.version).toBe(1);
   });
 
-  it("still rejects a token that is wrong by a whole millisecond", async () => {
-    // The truncation must not become a tolerance: a stale token one millisecond
-    // off is a genuine conflict and has to stay one.
-    const { tenantId, userId } = await seedOwner();
-    const plan = await seedReadyPlan(tenantId, userId, programOf(1));
-    await db.execute(
-      sql`update workout_plans set updated_at = timestamptz '2026-08-09 10:00:00.123456+00' where id = ${plan.id}`,
-    );
-
-    const offByOneMs = await planRepo.updateProgram(
-      tenantId,
-      userId,
-      plan.id,
-      programOf(1),
-      new Date("2026-08-09T10:00:00.124Z"),
-    );
-
-    expect(offByOneMs).toBeUndefined();
-  });
-
-  it("a successful edit advances updated_at, so the same token cannot be replayed", async () => {
+  it("a successful edit advances the token by exactly one", async () => {
     const { tenantId, userId } = await seedOwner();
     const plan = await seedReadyPlan(tenantId, userId, programOf(1));
 
@@ -207,27 +172,104 @@ describe.skipIf(!hasDb)("Program edit end-to-end (real Postgres, 17d PR D)", () 
       userId,
       plan.id,
       programOf(1),
-      plan.updatedAt,
+      plan.version,
     );
+
+    expect(first!.version).toBe(plan.version + 1);
+  });
+
+  it("rejects a token that is off by one in either direction", async () => {
+    // Neither a stale token nor a fabricated future one is a match. The guard
+    // is equality on a counter, not a range or a tolerance.
+    const { tenantId, userId } = await seedOwner();
+    const plan = await seedReadyPlan(tenantId, userId, programOf(1));
+
+    const tooLow = await planRepo.updateProgram(
+      tenantId,
+      userId,
+      plan.id,
+      programOf(1),
+      plan.version - 1,
+    );
+    const tooHigh = await planRepo.updateProgram(
+      tenantId,
+      userId,
+      plan.id,
+      programOf(1),
+      plan.version + 1,
+    );
+
+    expect(tooLow).toBeUndefined();
+    expect(tooHigh).toBeUndefined();
+  });
+
+  it("refuses a replayed token even when updated_at is byte-identical either side of the edit", async () => {
+    // #421, the regression this issue exists for, and the reason the token is
+    // no longer a timestamp.
+    //
+    // The old guard compared `date_trunc('milliseconds', updated_at)` against
+    // the token the caller held. It therefore protected nothing when a write
+    // landed inside the same millisecond as the token: the truncated value was
+    // unchanged afterwards, so a stale token still matched and the second write
+    // silently overwrote the first. No 409, no error, the first user's edit
+    // simply gone.
+    //
+    // Reproducing that by racing two writes would depend on timing luck — the
+    // original failure was luck, and a regression guard must not be. So the
+    // collision is FORCED, and in its worst possible form: after the first
+    // edit, `updated_at` is put back to the exact instant it held before, down
+    // to the microsecond. That is a strictly harder case than "same
+    // millisecond" — zero observable elapsed time — and it is deterministic on
+    // every run, on any machine, at any clock speed.
+    //
+    // Under the old timestamp guard this replay SUCCEEDS. Under the version
+    // guard it cannot, because `version` is not derived from the clock.
+    const { tenantId, userId } = await seedOwner();
+    const plan = await seedReadyPlan(tenantId, userId, programOf(1));
+    const frozen = "2026-08-09 10:00:00.123456+00";
+    await db.execute(
+      sql`update workout_plans set updated_at = ${frozen}::timestamptz where id = ${plan.id}`,
+    );
+
+    const first = await planRepo.updateProgram(
+      tenantId,
+      userId,
+      plan.id,
+      programOf(1),
+      plan.version,
+    );
+    expect(first).toBeDefined();
+
+    // Rewind the audit timestamp to exactly what the first writer observed.
+    await db.execute(
+      sql`update workout_plans set updated_at = ${frozen}::timestamptz where id = ${plan.id}`,
+    );
+    const [row] = await db
+      .select({ updatedAt: workoutPlans.updatedAt, version: workoutPlans.version })
+      .from(workoutPlans)
+      .where(eq(workoutPlans.id, plan.id));
+    expect(row!.updatedAt.toISOString()).toBe("2026-08-09T10:00:00.123Z");
+
     const replay = await planRepo.updateProgram(
       tenantId,
       userId,
       plan.id,
       programOf(1),
-      plan.updatedAt,
+      plan.version,
     );
 
-    expect(first!.updatedAt.getTime()).toBeGreaterThan(plan.updatedAt.getTime());
     // The losing writer of a two-tab race gets exactly this: 0 rows, which the
     // route turns into 409 edit_conflict rather than a silent overwrite.
     expect(replay).toBeUndefined();
+    // And the token did move, even though the timestamp did not.
+    expect(row!.version).toBe(plan.version + 1);
   });
 
   it("editing 4 days down to 3 makes the removed day resolve to day_not_in_plan", async () => {
     const { tenantId, userId } = await seedOwner();
     const plan = await seedReadyPlan(tenantId, userId, programOf(4));
 
-    await planRepo.updateProgram(tenantId, userId, plan.id, programOf(3), plan.updatedAt);
+    await planRepo.updateProgram(tenantId, userId, plan.id, programOf(3), plan.version);
 
     const outcome = await sessionRepo.startSession(tenantId, userId, plan.id, 4);
 
@@ -260,7 +302,7 @@ describe.skipIf(!hasDb)("Program edit end-to-end (real Postgres, 17d PR D)", () 
       userId,
       plan.id,
       edited,
-      current!.updatedAt,
+      current!.version,
     );
     expect(updated).toBeDefined();
 
@@ -281,7 +323,7 @@ describe.skipIf(!hasDb)("Program edit end-to-end (real Postgres, 17d PR D)", () 
     const edited = programOf(2);
     edited.weeklySessions[1]!.exercises[0]!.name = "Edited Day Two";
     const current = await planRepo.findById(tenantId, userId, plan.id);
-    await planRepo.updateProgram(tenantId, userId, plan.id, edited, current!.updatedAt);
+    await planRepo.updateProgram(tenantId, userId, plan.id, edited, current!.version);
 
     await sessionRepo.abandonSession(tenantId, userId, firstId!);
     const second = await sessionRepo.startSession(tenantId, userId, plan.id, 2);

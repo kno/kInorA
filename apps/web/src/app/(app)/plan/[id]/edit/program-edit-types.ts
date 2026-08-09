@@ -22,8 +22,8 @@ import type { WorkoutProgram } from "@kinora/contracts";
  * that was broken.
  */
 export type UpdateProgramResult =
-  | { kind: "ok"; program: WorkoutProgram; updatedAt: string }
-  | { kind: "conflict"; currentUpdatedAt: string | null }
+  | { kind: "ok"; program: WorkoutProgram; version: number }
+  | { kind: "conflict"; currentVersion: number | null }
   | { kind: "not_ready" }
   | { kind: "invalid"; issues: string[] }
   | { kind: "error"; message: string };

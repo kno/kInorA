@@ -3,8 +3,8 @@
  * 17d PR D — the program editor's behaviour, not its markup.
  *
  * The assertions that matter are the ones about what leaves the browser and
- * what the user is told when a save does not land: the loaded `updatedAt` must
- * come back as `expectedUpdatedAt`, a lost race must read differently from a
+ * what the user is told when a save does not land: the loaded `version` must
+ * come back as `expectedVersion`, a lost race must read differently from a
  * validation failure (the remedies differ), and a program stripped of every
  * day must never reach the network at all.
  */
@@ -25,7 +25,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const LOADED_UPDATED_AT = "2026-08-09T10:00:00.000Z";
+const LOADED_VERSION = 3;
 
 function program(): WorkoutProgram {
   return {
@@ -51,14 +51,14 @@ function renderEditor(onSave: ReturnType<typeof vi.fn>) {
       planId="plan-1"
       planName="Summer Cut"
       program={program()}
-      updatedAt={LOADED_UPDATED_AT}
+      version={LOADED_VERSION}
       onSave={onSave}
     />,
   );
 }
 
 function okResult(next: WorkoutProgram): UpdateProgramResult {
-  return { kind: "ok", program: next, updatedAt: "2026-08-09T10:05:00.000Z" };
+  return { kind: "ok", program: next, version: 4 };
 }
 
 describe("ProgramEditor (17d PR D)", () => {
@@ -72,7 +72,7 @@ describe("ProgramEditor (17d PR D)", () => {
     expect((screen.getByTestId("day-number-1") as HTMLInputElement).value).toBe("3");
   });
 
-  it("sends the loaded updatedAt back as expectedUpdatedAt", async () => {
+  it("sends the loaded version back as expectedVersion", async () => {
     const onSave = vi.fn().mockResolvedValue(okResult(program()));
     renderEditor(onSave);
 
@@ -80,7 +80,7 @@ describe("ProgramEditor (17d PR D)", () => {
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(onSave.mock.calls[0]![0]).toBe("plan-1");
-    expect(onSave.mock.calls[0]![2]).toBe(LOADED_UPDATED_AT);
+    expect(onSave.mock.calls[0]![2]).toBe(LOADED_VERSION);
   });
 
   it("submits the edited exercise name", async () => {
@@ -97,7 +97,7 @@ describe("ProgramEditor (17d PR D)", () => {
     expect(sent.weeklySessions[0]!.exercises[0]!.name).toBe("Incline Press");
   });
 
-  it("adopts the server's new updatedAt so a second save is not a self-conflict", async () => {
+  it("adopts the server's new version so a second save is not a self-conflict", async () => {
     const onSave = vi.fn().mockResolvedValue(okResult(program()));
     renderEditor(onSave);
 
@@ -108,7 +108,7 @@ describe("ProgramEditor (17d PR D)", () => {
     fireEvent.click(screen.getByTestId("save-program"));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
-    expect(onSave.mock.calls[1]![2]).toBe("2026-08-09T10:05:00.000Z");
+    expect(onSave.mock.calls[1]![2]).toBe(4);
   });
 
   it("removing a day rewrites the submitted document — it deletes nothing", async () => {
@@ -152,7 +152,7 @@ describe("ProgramEditor (17d PR D)", () => {
   it("renders a conflict distinctly from a validation error, and offers a reload", async () => {
     const onSave = vi
       .fn()
-      .mockResolvedValue({ kind: "conflict", currentUpdatedAt: "2026-08-09T11:00:00.000Z" });
+      .mockResolvedValue({ kind: "conflict", currentVersion: 7 });
     renderEditor(onSave);
 
     fireEvent.click(screen.getByTestId("save-program"));
@@ -250,7 +250,7 @@ describe("ProgramEditor (17d PR D)", () => {
       <ProgramEditor
         planId="plan-1"
         program={{ ...program(), limitationWarnings: ["Go easy on the shoulder."] }}
-        updatedAt={LOADED_UPDATED_AT}
+        version={LOADED_VERSION}
         onSave={onSave}
       />,
     );

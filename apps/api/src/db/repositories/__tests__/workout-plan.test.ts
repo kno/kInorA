@@ -122,9 +122,9 @@ function sqlContainsArchivedAtIsNull(node: unknown): boolean {
  * Flatten an `and(eq(...), eq(...))` SQL node into the `column = value`
  * equality bindings it compiles to, so a test can assert the WHERE clause is
  * actually guarded on what it claims. Used by the `updateProgram` suite below,
- * where the guard IS the feature: a missing `status`/`updated_at` binding is
- * the difference between optimistic concurrency and a silent lost update, and
- * a db double cannot enforce a WHERE clause on our behalf.
+ * where the guard IS the feature: a missing `status`/`version` binding is the
+ * difference between optimistic concurrency and a silent lost update, and a db
+ * double cannot enforce a WHERE clause on our behalf.
  */
 function sqlEqualityBindings(node: unknown): Array<{ column: string; value: unknown }> {
   const chunks = (node as { queryChunks?: unknown[] })?.queryChunks;
@@ -150,9 +150,10 @@ function sqlEqualityBindings(node: unknown): Array<{ column: string; value: unkn
 
 /**
  * Flatten a SQL node to its literal text, columns rendered as `<name>` and
- * parameters as `?`. Lets a test assert the SHAPE of a predicate that is not a
- * plain `column = value` — specifically `updateProgram`'s millisecond
- * truncation, which a db double cannot evaluate but which is load-bearing.
+ * parameters as `?`. Lets a test assert the SHAPE of a predicate rather than
+ * only its bindings — specifically that `updateProgram`'s version guard is a
+ * bare column equality with no function wrapped around it (#421), which a db
+ * double cannot evaluate but which is load-bearing.
  */
 function sqlText(node: unknown): string {
   const chunks = (node as { queryChunks?: unknown[] })?.queryChunks;
@@ -593,8 +594,8 @@ describe("WorkoutPlanRepository", () => {
     });
   });
 
-  describe("updateProgram (17d PR D)", () => {
-    const EXPECTED_UPDATED_AT = new Date("2026-08-09T10:00:00Z");
+  describe("updateProgram (17d PR D, #421)", () => {
+    const EXPECTED_VERSION = 3;
 
     const editedProgram: WorkoutProgram = {
       weeklySessions: [
@@ -619,6 +620,7 @@ describe("WorkoutPlanRepository", () => {
         errorMessage: null,
         createdAt: new Date("2026-08-01T10:00:00Z"),
         updatedAt: new Date("2026-08-09T10:05:00Z"),
+        version: EXPECTED_VERSION + 1,
         ...overrides,
       };
     }
@@ -633,7 +635,7 @@ describe("WorkoutPlanRepository", () => {
         USER_A,
         PLAN_ID,
         editedProgram,
-        EXPECTED_UPDATED_AT,
+        EXPECTED_VERSION,
       );
 
       expect(update).toHaveBeenCalledTimes(1);
@@ -643,83 +645,58 @@ describe("WorkoutPlanRepository", () => {
       expect(result).toEqual(row);
     });
 
-    it("sets program_json to the submitted program and nothing else but updated_at", async () => {
+    it("sets program_json and the next version, and nothing else but updated_at", async () => {
       const { update, set } = updateChain([updatedRow()]);
       const repo = new WorkoutPlanRepository({ update } as never);
 
-      await repo.updateProgram(TENANT_A, USER_A, PLAN_ID, editedProgram, EXPECTED_UPDATED_AT);
+      await repo.updateProgram(TENANT_A, USER_A, PLAN_ID, editedProgram, EXPECTED_VERSION);
 
       const payload = (set as ReturnType<typeof vi.fn>).mock.calls[0][0] as Record<string, unknown>;
       expect(payload.programJson).toEqual(editedProgram);
       // Notably absent: `status`. An edit must never flip a plan's lifecycle.
-      expect(Object.keys(payload).sort()).toEqual(["programJson", "updatedAt"]);
+      expect(Object.keys(payload).sort()).toEqual(["programJson", "updatedAt", "version"]);
     });
 
-    it("advances updated_at past the caller's expected value", async () => {
+    it("advances the version by exactly one (#421)", async () => {
+      // The whole guarantee in one assertion. The token is a counter, not a
+      // clock reading, so it advances by a fixed step on every successful write
+      // no matter how close together two writes land. `updated_at` used to
+      // carry this role and could not: two edits inside one millisecond left it
+      // unchanged at the precision the wire format could carry, so a stale
+      // token still matched and silently overwrote a fresh edit.
       const { update, set } = updateChain([updatedRow()]);
       const repo = new WorkoutPlanRepository({ update } as never);
 
-      await repo.updateProgram(TENANT_A, USER_A, PLAN_ID, editedProgram, EXPECTED_UPDATED_AT);
+      await repo.updateProgram(TENANT_A, USER_A, PLAN_ID, editedProgram, EXPECTED_VERSION);
 
-      const payload = (set as ReturnType<typeof vi.fn>).mock.calls[0][0] as { updatedAt: Date };
+      const payload = (set as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+        version: number;
+        updatedAt: Date;
+      };
+      expect(payload.version).toBe(EXPECTED_VERSION + 1);
+      // `updated_at` still moves, but purely as an audit timestamp now.
       expect(payload.updatedAt).toBeInstanceOf(Date);
-      expect(payload.updatedAt.getTime()).toBeGreaterThan(EXPECTED_UPDATED_AT.getTime());
     });
 
-    it("conditions the update on tenant AND user AND id AND status='ready'", async () => {
+    it("conditions the update on tenant AND user AND id AND status='ready' AND version", async () => {
+      // The version predicate is a plain equality on a column, deliberately: no
+      // `date_trunc`, no cast, no tolerance. Anything that reintroduces a
+      // function over the token — the shape the old `updated_at` guard needed —
+      // fails here first.
       const { update, where } = updateChain([updatedRow()]);
       const repo = new WorkoutPlanRepository({ update } as never);
 
-      await repo.updateProgram(TENANT_A, USER_A, PLAN_ID, editedProgram, EXPECTED_UPDATED_AT);
+      await repo.updateProgram(TENANT_A, USER_A, PLAN_ID, editedProgram, EXPECTED_VERSION);
 
-      const bindings = sqlEqualityBindings((where as ReturnType<typeof vi.fn>).mock.calls[0][0]);
-      expect(bindings).toEqual([
+      const predicate = (where as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sqlEqualityBindings(predicate)).toEqual([
         { column: "tenant_id", value: TENANT_A },
         { column: "user_id", value: USER_A },
         { column: "id", value: PLAN_ID },
         { column: "status", value: "ready" },
+        { column: "version", value: EXPECTED_VERSION },
       ]);
-    });
-
-    it("guards on updated_at TRUNCATED to milliseconds, not on raw equality", async () => {
-      // Not a stylistic preference: `updated_at` is timestamptz (microsecond
-      // precision in Postgres, populated that way by `defaultNow()`), while the
-      // caller's token has travelled through a JS Date and an ISO-8601 string
-      // and cannot carry anything finer than a millisecond. Raw equality
-      // therefore matches ZERO rows for any row with non-zero microseconds, and
-      // every edit answers 409 edit_conflict with no way to recover. The real
-      // Postgres suite proves the behaviour; this pins the mechanism so a
-      // "simplification" back to `eq(...)` fails here first.
-      const { update, where } = updateChain([updatedRow()]);
-      const repo = new WorkoutPlanRepository({ update } as never);
-
-      await repo.updateProgram(TENANT_A, USER_A, PLAN_ID, editedProgram, EXPECTED_UPDATED_AT);
-
-      const text = sqlText((where as ReturnType<typeof vi.fn>).mock.calls[0][0]);
-      expect(text).toContain("date_trunc('milliseconds', <updated_at>) = ?::timestamptz");
-    });
-
-    it("binds the caller's expectedUpdatedAt as the version parameter", async () => {
-      const { update, where } = updateChain([updatedRow()]);
-      const repo = new WorkoutPlanRepository({ update } as never);
-
-      await repo.updateProgram(TENANT_A, USER_A, PLAN_ID, editedProgram, EXPECTED_UPDATED_AT);
-
-      // The truncated predicate is built with a raw `sql` template, so the
-      // parameter sits outside `sqlEqualityBindings`' reach — assert it
-      // directly, or the guard could bind the wrong value and still look right.
-      const instants: string[] = [];
-      const collect = (node: unknown): void => {
-        const chunks = (node as { queryChunks?: unknown[] })?.queryChunks;
-        if (!Array.isArray(chunks)) return;
-        for (const chunk of chunks) {
-          if (typeof chunk === "string") instants.push(chunk);
-          collect(chunk);
-        }
-      };
-      collect((where as ReturnType<typeof vi.fn>).mock.calls[0][0]);
-
-      expect(instants).toEqual([EXPECTED_UPDATED_AT.toISOString()]);
+      expect(sqlText(predicate)).not.toContain("date_trunc");
     });
 
     it("returns undefined on 0 rows updated, without saying which guard failed", async () => {
@@ -734,13 +711,13 @@ describe("WorkoutPlanRepository", () => {
         USER_B,
         PLAN_ID,
         editedProgram,
-        EXPECTED_UPDATED_AT,
+        EXPECTED_VERSION,
       );
 
       expect(result).toBeUndefined();
     });
 
-    it("returns undefined for a stale expectedUpdatedAt (0 rows matched)", async () => {
+    it("returns undefined for a stale expectedVersion (0 rows matched)", async () => {
       const { update } = updateChain([]);
       const repo = new WorkoutPlanRepository({ update } as never);
 
@@ -749,7 +726,7 @@ describe("WorkoutPlanRepository", () => {
         USER_A,
         PLAN_ID,
         editedProgram,
-        new Date("2026-08-09T09:00:00Z"),
+        EXPECTED_VERSION - 1,
       );
 
       expect(result).toBeUndefined();
@@ -764,7 +741,7 @@ describe("WorkoutPlanRepository", () => {
         USER_A,
         PLAN_ID,
         editedProgram,
-        EXPECTED_UPDATED_AT,
+        EXPECTED_VERSION,
       );
 
       expect(result).toBeUndefined();

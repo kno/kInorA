@@ -107,4 +107,17 @@ describe("Drizzle migration journal", () => {
     expect(entry).toBeDefined();
     expect(entry?.idx).toBe(29);
   });
+
+  it("includes the #421 plan version-token migration at idx 30", () => {
+    // Adds `workout_plans.version`, the optimistic-concurrency token that
+    // replaced `updated_at`. Skipping this one silently would not break a
+    // query — it would drop the guard, and the edit route would answer 500 on
+    // every save rather than fail visibly at deploy time.
+    const journal = readJournal();
+    const entry = journal.entries.find(
+      (candidate) => candidate.tag === "0030_workout_plan_version",
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.idx).toBe(30);
+  });
 });

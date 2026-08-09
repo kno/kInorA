@@ -11,7 +11,7 @@
  *    `.passthrough()` would fail here, which is the whole point.
  * 2. Zero rows updated is ambiguous between three causes, and the route re-reads
  *    the scoped row to say which one it was instead of returning a generic
- *    failure. `edit_conflict` carries the plan's CURRENT `updatedAt`.
+ *    failure. `edit_conflict` carries the plan's CURRENT `version` (#421).
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -33,6 +33,14 @@ const PLAN_ID = "cccccccc-0000-0000-0000-000000000001";
 
 const LOADED_UPDATED_AT = new Date("2026-08-09T10:00:00.000Z");
 const SAVED_UPDATED_AT = new Date("2026-08-09T10:05:00.000Z");
+
+// #421: the optimistic-concurrency token is a monotonic integer, not a
+// timestamp. LOADED_* is what the editor read, SAVED_* is what the write
+// produced. The timestamps and the versions are deliberately independent
+// here: updated_at moving is an audit fact, and only version moving is the
+// concurrency guarantee.
+const LOADED_VERSION = 3;
+const SAVED_VERSION = LOADED_VERSION + 1;
 
 /** A name the exercise catalog resolves, so `catalogId` is server-authored. */
 const RESOLVABLE_EXERCISE = "Push-up";
@@ -88,6 +96,7 @@ function readyPlan(overrides: Record<string, unknown> = {}) {
     name: "Summer Cut",
     programJson: storedProgram,
     updatedAt: LOADED_UPDATED_AT,
+    version: LOADED_VERSION,
     ...overrides,
   };
 }
@@ -110,6 +119,7 @@ function buildPlanRepo(overrides: PlanRepoMock = {}): PlanRepoMock {
           name: "Summer Cut",
           programJson: program,
           updatedAt: SAVED_UPDATED_AT,
+          version: SAVED_VERSION,
         }),
       ),
     ...overrides,
@@ -170,7 +180,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
       url: `/workout-plans/${PLAN_ID}/program`,
       payload: {
         program: editedProgram(),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       },
     });
 
@@ -184,14 +194,14 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
 
     const res = await put(app, {
       program: editedProgram(),
-      expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+      expectedVersion: LOADED_VERSION,
     });
 
     expect(res.statusCode).toBe(404);
   });
 
   describe("step 1 — the envelope", () => {
-    it("400s when expectedUpdatedAt is missing", async () => {
+    it("400s when expectedVersion is missing", async () => {
       app = await buildTestApp();
 
       const res = await put(app, { program: editedProgram() });
@@ -202,7 +212,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
     it("400s when program is missing", async () => {
       app = await buildTestApp();
 
-      const res = await put(app, { expectedUpdatedAt: LOADED_UPDATED_AT.toISOString() });
+      const res = await put(app, { expectedVersion: LOADED_VERSION });
 
       expect(res.statusCode).toBe(400);
     });
@@ -217,7 +227,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
 
       const res = await put(app, {
         program: editedProgram(),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
         status: "failed",
       });
 
@@ -227,17 +237,19 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
       }
     });
 
-    it("400s on an unparseable expectedUpdatedAt rather than treating it as a conflict", async () => {
+    it("400s on an expectedVersion that is not an integer, rather than treating it as a conflict", async () => {
+      // A malformed token is a client bug, not a lost race: answering 409 would
+      // tell the user someone else saved first, which is a lie, and would send
+      // them to reload for no reason. #421 collapsed this into the schema —
+      // "integer >= 1" is the whole of what makes a version token usable, so
+      // there is no second hand-written check to disagree with it.
       const repo = buildPlanRepo();
       app = await buildTestApp(repo);
 
-      const res = await put(app, {
-        program: editedProgram(),
-        expectedUpdatedAt: "not-a-date",
-      });
-
-      expect(res.statusCode).toBe(400);
-      expect(res.json()).toEqual({ error: "invalid_expected_updated_at" });
+      for (const bad of ["not-a-number", 1.5, 0, -1, null]) {
+        const res = await put(app, { program: editedProgram(), expectedVersion: bad });
+        expect(res.statusCode).toBe(400);
+      }
       expect(repo.updateProgram).not.toHaveBeenCalled();
     });
   });
@@ -249,7 +261,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
 
       const res = await put(app, {
         program: { weeklySessions: [{ day: 1, title: "Push" }], limitationWarnings: [] },
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(422);
@@ -280,7 +292,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
           ],
           limitationWarnings: [],
         },
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(200);
@@ -298,7 +310,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
 
       await put(app, {
         program: editedProgram(),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       const written = repo.updateProgram!.mock.calls[0]![3] as WorkoutProgram;
@@ -311,7 +323,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
 
       await put(app, {
         program: editedProgram({ limitationWarnings: ["I am not a real warning"] }),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       const written = repo.updateProgram!.mock.calls[0]![3] as WorkoutProgram;
@@ -326,7 +338,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
 
       const res = await put(app, {
         program: { weeklySessions: [], limitationWarnings: [] },
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(422);
@@ -348,7 +360,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
             },
           ],
         }),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(422);
@@ -368,7 +380,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
             { day: 2, title: "B", exercises },
           ],
         }),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(422);
@@ -383,7 +395,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
         program: editedProgram({
           weeklySessions: [{ day: 1, title: "Push Day", exercises: [] }],
         }),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(422);
@@ -398,7 +410,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
 
       const res = await put(app, {
         program: editedProgram(),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(404);
@@ -414,7 +426,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
 
       const res = await put(app, {
         program: editedProgram(),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(409);
@@ -430,7 +442,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
 
       const res = await put(app, {
         program: editedProgram(),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(409);
@@ -443,7 +455,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
 
       const res = await put(app, {
         program: editedProgram(),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(404);
@@ -452,56 +464,59 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
   });
 
   describe("steps 6 and 7 — optimistic concurrency", () => {
-    it("passes the caller's expectedUpdatedAt through to the repository as a Date", async () => {
+    it("passes the caller's expectedVersion through to the repository as a number", async () => {
       const repo = buildPlanRepo();
       app = await buildTestApp(repo);
 
       await put(app, {
         program: editedProgram(),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
-      const passed = repo.updateProgram!.mock.calls[0]![4] as Date;
-      expect(passed).toBeInstanceOf(Date);
-      expect(passed.toISOString()).toBe(LOADED_UPDATED_AT.toISOString());
+      const passed = repo.updateProgram!.mock.calls[0]![4];
+      expect(passed).toBe(LOADED_VERSION);
+      expect(typeof passed).toBe("number");
     });
 
-    it("200s on a matching expectedUpdatedAt and returns an advanced updatedAt", async () => {
+    it("200s on a matching expectedVersion and returns the advanced version", async () => {
       app = await buildTestApp();
 
       const res = await put(app, {
         program: editedProgram(),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.id).toBe(PLAN_ID);
+      // The token the editor must adopt for its next save. Without it, a second
+      // save from the same tab would conflict with the tab's own first save.
+      expect(body.version).toBe(SAVED_VERSION);
+      expect(body.version).toBeGreaterThan(LOADED_VERSION);
       expect(body.updatedAt).toBe(SAVED_UPDATED_AT.toISOString());
-      expect(new Date(body.updatedAt).getTime()).toBeGreaterThan(LOADED_UPDATED_AT.getTime());
       expect(body.program.weeklySessions[0].exercises[0].name).toBe(RESOLVABLE_EXERCISE);
     });
 
-    it("409 edit_conflict, carrying the plan's CURRENT updatedAt, on a stale precondition", async () => {
-      const movedOn = new Date("2026-08-09T11:00:00.000Z");
+    it("409 edit_conflict, carrying the plan's CURRENT version, on a stale precondition", async () => {
+      const movedOn = 9;
       const repo = buildPlanRepo({
         updateProgram: vi.fn().mockResolvedValue(undefined),
         findPlanById: vi
           .fn()
           .mockResolvedValueOnce(readyPlan())
-          .mockResolvedValueOnce(readyPlan({ updatedAt: movedOn })),
+          .mockResolvedValueOnce(readyPlan({ version: movedOn })),
       });
       app = await buildTestApp(repo);
 
       const res = await put(app, {
         program: editedProgram(),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(409);
       expect(res.json()).toEqual({
         error: "edit_conflict",
-        currentUpdatedAt: movedOn.toISOString(),
+        currentVersion: movedOn,
       });
     });
 
@@ -517,7 +532,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
 
       await put(app, {
         program: editedProgram(),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(repo.findPlanById).toHaveBeenCalledTimes(2);
@@ -536,7 +551,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
 
       const res = await put(app, {
         program: editedProgram(),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(404);
@@ -555,7 +570,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
 
       const res = await put(app, {
         program: editedProgram(),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(409);
@@ -581,7 +596,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
             },
           ],
         }),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(200);
@@ -602,7 +617,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
 
       await put(app, {
         program: editedProgram(),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(recordEvent).not.toHaveBeenCalled();
@@ -622,7 +637,7 @@ describe("PUT /workout-plans/:id/program (17d PR D)", () => {
             },
           ],
         }),
-        expectedUpdatedAt: LOADED_UPDATED_AT.toISOString(),
+        expectedVersion: LOADED_VERSION,
       });
 
       expect(res.statusCode).toBe(200);

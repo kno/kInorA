@@ -351,8 +351,10 @@ describe("shared contracts boundary", () => {
       name?: string;
       /** 17d PR B — threaded into PlanWeekView's archived-plan indicator. */
       archivedAt?: string | null;
-      /** 17d PR D — the program editor's optimistic-concurrency token. */
+      /** 17d PR D — instant of the last write, for display/audit. */
       updatedAt?: string;
+      /** #421 — the program editor's optimistic-concurrency token. */
+      version?: number;
     }>();
   });
 
@@ -368,34 +370,40 @@ describe("shared contracts boundary", () => {
     }>();
   });
 
-  it("defines the program-edit request/response DTOs (17d PR D)", () => {
+  it("defines the program-edit request/response DTOs (17d PR D, #421)", () => {
     const request: UpdatePlanProgramRequest = {
       program: {} as WorkoutProgram,
-      expectedUpdatedAt: "2026-08-09T10:00:00.000Z",
+      expectedVersion: 3,
     };
     const response: UpdatePlanProgramResponse = {
       id: "plan-1",
       program: {} as WorkoutProgram,
       updatedAt: "2026-08-09T10:05:00.000Z",
+      version: 4,
     };
 
-    expect(request.expectedUpdatedAt).toBe("2026-08-09T10:00:00.000Z");
-    expect(response.updatedAt).toBe("2026-08-09T10:05:00.000Z");
+    // #421: the token is a NUMBER on the wire. Pinning that here is the point —
+    // it is the whole reason a same-instant replay can no longer be mistaken
+    // for a current token.
+    expect(request.expectedVersion).toBe(3);
+    expect(response.version).toBe(4);
+    expectTypeOf<UpdatePlanProgramRequest["expectedVersion"]>().toEqualTypeOf<number>();
     expectTypeOf<UpdatePlanProgramRequest>().toEqualTypeOf<{
       program: WorkoutProgram;
-      expectedUpdatedAt: string;
+      expectedVersion: number;
     }>();
     expectTypeOf<UpdatePlanProgramResponse>().toEqualTypeOf<{
       id: string;
       program: WorkoutProgram;
       updatedAt: string;
+      version: number;
     }>();
   });
 
   it("defines the edit-conflict DTO with a literal error discriminant (17d PR D)", () => {
     const conflict: PlanEditConflictResponse = {
       error: "edit_conflict",
-      currentUpdatedAt: "2026-08-09T10:05:00.000Z",
+      currentVersion: 4,
     };
 
     expect(conflict.error).toBe("edit_conflict");
@@ -404,7 +412,7 @@ describe("shared contracts boundary", () => {
     expectTypeOf<PlanEditConflictResponse["error"]>().toEqualTypeOf<"edit_conflict">();
     expectTypeOf<PlanEditConflictResponse>().toEqualTypeOf<{
       error: "edit_conflict";
-      currentUpdatedAt: string;
+      currentVersion: number;
     }>();
   });
 

@@ -20,10 +20,11 @@
  *   program document that gets saved; no row is deleted, and no session,
  *   set record, or stat is touched.
  *
- * Concurrency: the editor loads `updatedAt` and sends it back as
- * `expectedUpdatedAt`. A save that lost the race comes back as a conflict with
- * the current version, and the user is offered a reload rather than being told
- * "saved" over someone else's work.
+ * Concurrency: the editor loads `version` and sends it back as
+ * `expectedVersion` (#421 — an integer token; this used to be the `updatedAt`
+ * timestamp, which could not do the job correctly). A save that lost the race
+ * comes back as a conflict with the current version, and the user is offered a
+ * reload rather than being told "saved" over someone else's work.
  */
 import * as React from "react";
 import { useRouter } from "next/navigation";
@@ -38,13 +39,13 @@ export interface ProgramEditorProps {
   planId: string;
   planName?: string;
   program: WorkoutProgram;
-  /** The version token this editor loaded. Sent back as `expectedUpdatedAt`. */
-  updatedAt: string;
+  /** The version token this editor loaded. Sent back as `expectedVersion`. */
+  version: number;
   /** Defaults to the real Server Action. Injectable for tests. */
   onSave?: (
     planId: string,
     program: WorkoutProgram,
-    expectedUpdatedAt: string,
+    expectedVersion: number,
   ) => Promise<UpdateProgramResult>;
 }
 
@@ -75,13 +76,13 @@ export function ProgramEditor({
   planId,
   planName,
   program: initialProgram,
-  updatedAt: initialUpdatedAt,
+  version: initialVersion,
   onSave = updatePlanProgramAction,
 }: ProgramEditorProps) {
   const t = useTranslations();
   const router = useRouter();
   const [program, setProgram] = React.useState<WorkoutProgram>(initialProgram);
-  const [expectedUpdatedAt, setExpectedUpdatedAt] = React.useState(initialUpdatedAt);
+  const [expectedVersion, setExpectedVersion] = React.useState(initialVersion);
   const [state, setState] = React.useState<SaveState>({ kind: "idle" });
 
   function updateSessions(next: WorkoutSession[]) {
@@ -118,11 +119,11 @@ export function ProgramEditor({
     }
 
     setState({ kind: "saving" });
-    const result = await onSave(planId, program, expectedUpdatedAt);
+    const result = await onSave(planId, program, expectedVersion);
 
     if (result.kind === "ok") {
       setProgram(result.program);
-      setExpectedUpdatedAt(result.updatedAt);
+      setExpectedVersion(result.version);
       setState({ kind: "saved" });
       return;
     }
