@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { planSpecs, workoutPlans, workoutSessions } from "../schema.js";
 import type { Database } from "../client.js";
 import type { WorkoutProgram } from "@kinora/contracts";
@@ -18,6 +18,18 @@ export interface WorkoutPlanSummary {
    * `defaultPlanName(name, createdAt)` (single default layer).
    */
   name?: string | null;
+  /**
+   * 17d PR B. `null` when the plan is active. `undefined` on rows selected
+   * before this column existed is never produced — every projection below
+   * selects it explicitly once `includeArchived` is threaded through.
+   */
+  archivedAt?: Date | null;
+}
+
+/** Options accepted by `findAllByUser` and `listPlansWithProgress` (17d PR B). */
+export interface PlanListOptions {
+  /** Defaults to `false` — archived plans are hidden unless explicitly requested. */
+  includeArchived?: boolean;
 }
 
 /**
@@ -171,22 +183,23 @@ export class WorkoutPlanRepository {
    */
   async findAllByUser(
     tenantId: string,
-    userId: string
+    userId: string,
+    options: PlanListOptions = {}
   ): Promise<WorkoutPlanSummary[]> {
+    const conditions = [eq(workoutPlans.tenantId, tenantId), eq(workoutPlans.userId, userId)];
+    if (!options.includeArchived) {
+      conditions.push(isNull(workoutPlans.archivedAt));
+    }
     const rows = await this.db
       .select({
         id: workoutPlans.id,
         status: workoutPlans.status,
         createdAt: workoutPlans.createdAt,
         name: workoutPlans.name,
+        archivedAt: workoutPlans.archivedAt,
       })
       .from(workoutPlans)
-      .where(
-        and(
-          eq(workoutPlans.tenantId, tenantId),
-          eq(workoutPlans.userId, userId)
-        )
-      )
+      .where(and(...conditions))
       .orderBy(desc(workoutPlans.createdAt));
     return rows as WorkoutPlanSummary[];
   }
@@ -216,12 +229,18 @@ export class WorkoutPlanRepository {
    * below defaults to `completedSessions: 0` and omits `lastTrainedAt`,
    * never a `null` masquerading as a date.
    *
-   * Does NOT filter archived plans — that column does not exist until PR B.
+   * 17d PR B: `includeArchived` defaults to `false`, hiding archived plans —
+   * the SAME `archived_at IS NULL` condition `findAllByUser` appends.
    */
   async listPlansWithProgress(
     tenantId: string,
-    userId: string
+    userId: string,
+    options: PlanListOptions = {}
   ): Promise<WorkoutPlanProgressSummary[]> {
+    const conditions = [eq(workoutPlans.tenantId, tenantId), eq(workoutPlans.userId, userId)];
+    if (!options.includeArchived) {
+      conditions.push(isNull(workoutPlans.archivedAt));
+    }
     const planRows = (await this.db
       .select({
         id: workoutPlans.id,
@@ -229,15 +248,17 @@ export class WorkoutPlanRepository {
         createdAt: workoutPlans.createdAt,
         name: workoutPlans.name,
         planSpecId: workoutPlans.planSpecId,
+        archivedAt: workoutPlans.archivedAt,
       })
       .from(workoutPlans)
-      .where(and(eq(workoutPlans.tenantId, tenantId), eq(workoutPlans.userId, userId)))
+      .where(and(...conditions))
       .orderBy(desc(workoutPlans.createdAt))) as Array<{
       id: string;
       status: "generating" | "ready" | "failed";
       createdAt: Date;
       name: string | null;
       planSpecId: string;
+      archivedAt: Date | null;
     }>;
 
     if (planRows.length === 0) {
@@ -296,6 +317,7 @@ export class WorkoutPlanRepository {
         status: row.status,
         createdAt: row.createdAt,
         name: row.name,
+        archivedAt: row.archivedAt,
         ...(daysPerWeek !== undefined ? { daysPerWeek } : {}),
         completedSessions: progress?.completed ?? 0,
         ...(lastTrainedAt !== undefined ? { lastTrainedAt } : {}),
@@ -361,5 +383,43 @@ export class WorkoutPlanRepository {
       .orderBy(desc(workoutPlans.createdAt))
       .limit(1);
     return rows[0] as WorkoutPlanRecord | undefined;
+  }
+
+  /**
+   * Set or clear `archived_at` for one plan owned by the caller (17d PR B).
+   *
+   * Idempotent by construction: `archived_at` is written to `now()` only
+   * when it is currently NULL (`COALESCE(archived_at, now())` on the archive
+   * path), so a repeated archive cannot move the timestamp. Scoped by tenant
+   * AND user; 0 rows updated resolves to `undefined` (the route maps this to
+   * 404, indistinguishable from another user's plan — no IDOR leak).
+   *
+   * This is the ONLY write path for the column, and there is deliberately no
+   * delete counterpart: `workout_sessions` cascades from a plan DELETE
+   * (`schema.ts:708-710`), which would erase the training history archive
+   * exists to preserve.
+   */
+  async setArchived(
+    tenantId: string,
+    userId: string,
+    id: string,
+    archived: boolean
+  ): Promise<{ id: string; archivedAt: Date | null } | undefined> {
+    const rows = await this.db
+      .update(workoutPlans)
+      .set({
+        archivedAt: archived
+          ? sql`coalesce(${workoutPlans.archivedAt}, now())`
+          : null,
+      })
+      .where(
+        and(
+          eq(workoutPlans.tenantId, tenantId),
+          eq(workoutPlans.userId, userId),
+          eq(workoutPlans.id, id)
+        )
+      )
+      .returning({ id: workoutPlans.id, archivedAt: workoutPlans.archivedAt });
+    return rows[0] as { id: string; archivedAt: Date | null } | undefined;
   }
 }

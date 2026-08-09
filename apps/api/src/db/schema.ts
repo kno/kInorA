@@ -670,6 +670,16 @@ export const workoutPlans = pgTable(
     errorMessage: text("error_message"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * 17d PR B: when the user retired this plan from their active list. NULL
+     * = active. Orthogonal to `status` above, which is a GENERATION
+     * lifecycle — a plan may be `failed` and archived at once. Additive and
+     * nullable, like `name` above: rollback is a column drop with zero data
+     * loss, because archiving never deletes anything (`workout_sessions`
+     * cascades from this row's DELETE, which is exactly why this change
+     * introduces no DELETE route).
+     */
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
   },
   (table) => ({
     tenantSpecIdx: index("workout_plans_tenant_spec_idx").on(

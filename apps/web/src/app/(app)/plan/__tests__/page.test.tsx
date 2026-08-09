@@ -242,6 +242,27 @@ describe("PlanPage — ready state (SC-18 / T4 wiring)", () => {
     const weekView = findFirst(page, (el) => el.type === PlanWeekView);
     expect(weekView?.props?.messages).toBeUndefined();
   });
+
+  it("17d PR B — threads archivedAt from the plan detail into PlanWeekView", async () => {
+    listPlansAction.mockResolvedValue({ kind: "ok", plans: summaries });
+    getPlanStatusAction.mockResolvedValue({
+      kind: "ok",
+      plan: { ...readyPlan, archivedAt: "2026-08-01T00:00:00.000Z" },
+    });
+
+    const page = await PlanPage({ searchParams: Promise.resolve({}) });
+    const weekView = findFirst(page, (el) => el.type === PlanWeekView);
+    expect(weekView?.props?.archivedAt).toBe("2026-08-01T00:00:00.000Z");
+  });
+
+  it("17d PR B — an active plan (no archivedAt) threads undefined, not a fabricated value", async () => {
+    listPlansAction.mockResolvedValue({ kind: "ok", plans: summaries });
+    getPlanStatusAction.mockResolvedValue({ kind: "ok", plan: readyPlan });
+
+    const page = await PlanPage({ searchParams: Promise.resolve({}) });
+    const weekView = findFirst(page, (el) => el.type === PlanWeekView);
+    expect(weekView?.props?.archivedAt).toBeUndefined();
+  });
 });
 
 describe("PlanPage — generating state (SC-19)", () => {

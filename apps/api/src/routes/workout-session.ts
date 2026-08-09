@@ -150,7 +150,9 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
       const { workoutPlanId, day } = request.body;
 
       const outcome = await repo.startSession(tenantId, userId, workoutPlanId, day);
-      // undefined → plan not ready / day not in program (unchanged 404 contract).
+      // undefined → the plan is missing or not ready (unchanged 404 contract).
+      // "day not in program" is no longer part of this branch: since 17d PR B
+      // it is the typed `day_not_in_plan` outcome handled below, still at 404.
       if (!outcome) {
         return reply.code(404).send({ error: "not_found" });
       }
@@ -169,6 +171,22 @@ export const workoutSessionRoutes: FastifyPluginAsync<WorkoutSessionRoutesOption
           activeSessionId: outcome.activeSessionId,
           activeStartedAt: outcome.activeStartedAt,
         });
+      }
+
+      // 17d PR B: a NEW session was requested against an archived plan — a
+      // state conflict, the same class as active_session_conflict. In-progress
+      // sessions on the plan are unaffected (the resume branches above return
+      // before the repo's archived check ever runs).
+      if (outcome.kind === "plan_archived") {
+        return reply.code(409).send({ error: "plan_archived" });
+      }
+
+      // 17d PR B: the plan is ready but the requested day is not part of the
+      // program. Kept at 404 (not 409) so web/mobile's existing 404-branching
+      // in the offline flush taxonomy needs no status-code migration — only
+      // the body key changes.
+      if (outcome.kind === "day_not_in_plan") {
+        return reply.code(404).send({ error: "day_not_in_plan", availableDays: outcome.availableDays });
       }
 
       // started | resumed → 200 with the session snapshot (unchanged shape).

@@ -48,6 +48,8 @@ interface PlanRecord {
    * legacy callers/tests compiling.
    */
   name?: string;
+  /** 17d PR B — threaded into GET /workout-plans/:id's response DTO. */
+  archivedAt?: Date | null;
 }
 
 /** Lightweight plan summary for the list endpoint. */
@@ -57,6 +59,8 @@ interface PlanSummary {
   createdAt: Date;
   /** Resolved plan label (#93) — see PlanRecord.name. */
   name?: string;
+  /** 17d PR B. `null` when active. */
+  archivedAt?: Date | null;
 }
 
 /**
@@ -70,9 +74,10 @@ interface PlanProgressSummary extends PlanSummary {
   lastTrainedAt?: Date;
 }
 
-/** Querystring for `GET /workout-plans` (17d PR A adds `progress`). */
+/** Querystring for `GET /workout-plans` (17d PR A adds `progress`; PR B adds `includeArchived`). */
 interface WorkoutPlansQuerystring {
   progress?: string;
+  includeArchived?: string;
 }
 
 /**
@@ -134,8 +139,26 @@ export interface PlanRouteRepo {
    */
   listPlansWithProgress?(
     tenantId: string,
-    userId: string
+    userId: string,
+    options?: { includeArchived?: boolean }
   ): Promise<PlanProgressSummary[]>;
+  /**
+   * 17d PR B — set or clear `archived_at` for one plan owned by the caller.
+   * Resolves to `undefined` on another user's/tenant's plan (404 — no IDOR
+   * leak). Optional so existing tests that never exercise archive do not
+   * have to stub it; the two routes below are registered only when both
+   * methods are present.
+   */
+  archivePlan?(
+    tenantId: string,
+    userId: string,
+    id: string
+  ): Promise<{ id: string; archivedAt: Date | null } | undefined>;
+  unarchivePlan?(
+    tenantId: string,
+    userId: string,
+    id: string
+  ): Promise<{ id: string; archivedAt: Date | null } | undefined>;
   /**
    * 14a-v1.1 Slice B1 — in-place, tenant/user-scoped write of
    * `spec_json.daysPerWeek` on the caller's confirmed plan_specs row (the
@@ -1130,13 +1153,18 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
       const { tenantId, userId } = request.authContext!;
 
       if (request.query.progress && repo.listPlansWithProgress) {
-        const summaries = await repo.listPlansWithProgress(tenantId, userId);
+        // 17d PR B: `?includeArchived=1` opts a caller (the /plans show-archived
+        // toggle) into seeing archived plans too. Absent, the list stays
+        // filtered — the SAME default every other reader gets.
+        const includeArchived = request.query.includeArchived === "1";
+        const summaries = await repo.listPlansWithProgress(tenantId, userId, { includeArchived });
         return reply.code(200).send(
           summaries.map((s) => ({
             id: s.id,
             status: s.status,
             createdAt: s.createdAt,
             name: s.name,
+            archivedAt: s.archivedAt ? s.archivedAt.toISOString() : null,
             ...(s.daysPerWeek !== undefined ? { daysPerWeek: s.daysPerWeek } : {}),
             completedSessions: s.completedSessions ?? 0,
             ...(s.lastTrainedAt !== undefined ? { lastTrainedAt: s.lastTrainedAt } : {}),
@@ -1188,9 +1216,64 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         program: withCatalogLinks(plan.programJson ?? undefined),
         specId: plan.planSpecId,
         name: plan.name,
+        // 17d PR B — threaded into PlanWeekView's archived-plan indicator.
+        // Archiving does not affect this deep link's reachability, only
+        // /plans' default list visibility.
+        archivedAt: plan.archivedAt ?? null,
       });
     }
   );
+
+  // POST /workout-plans/:id/archive
+  // POST /workout-plans/:id/unarchive
+  // 17d PR B: archive toggles list visibility without deleting anything —
+  // there is deliberately no DELETE route for a plan (see the widened
+  // no-DELETE guard). Both idempotent: a repeat call returns the SAME
+  // archivedAt unchanged (see WorkoutPlanRepository.setArchived).
+  // Returns: 200 { id, archivedAt }
+  // Returns: 401 if not authenticated
+  // Returns: 404 on another user's/tenant's plan (indistinguishable from a
+  //           missing plan — no IDOR leak)
+  if (repo.archivePlan && repo.unarchivePlan) {
+    const archivePlan = repo.archivePlan.bind(repo);
+    const unarchivePlan = repo.unarchivePlan.bind(repo);
+
+    fastify.post(
+      "/workout-plans/:id/archive",
+      { preHandler: requireAuth() },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        const { tenantId, userId } = request.authContext!;
+        const { id } = request.params as { id: string };
+
+        const result = await archivePlan(tenantId, userId, id);
+        if (!result) {
+          return reply.code(404).send({ error: "not_found" });
+        }
+        return reply.code(200).send({
+          id: result.id,
+          archivedAt: result.archivedAt ? result.archivedAt.toISOString() : null,
+        });
+      }
+    );
+
+    fastify.post(
+      "/workout-plans/:id/unarchive",
+      { preHandler: requireAuth() },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        const { tenantId, userId } = request.authContext!;
+        const { id } = request.params as { id: string };
+
+        const result = await unarchivePlan(tenantId, userId, id);
+        if (!result) {
+          return reply.code(404).send({ error: "not_found" });
+        }
+        return reply.code(200).send({
+          id: result.id,
+          archivedAt: result.archivedAt ? result.archivedAt.toISOString() : null,
+        });
+      }
+    );
+  }
 
   // GET /plan-specs/:id/workout-plan
   // Returns the most recently created workout plan for a given plan spec.
