@@ -1597,7 +1597,8 @@
     "errors": {
       "conflict": "Este subdominio ya está en uso.",
       "invalid": "Revisa los colores e inténtalo de nuevo.",
-      "generic": "Algo salió mal. Inténtalo de nuevo."
+      "generic": "Algo salió mal. Inténtalo de nuevo.",
+      "loadFailed": "No se pudo cargar tu marca actual. El guardado está deshabilitado hasta que se cargue correctamente."
     }
   },
   "logs": {

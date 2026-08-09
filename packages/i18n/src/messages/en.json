@@ -1597,7 +1597,8 @@
     "errors": {
       "conflict": "This subdomain is already taken.",
       "invalid": "Please check the colors and try again.",
-      "generic": "Something went wrong. Please try again."
+      "generic": "Something went wrong. Please try again.",
+      "loadFailed": "Unable to load your current branding. Saving is disabled until this loads successfully."
     }
   },
   "logs": {
