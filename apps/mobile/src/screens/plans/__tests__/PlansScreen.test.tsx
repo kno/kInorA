@@ -93,10 +93,12 @@ function makeClient(
   };
 }
 
-function renderScreen(props: Record<string, unknown> = {}) {
+function renderScreen(
+  props: { client?: ReturnType<typeof makeClient> } & Record<string, unknown> = {},
+) {
   const navigation = { navigate: vi.fn(), reset: vi.fn(), replace: vi.fn() } as any;
   const clearSession = vi.fn(async () => {});
-  const client = (props.client as unknown) ?? makeClient();
+  const client = props.client ?? makeClient();
   let renderer!: ReactTestRenderer;
   act(() => {
     renderer = create(

@@ -409,38 +409,38 @@ Satisfies: Mobile List And Archive Parity; `06-v1-mobile-foundation` Mobile Plan
 
 ### Mobile API client — extend, do not duplicate
 
-- [ ] C.1 RED: extend `apps/mobile/src/api/__tests__/plan-status-client.test.ts` — `fetchPlanList`
+- [x] C.1 RED: extend `apps/mobile/src/api/__tests__/plan-status-client.test.ts` — `fetchPlanList`
       returns the same progress fields web receives; `archivePlan`/`unarchivePlan` round-trip
       `{ id, archivedAt }`; a 401 sets `sessionExpired` (the existing `NO_SESSION` sentinel pattern);
       a 404 carries `status: 404`; no `tenantId`/`userId` appears in any request body (identity comes
       only from the bearer token, mirroring every other method in this file)
-- [ ] C.2 GREEN: in `apps/mobile/src/api/plan-status-client.ts` — add `fetchPlanList`, `archivePlan`,
+- [x] C.2 GREEN: in `apps/mobile/src/api/plan-status-client.ts` — add `fetchPlanList`, `archivePlan`,
       `unarchivePlan`, reusing `requestInit`/`mapError`/`NO_SESSION`/`apiBaseUrl` already in this file
       rather than a new `plan-list-client.ts`; confirm C.1 is green
 
 ### The plans screen
 
-- [ ] C.3 RED: RN component test — `apps/mobile/src/screens/plans/__tests__/PlansScreen.test.tsx` —
+- [x] C.3 RED: RN component test — `apps/mobile/src/screens/plans/__tests__/PlansScreen.test.tsx` —
       renders every plan with days-per-week/completed/last-trained; archiving a row removes it from the
       list without a full screen reload; a show-archived affordance reveals archived rows; a load
       failure renders a distinguishable error state, not an empty list
-- [ ] C.4 GREEN: create `apps/mobile/src/screens/plans/{PlansScreen.tsx,PlansScreen.styles.ts,
+- [x] C.4 GREEN: create `apps/mobile/src/screens/plans/{PlansScreen.tsx,PlansScreen.styles.ts,
       messages.ts}` — `messages.ts` is id-only `defineMessages` pointing at the **existing** `plans.*`
       keys PR A/B already authored (check `packages/i18n/src/messages/en.json` for the key before
       adding anything — this file adds **no** new catalog key); confirm C.3 is green
 
 ### Navigation wiring
 
-- [ ] C.5 RED: RN component test on `HomeScreen` — a "Plans" entry button is present and navigates to
+- [x] C.5 RED: RN component test on `HomeScreen` — a "Plans" entry button is present and navigates to
       the `Plans` route; the existing "View your plan" entry into `PlanStatus` is unaffected
-- [ ] C.6 GREEN: in `apps/mobile/App.tsx` — add `Plans: undefined` to `RootStackParamList`, add
+- [x] C.6 GREEN: in `apps/mobile/App.tsx` — add `Plans: undefined` to `RootStackParamList`, add
       `"Plans"` to `PROTECTED_ROUTES`, add a `<Stack.Screen name="Plans" component={PlansScreen} />`;
       in `apps/mobile/src/screens/HomeScreen.tsx` — add one entry `Pressable` beside the existing
       History/Profile buttons (`:205-221`), following that exact pattern; confirm C.5 is green
 
 ### PR C verification
 
-- [ ] C.7 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green; `pnpm type-check`
+- [x] C.7 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green; `pnpm type-check`
       clean; `pnpm build` succeeds
 
 ---
