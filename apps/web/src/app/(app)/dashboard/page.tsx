@@ -25,6 +25,7 @@ export default async function DashboardPage() {
   const t = await getTranslations();
   const locale = await getLocale();
   const result = await getDashboardAction();
+  const loadFailed = result.kind === "error";
   const summary = result.kind === "ok" ? result.summary : undefined;
   const isEmpty =
     !summary || (summary.streak === 0 && summary.weeklyCompleted === 0 && summary.weeklyRollup.length === 0);
@@ -60,7 +61,15 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      {isEmpty ? (
+      {loadFailed ? (
+        <div className="dash-card dash-empty" role="alert" data-testid="dashboard-error">
+          <h2 className="kin-title">{t("dashboard.errorTitle")}</h2>
+          <p className="kin-text kin-muted">{t("dashboard.errorBody")}</p>
+          <a href="/dashboard" className="kin-btn kin-btn--accent">
+            {t("dashboard.retry")}
+          </a>
+        </div>
+      ) : isEmpty ? (
         <div className="dash-card dash-empty">
           <h2 className="kin-title">{t("dashboard.emptyTitle")}</h2>
           <p className="kin-text kin-muted">{t("dashboard.emptyBody")}</p>
