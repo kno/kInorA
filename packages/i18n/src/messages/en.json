@@ -1486,6 +1486,13 @@
         "title": "Logs & Observability",
         "description": "Inspect application logs and observability data."
       }
+    },
+    "eyebrow": "Backoffice",
+    "sectionEyebrow": "Platform",
+    "open": "Open",
+    "notice": {
+      "title": "Superadministration only",
+      "body": "These tools affect every organization on the platform. Changes are recorded in Logs & Observability."
     }
   },
   "tenantProvisioning": {
@@ -1529,7 +1536,20 @@
       "conflict": "This organization already has an assigned tier.",
       "invalid": "Please check the form and try again.",
       "generic": "An error occurred. Please try again."
-    }
+    },
+    "searchTitle": "Search organization",
+    "searchHint": "Search is by name. The identifier is shown on each result.",
+    "idleTitle": "Start by searching",
+    "idleDescription": "Type an organization name to see its effective tier and its assigned tier.",
+    "noResultsTitle": "No matches",
+    "detailTitle": "Organization detail",
+    "noSelectionTitle": "No organization selected",
+    "noSelectionDescription": "Pick a result on the left to see its effective tier, its billing and its assigned tier.",
+    "revokeTitle": "Revoke assigned tier",
+    "revokeDescription": "The organization returns immediately to its billing tier. Its users lose access to the assigned tier features. The action is recorded.",
+    "grantNote": "Replaces the active assignment, if any.",
+    "reasonHint": "Recorded alongside the assignment and visible in Logs & Observability.",
+    "required": "Required"
   },
   "brandingStudio": {
     "eyebrow": "White-label",
@@ -1648,12 +1668,30 @@
       "forbidden": "Access denied.",
       "invalid": "Please check the filters and try again.",
       "generic": "An error occurred. Please try again."
-    }
+    },
+    "filtersTitle": "Filters",
+    "resultsTitle": "Events",
+    "cursorNote": "Cursor-based pagination.",
+    "idle": {
+      "eyebrow": "Not queried yet",
+      "title": "No filters applied yet",
+      "description": "Events are not loaded automatically. Choose a level, an event or a time range, then press Apply. This does not mean there are no records."
+    },
+    "emptyEyebrow": "No results",
+    "emptyTitle": "No event matches these filters",
+    "emptyDescription": "The query ran successfully and returned zero events. Try widening the time range or removing a filter.",
+    "errorEyebrow": "Query error"
   },
   "aiConfig": {
     "errors": {
       "loadFailed": "Unable to load the current AI configuration. Saving is disabled until this loads successfully."
-    }
+    },
+    "keysTitle": "API keys",
+    "keysLead": "They are neither shown nor edited on this screen.",
+    "keysBody": "Keys are managed exclusively through server environment variables. Changing the provider here does not configure its credential: if the matching variable is undefined, generation will fail.",
+    "summaryTitle": "Configuration on the server",
+    "providerLabel": "Provider",
+    "modelLabel": "Model"
   },
   "platformStats": {
     "title": "Platform Statistics",
@@ -1714,7 +1752,10 @@
     "observability": {
       "errors24h": "Errors (24h)",
       "events24h": "Events (24h)"
-    }
+    },
+    "errorEyebrow": "Read error",
+    "funnelTitle": "Cohort funnel",
+    "cohortsTitle": "Weekly cohorts"
   },
   "plans": {
     "title": "Plans",

@@ -1486,6 +1486,13 @@
         "title": "Registros y observabilidad",
         "description": "Inspecciona los registros de la aplicación y los datos de observabilidad."
       }
+    },
+    "eyebrow": "Backoffice",
+    "sectionEyebrow": "Plataforma",
+    "open": "Abrir",
+    "notice": {
+      "title": "Solo superadministración",
+      "body": "Estas herramientas afectan a todas las organizaciones de la plataforma. Los cambios quedan registrados en Registros y observabilidad."
     }
   },
   "tenantProvisioning": {
@@ -1529,7 +1536,20 @@
       "conflict": "Esta organización ya tiene un nivel asignado.",
       "invalid": "Revisa el formulario e inténtalo de nuevo.",
       "generic": "Se produjo un error. Inténtalo de nuevo."
-    }
+    },
+    "searchTitle": "Buscar organización",
+    "searchHint": "La búsqueda es por nombre. El identificador se muestra en cada resultado.",
+    "idleTitle": "Empieza por buscar",
+    "idleDescription": "Escribe el nombre de una organización para ver su tier efectivo y su tier concedido.",
+    "noResultsTitle": "Sin coincidencias",
+    "detailTitle": "Detalle de la organización",
+    "noSelectionTitle": "Ninguna organización seleccionada",
+    "noSelectionDescription": "Selecciona un resultado de la izquierda para ver su tier efectivo, su facturación y su tier concedido.",
+    "revokeTitle": "Revocar tier concedido",
+    "revokeDescription": "La organización vuelve inmediatamente a su tier de facturación. Sus usuarios pierden el acceso a las funciones del tier concedido. La acción queda registrada.",
+    "grantNote": "Sustituye al tier concedido activo, si lo hay.",
+    "reasonHint": "Queda registrado junto al tier concedido y se puede consultar en Registros y observabilidad.",
+    "required": "Obligatorio"
   },
   "brandingStudio": {
     "eyebrow": "Marca blanca",
@@ -1648,12 +1668,30 @@
       "forbidden": "Acceso denegado.",
       "invalid": "Revisa los filtros e inténtalo de nuevo.",
       "generic": "Se produjo un error. Inténtalo de nuevo."
-    }
+    },
+    "filtersTitle": "Filtros",
+    "resultsTitle": "Eventos",
+    "cursorNote": "Paginación por cursor.",
+    "idle": {
+      "eyebrow": "Sin consultar",
+      "title": "Aún no has aplicado ningún filtro",
+      "description": "Los eventos no se cargan solos: elige un nivel, un evento o un rango temporal y pulsa Aplicar. Esto no significa que no haya registros."
+    },
+    "emptyEyebrow": "Sin resultados",
+    "emptyTitle": "Ningún evento coincide con estos filtros",
+    "emptyDescription": "La consulta se ha ejecutado correctamente y ha devuelto cero eventos. Prueba a ampliar el rango temporal o a quitar algún filtro.",
+    "errorEyebrow": "Error de consulta"
   },
   "aiConfig": {
     "errors": {
       "loadFailed": "No se pudo cargar la configuración de IA actual. El guardado está deshabilitado hasta que se cargue correctamente."
-    }
+    },
+    "keysTitle": "Claves de API",
+    "keysLead": "No se muestran ni se editan en esta pantalla.",
+    "keysBody": "Las claves se gestionan exclusivamente mediante variables de entorno del servidor. Cambiar el proveedor aquí no configura su credencial: si la variable correspondiente no está definida, la generación fallará.",
+    "summaryTitle": "Configuración en el servidor",
+    "providerLabel": "Proveedor",
+    "modelLabel": "Modelo"
   },
   "platformStats": {
     "title": "Estadísticas de la plataforma",
@@ -1714,7 +1752,10 @@
     "observability": {
       "errors24h": "Errores (24 h)",
       "events24h": "Eventos (24 h)"
-    }
+    },
+    "errorEyebrow": "Error de lectura",
+    "funnelTitle": "Embudo de la cohorte",
+    "cohortsTitle": "Cohortes semanales"
   },
   "plans": {
     "title": "Planes",
