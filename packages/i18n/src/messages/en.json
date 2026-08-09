@@ -27,7 +27,8 @@
     "more": "More",
     "logout": "Log out",
     "admin": "Admin",
-    "branding": "Branding"
+    "branding": "Branding",
+    "plans": "Plans"
   },
   "hero": {
     "eyebrow": "AI Coach",
@@ -263,6 +264,10 @@
         "title": "No plan yet",
         "desc": "Create your personalized workout plan to get started.",
         "cta": "Create your plan"
+      },
+      "loadError": {
+        "title": "Couldn't load your plans",
+        "desc": "Something went wrong while loading your plans. Please try again."
       }
     },
     "selector": {
@@ -1703,6 +1708,28 @@
     "observability": {
       "errors24h": "Errors (24h)",
       "events24h": "Events (24h)"
+    }
+  },
+  "plans": {
+    "title": "Plans",
+    "description": "Every plan you have ever generated, in one place.",
+    "empty": {
+      "title": "No plans yet",
+      "desc": "Create your personalized workout plan to get started.",
+      "cta": "Create your plan"
+    },
+    "error": "Couldn't load your plans. Please try again.",
+    "list": {
+      "currentlyFollowing": "Currently following",
+      "daysPerWeek": "{days} days/week",
+      "completedSessions": "{count} completed",
+      "lastTrained": "Last trained {date}",
+      "neverTrained": "Never trained",
+      "open": "Open",
+      "openDisabled": {
+        "generating": "This plan is still generating",
+        "failed": "This plan failed to generate"
+      }
     }
   }
 }

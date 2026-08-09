@@ -1,0 +1,40 @@
+/**
+ * 17d PR A — /plans list. Scoped module (no new global tokens): the
+ * age-coloring below reuses the SAME `--success`/`--warning`/`--muted`
+ * custom properties `globals.css` already defines, per the design's grep-
+ * first instruction. `.kin-btn--primary` renders transparent in this repo
+ * (undefined class) — every button here uses `.kin-btn--accent` instead.
+ */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--sp-3);
+}
+
+/* The plan currently being followed spans two columns of the grid. */
+.currentPlan {
+  grid-column: span 2;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-pill);
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.lastTrainedRecent {
+  color: var(--success);
+}
+
+.lastTrainedAging {
+  color: var(--warning);
+}
+
+.lastTrainedStale {
+  color: var(--muted);
+}

@@ -203,6 +203,20 @@ export interface WorkoutPlanSummary {
   status: string;
   createdAt: string;
   name?: string;
+  /**
+   * 17d PR A. `plan_specs.spec_json.daysPerWeek`, `?progress=1` only.
+   * Absent — never 0 — when the spec row is missing or its JSON has no
+   * usable number: "unknown" and "trains zero days a week" are different
+   * statements and the UI renders them differently.
+   */
+  daysPerWeek?: number;
+  /** 17d PR A, `?progress=1` only. Count of `status = 'completed'` sessions. */
+  completedSessions?: number;
+  /**
+   * 17d PR A, `?progress=1` only. ISO-8601 instant of the most recent
+   * completed session; absent — never a fabricated date — when never trained.
+   */
+  lastTrainedAt?: string;
 }
 
 /**
