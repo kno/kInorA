@@ -1286,6 +1286,10 @@ export const planRoutes: FastifyPluginAsync<PlanRoutesOptions> = async (
         // Archiving does not affect this deep link's reachability, only
         // /plans' default list visibility.
         archivedAt: plan.archivedAt ?? null,
+        // 17d PR D — the optimistic-concurrency token the program editor loads
+        // and sends back as `expectedUpdatedAt`. Without it the editor has no
+        // way to detect that another tab saved first.
+        updatedAt: plan.updatedAt?.toISOString(),
       });
     }
   );
