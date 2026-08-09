@@ -10,10 +10,9 @@
  * No `defaultMessage` anywhere: a local fallback string would be a second,
  * silently-diverging copy of text the catalog owns.
  *
- * ORDERING DEPENDENCY: the `plans.archive.*` and `plan.archived.badge` keys
- * are authored by 17d PR B (#403), which is still open. Until it merges,
- * those ids resolve to nothing and react-intl renders the id itself. The
- * fix is to merge #403 first — not to inline the strings here.
+ * The `plans.archive.*` and `plan.archived.badge` keys were authored by 17d
+ * PR B (#403) and are on `main`; note that the archived badge sits in the
+ * `plan.archived.*` namespace, not `plans.archive.*`.
  */
 
 import { defineMessages } from "react-intl";

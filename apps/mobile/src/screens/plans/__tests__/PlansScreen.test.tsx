@@ -39,29 +39,7 @@ const PlansScreen = (await import("../PlansScreen.js")).default;
 
 const NOW = new Date("2026-08-09T12:00:00.000Z");
 
-/**
- * The `plans.archive.*` / `plan.archived.*` copy is authored by 17d PR B
- * (#403) and is not on `main` yet, so `resolveMessages("en")` cannot resolve
- * it on this branch. These entries are transcribed from that PR's `en.json`
- * so the archive assertions below test REAL copy rather than raw message ids.
- * They are merged UNDER the real catalog, so the moment #403 lands the
- * catalog wins and this fixture can be deleted outright.
- */
-const PENDING_PR_B_COPY: Record<string, string> = {
-  "plans.archive.action": "Archive",
-  "plans.archive.confirmTitle": "Archive this plan?",
-  "plans.archive.confirmBody":
-    "Archiving hides this plan from your list. Every session and stat is kept — nothing is deleted, and you can unarchive it anytime.",
-  "plans.archive.confirm": "Archive",
-  "plans.archive.cancel": "Cancel",
-  "plans.archive.unarchiveAction": "Unarchive",
-  "plans.archive.showToggle": "Show archived ({count})",
-  "plans.archive.hideToggle": "Hide archived",
-  "plans.archive.sectionHeading": "Archived plans",
-  "plan.archived.badge": "Archived",
-};
-
-const enMessages = { ...PENDING_PR_B_COPY, ...resolveMessages("en") };
+const enMessages = resolveMessages("en");
 
 const activePlan: PlanListItem = {
   id: "plan_9",
@@ -241,7 +219,7 @@ describe("PlansScreen (17d PR C — mobile plans list + archive)", () => {
     expect(rendered).toContain("Archive this plan?");
     // The reassurance is the reason this is an archive and not a delete: it is
     // carried whole, not trimmed to a shorter paraphrase.
-    expect(rendered).toContain(PENDING_PR_B_COPY["plans.archive.confirmBody"]);
+    expect(rendered).toContain(enMessages["plans.archive.confirmBody"]);
     expect(rendered).toContain("nothing is deleted");
   });
 
