@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { screen, fireEvent, within } from "@testing-library/react";
 import { renderWithIntl } from "@/test-utils/render-with-intl";
 import { createServerTranslator } from "@/test-utils/server-translator";
@@ -25,6 +25,7 @@ vi.mock("../actions", () => ({
 // `server-translator.ts` for why this is mocked rather than run for real.
 vi.mock("next-intl/server", () => ({
   getTranslations: async () => createServerTranslator(),
+  getLocale: async () => "en",
 }));
 
 // --- React tree inspection helpers ---
@@ -306,10 +307,12 @@ describe("PlanWeekView — interactive day grid + start CTA (#93 Slice 3)", () =
 
     // The per-day Start CTA is wired (proves PlanTrackerClient passed
     // onStartWorkout down); it appears inside the detail panel once a day is
-    // opened. Scoped to the panel because the presentational hero renders its
-    // own (unrelated) Start button.
+    // opened. Scoped to the panel because the hero renders its own Start CTA
+    // (which starts the RECOMMENDED day, not the opened one).
     expect(document.getElementById("day-detail-panel")).toBeNull();
-    fireEvent.click(screen.getByText("Push Day"));
+    // Addressed by the tile's aria-label: "Push Day" is now also the hero
+    // title, since the hero describes the same session the plan recommends.
+    fireEvent.click(screen.getByRole("button", { name: "Day 1" }));
     const panel = document.getElementById("day-detail-panel");
     expect(panel).not.toBeNull();
     expect(within(panel!).getByRole("button", { name: "Start session" })).toBeDefined();
@@ -441,5 +444,109 @@ describe("PlanWeekView — trainer branding render (15b-v2 S4)", () => {
     // No trainer byline, and no --plan-accent custom property in the DOM.
     expect(container.querySelector(".brandingByline")).toBeNull();
     expect(accentValue(container)).toBe("");
+  });
+});
+
+describe("PlanWeekView — hero is the real session, not mockup copy (kno/kInorA#411)", () => {
+  // The hero used to render literal catalog strings ("Today · Fri 12",
+  // "68 min", "6 exercises", "Upper-body strength") as if they were the user's
+  // data. Each assertion below is triangulated against a SECOND fixture, so a
+  // regression to any hardcoded string fails rather than coincidentally passing.
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Freeze only `Date` — the component under test is awaited, so timers must keep working. */
+  function freezeClock(iso: string): void {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(iso));
+  }
+
+  it("the date pill follows a frozen clock", async () => {
+    freezeClock("2026-08-09T10:00:00Z"); // Sunday
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
+    renderWithIntl(<>{view}</>);
+
+    expect(screen.getByText("Today · Sunday, August 9")).toBeDefined();
+    // The mockup string that shipped to production must be gone.
+    expect(screen.queryByText(/Fri 12/)).toBeNull();
+  });
+
+  it("the date pill follows the clock to a different day (triangulation)", async () => {
+    freezeClock("2026-12-25T10:00:00Z"); // Friday
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
+    renderWithIntl(<>{view}</>);
+
+    expect(screen.getByText("Today · Friday, December 25")).toBeDefined();
+  });
+
+  it("the hero title is the recommended session's real title", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
+    renderWithIntl(<>{view}</>);
+
+    // No weekly overview (mocked to error) → recommended is the first session.
+    expect(screen.getByRole("heading", { level: 2, name: "Push Day" })).toBeDefined();
+    expect(screen.queryByText("Upper-body strength")).toBeNull();
+  });
+
+  it("the hero title triangulates to a different program's first session", async () => {
+    const view = await PlanWeekView({ program: fiveSessionProgram, planId: "plan-x" });
+    renderWithIntl(<>{view}</>);
+
+    expect(screen.getByRole("heading", { level: 2, name: "Day 1 session" })).toBeDefined();
+  });
+
+  it("the meta pills carry the recommended session's real duration and exercise count", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
+    renderWithIntl(<>{view}</>);
+
+    // "Push Day": Bench 4×(90+30) + OHP 3×(60+30) = 750s → 13 min, 2 exercises.
+    expect(screen.getByText("13 min")).toBeDefined();
+    expect(screen.getByText("2 exercises")).toBeDefined();
+    expect(screen.queryByText("68 min")).toBeNull();
+    expect(screen.queryByText("6 exercises")).toBeNull();
+  });
+
+  it("the meta pills triangulate on a different program, and the count is pluralized", async () => {
+    const view = await PlanWeekView({ program: fiveSessionProgram, planId: "plan-x" });
+    renderWithIntl(<>{view}</>);
+
+    // "Day 1 session": Squat 3×(120+30) = 450s → 8 min, 1 exercise (singular).
+    expect(screen.getByText("8 min")).toBeDefined();
+    expect(screen.getByText("1 exercise")).toBeDefined();
+  });
+
+  it("says so plainly when the program has no sessions, instead of inventing one", async () => {
+    const view = await PlanWeekView({
+      program: { weeklySessions: [], limitationWarnings: [] },
+      planId: "plan-x",
+    });
+    renderWithIntl(<>{view}</>);
+
+    expect(screen.getByRole("heading", { level: 2, name: "No session planned" })).toBeDefined();
+    // No invented duration/exercise pills alongside the real metrics grid.
+    expect(screen.queryByText(/\bmin$/)).toBeNull();
+  });
+
+  it("renders no control that claims an action it cannot perform", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
+    renderWithIntl(<>{view}</>);
+
+    for (const gone of ["Move to Saturday", "Rebalance week"]) {
+      expect(screen.queryByRole("button", { name: gone })).toBeNull();
+      expect(screen.queryByText(gone)).toBeNull();
+    }
+    // The muscle body-map asserted a focus the plan never supplied.
+    expect(screen.queryByText("Push active")).toBeNull();
+    expect(screen.queryByText("Chest · shoulders · triceps")).toBeNull();
+  });
+
+  it("keeps 'Edit plan' — the one topbar action that is real", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
+    const { container } = renderWithIntl(<>{view}</>);
+
+    const edit = container.querySelector('a[href="/create-plan"]');
+    expect(edit?.textContent).toBe("Edit plan");
   });
 });

@@ -481,7 +481,7 @@ describe("PlanTrackerClient — hero primary CTA starts the recommended session"
 
     renderWithIntl(
       <PlanTrackerClient program={program} planId="plan-a">
-        <PlanHero />
+        <PlanHero todayLabel="Sunday, August 9" session={{ title: "Push Day", durationMinutes: 13, exerciseCount: 2 }} />
       </PlanTrackerClient>,
     );
 
@@ -493,10 +493,22 @@ describe("PlanTrackerClient — hero primary CTA starts the recommended session"
     });
     // No weekly overview → recommended day is the first planned session (day 1).
     expect(startWorkoutSessionAction).toHaveBeenCalledWith("plan-a", 1);
-    // The presentational toast must NOT fire when a real handler is wired.
-    expect(
-      screen.queryByText("Session started. Focus on clean reps."),
-    ).toBeNull();
+  });
+
+  it("renders NO start CTA when no real start handler is published (kno/kInorA#411)", () => {
+    // Outside PlanTrackerClient there is no HeroStartContext value. The CTA
+    // used to stay and raise a "Session started" toast — a button reporting a
+    // session it never started. A missing button is honest; a lying one is not.
+    renderWithIntl(
+      <PlanHero
+        todayLabel="Sunday, August 9"
+        session={{ title: "Push Day", durationMinutes: 13, exerciseCount: 2 }}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Start session" })).toBeNull();
+    // The hero still tells the truth about the session it describes.
+    expect(screen.getByRole("heading", { level: 2, name: "Push Day" })).toBeDefined();
   });
 
   it("skips already-completed days: recommends the first non-done planned day", async () => {
@@ -524,7 +536,7 @@ describe("PlanTrackerClient — hero primary CTA starts the recommended session"
 
     renderWithIntl(
       <PlanTrackerClient program={program} planId="plan-a" weeklyOverview={weeklyOverview}>
-        <PlanHero />
+        <PlanHero todayLabel="Sunday, August 9" session={{ title: "Push Day", durationMinutes: 13, exerciseCount: 2 }} />
       </PlanTrackerClient>,
     );
 
