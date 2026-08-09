@@ -567,6 +567,11 @@ export default function WorkoutTrackerScreen({
         activeSessionId: result.activeSessionId ?? "",
         activeStartedAt: result.activeStartedAt ?? "",
       });
+    } else if (result.message === "plan_archived") {
+      // 17d: the plan was archived (409). The refusal is a state the user
+      // changes on the plans list, not a transient failure — so it gets its
+      // own message and NO retry, which could never succeed.
+      setErrorKey("errorPlanArchived");
     } else {
       setErrorKey(sessionId ? "errorLoad" : "errorStart");
     }
@@ -1084,18 +1089,28 @@ export default function WorkoutTrackerScreen({
   }
 
   if (errorKey && !session) {
-    const errorMsg = errorKey === "errorLoad" ? M.errorLoad : M.errorStart;
+    const planArchived = errorKey === "errorPlanArchived";
+    const errorMsg = planArchived
+      ? M.errorPlanArchived
+      : errorKey === "errorLoad"
+        ? M.errorLoad
+        : M.errorStart;
     return (
       <View style={[styles.centered, { paddingTop: insets.top }]}>
         <StatusBar style="light" />
         <Text style={[styles.stateText, styles.errorText]}>
           <FormattedMessage {...errorMsg} />
         </Text>
-        <Pressable style={styles.secondaryBtn} onPress={loadSession} accessibilityRole="button">
-          <Text style={styles.secondaryBtnText}>
-            <FormattedMessage {...M.retry} />
-          </Text>
-        </Pressable>
+        {/* An archived plan cannot be started however many times it is
+            retried, so this state offers no retry — the message says what
+            to change instead. */}
+        {!planArchived && (
+          <Pressable style={styles.secondaryBtn} onPress={loadSession} accessibilityRole="button">
+            <Text style={styles.secondaryBtnText}>
+              <FormattedMessage {...M.retry} />
+            </Text>
+          </Pressable>
+        )}
       </View>
     );
   }

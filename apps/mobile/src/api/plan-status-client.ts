@@ -28,9 +28,17 @@
  *   POST /plan-specs/:id/regenerate {}  → 202 { planId, status } | 403 (quota) | 404
  *   POST /plan-specs/:id/adapt      {}  → 202 { planId, status } | 409 no_adaptation | 403 (quota) | 404
  *   GET  /progress/dashboard            → 200 DashboardSummaryDTO (incl. optional `adaptation`)
+ *   GET  /workout-plans?progress=1      → 200 PlanListItem[] (17d PR C — the plans list)
+ *   POST /workout-plans/:id/archive {}  → 200 { id, archivedAt } | 404
+ *   POST /workout-plans/:id/unarchive {}→ 200 { id, archivedAt: null } | 404
  */
 
-import type { DashboardSummaryDTO, PlanBranding, WorkoutProgram } from "@kinora/contracts";
+import type {
+  DashboardSummaryDTO,
+  PlanBranding,
+  WorkoutPlanSummary,
+  WorkoutProgram,
+} from "@kinora/contracts";
 
 /**
  * Default token source. Imported lazily so this module's graph does not pull in
@@ -330,4 +338,129 @@ export async function fetchDashboardSummary(
     return { kind: "error", message: "invalid_response" };
   }
   return { kind: "ok", summary: body };
+}
+
+/* ── 17d PR C: the plans list and its archive/unarchive actions ── */
+
+/**
+ * One row of the `?progress=1` plan-list projection — the SAME payload the web
+ * `/plans` surface consumes (`fetchUserPlansWithProgress`), not a parallel
+ * mobile shape.
+ *
+ * `archivedAt` is written as a local intersection rather than read off
+ * `WorkoutPlanSummary` because the shared contract only gains that field in
+ * 17d PR B; the intersection collapses to a no-op once it lands, and PR C
+ * touches no package outside `apps/mobile`.
+ */
+export type PlanListItem = WorkoutPlanSummary & {
+  /** ISO-8601 instant the plan was archived; `null`/absent while it is active. */
+  archivedAt?: string | null;
+};
+
+export type FetchPlanListResult =
+  | { kind: "ok"; plans: PlanListItem[] }
+  | PlanStatusError;
+
+/** Result of an archive/unarchive round-trip: `200 { id, archivedAt }` or a typed error. */
+export type PlanArchiveResult =
+  | { kind: "ok"; id: string; archivedAt: string | null }
+  | PlanStatusError;
+
+export interface PlanListOptions extends ClientOptions {
+  /** Include archived plans in the response (the show-archived affordance). */
+  includeArchived?: boolean;
+}
+
+/**
+ * Fetch every plan with its progress projection via
+ * `GET /workout-plans?progress=1`, adding `&includeArchived=1` for the
+ * show-archived view.
+ *
+ * A failure NEVER degrades to an empty list: a non-2xx, an unreachable API and
+ * a non-array body each map to a distinct typed error, so `PlansScreen` can
+ * tell "we could not load your plans" apart from "you have no plans" — the
+ * collapsed-error defect #378/#396 closed across six other surfaces.
+ */
+export async function fetchPlanList(
+  options: PlanListOptions = {},
+): Promise<FetchPlanListResult> {
+  const token = await (options.getToken ?? defaultGetToken)();
+  if (!token) return NO_SESSION;
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const query = options.includeArchived ? "?progress=1&includeArchived=1" : "?progress=1";
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}/workout-plans${query}`, requestInit("GET", token));
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (!res.ok) return mapError(res, "fetch_plans_failed");
+
+  const body = (await res.json().catch(() => null)) as PlanListItem[] | null;
+  if (!Array.isArray(body)) {
+    return { kind: "error", message: "invalid_response" };
+  }
+  return { kind: "ok", plans: body };
+}
+
+/** Shared POST helper for the archive/unarchive endpoints (both send `{}`). */
+async function postArchive(
+  path: string,
+  fallback: string,
+  options: ClientOptions,
+): Promise<PlanArchiveResult> {
+  const token = await (options.getToken ?? defaultGetToken)();
+  if (!token) return NO_SESSION;
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}${path}`, requestInit("POST", token, {}));
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (!res.ok) return mapError(res, fallback);
+
+  const body = (await res.json().catch(() => null)) as {
+    id?: string;
+    archivedAt?: string | null;
+  } | null;
+  if (!body || typeof body.id !== "string") {
+    return { kind: "error", message: "invalid_response" };
+  }
+  return { kind: "ok", id: body.id, archivedAt: body.archivedAt ?? null };
+}
+
+/**
+ * Archive a plan via `POST /workout-plans/:planId/archive` → `200 { id,
+ * archivedAt }`. Idempotent server-side: archiving an already-archived plan
+ * returns its existing timestamp unchanged. Archiving hides a plan from the
+ * default list and refuses NEW sessions on it; it destroys nothing — every
+ * logged session, PR and streak survives, which is exactly why this is an
+ * archive and not a delete.
+ */
+export function archivePlan(
+  planId: string,
+  options: ClientOptions = {},
+): Promise<PlanArchiveResult> {
+  return postArchive(`/workout-plans/${planId}/archive`, "archive_failed", options);
+}
+
+/**
+ * Restore an archived plan via `POST /workout-plans/:planId/unarchive` → `200
+ * { id, archivedAt: null }`, idempotent the same way. A `404` (unknown or
+ * another user's plan — indistinguishable by design) carries `status: 404`.
+ */
+export function unarchivePlan(
+  planId: string,
+  options: ClientOptions = {},
+): Promise<PlanArchiveResult> {
+  return postArchive(`/workout-plans/${planId}/unarchive`, "unarchive_failed", options);
 }

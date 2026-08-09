@@ -2,12 +2,16 @@ import { describe, it, expect, vi } from "vitest";
 import type { DashboardSummaryDTO, WorkoutProgram } from "@kinora/contracts";
 import {
   adaptPlan,
+  archivePlan,
   fetchDashboardSummary,
   fetchLatestPlanForSpec,
+  fetchPlanList,
   fetchPlanStatus,
   fetchTrainerPlan,
   regeneratePlan,
+  unarchivePlan,
   type FetchLike,
+  type PlanListItem,
 } from "../plan-status-client";
 
 const token = async () => "tok_123";
@@ -46,6 +50,27 @@ const readyPlan = {
   name: "My Plan",
   program: { days: [] } as unknown as WorkoutProgram,
 };
+
+/** The `?progress=1` list projection, exactly as `/plans` receives it on web. */
+const planListRows: PlanListItem[] = [
+  {
+    id: "plan_9",
+    status: "ready",
+    createdAt: "2026-07-01T09:00:00.000Z",
+    name: "My Plan",
+    daysPerWeek: 4,
+    completedSessions: 7,
+    lastTrainedAt: "2026-07-28T18:30:00.000Z",
+  },
+  {
+    id: "plan_8",
+    status: "ready",
+    createdAt: "2026-05-01T09:00:00.000Z",
+    name: "Old Plan",
+    completedSessions: 0,
+    archivedAt: "2026-06-01T09:00:00.000Z",
+  },
+];
 
 const lowSummary: DashboardSummaryDTO = {
   streak: 0,
@@ -468,6 +493,184 @@ describe("plan-status-client", () => {
         fetchImpl: mockFetch(jsonResponse(null)),
       });
       expect(res).toEqual({ kind: "error", message: "invalid_response" });
+    });
+  });
+
+  // ── 17d PR C: the plans list + archive/unarchive ──
+
+  describe("fetchPlanList", () => {
+    it("returns a sessionExpired error without calling fetch when no token is stored", async () => {
+      const fetchImpl = vi.fn<FetchLike>();
+      const res = await fetchPlanList({ getToken: async () => null, fetchImpl });
+      expect(res).toEqual({
+        kind: "error",
+        message: "no_session",
+        sessionExpired: true,
+      });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it("GETs /workout-plans?progress=1 and returns the same progress fields web receives", async () => {
+      const fetchImpl = mockFetch(jsonResponse(planListRows));
+      const res = await fetchPlanList({
+        getToken: token,
+        apiBaseUrl: "http://api.test",
+        fetchImpl,
+      });
+      expect(res).toEqual({ kind: "ok", plans: planListRows });
+      const { url, init } = firstCall(fetchImpl);
+      expect(url).toBe("http://api.test/workout-plans?progress=1");
+      expect(init.method).toBe("GET");
+      expect(init.headers.authorization).toBe("Bearer tok_123");
+      // A GET never sends a body → no tenantId/userId can leak from the client.
+      expect(init.body).toBeUndefined();
+    });
+
+    it("opts into archived rows with includeArchived, keeping progress=1", async () => {
+      const fetchImpl = mockFetch(jsonResponse(planListRows));
+      await fetchPlanList({
+        getToken: token,
+        apiBaseUrl: "http://api.test",
+        includeArchived: true,
+        fetchImpl,
+      });
+      expect(firstCall(fetchImpl).url).toBe(
+        "http://api.test/workout-plans?progress=1&includeArchived=1",
+      );
+    });
+
+    it("maps a 401 to a sessionExpired error", async () => {
+      const res = await fetchPlanList({
+        getToken: token,
+        fetchImpl: mockFetch(jsonResponse({ error: "unauthorized" }, 401)),
+      });
+      expect(res).toEqual({
+        kind: "error",
+        message: "unauthorized",
+        status: 401,
+        sessionExpired: true,
+      });
+    });
+
+    it("maps a 500 to an error carrying the status (never an empty list)", async () => {
+      const res = await fetchPlanList({
+        getToken: token,
+        fetchImpl: mockFetch(jsonResponse({ error: "internal_error" }, 500)),
+      });
+      expect(res).toEqual({
+        kind: "error",
+        message: "internal_error",
+        status: 500,
+      });
+    });
+
+    it("maps a non-array 200 to invalid_response rather than an empty list", async () => {
+      const res = await fetchPlanList({
+        getToken: token,
+        fetchImpl: mockFetch(jsonResponse({ plans: [] })),
+      });
+      expect(res).toEqual({ kind: "error", message: "invalid_response" });
+    });
+
+    it("maps a network throw to api_unreachable", async () => {
+      const res = await fetchPlanList({
+        getToken: token,
+        fetchImpl: mockFetch(() => {
+          throw new Error("offline");
+        }),
+      });
+      expect(res).toEqual({ kind: "error", message: "api_unreachable" });
+    });
+  });
+
+  describe("archivePlan / unarchivePlan", () => {
+    it("POSTs /workout-plans/:id/archive and round-trips { id, archivedAt }", async () => {
+      const fetchImpl = mockFetch(
+        jsonResponse({ id: "plan_9", archivedAt: "2026-08-01T10:00:00.000Z" }),
+      );
+      const res = await archivePlan("plan_9", {
+        getToken: token,
+        apiBaseUrl: "http://api.test",
+        fetchImpl,
+      });
+      expect(res).toEqual({
+        kind: "ok",
+        id: "plan_9",
+        archivedAt: "2026-08-01T10:00:00.000Z",
+      });
+      const { url, init } = firstCall(fetchImpl);
+      expect(url).toBe("http://api.test/workout-plans/plan_9/archive");
+      expect(init.method).toBe("POST");
+      expect(init.headers.authorization).toBe("Bearer tok_123");
+      // Server-authoritative: identity comes from the bearer token only.
+      expect(JSON.parse(init.body!)).toEqual({});
+    });
+
+    it("POSTs /workout-plans/:id/unarchive and round-trips a null archivedAt", async () => {
+      const fetchImpl = mockFetch(jsonResponse({ id: "plan_9", archivedAt: null }));
+      const res = await unarchivePlan("plan_9", {
+        getToken: token,
+        apiBaseUrl: "http://api.test",
+        fetchImpl,
+      });
+      expect(res).toEqual({ kind: "ok", id: "plan_9", archivedAt: null });
+      const { url, init } = firstCall(fetchImpl);
+      expect(url).toBe("http://api.test/workout-plans/plan_9/unarchive");
+      expect(init.method).toBe("POST");
+      expect(JSON.parse(init.body!)).toEqual({});
+    });
+
+    it("returns a sessionExpired error without calling fetch when no token is stored", async () => {
+      const fetchImpl = vi.fn<FetchLike>();
+      const res = await archivePlan("plan_9", {
+        getToken: async () => null,
+        fetchImpl,
+      });
+      expect(res).toEqual({
+        kind: "error",
+        message: "no_session",
+        sessionExpired: true,
+      });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it("maps a 401 to a sessionExpired error", async () => {
+      const res = await archivePlan("plan_9", {
+        getToken: token,
+        fetchImpl: mockFetch(jsonResponse({ error: "unauthorized" }, 401)),
+      });
+      expect(res).toEqual({
+        kind: "error",
+        message: "unauthorized",
+        status: 401,
+        sessionExpired: true,
+      });
+    });
+
+    it("maps a 404 (unknown or another user's plan) to an error carrying status 404", async () => {
+      const res = await unarchivePlan("plan_missing", {
+        getToken: token,
+        fetchImpl: mockFetch(jsonResponse({ error: "not_found" }, 404)),
+      });
+      expect(res).toEqual({ kind: "error", message: "not_found", status: 404 });
+    });
+
+    it("maps a 200 without an id to invalid_response", async () => {
+      const res = await archivePlan("plan_9", {
+        getToken: token,
+        fetchImpl: mockFetch(jsonResponse({ archivedAt: null })),
+      });
+      expect(res).toEqual({ kind: "error", message: "invalid_response" });
+    });
+
+    it("maps a network throw to api_unreachable", async () => {
+      const res = await archivePlan("plan_9", {
+        getToken: token,
+        fetchImpl: mockFetch(() => {
+          throw new Error("offline");
+        }),
+      });
+      expect(res).toEqual({ kind: "error", message: "api_unreachable" });
     });
   });
 });
