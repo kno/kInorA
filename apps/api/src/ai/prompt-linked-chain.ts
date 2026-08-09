@@ -13,6 +13,20 @@ import { Runnable, RunnableLambda, RunnableSequence } from "@langchain/core/runn
  * front does not fix it either: neither `Runnable.pipe` nor
  * `RunnableSequence.from` flattens a nested sequence.
  *
+ * SHAPE DEPENDENCY (issue #375). This file is coupled to what
+ * `@langchain/core`, `@langchain/openai`, `@langchain/anthropic` and
+ * `@langchain/google-genai` return from `withStructuredOutput` — a contract
+ * none of them promises. `prompt-linked-chain.test.ts`'s "SDK
+ * structured-output shape" block calls those SDKs for real and pins the
+ * shapes, so a bump that moves them fails the build instead of silently
+ * flipping `promptLinked` to `false` in trace metadata. Edit the guard below
+ * and that block together.
+ *
+ * Only `ChatOpenAI` returns the bare sequence described above. Core's base
+ * implementation — which `ChatAnthropic` and `ChatGoogleGenerativeAI` use —
+ * wraps it in a `RunnableBinding` that merely names the run, so the guard
+ * declines and those two providers link no prompt today.
+ *
  * The fix is to rebuild ONE FLAT sequence whose first step is our own prompt
  * step, reusing the structured chain's exact `steps` so the model becomes a
  * sibling of the prompt step under the same run. That satisfies the SDK's
