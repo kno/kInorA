@@ -1,9 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import type { WorkoutSessionRecord } from "@kinora/contracts";
 import { createInMemoryOfflineStore } from "../__test-utils__/in-memory-store";
 import {
   writeActiveSessionPointer,
   readActiveSessionPointer,
   clearActiveSessionPointer,
+  discardTerminalSession,
+  writeSnapshot,
+  readSnapshot,
 } from "../snapshot";
 
 /**
@@ -14,6 +18,18 @@ import {
  */
 
 const IDENTITY = "identity-a";
+
+function session(id: string): WorkoutSessionRecord {
+  return {
+    id,
+    workoutPlanId: "plan-1",
+    status: "completed",
+    startedAt: "2026-08-07T09:00:00.000Z",
+    day: 1,
+    exercises: [],
+  };
+}
+
 
 describe("writeActiveSessionPointer / readActiveSessionPointer / clearActiveSessionPointer", () => {
   let store: ReturnType<typeof createInMemoryOfflineStore>;
@@ -37,6 +53,39 @@ describe("writeActiveSessionPointer / readActiveSessionPointer / clearActiveSess
 
     await clearActiveSessionPointer(store, IDENTITY);
 
+    expect(await readActiveSessionPointer(store, IDENTITY)).toBeUndefined();
+  });
+});
+
+describe("discardTerminalSession", () => {
+  let store: ReturnType<typeof createInMemoryOfflineStore>;
+
+  beforeEach(() => {
+    store = createInMemoryOfflineStore();
+  });
+
+  it("drops the snapshot and the pointer when the pointer names the discarded session", async () => {
+    await writeSnapshot(store, IDENTITY, "session-1", session("session-1"));
+    await writeActiveSessionPointer(store, IDENTITY, "session-1");
+
+    await discardTerminalSession(store, IDENTITY, "session-1");
+
+    expect(await readSnapshot(store, IDENTITY, "session-1")).toBeUndefined();
+    expect(await readActiveSessionPointer(store, IDENTITY)).toBeUndefined();
+  });
+
+  it("leaves a NEWER session's pointer alone while dropping the old snapshot", async () => {
+    await writeSnapshot(store, IDENTITY, "session-1", session("session-1"));
+    await writeActiveSessionPointer(store, IDENTITY, "session-2");
+
+    await discardTerminalSession(store, IDENTITY, "session-1");
+
+    expect(await readSnapshot(store, IDENTITY, "session-1")).toBeUndefined();
+    expect(await readActiveSessionPointer(store, IDENTITY)).toBe("session-2");
+  });
+
+  it("is a safe no-op when there is nothing left to discard", async () => {
+    await expect(discardTerminalSession(store, IDENTITY, "session-1")).resolves.toBeUndefined();
     expect(await readActiveSessionPointer(store, IDENTITY)).toBeUndefined();
   });
 });

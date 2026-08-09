@@ -88,6 +88,30 @@ export async function clearActiveSessionPointer(
 }
 
 /**
+ * Forget a session that has reached a terminal status: drop its cached
+ * snapshot and, when the active-session pointer still names it, drop the
+ * pointer too. Mirrors web's `snapshot.ts` exactly.
+ *
+ * The pointer is only cleared when it names THIS session (or is already
+ * absent) so a newer session's pointer is never collateral damage.
+ *
+ * This is the single write-side cleanup for every terminal route — flush
+ * acknowledgement, an online complete, an abandon — so no route can leave a
+ * pointer naming a finished session behind.
+ */
+export async function discardTerminalSession(
+  store: OfflineStore,
+  identityKey: string,
+  sessionId: string,
+): Promise<void> {
+  await clearSnapshot(store, identityKey, sessionId);
+  const pointer = await readActiveSessionPointer(store, identityKey);
+  if (pointer === undefined || pointer === sessionId) {
+    await clearActiveSessionPointer(store, identityKey);
+  }
+}
+
+/**
  * Complete-mutation optimistic semantics (design): enqueuing a `complete`
  * mutation flips the cached snapshot's `session.status` to `"completed"` at
  * the same time — so an offline restart after tapping "Finalizar sesión"

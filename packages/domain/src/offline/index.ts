@@ -8,6 +8,8 @@
 
 export { collapseQueue } from "./collapse-queue.js";
 
+export { isTerminalSessionStatus } from "./session-status.js";
+
 export {
   computeAverageRpe,
   computeSessionVolume,
