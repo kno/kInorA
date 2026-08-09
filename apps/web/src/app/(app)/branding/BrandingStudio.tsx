@@ -24,6 +24,19 @@ export interface BrandingInitial {
   palette: BrandingPalette;
 }
 
+export interface BrandingStudioProps {
+  initial: BrandingInitial;
+  /**
+   * True when the server could not read the current branding
+   * (kno/kInorA#378). `initial` still seeds the studio with blank defaults
+   * so it renders, but Save is disabled — and `handleSave` guards against it
+   * too, defense-in-depth against a bypassed disabled state — so an owner
+   * can never overwrite a real subdomain/logo/palette while believing the
+   * blank form reflects reality.
+   */
+  loadFailed?: boolean;
+}
+
 type SaveState =
   | { kind: "idle" }
   | { kind: "saving" }
@@ -57,7 +70,7 @@ const GROUP_ORDER: readonly PaletteGroup[] = ["brand", "surfaces", "text"] as co
  * editing. Imports ONLY the server actions + the client-safe constants (never
  * the server-only client module) so `ui-api-guard` passes.
  */
-export function BrandingStudio({ initial }: { initial: BrandingInitial }) {
+export function BrandingStudio({ initial, loadFailed = false }: BrandingStudioProps) {
   const t = useTranslations("brandingStudio");
 
   const [slug, setSlug] = useState(initial.subdomainSlug);
@@ -113,6 +126,7 @@ export function BrandingStudio({ initial }: { initial: BrandingInitial }) {
   }
 
   async function handleSave() {
+    if (loadFailed) return; // guard against a bypassed disabled state
     if (!isValidSlug(slug)) {
       setSave({ kind: "error", message: t("subdomain.invalid") });
       return;
@@ -350,7 +364,7 @@ export function BrandingStudio({ initial }: { initial: BrandingInitial }) {
             type="button"
             data-testid="save-branding"
             className="kin-btn kin-btn--accent"
-            disabled={save.kind === "saving"}
+            disabled={save.kind === "saving" || loadFailed}
             onClick={() => void handleSave()}
           >
             {save.kind === "saving" ? t("save.saving") : t("save.button")}
