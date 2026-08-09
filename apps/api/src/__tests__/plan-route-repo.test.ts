@@ -446,7 +446,10 @@ describe("createPlanRouteRepo — list and spec-write adapters", () => {
 
     const result = await repo.listPlansWithProgress!(TENANT_A, USER_A);
 
-    expect(planRepo.listPlansWithProgress).toHaveBeenCalledWith(TENANT_A, USER_A);
+    // 17d PR B added a third `PlanListOptions` parameter. The adapter forwards
+    // whatever it is given, so calling without options forwards `undefined` —
+    // safe, because the repository declares `options: PlanListOptions = {}`.
+    expect(planRepo.listPlansWithProgress).toHaveBeenCalledWith(TENANT_A, USER_A, undefined);
     expect(result[0].name).toBe("Summer Cut");
     // The blank name is resolved by the SAME single default layer the detail and
     // list reads use, so every consumer renders one label.
@@ -456,6 +459,22 @@ describe("createPlanRouteRepo — list and spec-write adapters", () => {
     expect(result[1].daysPerWeek).toBe(5);
     expect(result[0].completedSessionCount).toBe(4);
     expect(result[0].lastTrainedAt).toBe(CREATED_AT);
+  });
+
+  it("listPlansWithProgress forwards PlanListOptions, so the show-archived toggle reaches the query", async () => {
+    // `includeArchived` is the whole mechanism behind "Show archived": the
+    // repository appends `archived_at IS NULL` unless it is set. An adapter
+    // that dropped this argument would silently hide archived plans from a
+    // user who explicitly asked to see them, with nothing failing to type-check.
+    const { repo, workoutPlanRepo: planRepo } = buildAdapters({
+      workoutPlan: { listPlansWithProgress: vi.fn().mockResolvedValue([]) },
+    });
+
+    await repo.listPlansWithProgress!(TENANT_A, USER_A, { includeArchived: true });
+
+    expect(planRepo.listPlansWithProgress).toHaveBeenCalledWith(TENANT_A, USER_A, {
+      includeArchived: true,
+    });
   });
 
   it("listPlansWithProgress returns an empty list unchanged", async () => {
