@@ -93,4 +93,18 @@ describe("Drizzle migration journal", () => {
     expect(entry).toBeDefined();
     expect(entry?.idx).toBe(28);
   });
+
+  it("includes the 17d PR B archived_at migration at idx 29", () => {
+    // The journal max idx was 28 before this change; `drizzle/` holds 29
+    // .sql files (not 28) because 0011 is used twice
+    // (0011_billing_plans_tiers.sql and 0011_abnormal_squadron_sinister.sql).
+    // The journal idx, not the file count, is authoritative — this pins the
+    // correct next value so a future reader does not derive 0030 and leave a gap.
+    const journal = readJournal();
+    const entry = journal.entries.find(
+      (candidate) => candidate.tag === "0029_workout_plan_archived_at",
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.idx).toBe(29);
+  });
 });

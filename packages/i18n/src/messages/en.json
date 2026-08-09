@@ -411,6 +411,9 @@
     },
     "branding": {
       "byTrainer": "By {trainerName}"
+    },
+    "archived": {
+      "badge": "Archived"
     }
   },
   "tracker": {
@@ -1730,6 +1733,17 @@
         "generating": "This plan is still generating",
         "failed": "This plan failed to generate"
       }
+    },
+    "archive": {
+      "action": "Archive",
+      "confirmTitle": "Archive this plan?",
+      "confirmBody": "Archiving hides this plan from your list. Every session and stat is kept — nothing is deleted, and you can unarchive it anytime.",
+      "confirm": "Archive",
+      "cancel": "Cancel",
+      "unarchiveAction": "Unarchive",
+      "showToggle": "Show archived ({count})",
+      "hideToggle": "Hide archived",
+      "sectionHeading": "Archived plans"
     }
   }
 }

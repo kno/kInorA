@@ -269,13 +269,13 @@ plumbing; the edit that makes a removed day *reachable* is PR D's).
 
 ### Migration + guard
 
-- [ ] B.1 Preflight: grep `apps/api/drizzle/meta/_journal.json`, confirm the current highest `idx` is
+- [x] B.1 Preflight: grep `apps/api/drizzle/meta/_journal.json`, confirm the current highest `idx` is
       28, so the new entry is `idx: 29` with no gap — **the SQL filename count is 29, not 28, because
       `0011` is duplicated; the journal `idx`, not the file count, is authoritative**
-- [ ] B.2 RED: extend `apps/api/src/db/__tests__/migration-journal.test.ts` with a pinning assertion
+- [x] B.2 RED: extend `apps/api/src/db/__tests__/migration-journal.test.ts` with a pinning assertion
       that `0029_workout_plan_archived_at.sql` exists at `idx: 29` (the general contiguous-`idx`/
       matching-`tag` assertions already cover it with no edit)
-- [ ] B.3 GREEN: create `apps/api/drizzle/0029_workout_plan_archived_at.sql` —
+- [x] B.3 GREEN: create `apps/api/drizzle/0029_workout_plan_archived_at.sql` —
       `ALTER TABLE "workout_plans" ADD COLUMN "archived_at" timestamp with time zone;`; hand-add the
       journal entry `{ idx: 29, version: "7", when: <ms>, tag: "0029_workout_plan_archived_at",
       breakpoints: true }`; add `archivedAt: timestamp("archived_at", { withTimezone: true })` to
@@ -285,22 +285,22 @@ plumbing; the edit that makes a removed day *reachable* is PR D's).
 
 ### Contracts: archive + refusal variants
 
-- [ ] B.4 RED: extend `contracts.test.ts`'s exact-shape assertion for `WorkoutPlanSummary` to add
+- [x] B.4 RED: extend `contracts.test.ts`'s exact-shape assertion for `WorkoutPlanSummary` to add
       `archivedAt?: string | null`; extend the `StartSessionOutcome` union assertion (`:210-266`) with
       `{ kind: "plan_archived" }` and `{ kind: "day_not_in_plan"; availableDays: number[] }`; add
       compile-time checks for `PlanArchiveResponse { id, archivedAt }`
-- [ ] B.5 GREEN: in `packages/contracts/src/index.ts` — add the fields/variants/types from B.4; confirm
+- [x] B.5 GREEN: in `packages/contracts/src/index.ts` — add the fields/variants/types from B.4; confirm
       B.4 is green and the runtime export-list assertion (`:61-72`) stays unedited (type-only additions)
 
 ### Repository: the filter + `setArchived`
 
-- [ ] B.6 RED: `apps/api/src/db/repositories/__tests__/workout-plan.test.ts` — `findAllByUser` hides
+- [x] B.6 RED: `apps/api/src/db/repositories/__tests__/workout-plan.test.ts` — `findAllByUser` hides
       archived plans by default and returns them with `includeArchived: true`; `listPlansWithProgress`
       gains the identical option and behavior; `setArchived` is idempotent (a second archive on an
       already-archived plan does not move `archivedAt`); `setArchived(false)` (unarchive) clears the
       column and is idempotent the same way; a cross-user/cross-tenant id resolves to `undefined`
       (404, not a leak)
-- [ ] B.7 GREEN: in `apps/api/src/db/repositories/workout-plan.ts` — add `options: { includeArchived?:
+- [x] B.7 GREEN: in `apps/api/src/db/repositories/workout-plan.ts` — add `options: { includeArchived?:
       boolean } = {}` to both `findAllByUser` and `listPlansWithProgress`, appending
       `archived_at IS NULL` to the existing `and(...)` unless `includeArchived` is true; add
       `WorkoutPlanSummary.archivedAt: Date | null` to the summary projection; add
@@ -310,7 +310,7 @@ plumbing; the edit that makes a removed day *reachable* is PR D's).
 
 ### `startSession`: the two typed refusals
 
-- [ ] B.8 RED: `apps/api/src/db/repositories/__tests__/workout-session.test.ts` — `startSession` returns
+- [x] B.8 RED: `apps/api/src/db/repositories/__tests__/workout-session.test.ts` — `startSession` returns
       `{ kind: "plan_archived" }` for a **new** session against an archived plan; returns `{ kind:
       "resumed" }` for a session already in progress whose plan is archived mid-workout (the resume
       branch at Phase 1 must win over the Phase 2 archived check); `recordSet`/`completeSession`/
@@ -318,13 +318,13 @@ plumbing; the edit that makes a removed day *reachable* is PR D's).
       mid-workout" criterion, asserted rather than argued; `startSession` returns `{ kind:
       "day_not_in_plan", availableDays: [...] }` (ascending) when the requested day is not in the
       program, distinct from the plan-not-found `undefined`
-- [ ] B.9 GREEN: in `apps/api/src/db/repositories/workout-session.ts` — extend `findReadyPlan`'s select
+- [x] B.9 GREEN: in `apps/api/src/db/repositories/workout-session.ts` — extend `findReadyPlan`'s select
       to include `archivedAt`; in `startSession`'s Phase 2 (`:393-402`, immediately after the resume
       branches and before the Phase 3 transaction), add: `if (plan.archivedAt !== null) return { kind:
       "plan_archived" }`; then, when no `plannedSession` matches the requested day, return `{ kind:
       "day_not_in_plan", availableDays: plan.programJson.weeklySessions.map(s => s.day).sort((a,b) =>
       a-b) }` instead of the current bare `undefined`; confirm B.8 is green
-- [ ] B.10 GREEN: in `apps/api/src/routes/workout-session.ts` — map `plan_archived` to `409 { error:
+- [x] B.10 GREEN: in `apps/api/src/routes/workout-session.ts` — map `plan_archived` to `409 { error:
       "plan_archived" }` and `day_not_in_plan` to `404 { error: "day_not_in_plan", availableDays }`
       (kept at 404, not 409, so both web `tracker-client.ts` and mobile `plan-status-client.ts`'s
       existing 404-branching in the offline flush taxonomy needs no status-code migration — only the
@@ -333,23 +333,23 @@ plumbing; the edit that makes a removed day *reachable* is PR D's).
 
 ### Archive/unarchive routes
 
-- [ ] B.11 RED: `apps/api/src/routes/__tests__/plan-archive.test.ts` — `POST
+- [x] B.11 RED: `apps/api/src/routes/__tests__/plan-archive.test.ts` — `POST
       /workout-plans/:id/archive` returns `200 { id, archivedAt }`; a repeat call returns the same
       unchanged `archivedAt`; `POST /workout-plans/:id/unarchive` returns `200 { id, archivedAt: null }`,
       idempotent the same way; both 404 on another user's/tenant's plan (indistinguishable from a
       missing plan — no IDOR leak); 401 unauthenticated
-- [ ] B.12 GREEN: in `apps/api/src/routes/plan.ts` — register `POST /workout-plans/:id/archive` and
+- [x] B.12 GREEN: in `apps/api/src/routes/plan.ts` — register `POST /workout-plans/:id/archive` and
       `/unarchive` calling `repo.setArchived` (new `PlanRouteRepo` method wired in
       `apps/api/src/plan-route-repo.ts`); confirm B.11 is green
 
 ### Integration + repo-wide guard
 
-- [ ] B.13 RED then GREEN (integration, no production change beyond what B.7/B.9 already shipped):
+- [x] B.13 RED then GREEN (integration, no production change beyond what B.7/B.9 already shipped):
       `apps/api/src/db/repositories/__tests__/workout-plan-archive.integration.test.ts` — archiving a
       plan with completed sessions destroys **zero** `workout_sessions` rows (count before == count
       after); unarchive restores default-list visibility exactly. Picked up automatically by the CI
       glob (#392) — no workflow edit
-- [ ] B.14 RED then GREEN: widen the existing no-DELETE route-table guard (or add one alongside it if
+- [x] B.14 RED then GREEN: widen the existing no-DELETE route-table guard (or add one alongside it if
       none exists yet) to assert the registered Fastify route table contains **no** `DELETE` method on
       any `/workout-plans*` **or** `/plan-specs*` path — Judgment Day finding 2: the original scope
       named only `workout_plans`, but `workout_plans.plan_spec_id` → `plan_specs.id` is
@@ -360,20 +360,20 @@ plumbing; the edit that makes a removed day *reachable* is PR D's).
 
 ### Show-archived UI + the archived-plan week-view indicator
 
-- [ ] B.15 RED: extend `apps/web/src/app/(app)/plans/__tests__/page.test.tsx` — archived plans are
+- [x] B.15 RED: extend `apps/web/src/app/(app)/plans/__tests__/page.test.tsx` — archived plans are
       excluded from the default `/plans` view; a show-archived toggle reveals them in their **own
       section below a separator**, not mixed into the active grid (per the Open Design mock); the
       archive action's confirmation copy states that history is preserved; unarchiving from the
       archived section moves a plan back into the default grid without a page reload
-- [ ] B.16 GREEN: create/extend `apps/web/src/app/(app)/plans/{plans-client.ts,PlanRowActions.tsx}` —
+- [x] B.16 GREEN: create/extend `apps/web/src/app/(app)/plans/{plans-client.ts,PlanRowActions.tsx}` —
       archive/unarchive buttons calling the B.12 routes; the show-archived section per B.15; confirm
       B.15 is green
-- [ ] B.17 RED: extend `apps/web/src/app/(app)/plan/__tests__/page.test.tsx` (or `PlanWeekView`'s own
+- [x] B.17 RED: extend `apps/web/src/app/(app)/plan/__tests__/page.test.tsx` (or `PlanWeekView`'s own
       test file) — an archived plan's week view visibly indicates it is archived when reached via
       `?planId=X`, while remaining fully reachable and functional (the deep link is unaffected by
       archiving — archiving controls list visibility, not URL reachability, per the corrected
       requirement)
-- [ ] B.18 GREEN: confirm `PlanWeekView` (not `plan/[id]/PlanStatusClient.tsx`, which serves the
+- [x] B.18 GREEN: confirm `PlanWeekView` (not `plan/[id]/PlanStatusClient.tsx`, which serves the
       live-generation view) is the render path for `/plan?planId=X`'s `ready` branch; add
       `archivedAt?: string | null` to `PlanWeekViewProps`, threaded from `GET /workout-plans/:id`'s
       response (which must now include `archivedAt` — extend that route handler and its DTO mapping);
@@ -381,15 +381,15 @@ plumbing; the edit that makes a removed day *reachable* is PR D's).
 
 ### i18n
 
-- [ ] B.19 GREEN: add `plans.archive.*` (confirm copy, "history is preserved" copy, show-archived
+- [x] B.19 GREEN: add `plans.archive.*` (confirm copy, "history is preserved" copy, show-archived
       toggle label, section heading), `plan.archived.badge` to `packages/i18n/src/messages/{en,es}.json`,
       both locales; bump the leaf-key-count canary; rebuild before manual verification
 
 ### PR B verification
 
-- [ ] B.20 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green; `pnpm type-check`
+- [x] B.20 Verify: `pnpm -r test` green; `pnpm -r --if-present test:coverage` green; `pnpm type-check`
       clean; `pnpm build` succeeds
-- [ ] B.21 Verify: grep-confirm the new `0029` migration entry and the `plan_specs` DELETE-route guard
+- [x] B.21 Verify: grep-confirm the new `0029` migration entry and the `plan_specs` DELETE-route guard
       are both present, then re-read `_journal.json` to confirm `idx: 29` is contiguous with `idx: 28`
 
 ---

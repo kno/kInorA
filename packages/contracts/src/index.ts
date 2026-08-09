@@ -152,7 +152,20 @@ export type StartSessionOutcome =
       /** 17b scope A: the blocking session, so the banner can name its date and resume it. */
       activeSessionId: string;
       activeStartedAt: string;
-    };
+    }
+  /**
+   * 17d PR B: a NEW session was requested against an archived plan. In-progress
+   * sessions are unaffected — this variant is unreachable for them, because the
+   * resume branches return before the archived check runs.
+   */
+  | { kind: "plan_archived" }
+  /**
+   * 17d PR B: the plan is ready but does not contain the requested day —
+   * newly reachable once a user can remove a day by editing (PR D).
+   * `availableDays` is ascending, so the client can offer what remains
+   * instead of a bare 404.
+   */
+  | { kind: "day_not_in_plan"; availableDays: number[] };
 
 /**
  * 200 body of `POST /workout-sessions` (17b). Additive: the body stays the
@@ -203,6 +216,8 @@ export interface WorkoutPlanSummary {
   status: string;
   createdAt: string;
   name?: string;
+  /** 17d PR B. ISO-8601 instant, or null when the plan is active. */
+  archivedAt?: string | null;
   /**
    * 17d PR A. `plan_specs.spec_json.daysPerWeek`, `?progress=1` only.
    * Absent — never 0 — when the spec row is missing or its JSON has no
@@ -229,6 +244,18 @@ export interface WorkoutPlanDetail {
   program?: WorkoutProgram;
   specId: string;
   name?: string;
+  /** 17d PR B — threaded into PlanWeekView's archived-plan indicator. */
+  archivedAt?: string | null;
+}
+
+/**
+ * 17d PR B: response of `POST /workout-plans/:id/archive` and `/unarchive`.
+ * Idempotent on both sides — a repeat archive returns the SAME `archivedAt`
+ * it already had, never a moved timestamp.
+ */
+export interface PlanArchiveResponse {
+  id: string;
+  archivedAt: string | null;
 }
 
 export { WorkoutProgramSchema } from "./workout-program.schema.js";
