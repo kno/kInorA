@@ -160,6 +160,34 @@ describe("BrandingStudio — save", () => {
     const error = await screen.findByTestId("branding-error");
     expect(error.textContent).toMatch(/already taken/i);
   });
+
+  // kno/kInorA#378: a failed initial read must never let an owner overwrite
+  // real branding with the studio's blank defaults.
+  it("disables the Save button when loadFailed is true", () => {
+    renderWithIntl(<BrandingStudio initial={INITIAL} loadFailed />);
+
+    const button = screen.getByTestId("save-branding") as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
+  it("does not call saveBrandingAction when Save is clicked while loadFailed is true (defense-in-depth)", () => {
+    renderWithIntl(<BrandingStudio initial={INITIAL} loadFailed />);
+
+    fireEvent.click(screen.getByTestId("save-branding"));
+
+    expect(saveBrandingAction).not.toHaveBeenCalled();
+  });
+
+  it("re-enables Save and allows submission when loadFailed is false (default)", async () => {
+    saveBrandingAction.mockResolvedValue({ kind: "ok", branding: { ...INITIAL, palette: EMPTY_PALETTE } });
+    renderWithIntl(<BrandingStudio initial={INITIAL} />);
+
+    const button = screen.getByTestId("save-branding") as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+
+    await waitFor(() => expect(saveBrandingAction).toHaveBeenCalledTimes(1));
+  });
 });
 
 describe("BrandingStudio — logo", () => {

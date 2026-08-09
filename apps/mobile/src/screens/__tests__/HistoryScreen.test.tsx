@@ -159,7 +159,7 @@ describe("HistoryScreen (sync-independent — never touches the offline queue/sn
     expect(found.length).toBeGreaterThan(0);
   });
 
-  it("falls back to the empty state when the fetch errors (fail-open)", async () => {
+  it("shows a visible error state (not the empty state) when the fetch errors", async () => {
     getWorkoutHistory.mockResolvedValue({ kind: "error", message: "api_unreachable" });
 
     let renderer!: ReturnType<typeof create>;
@@ -167,8 +167,12 @@ describe("HistoryScreen (sync-independent — never touches the offline queue/sn
       renderer = renderWithLocale("en");
     });
 
-    const found = renderer.root.findAllByProps({ children: "No completed sessions yet." });
-    expect(found.length).toBeGreaterThan(0);
+    expect(
+      renderer.root.findAllByProps({ children: "No completed sessions yet." }),
+    ).toHaveLength(0);
+    const errorNodes = renderer.root.findAllByProps({ testID: "history-load-error" });
+    expect(errorNodes.length).toBeGreaterThan(0);
+    expect(errorNodes[0]?.props.children).toContain("We couldn't load your workout history");
   });
 
   it("renders the abandoned label for an abandoned session", async () => {

@@ -52,12 +52,17 @@ describe("DashboardPage", () => {
     expect(textOf(page)).toContain("Create a plan or start a workout");
   });
 
-  it("shows the guiding empty state when the fetch fails", async () => {
+  it("shows a visible error state (not the new-user empty state) when the fetch fails", async () => {
     vi.mocked(getDashboardAction).mockResolvedValueOnce({ kind: "error", message: "no_session" });
 
     const page = await DashboardPage();
+    const text = textOf(page);
 
-    expect(textOf(page)).toContain("No workouts yet");
+    expect(text).not.toContain("No workouts yet");
+    const error = findFirst(page, (el) => el.props?.["data-testid"] === "dashboard-error");
+    expect(error).toBeDefined();
+    expect(error?.props?.role).toBe("alert");
+    expect(textOf(error)).toContain("We couldn't load your dashboard");
   });
 
   it("renders the streak, weekly progress, and week-route strip when there is data", async () => {

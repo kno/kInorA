@@ -88,4 +88,41 @@ describe("AiConfigForm", () => {
       expect(screen.getByText(/error/i)).toBeDefined();
     });
   });
+
+  // kno/kInorA#378: a failed initial read must never let an admin overwrite a
+  // real provider/model config with the form's blank defaults.
+  it("disables the Save button when loadFailed is true", () => {
+    render(<AiConfigForm loadFailed />);
+
+    const button = screen.getByRole("button") as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
+  it("does not call updateAiConfigAction when submitted while loadFailed is true (defense-in-depth)", async () => {
+    render(<AiConfigForm loadFailed />);
+
+    const form = screen.getByRole("button").closest("form");
+    expect(form).not.toBeNull();
+    fireEvent.submit(form as HTMLFormElement);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(updateAiConfigAction).not.toHaveBeenCalled();
+  });
+
+  it("re-enables Save and allows submission when loadFailed is false (default)", async () => {
+    updateAiConfigAction.mockResolvedValue({
+      kind: "ok",
+      config: { provider: "openai", model: "gpt-4o", updatedAt: "2026-06-30T00:00:00Z" },
+    });
+
+    render(<AiConfigForm initialProvider="openai" initialModel="gpt-4o" />);
+
+    const button = screen.getByRole("button") as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(updateAiConfigAction).toHaveBeenCalled();
+    });
+  });
 });

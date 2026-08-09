@@ -11,6 +11,14 @@ import { updateAiConfigAction } from "./actions";
 export interface AiConfigFormProps {
   initialProvider?: AiProvider;
   initialModel?: string;
+  /**
+   * True when the server could not read the current config (kno/kInorA#378).
+   * The form still renders with its blank defaults, but Save is disabled —
+   * and the submit handler guards against it too, defense-in-depth against a
+   * bypassed disabled state — so an admin can never overwrite a real
+   * provider/model setting while believing this reflects reality.
+   */
+  loadFailed?: boolean;
 }
 
 /**
@@ -24,7 +32,7 @@ export interface AiConfigFormProps {
  * SC-14: admin user sees current config (passed as props from server component)
  * SC-15: submit → calls PUT, shows confirmation
  */
-export function AiConfigForm({ initialProvider, initialModel }: AiConfigFormProps) {
+export function AiConfigForm({ initialProvider, initialModel, loadFailed = false }: AiConfigFormProps) {
   const defaultProvider: AiProvider = initialProvider ?? "openrouter";
   const defaultModel = initialModel ?? MODEL_DEFAULTS[defaultProvider];
 
@@ -47,6 +55,8 @@ export function AiConfigForm({ initialProvider, initialModel }: AiConfigFormProp
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loadFailed) return; // guard against a bypassed disabled state
+
     setStatus("loading");
     setErrorMessage("");
 
@@ -102,7 +112,7 @@ export function AiConfigForm({ initialProvider, initialModel }: AiConfigFormProp
 
       <button
         type="submit"
-        disabled={status === "loading"}
+        disabled={status === "loading" || loadFailed}
         className="kin-btn kin-btn--primary"
       >
         {status === "loading" ? "Saving..." : "Save"}

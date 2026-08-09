@@ -219,7 +219,16 @@ describe("@kinora/i18n package assembly", () => {
     // first-entry volume-shift notice on the web weight-entry form.
     // +1 `profile.weightEntry.loadError` (kno/kInorA#378) — distinguishes a
     // failed weight-history fetch from an empty list on mobile ProfileScreen.
-    expect(nonBillingKeys).toHaveLength(795);
+    // +6 `dashboard.{errorTitle,errorBody,retry}`, `history.error`,
+    // `stats.error`, `aiConfig.errors.loadFailed` (kno/kInorA#378) — the
+    // remaining five collapsed-error sites (web dashboard/history/stats,
+    // mobile history, and the admin AI-config panel) now render a visible,
+    // distinguishable error instead of silently falling back to an empty or
+    // default state.
+    // `brandingStudio.errors.loadFailed` (kno/kInorA#378, a sixth
+    // collapsed-error site) is NOT counted here — `brandingStudio.*` has its
+    // own scoped count test below, per the frozen-total convention.
+    expect(nonBillingKeys).toHaveLength(801);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
@@ -565,8 +574,9 @@ describe("@kinora/i18n package assembly", () => {
     const keys = Object.keys(flat).filter((key) => key.startsWith("brandingStudio."));
     // eyebrow/title/description (3) + subdomain x5 + logo x11 + palette x2 +
     // groups x3 + tokens x6 + presets x5 + contrast x5 + preview x13 +
-    // save x3 + errors x3 = 58 keys for the /branding white-label studio.
-    expect(keys).toHaveLength(58);
+    // save x3 + errors x4 = 59 keys for the /branding white-label studio
+    // (errors gained `loadFailed`, kno/kInorA#378).
+    expect(keys).toHaveLength(59);
     expect(flat["brandingStudio.title"]).toBeTruthy();
     expect(flattenMessages(catalogs.es)["brandingStudio.title"]).toBeTruthy();
     expect(flat["brandingStudio.errors.conflict"]).toContain("already taken");

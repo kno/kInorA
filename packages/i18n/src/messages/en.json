@@ -723,7 +723,10 @@
     "viewAllExercises": "See all 6 exercises",
     "emptyTitle": "No workouts yet",
     "emptyBody": "Create a plan or start a workout to see your progress here.",
-    "emptyCta": "Create a plan"
+    "emptyCta": "Create a plan",
+    "errorTitle": "We couldn't load your dashboard",
+    "errorBody": "Something went wrong while fetching your progress. Please try again.",
+    "retry": "Try again"
   },
   "home": {
     "title": "Welcome to kInorA",
@@ -968,6 +971,7 @@
   "stats": {
     "title": "Statistics",
     "description": "Track your progress and review your training history.",
+    "error": "We couldn't load your statistics. Please try again.",
     "rangeWeek": "Week",
     "rangeMonth": "Month",
     "rangeYear": "Year",
@@ -1021,7 +1025,8 @@
       "down": "Volume down {volume} kg vs. prior session",
       "flat": "Volume unchanged vs. prior session"
     },
-    "loadMore": "Load more"
+    "loadMore": "Load more",
+    "error": "We couldn't load your workout history. Please try again."
   },
   "profile": {
     "title": "Profile",
@@ -1592,7 +1597,8 @@
     "errors": {
       "conflict": "This subdomain is already taken.",
       "invalid": "Please check the colors and try again.",
-      "generic": "Something went wrong. Please try again."
+      "generic": "Something went wrong. Please try again.",
+      "loadFailed": "Unable to load your current branding. Saving is disabled until this loads successfully."
     }
   },
   "logs": {
@@ -1631,6 +1637,11 @@
       "forbidden": "Access denied.",
       "invalid": "Please check the filters and try again.",
       "generic": "An error occurred. Please try again."
+    }
+  },
+  "aiConfig": {
+    "errors": {
+      "loadFailed": "Unable to load the current AI configuration. Saving is disabled until this loads successfully."
     }
   },
   "platformStats": {

@@ -108,4 +108,39 @@ describe("BrandingPage (server component)", () => {
     await BrandingPage();
     expect(fetchBranding).toHaveBeenCalledWith("my-session-token");
   });
+
+  // kno/kInorA#378: a transient fetch failure must never collapse into the
+  // same blank-defaults form as "no branding configured yet" (not_found) —
+  // it renders a visible error AND flags the studio so Save is disabled (an
+  // owner must never overwrite real branding believing the blank defaults
+  // reflect reality).
+  it("renders a visible error banner and passes loadFailed to BrandingStudio on a transient fetch error (#378)", async () => {
+    cookieGet.mockReturnValue({ value: "gym-token" });
+    fetchBranding.mockResolvedValue({ kind: "error", message: "api_unreachable" });
+
+    const page = (await BrandingPage()) as AnyElement;
+    expect(redirect).not.toHaveBeenCalled();
+
+    const error = findFirst(page, (el) => el.props?.["data-testid"] === "branding-load-error");
+    expect(error).toBeDefined();
+    expect(error?.props?.role).toBe("alert");
+
+    const studio = findFirst(page, (el) => el.type === BrandingStudio);
+    expect(studio).toBeDefined();
+    expect(studio?.props.loadFailed).toBe(true);
+    expect(studio?.props.initial).toMatchObject({ subdomainSlug: "", logoUrl: null });
+  });
+
+  it("does not render the error banner and passes loadFailed=false on ok/not_found", async () => {
+    cookieGet.mockReturnValue({ value: "gym-token" });
+    fetchBranding.mockResolvedValue({ kind: "not_found" });
+
+    const page = (await BrandingPage()) as AnyElement;
+
+    const error = findFirst(page, (el) => el.props?.["data-testid"] === "branding-load-error");
+    expect(error).toBeUndefined();
+
+    const studio = findFirst(page, (el) => el.type === BrandingStudio);
+    expect(studio?.props.loadFailed).toBe(false);
+  });
 });

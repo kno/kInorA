@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { fetchAiConfig } from "./ai-config-client";
 import { AiConfigForm } from "./AiConfigForm";
@@ -17,6 +18,7 @@ import type { AiProvider } from "./ai-config-client";
  * API keys are NEVER shown in this panel — only provider + model.
  */
 export default async function AiConfigPage() {
+  const t = await getTranslations();
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
 
@@ -28,6 +30,12 @@ export default async function AiConfigPage() {
     redirect("/");
   }
 
+  // A read failure here is distinct from "no config saved yet" (`config: null`
+  // on an `ok` result). Collapsing both into `null` used to let an admin hit
+  // Save believing an empty form reflected reality and overwrite a real
+  // provider/model setting — see kno/kInorA#378. `loadFailed` drives both the
+  // visible error banner and the AiConfigForm save guard below.
+  const loadFailed = result.kind === "error";
   const config = result.kind === "ok" ? result.config : null;
 
   return (
@@ -38,9 +46,15 @@ export default async function AiConfigPage() {
           Select the active AI provider and model for plan generation.
           API keys are managed via server environment variables — not here.
         </p>
+        {loadFailed && (
+          <p className="kin-text" role="alert" data-testid="ai-config-error" style={{ marginBottom: "1rem" }}>
+            {t("aiConfig.errors.loadFailed")}
+          </p>
+        )}
         <AiConfigForm
           initialProvider={config?.provider as AiProvider | undefined}
           initialModel={config?.model}
+          loadFailed={loadFailed}
         />
       </div>
     </main>

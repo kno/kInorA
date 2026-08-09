@@ -38,6 +38,7 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
   const offset = Number(params.offset ?? 0) || 0;
 
   const result = await getWorkoutHistoryAction({ limit: PAGE_SIZE, offset });
+  const loadFailed = result.kind === "error";
   const entries = result.kind === "ok" ? result.entries : [];
 
   return (
@@ -45,7 +46,13 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
       <h1 className="kin-title">{t("history.title")}</h1>
       <p className="kin-text kin-muted">{t("history.description")}</p>
 
-      {entries.length === 0 ? (
+      {loadFailed ? (
+        <div className="kin-card kin-card--center">
+          <p className="kin-text" role="alert" data-testid="history-error">
+            {t("history.error")}
+          </p>
+        </div>
+      ) : entries.length === 0 ? (
         <div className="kin-card kin-card--center">
           <p className="kin-text kin-muted">{t("history.empty")}</p>
         </div>
