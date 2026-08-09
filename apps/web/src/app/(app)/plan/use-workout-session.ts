@@ -12,7 +12,9 @@
  *      `completed` session there is no navigation escape on `/plan` (the tracker
  *      is a full state-swap). We clear `activeSession` on a successful complete
  *      so the plan/day view returns; the completed session is persisted
- *      server-side, so nothing is lost.
+ *      server-side, so nothing is lost. Clearing in-memory state only fixes
+ *      the CURRENT tab, though — the persisted active-session pointer
+ *      outlives it. See "Terminal-pointer recovery" below (#398).
  *   2. Unhandled throw — `startWorkoutSessionAction` /
  *      `recordWorkoutSetAction` / `completeWorkoutSessionAction` THROW on
  *      non-conflict failures (network / not_found / invalid_response). Awaiting
@@ -52,7 +54,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AutoClosedSessionNotice, PendingMutation, WorkoutSessionRecord } from "@kinora/contracts";
-import { collapseQueue } from "@kinora/domain/offline";
+import { collapseQueue, isTerminalSessionStatus } from "@kinora/domain/offline";
 import {
   abandonSessionAction,
   completeWorkoutSessionAction,
@@ -66,9 +68,8 @@ import type { OfflineStore } from "./offline/store";
 import {
   applyOptimisticComplete,
   applyPendingMutation,
-  clearActiveSessionPointer,
-  clearSnapshot,
   createConnectivityMonitor as createRealConnectivityMonitor,
+  discardTerminalSession,
   enqueueMutation,
   ensureIdentityScope,
   getQueuedMutations,
@@ -282,6 +283,22 @@ export function useWorkoutSession(
         const snapshot = await readSnapshot(store, identityKey, pointerSessionId);
         if (!snapshot || cancelled) return;
 
+        // Terminal-pointer recovery. The pointer is PERSISTED local state, so
+        // it can outlive the session it names — by any route, including ones
+        // we have not thought of. Hydrating a finished session here swaps the
+        // tracker in permanently: `/plan` has no navigation escape, so the
+        // user is trapped on every visit until they clear IndexedDB.
+        //
+        // So the pointer is validated, not trusted: a snapshot holding a
+        // non-active session is discarded on READ and we fall through to the
+        // normal plan view. This is deliberately unconditional on HOW the
+        // pointer went stale — it is the recovery mechanism, and a recovery
+        // mechanism that needs the cause diagnosed first is not one.
+        if (isTerminalSessionStatus(snapshot.session.status)) {
+          await discardTerminalSession(store, identityKey, pointerSessionId);
+          return;
+        }
+
         const queued = await getQueuedMutations(store, identityKey);
         const collapsed = collapseQueue(queued);
         const hydrated = collapsed.reduce(applyPendingMutation, snapshot.session);
@@ -401,9 +418,15 @@ export function useWorkoutSession(
       await writeSnapshot(ctx.store, ctx.identityKey, acked.id, acked);
       setActiveSession((prev) => (prev?.id === acked.id ? acked : prev));
 
-      if (acked.status === "completed" && summary.remaining.length === 0) {
-        await clearSnapshot(ctx.store, ctx.identityKey, acked.id);
-        await clearActiveSessionPointer(ctx.store, ctx.identityKey);
+      // Scoped to the acknowledged session (mobile's shape): a mutation still
+      // queued for a DIFFERENT session says nothing about whether this one is
+      // finished, and gating on a globally empty queue left the finished
+      // session's pointer behind whenever anything else was pending.
+      const hasRemainingForSession = summary.remaining.some(
+        (mutation) => mutation.sessionId === acked.id,
+      );
+      if (isTerminalSessionStatus(acked.status) && !hasRemainingForSession) {
+        await discardTerminalSession(ctx.store, ctx.identityKey, acked.id);
       }
     }
 
@@ -446,10 +469,12 @@ export function useWorkoutSession(
           // not-successfully-removed mutations remain queued and may retry
           // on a later valid trigger; a partial delete may leave the
           // queue partially depleted. After removal completes, snapshot/
-          // cleanup failures are swallowed, acknowledged mutations are
-          // not retryable, and snapshot/pointer may be stale with no new
-          // recovery mechanism (09d-v1-offline-flush-hardening; mirrors
-          // mobile's flush() inner try/catch).
+          // cleanup failures are swallowed and acknowledged mutations are
+          // not retryable, so the snapshot/pointer may be left stale
+          // (09d-v1-offline-flush-hardening; mirrors mobile's flush() inner
+          // try/catch). A stale pointer is no longer terminal for the user:
+          // mount hydration discards a pointer whose snapshot holds a
+          // non-active session (#398).
         }
       } while (flushAgainRef.current);
     } finally {
@@ -534,6 +559,18 @@ export function useWorkoutSession(
         return;
       }
 
+      // Abandon is a terminal transition too, so the blocking session's
+      // pointer/snapshot must go with it — otherwise the session the user
+      // just discarded stays the one hydration restores on the next mount.
+      const ctx = offlineRef.current;
+      if (ctx) {
+        try {
+          await discardTerminalSession(ctx.store, ctx.identityKey, blockingSessionId);
+        } catch {
+          // Best-effort cleanup — the abandon itself already succeeded.
+        }
+      }
+
       setDiscardFailed(false);
       setConflict(undefined);
       await handleStartWorkout(pending.planId, pending.day);
@@ -557,8 +594,16 @@ export function useWorkoutSession(
 
       const ctx = offlineRef.current;
       if (ctx) {
-        await writeSnapshot(ctx.store, ctx.identityKey, session.id, session);
-        await writeActiveSessionPointer(ctx.store, ctx.identityKey, session.id);
+        // A terminal session must never BECOME the persisted pointer. The
+        // server can legitimately answer with a session that finished
+        // elsewhere; showing it once is fine, persisting it as "the session
+        // to restore on every future mount" is the trap.
+        if (isTerminalSessionStatus(session.status)) {
+          await discardTerminalSession(ctx.store, ctx.identityKey, session.id);
+        } else {
+          await writeSnapshot(ctx.store, ctx.identityKey, session.id, session);
+          await writeActiveSessionPointer(ctx.store, ctx.identityKey, session.id);
+        }
       }
     } catch {
       setError("tracker_error_start");
@@ -685,6 +730,21 @@ export function useWorkoutSession(
       setActiveSession(undefined);
     } catch {
       setError("tracker_error_complete");
+      return;
+    }
+
+    // The session is terminal now, so its pointer must go — reaching a
+    // terminal state is what clears the pointer, not passing through one
+    // particular branch of the flush. This path runs when the offline module
+    // was unavailable before the durable enqueue, which is precisely when no
+    // flush will ever acknowledge this completion.
+    if (ctx) {
+      try {
+        await discardTerminalSession(ctx.store, ctx.identityKey, sessionId);
+      } catch {
+        // Best-effort cleanup: the completion itself already succeeded, and
+        // hydration discards a terminal pointer on read anyway.
+      }
     }
   }, [flush, validateOfflineIdentity]);
 

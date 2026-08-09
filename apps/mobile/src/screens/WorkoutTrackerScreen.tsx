@@ -64,7 +64,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import type { ConnectivityMonitor, WorkoutSessionRecord } from "@kinora/contracts";
-import { collapseQueue } from "@kinora/domain/offline";
+import { collapseQueue, isTerminalSessionStatus } from "@kinora/domain/offline";
 
 import { colors, spacing } from "../theme/tokens";
 import {
@@ -107,8 +107,7 @@ import {
 import { enqueueMutation, getQueuedMutations, removeMutation } from "../offline/queue";
 import {
   applyOptimisticComplete,
-  clearActiveSessionPointer,
-  clearSnapshot,
+  discardTerminalSession,
   readActiveSessionPointer,
   readSnapshot,
   writeActiveSessionPointer,
@@ -378,9 +377,8 @@ export default function WorkoutTrackerScreen({
       const hasRemainingForSession = summary.remaining.some(
         (mutation) => mutation.sessionId === acked.id,
       );
-      if (acked.status === "completed" && !hasRemainingForSession) {
-        await clearSnapshot(ctx.store, ctx.identityKey, acked.id);
-        await clearActiveSessionPointer(ctx.store, ctx.identityKey);
+      if (isTerminalSessionStatus(acked.status) && !hasRemainingForSession) {
+        await discardTerminalSession(ctx.store, ctx.identityKey, acked.id);
       }
     }
 
@@ -460,6 +458,26 @@ export default function WorkoutTrackerScreen({
           connectivityRef.current = monitor;
           connectivityUnsubscribeRef.current = unsubscribe;
 
+          // Terminal-pointer recovery (#398). The active-session pointer is
+          // PERSISTED local state, so it can outlive the session it names —
+          // by any route, including ones we have not thought of. Validate it
+          // instead of trusting it: a pointer whose snapshot holds a
+          // non-active session is discarded on READ, whatever wrote it, so
+          // hydration can never restore a finished session. Runs regardless
+          // of connectivity so the stale pointer is cleared on the first
+          // visit, not only on an offline one. An explicit `sessionId` route
+          // param is the caller naming a session directly, not the pointer,
+          // so it is left alone.
+          if (!sessionId) {
+            const pointerSessionId = await readActiveSessionPointer(store, identityKey);
+            if (pointerSessionId) {
+              const pointed = await readSnapshot(store, identityKey, pointerSessionId);
+              if (pointed && isTerminalSessionStatus(pointed.session.status)) {
+                await discardTerminalSession(store, identityKey, pointerSessionId);
+              }
+            }
+          }
+
           // Offline restart hydration: if we're offline right now and a
           // cached snapshot exists for the target session, render directly
           // from the snapshot + any still-queued mutations replayed on top
@@ -528,8 +546,16 @@ export default function WorkoutTrackerScreen({
       const ctx = offlineRef.current;
       if (ctx) {
         try {
-          await writeSnapshot(ctx.store, ctx.identityKey, result.session.id, result.session);
-          await writeActiveSessionPointer(ctx.store, ctx.identityKey, result.session.id);
+          // A terminal session must never BECOME the persisted pointer: the
+          // server can legitimately answer with a session that finished
+          // elsewhere, and persisting it as "the session to restore on every
+          // future load" is what creates the stale pointer in the first place.
+          if (isTerminalSessionStatus(result.session.status)) {
+            await discardTerminalSession(ctx.store, ctx.identityKey, result.session.id);
+          } else {
+            await writeSnapshot(ctx.store, ctx.identityKey, result.session.id, result.session);
+            await writeActiveSessionPointer(ctx.store, ctx.identityKey, result.session.id);
+          }
         } catch {
           // Best-effort — the session still rendered from the network response.
         }
@@ -866,6 +892,19 @@ export default function WorkoutTrackerScreen({
       if (result.kind === "ok") {
         setErrorKey(undefined);
         setSession(result.session);
+
+        // Reaching a terminal state is what clears the pointer — not passing
+        // through one particular branch of the flush. This path runs when the
+        // offline module was unavailable before the durable enqueue, which is
+        // precisely when no flush will ever acknowledge this completion.
+        if (ctx) {
+          try {
+            await discardTerminalSession(ctx.store, ctx.identityKey, sessionId);
+          } catch {
+            // Best-effort cleanup: the completion itself already succeeded,
+            // and a terminal pointer is discarded on read anyway.
+          }
+        }
       } else {
         setErrorKey("errorComplete");
       }
@@ -909,6 +948,21 @@ export default function WorkoutTrackerScreen({
     setDiscardInProgress(true);
     try {
       const outcome = await abandonSession(conflict.activeSessionId);
+
+      // Abandon is a terminal transition too, so the blocking session's
+      // pointer/snapshot must go with it — otherwise the session the user
+      // just discarded stays the one hydration restores on the next load.
+      // Runs before the mounted guard: the storage is shared with the next
+      // mount, so cleanup must not depend on this screen surviving.
+      const ctx = offlineRef.current;
+      if (outcome.kind === "ok" && ctx) {
+        try {
+          await discardTerminalSession(ctx.store, ctx.identityKey, conflict.activeSessionId);
+        } catch {
+          // Best-effort cleanup — the abandon itself already succeeded.
+        }
+      }
+
       if (!mountedRef.current) return;
       if (outcome.kind !== "ok") {
         setDiscardFailed(true);
