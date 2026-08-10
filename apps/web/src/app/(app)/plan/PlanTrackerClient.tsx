@@ -60,11 +60,6 @@ export interface PlanTrackerClientProps {
    */
   topbar?: React.ReactNode;
   /**
-   * Presentational side rail (readiness ring, today's blocks, Coach AI) shown
-   * in the cockpit's right column. Hidden while a session is active. Optional.
-   */
-  sideRail?: React.ReactNode;
-  /**
    * Optional trainer-authored branding (15b-v2 S4). Only `accentColor` is
    * consumed here — it becomes the `--plan-accent` CSS custom property on
    * the plan container, read by the CSS module's accent surfaces (with the
@@ -100,7 +95,6 @@ export function PlanTrackerClient({
   children,
   weeklyOverview,
   topbar,
-  sideRail,
   branding,
 }: PlanTrackerClientProps) {
   const {
@@ -183,10 +177,10 @@ export function PlanTrackerClient({
     );
   }
 
-  // Non-active: the cockpit layout (web-plan.html). Topbar spans full width;
-  // the two-column grid holds the main column (children = hero + metrics +
-  // limitation banner, then the DATA-WIRED week board) and the presentational
-  // side rail.
+  // Non-active: the cockpit layout. Topbar spans full width, then a single
+  // column stacks the children (hero + metrics + limitation banner) above the
+  // DATA-WIRED week board. The mockup's right-hand side rail was removed in
+  // #420, so there is no second column left to lay out.
   const accentStyle = branding?.accentColor
     ? ({ "--plan-accent": branding.accentColor } as React.CSSProperties)
     : undefined;
@@ -201,32 +195,29 @@ export function PlanTrackerClient({
         </p>
       )}
       <div className={styles.cockpit}>
-        <div className={styles.cockpitMain}>
-          {/* Publish the real start handler to the hero CTA composed inside
-              `children` (server-rendered PlanHero); its primary "Empezar
-              sesión" button starts the recommended day instead of toasting. */}
-          <PlanHeroStartProvider
-            onStart={
-              recommendedDay != null
-                ? () => handleStartWorkout(planId, recommendedDay)
-                : undefined
-            }
-          >
-            {children}
-          </PlanHeroStartProvider>
-          <section className={`${styles.panel} ${styles.weekBoard}`} aria-label={t("plan.week.title")}>
-            <DayDetailPanel
-              sessions={program.weeklySessions}
-              onStartWorkout={(day) => handleStartWorkout(planId, day)}
-              conflict={conflict}
-              onResumeSession={handleResumeSession}
-              onDiscardSession={handleDiscardSession}
-              discardFailed={discardFailed}
-              weeklyOverview={weeklyOverview}
-            />
-          </section>
-        </div>
-        {sideRail}
+        {/* Publish the real start handler to the hero CTA composed inside
+            `children` (server-rendered PlanHero); its primary "Empezar
+            sesión" button starts the recommended day instead of toasting. */}
+        <PlanHeroStartProvider
+          onStart={
+            recommendedDay != null
+              ? () => handleStartWorkout(planId, recommendedDay)
+              : undefined
+          }
+        >
+          {children}
+        </PlanHeroStartProvider>
+        <section className={`${styles.panel} ${styles.weekBoard}`} aria-label={t("plan.week.title")}>
+          <DayDetailPanel
+            sessions={program.weeklySessions}
+            onStartWorkout={(day) => handleStartWorkout(planId, day)}
+            conflict={conflict}
+            onResumeSession={handleResumeSession}
+            onDiscardSession={handleDiscardSession}
+            discardFailed={discardFailed}
+            weeklyOverview={weeklyOverview}
+          />
+        </section>
       </div>
     </div>
   );
