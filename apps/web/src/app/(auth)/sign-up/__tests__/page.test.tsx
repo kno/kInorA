@@ -39,12 +39,41 @@ describe("SignUpPage", () => {
     expect(password?.props.type).toBe("password");
     expect(password?.props.required).toBe(true);
 
-    const submit = findFirst(page, (el) => el.props.type === "submit");
+    // kno/kInorA#445 — the submit control is now `AuthSubmitButton` (see the
+    // matching note in the login page suite): this file inspects the element
+    // tree without rendering, so the marker is `pendingLabel`, not `type`.
+    const submit = findFirst(page, (el) => typeof el.props.pendingLabel === "string");
     expect(submit).toBeDefined();
+    expect(textOf(submit)).toContain("Sign up");
 
     const google = findFirst(page, (el) => typeof el.props.href === "string");
     expect(google?.props.href).toBe("/auth/social/login?provider=google");
     expect(textOf(google)).toMatch(/google/i);
+  });
+
+  // kno/kInorA#445 — the screen's `Estados` sections. Same `?error=` query
+  // parameter as before; only its presentation is new.
+  it("marks both credential fields invalid when the submission was rejected", async () => {
+    const page = await SignUpPage({
+      searchParams: Promise.resolve({ error: "email_already_exists" }),
+    });
+
+    expect(findAll(page, (el) => el.props["data-invalid"] === "")).toHaveLength(2);
+  });
+
+  it("leaves the fields unmarked when there is no error", async () => {
+    const page = await SignUpPage({ searchParams: Promise.resolve({}) });
+
+    expect(findAll(page, (el) => el.props["data-invalid"] === "")).toEqual([]);
+  });
+
+  it("renders the three onboarding steps from the supporting panel", async () => {
+    const page = await SignUpPage({ searchParams: Promise.resolve({}) });
+    const text = textOf(page);
+
+    expect(text).toContain("Create your account");
+    expect(text).toContain("Tell us your goal");
+    expect(text).toContain("Train today");
   });
 
   it("shows the error message when an error query param is present", async () => {
@@ -118,6 +147,19 @@ function findFirst(
     }
   }
   return undefined;
+}
+
+function findAll(
+  node: ReactNode,
+  match: (el: AnyElement) => boolean,
+  out: AnyElement[] = []
+): AnyElement[] {
+  if (isReactElement(node)) {
+    if (match(node)) out.push(node);
+    findAll(node.props.children, match, out);
+  }
+  if (Array.isArray(node)) for (const child of node) findAll(child, match, out);
+  return out;
 }
 
 function textOf(node: ReactNode): string {

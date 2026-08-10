@@ -149,22 +149,72 @@
   },
   "auth": {
     "login": {
-      "title": "Log in",
+      "title": "Welcome back",
+      "subtitle": "Log in to pick your plan up right where you left it.",
       "submit": "Log in",
+      "pending": "Checking…",
       "google": "Sign in with Google",
       "switchPrompt": "Don't have an account?",
       "switchLink": "Sign up",
-      "gymLogoAlt": "Gym logo"
+      "gymLogoAlt": "Gym logo",
+      "poster": {
+        "badge": "Your coach, always awake",
+        "title": "The plan adapts. You just train.",
+        "body": "kInorA reads your adherence, your RPE and your rest, and adjusts the week before a plateau shows up.",
+        "stat1": {
+          "value": "1,300+",
+          "label": "Guided exercises"
+        },
+        "stat2": {
+          "value": "4 min",
+          "label": "From zero to plan"
+        },
+        "stat3": {
+          "value": "Weekly",
+          "label": "Automatic readjustment"
+        }
+      }
     },
     "signup": {
       "title": "Sign up",
+      "subtitle": "Your first personalised training plan is a couple of minutes away.",
       "submit": "Sign up",
+      "pending": "Creating account…",
       "google": "Sign up with Google",
       "switchPrompt": "Already have an account?",
-      "switchLink": "Log in"
+      "switchLink": "Log in",
+      "poster": {
+        "badge": "Start free, no card required",
+        "title": "Tell us your goal. We do the rest.",
+        "body": "In four minutes we generate your first plan from your experience, the equipment you have and the days you are free — and we keep adjusting it every week.",
+        "step1": {
+          "title": "Create your account",
+          "desc": "Email and password only"
+        },
+        "step2": {
+          "title": "Tell us your goal",
+          "desc": "Strength, hypertrophy, endurance…"
+        },
+        "step3": {
+          "title": "Train today",
+          "desc": "Plan generated instantly"
+        }
+      }
     },
     "emailLabel": "Email",
-    "passwordLabel": "Password"
+    "emailPlaceholder": "you@email.com",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "At least 8 characters",
+    "separator": "or continue with",
+    "validation": {
+      "invalidEmail": "Enter a valid email address",
+      "passwordTooShort": "The password must be at least 8 characters long"
+    },
+    "error": {
+      "retry": "The email or the password do not match. Check them and try again.",
+      "network": "Could not reach the server.",
+      "noSession": "No session received."
+    }
   },
   "footer": {
     "tagline": "The AI coach that builds your plan, adjusts it every week, and trains with you.",
