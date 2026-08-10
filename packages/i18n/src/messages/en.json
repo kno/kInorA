@@ -899,6 +899,7 @@
     "volumeTrendEmpty": "Not enough data yet to show a trend.",
     "distributionTitle": "Sets per muscle group",
     "distributionEmpty": "No mapped exercises yet — log a workout to see this chart.",
+    "prEyebrow": "History",
     "prTitle": "Personal records",
     "prEmpty": "No personal records yet.",
     "prExerciseHeader": "Exercise",

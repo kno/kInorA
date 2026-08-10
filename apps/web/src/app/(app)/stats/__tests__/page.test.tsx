@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { StatsSummaryDTO } from "@kinora/contracts";
 import StatsPage from "../page";
+import styles from "../stats.module.css";
 
 type AnyProps = Record<string, unknown> & { children?: ReactNode };
 type AnyElement = ReactElement<AnyProps>;
@@ -177,6 +178,37 @@ describe("StatsPage", () => {
     expect(text).toContain("—");
   });
 
+  // The PR card is the one section built unlike its siblings on the screen
+  // (`.pr-card`, web-stats.html:368): the heading sits in its own band with a
+  // `border-bottom`, and the table is that band's sibling so it runs edge to
+  // edge under the rule rather than being inset by card padding (#435).
+  it("puts the personal-records heading in its own header band, with the table as its sibling", async () => {
+    vi.mocked(getStatsAction).mockResolvedValueOnce({ kind: "ok", summary: populatedSummary });
+
+    const page = await renderPage();
+    const card = findFirst(page, (el) => hasClass(el, "prCard"));
+
+    expect(card).toBeDefined();
+    const children = childrenOf(card);
+    const header = children.find((child) => hasClass(child, "prCardHeader"));
+    expect(header).toBeDefined();
+    // Two lines, eyebrow above the title, as on the screen.
+    expect(textOf(header)).toContain("History");
+    expect(textOf(header)).toContain("Personal records");
+    // Sibling of the header, not nested inside it or inside a padded body.
+    expect(children.some((child) => child.type === "table")).toBe(true);
+  });
+
+  it("pads the personal-records empty state, which the unpadded card cannot", async () => {
+    vi.mocked(getStatsAction).mockResolvedValueOnce({ kind: "ok", summary: emptySummary });
+
+    const page = await renderPage();
+    const body = findFirst(page, (el) => hasClass(el, "prCardBody"));
+
+    expect(body).toBeDefined();
+    expect(textOf(body)).toContain("No personal records yet");
+  });
+
   it("renders an empty-state message for distribution and PRs when there is no data", async () => {
     vi.mocked(getStatsAction).mockResolvedValueOnce({ kind: "ok", summary: emptySummary });
 
@@ -226,6 +258,7 @@ describe("StatsPage", () => {
     // Coarse muscle-group labels + PR table copy also come from the ES catalog.
     expect(text).toContain("Espalda");
     expect(text).toContain("Pierna");
+    expect(text).toContain("Historial");
     expect(text).toContain("Sentadilla con barra");
   });
 
@@ -259,6 +292,25 @@ function findFirst(
     }
   }
   return undefined;
+}
+
+/**
+ * CSS-module class names are hashed, so a structural assertion matches
+ * against the hash the stylesheet itself resolves to rather than the
+ * authored name.
+ */
+function hasClass(el: AnyElement, name: keyof typeof styles): boolean {
+  const className = el.props?.className;
+  const resolved = styles[name];
+  if (typeof className !== "string" || resolved === undefined) return false;
+  return className.split(/\s+/).includes(resolved);
+}
+
+function childrenOf(node: ReactNode): AnyElement[] {
+  if (!isReactElement(node)) return [];
+  const children = node.props.children;
+  const list = Array.isArray(children) ? children : [children];
+  return list.filter(isReactElement);
 }
 
 function textOf(node: ReactNode): string {
