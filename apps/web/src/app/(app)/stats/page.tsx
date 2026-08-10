@@ -3,6 +3,7 @@ import type { KpiWithDelta, PersonalRecord, StatsSummaryDTO } from "@kinora/cont
 import { getStatsAction } from "./actions";
 import type { StatsRange } from "./stats-client";
 import { toCoarseMuscleGroupBars } from "./muscle-group-display";
+import styles from "./stats.module.css";
 
 /**
  * Statistics — protected page only accessible with a valid session
@@ -49,15 +50,15 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   const summary = result.kind === "ok" ? result.summary : undefined;
 
   return (
-    <main className="kin-page stats-page">
-      <div className="stats-topbar">
+    <main className={`kin-page ${styles.page}`}>
+      <div className={styles.topbar}>
         <h1 className="kin-title">{t("stats.title")}</h1>
-        <nav className="stats-range-pills" aria-label={t("stats.title")}>
+        <nav className={styles.rangePills} aria-label={t("stats.title")}>
           {RANGES.map((option) => (
             <a
               key={option}
               href={`?range=${option}`}
-              className={`stats-pill${option === range ? " stats-pill--active" : ""}`}
+              className={`${styles.pill}${option === range ? ` ${styles.pillActive}` : ""}`}
               aria-current={option === range ? "true" : undefined}
             >
               {t(RANGE_LABEL_KEYS[option])}
@@ -87,24 +88,24 @@ interface StatsBodyProps {
 function StatsBody({ summary, t }: StatsBodyProps) {
   return (
     <>
-      <div className="stats-kpi-row">
+      <div className={styles.kpiRow}>
         {KpiCard({ label: t("stats.volumeLabel"), value: formatVolume(summary.totalVolumeKg.value), kpi: summary.totalVolumeKg, t })}
         {KpiCard({ label: t("stats.sessionsLabel"), value: String(summary.sessionCount.value), kpi: summary.sessionCount, t })}
         {KpiCard({ label: t("stats.durationLabel"), value: formatDuration(summary.totalDurationMin.value), kpi: summary.totalDurationMin, t })}
         {KpiCard({ label: t("stats.prLabel"), value: String(summary.prCount.value), kpi: summary.prCount, t })}
       </div>
 
-      <article className="stats-card">
+      <article className={styles.card}>
         <h2 className="kin-title">{t("stats.volumeTrendTitle")}</h2>
         {VolumeTrend({ trend: summary.volumeTrend, t })}
       </article>
 
-      <div className="stats-placeholder-row">
-        <article className="stats-card">
+      <div className={styles.placeholderRow}>
+        <article className={styles.card}>
           <h2 className="kin-title">{t("stats.distributionTitle")}</h2>
           {MuscleGroupDistribution({ distribution: summary.muscleGroupDistribution, t })}
         </article>
-        <article className="stats-card">
+        <article className={styles.card}>
           <h2 className="kin-title">{t("stats.prTitle")}</h2>
           {PersonalRecordsTable({ personalRecords: summary.personalRecords, t })}
         </article>
@@ -126,14 +127,14 @@ function MuscleGroupDistribution({ distribution, t }: MuscleGroupDistributionPro
   }
 
   return (
-    <div className="stats-bar-chart">
+    <div className={styles.barChart}>
       {bars.map((bar) => (
-        <div className="stats-bar-row" key={bar.group}>
-          <div className="stats-bar-label">{t(`progress.muscle.${bar.group}`)}</div>
-          <div className="stats-bar-track">
-            <div className="stats-bar-fill" style={{ width: `${Math.max(4, bar.percentOfMax)}%` }} />
+        <div className={styles.barRow} key={bar.group}>
+          <div className={styles.barLabel}>{t(`progress.muscle.${bar.group}`)}</div>
+          <div className={styles.barTrack}>
+            <div className={styles.barFill} style={{ width: `${Math.max(4, bar.percentOfMax)}%` }} />
           </div>
-          <div className="stats-bar-val num">{bar.setCount}</div>
+          <div className={`${styles.barVal} num`}>{bar.setCount}</div>
         </div>
       ))}
     </div>
@@ -151,7 +152,7 @@ function PersonalRecordsTable({ personalRecords, t }: PersonalRecordsTableProps)
   }
 
   return (
-    <table className="stats-pr-table">
+    <table className={styles.prTable}>
       <thead>
         <tr>
           <th>{t("stats.prExerciseHeader")}</th>
@@ -163,9 +164,9 @@ function PersonalRecordsTable({ personalRecords, t }: PersonalRecordsTableProps)
       <tbody>
         {personalRecords.map((record) => (
           <tr key={record.exerciseTitle}>
-            <td className="stats-pr-exercise">{record.exerciseTitle}</td>
+            <td className={styles.prExercise}>{record.exerciseTitle}</td>
             <td className="num">{formatEstimated1RM(record.estimated1RM)}</td>
-            <td className="stats-pr-date">{formatPrDate(record.achievedAt)}</td>
+            <td className={styles.prDate}>{formatPrDate(record.achievedAt)}</td>
             <td>{PrTrend({ trend: record.trend })}</td>
           </tr>
         ))}
@@ -180,14 +181,14 @@ interface PrTrendProps {
 
 function PrTrend({ trend }: PrTrendProps) {
   if (!trend) {
-    return <span className="stats-pr-trend stats-trend-arrow-flat">—</span>;
+    return <span className={`${styles.prTrend} ${styles.trendArrowFlat}`}>—</span>;
   }
 
-  const arrowClass = trend.delta > 0 ? "stats-trend-arrow-up" : trend.delta < 0 ? "stats-trend-arrow-down" : "stats-trend-arrow-flat";
+  const arrowClass = trend.delta > 0 ? styles.trendArrowUp : trend.delta < 0 ? styles.trendArrowDown : styles.trendArrowFlat;
   const sign = trend.delta > 0 ? "+" : "";
 
   return (
-    <span className={`stats-pr-trend ${arrowClass}`}>
+    <span className={`${styles.prTrend} ${arrowClass}`}>
       {`${sign}${Math.round(trend.delta * 10) / 10} kg`}
     </span>
   );
@@ -214,10 +215,10 @@ function KpiCard({ label, value, kpi, t }: KpiCardProps) {
   const isPositive = delta !== null && delta >= 0;
 
   return (
-    <article className="stats-kpi-card">
-      <div className="stats-kpi-label">{label}</div>
-      <div className="stats-kpi-value num">{value}</div>
-      <div className={`stats-kpi-delta ${isNew ? "stats-kpi-delta--new" : isPositive ? "stats-kpi-delta--pos" : "stats-kpi-delta--neg"}`}>
+    <article className={styles.kpiCard}>
+      <div className={styles.kpiLabel}>{label}</div>
+      <div className={`${styles.kpiValue} num`}>{value}</div>
+      <div className={`${styles.kpiDelta} ${isNew ? styles.kpiDeltaNew : isPositive ? styles.kpiDeltaPos : styles.kpiDeltaNeg}`}>
         {isNew ? t("stats.deltaNew") : `${isPositive ? "+" : ""}${Math.round(delta)}% ${t("stats.deltaSuffix")}`}
       </div>
     </article>
@@ -237,7 +238,7 @@ function VolumeTrend({ trend, t }: VolumeTrendProps) {
   const maxVolume = Math.max(1, ...trend.current, ...trend.previous);
 
   return (
-    <div className="stats-trend">
+    <div className={styles.trend}>
       {TrendSeries({ label: t("stats.volumeTrendCurrentLabel"), values: trend.current, max: maxVolume, variant: "current" })}
       {TrendSeries({ label: t("stats.volumeTrendPreviousLabel"), values: trend.previous, max: maxVolume, variant: "previous" })}
     </div>
@@ -253,13 +254,13 @@ interface TrendSeriesProps {
 
 function TrendSeries({ label, values, max, variant }: TrendSeriesProps) {
   return (
-    <div className="stats-trend-series" data-variant={variant}>
-      <span className="stats-trend-legend">{label}</span>
-      <div className="stats-trend-bars">
+    <div className={styles.trendSeries} data-variant={variant}>
+      <span className={styles.trendLegend}>{label}</span>
+      <div className={styles.trendBars}>
         {values.map((value, index) => (
           <span
             key={index}
-            className="stats-trend-bar"
+            className={styles.trendBar}
             style={{ height: `${Math.max(4, Math.round((value / max) * 100))}%` }}
             title={`${Math.round(value)} kg`}
           />
