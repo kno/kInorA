@@ -34,7 +34,7 @@ import {
 } from "../../schema.js";
 import { WorkoutSessionRepository } from "../workout-session.js";
 import { UserWeightEntryRepository } from "../user-weight-entry.js";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
@@ -119,14 +119,43 @@ describe.skipIf(!hasDb)("WorkoutSessionRepository.startSession auto-close transa
     return session!.id;
   }
 
+  /**
+   * `session_exercises` and `set_records` carry no tenant/user column of their
+   * own, so a private count has to reach them through their owning
+   * `workout_sessions` row. Counting the WHOLE table instead would measure
+   * every concurrently-running worker's inserts too: these suites share one
+   * scratch database and vitest runs files in parallel, so rows landing
+   * between the `before` and `after` reads inflated the delta and made the
+   * preservation assertion fail intermittently (the #405 family — the fix is a
+   * private scope, never a looser assertion).
+   */
+  async function countExercisesForUser(tenantId: string, userId: string): Promise<number> {
+    const rows = await db
+      .select({ id: sessionExercises.id })
+      .from(sessionExercises)
+      .innerJoin(workoutSessions, eq(sessionExercises.workoutSessionId, workoutSessions.id))
+      .where(and(eq(workoutSessions.tenantId, tenantId), eq(workoutSessions.userId, userId)));
+    return rows.length;
+  }
+
+  async function countSetRecordsForUser(tenantId: string, userId: string): Promise<number> {
+    const rows = await db
+      .select({ id: setRecords.id })
+      .from(setRecords)
+      .innerJoin(sessionExercises, eq(setRecords.sessionExerciseId, sessionExercises.id))
+      .innerJoin(workoutSessions, eq(sessionExercises.workoutSessionId, workoutSessions.id))
+      .where(and(eq(workoutSessions.tenantId, tenantId), eq(workoutSessions.userId, userId)));
+    return rows.length;
+  }
+
   it("auto-closes an aged session as abandoned (never completed), preserves its data, and returns the notice", async () => {
     const tenantId = await seedTenant();
     const userId = await seedUser();
     const planId = await seedReadyPlan(tenantId, userId);
     const staleId = await seedActiveSession(tenantId, userId, planId, AGED_STARTED_AT, 1);
 
-    const setCountBefore = await db.select().from(setRecords);
-    const exerciseCountBefore = await db.select().from(sessionExercises);
+    const setCountBefore = await countSetRecordsForUser(tenantId, userId);
+    const exerciseCountBefore = await countExercisesForUser(tenantId, userId);
 
     const outcome = await repo.startSession(tenantId, userId, planId, 2, NOW);
 
@@ -151,8 +180,8 @@ describe.skipIf(!hasDb)("WorkoutSessionRepository.startSession auto-close transa
       .where(eq(setRecords.sessionExerciseId, exerciseRowsAfter[0]!.id));
     expect(setRowsAfter).toHaveLength(2);
 
-    const setCountAfter = await db.select().from(setRecords);
-    const exerciseCountAfter = await db.select().from(sessionExercises);
+    const setCountAfter = await countSetRecordsForUser(tenantId, userId);
+    const exerciseCountAfter = await countExercisesForUser(tenantId, userId);
     // The new session materializes day 2 of `twoDaySessionsProgram`: one
     // exercise ("Bench") carrying `sets: 3`. Derived from the fixture rather
     // than hardcoded — the original `+ 1` was wrong and went unnoticed because
@@ -160,8 +189,11 @@ describe.skipIf(!hasDb)("WorkoutSessionRepository.startSession auto-close transa
     // (#382), so it had never executed.
     const newSessionExercises = twoDaySessionsProgram.weeklySessions.find((s) => s.day === 2)!.exercises;
     const newSessionSetCount = newSessionExercises.reduce((sum, exercise) => sum + exercise.sets, 0);
-    expect(setCountAfter.length).toBe(setCountBefore.length + newSessionSetCount);
-    expect(exerciseCountAfter.length).toBe(exerciseCountBefore.length + newSessionExercises.length);
+    // Exact equality, both sides scoped to this test's own tenant/user: an
+    // auto-close is a status update, so it must ADD the new day's rows and
+    // destroy none of the stale session's. A tolerance would pass either way.
+    expect(setCountAfter).toBe(setCountBefore + newSessionSetCount);
+    expect(exerciseCountAfter).toBe(exerciseCountBefore + newSessionExercises.length);
 
     if (outcome?.kind === "started") {
       expect(outcome.autoClosedSession).toEqual({
@@ -220,11 +252,16 @@ describe.skipIf(!hasDb)("WorkoutSessionRepository.startSession auto-close transa
     const kinds = [resultA?.kind, resultB?.kind].sort();
     expect(kinds).toEqual(["resumed", "started"]);
 
-    const activeRows = await db
+    const activeForUser = await db
       .select()
       .from(workoutSessions)
-      .where(eq(workoutSessions.status, "active"));
-    const activeForUser = activeRows.filter((row) => row.userId === userId);
+      .where(
+        and(
+          eq(workoutSessions.tenantId, tenantId),
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.status, "active"),
+        ),
+      );
     expect(activeForUser).toHaveLength(1);
   });
 
