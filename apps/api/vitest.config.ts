@@ -1,5 +1,11 @@
 import { defineConfig } from "vitest/config";
 import { coverageConfig, resolveConfig, ssrResolveConfig } from "../../vitest.shared";
+import { assertCoverageContext, functionsThreshold } from "./coverage-mode.mjs";
+
+// Fails the run outright if CI ever measures this package's coverage without a
+// database. See coverage-mode.mjs — the two-floor design cannot catch that one
+// regression by itself, so it is asserted rather than inferred from a number.
+assertCoverageContext();
 
 export default defineConfig({
   resolve: {
@@ -52,36 +58,35 @@ export default defineConfig({
       ],
       thresholds: {
         ...coverageConfig.thresholds,
-        // Raised 85 → 90 after #404 made the coverage run execute the
-        // integration suites instead of skipping them.
+        // TWO floors, on purpose, because there are two honest measurements —
+        // and this file no longer picks between them. See coverage-mode.mjs for
+        // the numbers and the reasoning; the short version:
         //
-        // Two different numbers are now in play, and this floor is deliberately
-        // derived from the LOWER one:
+        //   93  integrated — DATABASE_URL present, integration suites executing
+        //       (measured 94.35% on main 78ce941, CI run 31352490931).
+        //   90  hermetic — no database, every
+        //       `describe.skipIf(!process.env.DATABASE_URL)` suite skipping
+        //       (measured 91.51% on the same commit).
         //
-        //   94.35%  CI, with DATABASE_URL and a real Postgres (run 31326626023,
-        //           2471 tests pass, 121 that used to skip now execute).
-        //   91.51%  hermetic, no database — every
-        //           `describe.skipIf(!process.env.DATABASE_URL)` suite skips.
+        // Until #425 there was a single floor pinned to the LOWER measurement,
+        // because `.githooks/pre-push` ran `pnpm test:coverage` with no
+        // database: anything above 91.51% blocked `git push` for every
+        // developer without a local Postgres, and the hook's remedy for that
+        // was `git push --no-verify` — the habit this gate exists to prevent.
+        // The hook is now mode-aware too (scripts/prepush-coverage.mjs), so the
+        // three points CI genuinely proves are finally enforced in CI without
+        // holding a local push to infrastructure the developer may not have.
         //
-        // The floor CANNOT be set from the 94.35% figure. `.githooks/pre-push`
-        // runs `pnpm test:coverage` with no database, so any value above 91.51%
-        // blocks `git push` for every developer who does not happen to have
-        // Postgres running — and that hook's failure message advertises
-        // `git push --no-verify`, which is the habit this gate exists to
-        // prevent. Verified, not assumed: at 92 the hermetic run exits 1 with
-        // "Coverage for functions (91.51%) does not meet global threshold".
-        //
-        // So 90 is bounded above by the hermetic ceiling (1.5 points of churn
-        // headroom against 91.51), not chosen from what CI happened to report.
-        // Closing the remaining CI headroom means making the pre-push hook
-        // database-aware first; until then this floor is what BOTH contexts can
-        // honestly hold.
+        // The dual standard is stated rather than hidden: the hook prints which
+        // mode it selected and which floor that buys before it runs anything.
         //
         // Note the coverage number is not what protects the database wiring: if
         // Postgres is unreachable the "Run database migrations" step fails and
-        // the job goes red before coverage is measured at all.
+        // the job goes red before coverage is measured at all. The case a
+        // number cannot catch — DATABASE_URL dropped from the Coverage step
+        // alone — is handled by `assertCoverageContext()` above.
         //
-        // Close real gaps, never lower this. The genuine remaining holes are
+        // Close real gaps, never lower these. The genuine remaining holes are
         // `billing-admin.ts` (66.66% functions) and `tier-override-admin.ts`
         // (80%) — both measured WITH a database, so they are real gaps rather
         // than the measurement artefact #404 was about.
@@ -90,7 +95,7 @@ export default defineConfig({
         // once its declaration site executes, which is why this number dropped
         // from an apparent 88.83% to 85.40% when `build-app.test.ts` began
         // invoking the real `buildApp()` (#369).
-        functions: 90,
+        functions: functionsThreshold(),
       },
     },
   },

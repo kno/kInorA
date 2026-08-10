@@ -1,27 +1,25 @@
 #!/bin/sh
 #
 # Pre-push hook: enforce coverage thresholds before push.
-# Runs `pnpm test:coverage` — Vitest fails the push if any
-# package's coverage drops below its configured thresholds.
+#
+# The work lives in scripts/prepush-coverage.mjs, which picks a coverage mode
+# before running anything:
+#
+#   integrated — DATABASE_URL is set and reachable. The apps/api integration
+#                suites run, and apps/api is held to the same floor CI enforces.
+#   hermetic   — no reachable database. Those suites skip, and apps/api is held
+#                to the lower floor that a run without infrastructure can
+#                honestly prove.
+#
+# Two floors, deliberately, and the script prints which one applies before the
+# run starts. A gate that can only be satisfied by infrastructure the project
+# does not help you obtain is a gate people learn to skip (#425).
 #
 # The coverage thresholds live in:
-#   vitest.shared.ts          — global baseline
-#   apps/*/vitest.config.ts   — per-package override
+#   vitest.shared.ts             — global baseline
+#   apps/api/coverage-mode.mjs   — the two apps/api function-coverage floors
+#   apps/*/vitest.config.ts      — per-package overrides
 #   packages/*/vitest.config.ts
-#
-# To skip: git push --no-verify
 
-echo "=== Pre-push: checking coverage thresholds ==="
-pnpm test:coverage
-status=$?
-
-if [ $status -ne 0 ]; then
-  echo ""
-  echo "❌ Coverage thresholds not met. Push blocked."
-  echo "   Run 'pnpm test:coverage' locally to see the details."
-  echo "   To skip (not recommended): git push --no-verify"
-  exit 1
-fi
-
-echo "✅ Coverage thresholds met. Push allowed."
-exit 0
+repo_root=$(git rev-parse --show-toplevel) || exit 1
+exec node "$repo_root/scripts/prepush-coverage.mjs"
