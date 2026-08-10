@@ -1,11 +1,9 @@
 /**
  * PlanWeekView — server component.
  *
- * Renders the plan "ready" state as the cockpit layout from
- * `screens/web-plan.html`: a topbar (plan name + lead + actions), a two-column
- * cockpit whose main column holds the hero (session copy + DATA-WIRED metrics
- * + muscle body-map) and the week board, and a presentational side rail
- * (readiness ring, today's blocks, Coach AI).
+ * Renders the plan "ready" state as a single-column cockpit: a topbar (plan
+ * name + lead + actions), the hero (session copy + DATA-WIRED metrics) and the
+ * week board.
  *
  * DATA-WIRED (derived from the WorkoutProgram / WeeklyOverviewDTO props):
  *   - the 4 metric tiles (sessions / rest / est. duration / volume placeholder)
@@ -15,8 +13,10 @@
  *   - the 7-tile Mon–Sun board with real day states + week navigation
  *     (rendered by PlanTrackerClient → DayDetailPanel)
  *
- * PRESENTATIONAL ONLY (no data model yet — see plan-presentational.tsx):
- *   - the side rail (readiness ring, today's blocks, Coach AI).
+ * Every surface listed above is derived from real data. The mockup's side rail
+ * — readiness ring, today's invented exercise blocks and the Coach AI card —
+ * was removed in #420 rather than restyled: it presented fabricated health
+ * signals and training prescriptions as if they were the user's own.
  *
  * No "use client" directive: this is a pure server component. The only server
  * call is `getWeeklyOverviewAction` (a Server Action); the browser never sees
@@ -28,7 +28,7 @@ import type { PlanBranding, WorkoutProgram } from "@kinora/contracts";
 import { formatToday } from "@/lib/week-dates";
 import styles from "./plan-week-view.module.css";
 import { PlanTrackerClient } from "./PlanTrackerClient";
-import { PlanHero, PlanSideRail, PlanToolbar } from "./plan-presentational";
+import { PlanHero, PlanToolbar } from "./plan-presentational";
 import { estimateSessionMinutes, recommendedSession, restDays } from "./plan-utils";
 import { cleanLimitationNotes } from "./limitation-notes";
 import { getWeeklyOverviewAction } from "./actions";
@@ -108,9 +108,14 @@ export async function PlanWeekView({
   };
 
   // DATA-WIRED metrics grid — kept as literal server JSX so the values stay
-  // server-derived. Passed into the (presentational) hero panel via children.
+  // server-derived. Passed into the hero panel via children.
+  //
+  // The group's accessible name is `metricsLabel`, not the old `focusLabel`
+  // ("Muscle focus"): that name belonged to the body-map removed in #411 and
+  // told a screen-reader user this grid of sessions / rest days / duration /
+  // volume was a muscle-focus breakdown (#420).
   const metrics = (
-    <div className={styles.metrics} aria-label={t("plan.hero.focusLabel")}>
+    <div className={styles.metrics} aria-label={t("plan.hero.metricsLabel")}>
       <div className={styles.metric}>
         <div className={styles.metricEyebrow}>{t("plan.summary.sessions")}</div>
         <div className={styles.metricValue}>{sessionCount}</div>
@@ -172,7 +177,6 @@ export async function PlanWeekView({
       planName={planName}
       weeklyOverview={weeklyOverview}
       topbar={topbar}
-      sideRail={<PlanSideRail />}
       branding={branding}
     >
       {/* Hero panel wrapping the DATA-WIRED metrics grid. `todayLabel` is the

@@ -93,6 +93,8 @@ describe("@kinora/i18n package assembly", () => {
     // full web-plan.html mockup (25 `plan.hero.*` topbar/hero cockpit copy +
     // metrics/body-map, 11 `plan.readiness.*`, 22 `plan.today.*` side-rail
     // exercise blocks, 10 `plan.coach.*` — the side rail is presentational).
+    // 59 of those 68 were later removed as fabricated copy: see the #411 and
+    // #420 lines below.
     // + 18 `profile.*` keys authored in 10a for the /profile experience
     // (3 `profile.loading.*` loading-state keys + 12 `profile.form.*`
     // heading/labels/placeholders/feedback + 3 `profile.experience.*`
@@ -267,11 +269,26 @@ describe("@kinora/i18n package assembly", () => {
     // `pillExercises`) became ICU templates fed by the real clock and the
     // real recommended session. Net 25 -> 9.
     //
+    // -43 `plan.{readiness,today,coach}.*` (kno/kInorA#420) — the plan side
+    // rail. 11 `plan.readiness.*` (a ring whose score was a JSX literal, plus
+    // sleep / soreness / last-push figures this app never measures and an
+    // "Add 2.5 kg" recommendation derived from nothing), 22 `plan.today.*`
+    // (six invented exercises with loads, standing beside the hero's REAL
+    // session and disagreeing with it) and 10 `plan.coach.*` (an "AI Coach"
+    // prescribing "Keep bench at 82.5 kg" with two buttons that toasted
+    // "Suggestion applied to your plan" and wrote nothing). Removed, not
+    // restyled: there is no wearable integration, no sleep or soreness input,
+    // and no coaching engine. Real adaptation exists (14a/14b) and is where a
+    // coaching surface belongs.
+    // ±0 `plan.hero.focusLabel` -> `plan.hero.metricsLabel` (same issue) — the
+    // metrics grid's accessible name still said "Muscle focus", left over from
+    // the body-map removed in #411.
+    //
     // NOTE: this total is the one line every concurrent branch edits, so a
     // merge that takes either side wholesale stays GREEN on a number matching
     // whichever catalog survived. It is derived from the merged catalogs, never
-    // carried over from one side: 813 (post-#409/#414) - 16 = 797.
-    expect(nonBillingKeys).toHaveLength(797);
+    // carried over from one side: 813 (post-#409/#414) - 16 - 43 = 754.
+    expect(nonBillingKeys).toHaveLength(754);
   });
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {

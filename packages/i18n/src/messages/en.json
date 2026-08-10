@@ -334,64 +334,15 @@
       "retryCta": "Retry"
     },
     "hero": {
-      "eyebrow": "Weekly control · strength block",
-      "lead": "Weekly control view: load, recovery, today's session and upcoming exercises without losing your training focus.",
+      "eyebrow": "Weekly control",
+      "lead": "Your week at a glance: the sessions in this plan, their estimated load, and what each day holds.",
       "editCta": "Edit plan",
       "pillToday": "Today · {date}",
       "pillDuration": "{minutes} min",
       "pillExercises": "{count, plural, one {# exercise} other {# exercises}}",
       "noSessionTitle": "No session planned",
       "startCta": "Start session",
-      "focusLabel": "Muscle focus"
-    },
-    "readiness": {
-      "eyebrow": "Readiness",
-      "title": "Ready to push, not to improvise.",
-      "ringAria": "Readiness 82 percent",
-      "sleepLabel": "Sleep",
-      "sleepValue": "7h 35m",
-      "sorenessLabel": "Muscle soreness",
-      "sorenessValue": "Low",
-      "lastPushLabel": "Last push",
-      "lastPushValue": "96 h",
-      "recommendationLabel": "Recommendation",
-      "recommendationValue": "Add 2.5 kg"
-    },
-    "today": {
-      "eyebrow": "Today's session",
-      "title": "Blocks",
-      "restChip": "90–120 s",
-      "targetLabel": "target",
-      "ex1Name": "Flat bench press",
-      "ex1Sub": "4×6 · RPE 7–8",
-      "ex1Load": "82.5 kg",
-      "ex2Name": "Barbell row",
-      "ex2Sub": "4×8 · controlled",
-      "ex2Load": "65 kg",
-      "ex3Name": "Overhead press",
-      "ex3Sub": "3×8 · no failure",
-      "ex3Load": "42 kg",
-      "ex4Name": "Weighted pull-ups",
-      "ex4Sub": "4×6 · full range",
-      "ex4Load": "+10 kg",
-      "ex5Name": "Barbell curl",
-      "ex5Sub": "3×10 · accessory",
-      "ex5Load": "32 kg",
-      "ex6Name": "Triceps pushdown",
-      "ex6Sub": "3×12 · finisher",
-      "ex6Load": "28 kg"
-    },
-    "coach": {
-      "eyebrow": "Coach AI",
-      "title": "Suggested adjustments",
-      "note": "Keep bench at 82.5 kg. If RPE goes above 8, cut one accessory set before touching the main lift.",
-      "action1Title": "Adjust fatigue",
-      "action1Sub": "Fewer accessories",
-      "action1Note": "Change applied: accessories reduced and rest extended to 120 seconds.",
-      "action2Title": "Prepare progression",
-      "action2Sub": "+2.5 kg if it's clean",
-      "action2Note": "Progression marked: next bench suggested at 85 kg if you finish 4×6.",
-      "appliedToast": "Suggestion applied to your plan."
+      "metricsLabel": "Plan summary"
     },
     "branding": {
       "byTrainer": "By {trainerName}"
