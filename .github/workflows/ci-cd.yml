@@ -65,6 +65,16 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Assert every test directory belongs to a vitest project
+        # `pnpm test` above can be entirely green while a whole directory of
+        # tests never executes. `scripts/__tests__` was exactly that for four
+        # suites and ~37KB of assertions (#437), the third instance of the shape
+        # after #392 and #404. The guard asks each vitest project which files it
+        # would run, compares the union against the files on disk, and fails
+        # naming any file, directory, or unreachable project left over. It also
+        # fails when it finds nothing to check, so it cannot pass vacuously.
+        run: pnpm test:dirs-guard
+
       - name: Run database migrations
         run: pnpm --filter api db:migrate
         env:
