@@ -18,8 +18,9 @@
  *
  * `.stats-placeholder` was NOT carried across: it had no reference anywhere in
  * `apps/`, a leftover from the Slice 3a placeholder sections.
- * `.stats-placeholder-row` is the live one, and now carries the screen's own
- * name, `.secondaryRow` (kno/kInorA#435).
+ * `.stats-placeholder-row` was the live one, and carried the screen's own
+ * name, `.secondaryRow` (kno/kInorA#435), until the page went to a single
+ * column of full-width sections (kno/kInorA#443 — see below).
  *
  * Everything resolves through the existing globals.css tokens (`--surface`,
  * `--border`, `--accent`, `--r-card`, `--r-pill`); no literal is introduced.
@@ -117,21 +118,30 @@
 }
 
 /*
- * The screen's `secondary-row` (web-stats.html:336) — renamed from the
- * `.placeholderRow` the Slice 3a era left behind, when both cards under it
- * were placeholders. Both hold real data now.
+ * Every section heading on the page: the volume-trend card, the muscle-group
+ * card, and the personal-records card. The screen sets its section titles at
+ * 16-17px, weight 600 (`.chart-title` web-stats.html:322, `.sec-title` :348,
+ * and the PR card's own title :714) — not the page-title scale `kin-title`
+ * carries. `kin-title` stays untouched: it is shared by every route, and the
+ * heading treatment this screen asks for belongs to `/stats` alone
+ * (kno/kInorA#443).
  *
- * The screen hardcodes `grid-template-columns: 1fr 1fr`; this stays on
- * `auto-fit`/`minmax` so the pair collapses to a single column on a narrow
- * viewport instead of squeezing two charts into it. The screen is a
- * fixed-width mockup and does not model that case, so this is a deliberate
- * improvement on it rather than a divergence to correct.
+ * Only the size and weight are set here. The display family, tracking and
+ * line height already come from the global `h1, h2, h3` rule.
  */
-.secondaryRow {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: var(--sp-3);
+.sectionTitle {
+  font-size: 17px;
+  font-weight: 600;
 }
+
+/*
+ * The screen's `secondary-row` (web-stats.html:336) is gone: it was a
+ * `1fr 1fr` pair of the muscle-group card and the workout-type donut, and the
+ * donut is permanently out of scope, so the row had a single child left. The
+ * screen puts a lone card at full width (`.chart-card`, `.pr-card`), so both
+ * remaining cards are now full-width siblings and no two-column rule — and no
+ * narrow-viewport collapse for one — is needed at all.
+ */
 
 .trend {
   display: grid;

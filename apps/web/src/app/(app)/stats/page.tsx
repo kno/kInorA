@@ -24,6 +24,14 @@ import styles from "./stats.module.css";
  * workout-type donut is permanently out of scope (design.md "Statistics" —
  * workout type is not tracked).
  *
+ * Section order and width follow the screen: the KPI row, the volume-trend
+ * card, the muscle-group card, and then the personal-records card, each full
+ * width. On the screen the PR card is a sibling *after* `secondary-row`
+ * (web-stats.html:711), not a cell inside it; the row's other cell was the
+ * donut, so with the donut out of scope the two-column row has no second
+ * child left and the muscle-group card is simply a full-width section like
+ * the trend card above it (kno/kInorA#443).
+ *
  * The proxy (`proxy.ts`) gates this route: no `kinora_session` cookie ->
  * redirect to `/login`. Renders inside the AppShell (sidebar/topbar chrome
  * lives there, not here).
@@ -96,23 +104,22 @@ function StatsBody({ summary, t }: StatsBodyProps) {
       </div>
 
       <article className={styles.card}>
-        <h2 className="kin-title">{t("stats.volumeTrendTitle")}</h2>
+        <h2 className={styles.sectionTitle}>{t("stats.volumeTrendTitle")}</h2>
         {VolumeTrend({ trend: summary.volumeTrend, t })}
       </article>
 
-      <div className={styles.secondaryRow}>
-        <article className={styles.card}>
-          <h2 className="kin-title">{t("stats.distributionTitle")}</h2>
-          {MuscleGroupDistribution({ distribution: summary.muscleGroupDistribution, t })}
-        </article>
-        <article className={styles.prCard}>
-          <div className={styles.prCardHeader}>
-            <div className={styles.prEyebrow}>{t("stats.prEyebrow")}</div>
-            <h2 className="kin-title">{t("stats.prTitle")}</h2>
-          </div>
-          {PersonalRecordsTable({ personalRecords: summary.personalRecords, t })}
-        </article>
-      </div>
+      <article className={styles.card}>
+        <h2 className={styles.sectionTitle}>{t("stats.distributionTitle")}</h2>
+        {MuscleGroupDistribution({ distribution: summary.muscleGroupDistribution, t })}
+      </article>
+
+      <article className={styles.prCard}>
+        <div className={styles.prCardHeader}>
+          <div className={styles.prEyebrow}>{t("stats.prEyebrow")}</div>
+          <h2 className={styles.sectionTitle}>{t("stats.prTitle")}</h2>
+        </div>
+        {PersonalRecordsTable({ personalRecords: summary.personalRecords, t })}
+      </article>
     </>
   );
 }

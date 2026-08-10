@@ -199,6 +199,41 @@ describe("StatsPage", () => {
     expect(children.some((child) => child.type === "table")).toBe(true);
   });
 
+  // On the screen the PR card is a sibling *after* `secondary-row`
+  // (web-stats.html:711), full width, not one of its two cells (#443).
+  it("renders the personal-records card as a full-width sibling after the muscle-group card, not inside a two-column row", async () => {
+    vi.mocked(getStatsAction).mockResolvedValueOnce({ kind: "ok", summary: populatedSummary });
+
+    const page = await renderPage();
+    const main = findFirst(page, (el) => el.type === "main");
+    // The page's own sections: `main`'s children are the topbar and the body
+    // fragment, so one level down is the flat list of top-level blocks.
+    const sections = childrenOf(main).flatMap((child) => childrenOf(child));
+
+    const distributionIndex = sections.findIndex((el) => textOf(el).includes("Sets per muscle group"));
+    const prIndex = sections.findIndex((el) => hasClass(el, "prCard"));
+
+    // Both found at the same level => neither is wrapped in a grid row.
+    expect(distributionIndex).toBeGreaterThanOrEqual(0);
+    expect(prIndex).toBeGreaterThan(distributionIndex);
+  });
+
+  // The screen's section titles are 16-17px, not the page-title scale
+  // `kin-title` carries; `kin-title` is shared app-wide, so `/stats` gets its
+  // own heading class and every heading on the page takes it together (#443).
+  it("gives every section heading the module's heading treatment instead of kin-title", async () => {
+    vi.mocked(getStatsAction).mockResolvedValueOnce({ kind: "ok", summary: populatedSummary });
+
+    const page = await renderPage();
+    const headings = findAll(page, (el) => el.type === "h2");
+
+    expect(headings).toHaveLength(3);
+    for (const heading of headings) {
+      expect(hasClass(heading, "sectionTitle")).toBe(true);
+      expect(String(heading.props?.className ?? "")).not.toContain("kin-title");
+    }
+  });
+
   it("pads the personal-records empty state, which the unpadded card cannot", async () => {
     vi.mocked(getStatsAction).mockResolvedValueOnce({ kind: "ok", summary: emptySummary });
 
@@ -292,6 +327,13 @@ function findFirst(
     }
   }
   return undefined;
+}
+
+function findAll(node: ReactNode, match: (el: AnyElement) => boolean): AnyElement[] {
+  if (Array.isArray(node)) return node.flatMap((child) => findAll(child, match));
+  if (!isReactElement(node)) return [];
+  const inChildren = findAll(node.props.children, match);
+  return match(node) ? [node, ...inChildren] : inChildren;
 }
 
 /**
