@@ -22,10 +22,10 @@ import {
   collectTestFiles,
   discoverProjects,
   findUnclaimed,
-  parseWorkspaceGlobs,
   rootScriptRunsVitest,
   vacuityErrors,
 } from "../assert-test-dirs-have-a-project.mjs";
+import { parseWorkspaceGlobs } from "../workspace-packages.mjs";
 
 const WORKSPACE_YAML = 'packages:\n  - "apps/*"\n  - "packages/*"\n';
 const globs = parseWorkspaceGlobs(WORKSPACE_YAML);
@@ -81,21 +81,6 @@ describe("discoverProjects", () => {
 
   it("returns nothing when no vitest config exists, so vacuity can be reported", () => {
     expect(discoverProjects(["package.json", "README.md"])).toEqual([]);
-  });
-});
-
-describe("parseWorkspaceGlobs", () => {
-  it("matches only the directory depth the glob describes", () => {
-    expect(globs.some((glob) => glob.test("apps/api"))).toBe(true);
-    expect(globs.some((glob) => glob.test("packages/domain"))).toBe(true);
-    // `apps/*` is one level: a nested directory is NOT a workspace package.
-    expect(globs.some((glob) => glob.test("apps/api/scripts"))).toBe(false);
-    expect(globs.some((glob) => glob.test("scripts"))).toBe(false);
-    expect(globs.some((glob) => glob.test("."))).toBe(false);
-  });
-
-  it("ignores keys other than `packages:`", () => {
-    expect(parseWorkspaceGlobs('onlyBuiltDependencies:\n  - "esbuild"\n')).toEqual([]);
   });
 });
 
