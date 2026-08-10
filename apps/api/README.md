@@ -59,6 +59,66 @@ UPDATE users SET is_admin = true WHERE email = 'your@email.com';
 
 **Configure**: set keys in the operator `.env` on the VPS. They are **not** GitHub secrets and not injected by CI/CD (same pattern as `OPENROUTER_API_KEY`).
 
+### Voice — STT and TTS (13-v1.1-interactive-voice-chat)
+
+Transcription and synthesis providers are selected **independently** at deploy time, so a deployment can use Deepgram for transcription while keeping OpenAI for synthesis. This is an env decision, not a per-tenant runtime config, and it is not stored in the database.
+
+Fail-safe: an unknown or unset provider value falls back to `openai`, so a misconfigured environment can never leave voice with no adapter.
+
+| Variable | Default | Description |
+|---|---|---|
+| `VOICE_STT_PROVIDER` | `openai` | `openai` \| `google` (Gemini STT) \| `deepgram` (Listen). Unknown → `openai`. |
+| `VOICE_TTS_PROVIDER` | `openai` | `openai` \| `google` (Gemini TTS, `audio/wav`) \| `deepgram` (Aura-2, container-wrapped `audio/wav`). Unknown → `openai`. |
+| `DEEPGRAM_API_KEY` | — | Required when either provider is `deepgram`. Without it the adapters fall back to a placeholder key and every live call fails. |
+| `DEEPGRAM_STT_MODEL` | `nova-2` | Deepgram Listen model. |
+| `DEEPGRAM_STT_LANGUAGE` | `es` | Deepgram Listen language. |
+| `DEEPGRAM_TTS_MODEL` | `aura-2-carina-es` | Deepgram Aura-2 voice. |
+| `GOOGLE_STT_MODEL` | `gemini-2.5-flash` | Gemini STT model. |
+| `GOOGLE_TTS_MODEL` | `gemini-2.5-flash-preview-tts` | Gemini TTS model. |
+| `GOOGLE_TTS_VOICE` | `Kore` | Gemini TTS voice. |
+| `GOOGLE_TTS_STYLE_DIRECTIVE` | built-in | Style directive prepended to the Gemini TTS prompt. Not overridable in containers — see below. |
+
+The Google/Gemini adapters authenticate with `GOOGLE_GENERATIVE_AI_API_KEY`. Setting both `VOICE_*` variables to `google` or `deepgram` gives a fully OpenAI-free voice stack.
+
+> **`GOOGLE_TTS_STYLE_DIRECTIVE` is deliberately not forwarded in Compose.** The synthesizer resolves it with `?? DEFAULT_TTS_STYLE_DIRECTIVE`, and Compose interpolates an unset variable to the empty string, which is not nullish. Forwarding it bare would replace the Castilian-accent directive with `""` on every deploy that does not set it — worse than not being able to override it. The same applies to an empty assignment in `.env`. Making it overridable requires the adapter to treat an empty value as unset first.
+
+### Vector memory (10b-user-memory-vector)
+
+These values define the embedding cohort persisted in pgvector. Keep them stable per environment: changing the model, version or dimension without a coordinated re-embed creates an incompatible cohort that retrieval intentionally skips. The data is not lost, it simply stops being returned.
+
+| Variable | Default | Description |
+|---|---|---|
+| `VECTOR_MEMORY_EMBEDDING_PROVIDER` | `openai` | Embedding provider. |
+| `VECTOR_MEMORY_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model. Must match the persisted rows. |
+| `VECTOR_MEMORY_EMBEDDING_VERSION` | `text-embedding-3-small` | Cohort version tag stored alongside each vector. |
+| `VECTOR_MEMORY_EMBEDDING_DIMENSION` | `1536` | Vector dimension. Must match the persisted rows. |
+| `VECTOR_MEMORY_EMBEDDING_TIMEOUT_MS` | `3000` | Per-call embedding timeout. |
+| `VECTOR_MEMORY_EMBEDDING_MAX_ATTEMPTS` | `2` | Retry attempts for a transient embedding failure. |
+
+### Billing — Stripe (11b-v1-billing-stripe-integration)
+
+Without these the Stripe gateway is unconfigured and the whole billing flow — checkout, portal and webhook — fails closed.
+
+| Variable | Default | Description |
+|---|---|---|
+| `STRIPE_SECRET_KEY` | — | Stripe secret key. Use a test-mode key in development. |
+| `STRIPE_WEBHOOK_SECRET` | — | Signing secret for the webhook endpoint. |
+| `STRIPE_PRICE_MONTHLY` | — | Stripe Price id for the monthly Pro plan. |
+| `STRIPE_PRICE_ANNUAL` | — | Stripe Price id for the annual Pro plan. |
+| `STRIPE_PRICE_MONTHLY_AMOUNT` | — | Display amount in minor units. Drives pricing copy only. |
+| `STRIPE_PRICE_ANNUAL_AMOUNT` | — | Display amount in minor units. Drives pricing copy and the annual save badge. |
+| `STRIPE_PRICE_CURRENCY` | `eur` | ISO-4217 code, lowercased at read time. |
+
+The `*_AMOUNT` variables never charge anything by themselves; the Price id is what Stripe bills. They exist so the pricing page and the save badge can render without a Stripe round trip.
+
+### Seat billing — Trainer tier (16c-v3-b2b-seat-billing)
+
+| Variable | Default | Description |
+|---|---|---|
+| `STRIPE_PRICE_TRAINER_SEAT_MONTHLY` | — | Per-seat Stripe Price id, monthly. |
+| `STRIPE_PRICE_TRAINER_SEAT_ANNUAL` | — | Per-seat Stripe Price id, annual. |
+| `SEAT_BILLING_ENABLED` | `0` | Set to `1` to activate the outbound Stripe seat-quantity sync. |
+
 ### Optional / runtime tunables
 
 | Variable | Default | Description |
@@ -66,6 +126,12 @@ UPDATE users SET is_admin = true WHERE email = 'your@email.com';
 | `PORT` | `4000` | HTTP port to listen on |
 | `HOST` | `0.0.0.0` | HTTP host to bind to |
 | `NODE_ENV` | `development` | Runtime environment |
+
+### The Compose forwarding rule
+
+Compose only injects variables listed under a service's `environment:` block. A variable that exists in the root `.env.example` and in the VPS `.env` but is missing from that block is silently ignored inside the container, which keeps its built-in default instead.
+
+This has shipped as a real bug more than once — `STRIPE_*` in PR #254, and later `VOICE_*` and `DEEPGRAM_*`. When adding a variable, add the matching forward in `docker-compose.yml` in the same change, and document it in `.env.example` and here.
 
 ## Development
 

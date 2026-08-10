@@ -70,6 +70,21 @@ services:
       # behavior is unchanged unless the VPS .env overrides them.
       DEEPGRAM_STT_MODEL: ${DEEPGRAM_STT_MODEL:-nova-2}
       DEEPGRAM_STT_LANGUAGE: ${DEEPGRAM_STT_LANGUAGE:-es}
+      # Google/Gemini voice knobs (VOICE_STT_PROVIDER/VOICE_TTS_PROVIDER=google).
+      # Same forwarding gotcha as the Deepgram block above: without these lines a
+      # VPS .env override is silently ignored and the adapters keep their built-in
+      # defaults. Defaults must match the adapters (gemini-2.5-flash /
+      # gemini-2.5-flash-preview-tts / Kore) so behavior is unchanged unless the
+      # VPS .env overrides them.
+      GOOGLE_STT_MODEL: ${GOOGLE_STT_MODEL:-gemini-2.5-flash}
+      GOOGLE_TTS_MODEL: ${GOOGLE_TTS_MODEL:-gemini-2.5-flash-preview-tts}
+      GOOGLE_TTS_VOICE: ${GOOGLE_TTS_VOICE:-Kore}
+      # GOOGLE_TTS_STYLE_DIRECTIVE is deliberately NOT forwarded. The synthesizer
+      # resolves it with `?? DEFAULT_TTS_STYLE_DIRECTIVE`, and compose interpolates
+      # an unset variable to the empty string, which is not nullish — forwarding it
+      # bare would replace the Castilian-accent directive with "" on every deploy
+      # that does not set it. Making it overridable in containers requires the
+      # adapter to treat an empty value as unset first.
       # 13 voice provider selection. MUST be forwarded — the voice factory reads
       # these at boot; without them the container ignores the VPS .env and falls
       # back to `openai`, so the OpenAI-free Google (Gemini) STT+TTS stack is dead
