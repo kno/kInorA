@@ -1,8 +1,6 @@
 {
   "marketing": {
     "title": "kInorA",
-    "subtitle": "Personalized training powered by AI",
-    "cta": "Get Started",
     "cinemaAlt": "Athlete taking an active break between sets, sitting on the gym floor with hands resting on knees",
     "comoImgAlt": "Woman performing a loaded barbell squat in the gym, with correct posture and full concentration",
     "strengthImgAlt": "Chalked hands gripping a barbell before a lift, ready to execute the movement"
@@ -68,17 +66,14 @@
     "title": "From your goal to your routine in three steps",
     "subtitle": "No generic templates. Tell kInorA what you want to achieve and it builds a custom plan that improves with you.",
     "step1": {
-      "num": "01",
       "title": "Tell it your goal",
       "desc": "Speak or type: gain strength, lose fat, run farther. The AI learns your level, availability, and equipment."
     },
     "step2": {
-      "num": "02",
       "title": "AI builds your plan",
       "desc": "In seconds you get a weekly routine with exercises, sets, reps, and rest designed for you."
     },
     "step3": {
-      "num": "03",
       "title": "Train and improve every week",
       "desc": "Log your sessions and the AI adjusts loads and volume so you keep progressing without plateauing."
     }
@@ -237,28 +232,13 @@
     "regenerate": {
       "cta": "Regenerate plan"
     },
-    "session": {
-      "day": "Day"
-    },
     "exercises": {
-      "label": "Exercises",
       "count": "exercises"
     },
-    "sets": {
-      "label": "sets"
-    },
-    "reps": {
-      "label": "reps"
-    },
-    "rest": {
-      "label": "rest"
-    },
     "limitation": {
-      "warningLabel": "Note",
       "title": "Important note",
       "advisory": "Consult a professional before attempting exercises that stress these areas."
     },
-    "backToDashboard": "Back to dashboard",
     "nav": {
       "empty": {
         "title": "No plan yet",
@@ -352,16 +332,9 @@
     }
   },
   "tracker": {
-    "start": {
-      "cta": "Start workout"
-    },
     "live": {
       "eyebrow": "Active session",
       "title": "Live workout"
-    },
-    "status": {
-      "active": "Active",
-      "completed": "Completed"
     },
     "tracking": {
       "day": "Day {n}"
@@ -606,7 +579,6 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "authenticated": "You are authenticated.",
     "logout": "Log out",
     "pageTitle": "Your training hub",
     "weekLabel": "Week {week}",
@@ -752,7 +724,6 @@
       "searchSubmit": "Search",
       "applyFilters": "Apply filters",
       "clearFilters": "Clear filters",
-      "filterAll": "All",
       "filters": {
         "bodyPart": "Body part",
         "equipment": "Equipment",
@@ -803,8 +774,6 @@
         "execution": "Execution",
         "muscles": "Muscles worked"
       },
-      "stepsHeading": "Execution steps",
-      "musclesHeading": "Muscles worked",
       "noSecondaryMuscles": "No assisting muscles recorded for this exercise.",
       "viewHistory": "View my history",
       "error": {
@@ -929,10 +898,8 @@
     "volumeTrendPreviousLabel": "Previous period",
     "volumeTrendEmpty": "Not enough data yet to show a trend.",
     "distributionTitle": "Sets per muscle group",
-    "distributionComingSoon": "Muscle-group distribution is coming soon.",
     "distributionEmpty": "No mapped exercises yet — log a workout to see this chart.",
     "prTitle": "Personal records",
-    "prComingSoon": "Personal records are coming soon.",
     "prEmpty": "No personal records yet.",
     "prExerciseHeader": "Exercise",
     "prEstimatedHeader": "Estimated 1RM",
@@ -1089,7 +1056,6 @@
   "billing": {
     "navLabel": "Billing",
     "title": "Billing",
-    "description": "Review your plan, trial status, and usage for this account.",
     "subtitle": "Manage your plan and usage.",
     "loading": {
       "title": "Loading your billing…",
@@ -1132,13 +1098,11 @@
       "metaRenewal": "Renewal",
       "valueNotSet": "—",
       "renewalNone": "No renewal",
-      "comparePlans": "Compare plans",
       "priceFree": "Free"
     },
     "usage": {
       "tenantTitle": "Tenant usage this period",
       "memberTitle": "Your usage this period",
-      "row": "{feature} — {used}/{limit} used",
       "emptyTitle": "No usage recorded yet",
       "emptyDescription": "Usage for this billing period will appear here once it starts.",
       "periodLabel": "Period {period}",
@@ -1207,7 +1171,6 @@
       "endedDescription": "You are now on the Free plan. Upgrade to restore your premium features."
     },
     "upgrade": {
-      "title": "Unlock Pro features",
       "description": "Upgrade to Pro for high monthly limits on plan generation and premium memory.",
       "cta": "View upgrade options"
     }
@@ -1269,7 +1232,6 @@
       "discardCancel": "Cancel",
       "discardFailed": "We couldn't discard that session. Try again."
     },
-    "autoClosed": "We closed your unfinished session from {date, date, medium}.",
     "retry": "Retry",
     "rpe": {
       "a11y": "RPE, optional, 0 to 10"
@@ -1294,7 +1256,6 @@
     },
     "panel": {
       "title": "Extracted data",
-      "empty": "Your plan details will appear here as we chat.",
       "editAria": "Edit {field}",
       "notSet": "—",
       "generate": "Generate plan",
@@ -1310,8 +1271,6 @@
       "level": "Level"
     },
     "value": {
-      "daysPerWeek": "{n, plural, one {# day} other {# days}}",
-      "sessionDuration": "{n} min",
       "equipmentCount": "{n, plural, =0 {None} one {# item} other {# items}}",
       "limitationsCount": "{n, plural, =0 {None} one {# note} other {# notes}}"
     },
@@ -1357,11 +1316,6 @@
     "roleYou": "You",
     "roleCoach": "kInorA"
   },
-  "sidebar": {
-    "logout": "Log out",
-    "logoutLabel": "Log out",
-    "userAreaAria": "User menu"
-  },
   "clients": {
     "pageTitle": "My Clients",
     "pageDescription": "Invite clients and create plans on their behalf.",
@@ -1395,7 +1349,6 @@
       "locationLabel": "Training location",
       "submit": "Create plan",
       "submitting": "Creating…",
-      "success": "Plan created.",
       "errorGeneric": "We couldn't create the plan. Please try again.",
       "errorForbidden": "You are not authorized to create a plan for this client."
     }
@@ -1403,7 +1356,6 @@
   "admin": {
     "pageTitle": "Admin",
     "pageDescription": "Manage platform-wide settings and tools.",
-    "comingSoon": "Coming soon",
     "sections": {
       "aiConfig": {
         "title": "AI Config",
@@ -1500,13 +1452,11 @@
     "logo": {
       "label": "Logo",
       "dropHint": "Drag & drop or click to upload",
-      "browse": "Browse files",
       "formats": "PNG, JPEG, SVG or WebP · up to 5 MB",
       "uploading": "Uploading…",
       "uploadError": "Couldn't upload that logo. Please try again.",
       "unsupported": "That file type isn't supported. Use PNG, JPEG, SVG or WebP.",
       "tooLarge": "That logo is too large. The limit is 5 MB.",
-      "remove": "Remove logo",
       "alt": "Gym logo",
       "empty": "No logo yet"
     },
@@ -1598,7 +1548,6 @@
     },
     "loadMore": "Load more",
     "loadingMore": "Loading…",
-    "empty": "No log events match your filters.",
     "errors": {
       "forbidden": "Access denied.",
       "invalid": "Please check the filters and try again.",

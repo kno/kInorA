@@ -147,7 +147,10 @@ describe("@kinora/i18n package assembly", () => {
     // − 5 (payment-method surface removed: plan.metaPayment, payment.{title,
     //   description,manageCta}, actions.portalError).
     // − 2 (current-period tile removed: plan.metaPeriod, plan.periodTrialEndsOn).
-    expect(billingKeys).toHaveLength(90);
+    // − 4 (kno/kInorA#436: description, plan.comparePlans, upgrade.title and
+    //   usage.row were rendered nowhere — copy left behind by the Slice 5
+    //   screen, which renders its own hero/meter/CTA keys instead).
+    expect(billingKeys).toHaveLength(86);
     expect(en["billing.tier.free"]).toBe("Free");
     expect(es["billing.tier.free"]).toBe("Gratis");
   });
@@ -271,7 +274,12 @@ describe("@kinora/i18n package assembly", () => {
     // kno/kInorA#409: +2 `mobileTracker.error.{dayNotInPlan,
     // dayNotInPlanNoDays}` — the sibling `404 day_not_in_plan` refusal, in
     // its two shapes (some days remain, or none do).
-    expect(mobileTrackerKeys).toHaveLength(34);
+    // kno/kInorA#436: −1 `mobileTracker.autoClosed`. The 17b conflict UI it
+    // shipped with is live and renders the `conflict.*` siblings, but the
+    // auto-close NOTICE was never built on mobile — the screen drops the
+    // `autoClosedSession` the API returns. Web renders it as
+    // `plan.start.autoClosed`; mobile authors its own key when it renders one.
+    expect(mobileTrackerKeys).toHaveLength(33);
     expect(flat["mobileTracker.error.planArchived"]).toContain("archived");
     expect(flattenMessages(catalogs.es)["mobileTracker.error.planArchived"]).toContain(
       "archivado",
@@ -297,8 +305,10 @@ describe("@kinora/i18n package assembly", () => {
 
     const flat = flattenMessages(catalogs.en);
     const clientsKeys = Object.keys(flat).filter((key) => key.startsWith("clients."));
-    // Trainer client-list (19) + status.* (3) + createPlan.* (10) = 32.
-    expect(clientsKeys).toHaveLength(32);
+    // Trainer client-list (19) + status.* (3) + createPlan.* (10) = 32,
+    // − 1 (kno/kInorA#436: `createPlan.success` — the web and mobile forms both
+    //   navigate away on success rather than rendering a confirmation).
+    expect(clientsKeys).toHaveLength(31);
     expect(flat["clients.pageTitle"]).toBe("My Clients");
     expect(flattenMessages(catalogs.es)["clients.pageTitle"]).toBe("Mis clientes");
   });
@@ -442,8 +452,10 @@ describe("@kinora/i18n package assembly", () => {
     // pageTitle, pageDescription, comingSoon (3) + 4 sections x {title,
     // description} (8) = 11, + eyebrow, sectionEyebrow, open and notice x2 (5)
     // for the Open Design chrome (kno/kInorA#414) = 16 keys for the /admin
-    // landing page and the shared backoffice page shell.
-    expect(adminKeys).toHaveLength(16);
+    // landing page and the shared backoffice page shell,
+    // − 1 (kno/kInorA#436: `comingSoon` — #414's `notice.{title,body}` pair
+    //   replaced that single line and the old key was left behind).
+    expect(adminKeys).toHaveLength(15);
     expect(flat["admin.pageTitle"]).toBeTruthy();
     expect(flattenMessages(catalogs.es)["admin.pageTitle"]).toBeTruthy();
     expect(flat["admin.sections.aiConfig.title"]).toBeTruthy();
@@ -487,8 +499,10 @@ describe("@kinora/i18n package assembly", () => {
     // loadMore, loadingMore (2) + empty (1) + errors x3 = 28, + 10 keys for the
     // panel headings and the three now-distinct result states (kno/kInorA#414:
     // idle x3, empty x3, errorEyebrow, filtersTitle, resultsTitle, cursorNote)
-    // = 38 keys for the /admin/logs observability panel.
-    expect(keys).toHaveLength(38);
+    // = 38 keys for the /admin/logs observability panel,
+    // − 1 (kno/kInorA#436: the scalar `empty` — #414 split the empty state into
+    //   `empty{Eyebrow,Title,Description}` and the scalar stopped being read).
+    expect(keys).toHaveLength(37);
     expect(flat["logs.title"]).toBeTruthy();
     expect(flattenMessages(catalogs.es)["logs.title"]).toBeTruthy();
     expect(flat["logs.columns.metadata"]).toBeTruthy();
@@ -537,8 +551,10 @@ describe("@kinora/i18n package assembly", () => {
     // eyebrow/title/description (3) + subdomain x5 + logo x11 + palette x2 +
     // groups x3 + tokens x6 + presets x5 + contrast x5 + preview x13 +
     // save x3 + errors x4 = 59 keys for the /branding white-label studio
-    // (errors gained `loadFailed`, kno/kInorA#378).
-    expect(keys).toHaveLength(59);
+    // (errors gained `loadFailed`, kno/kInorA#378),
+    // − 2 (kno/kInorA#436: logo.{browse,remove} — the logo control is a
+    //   drag-and-drop zone with no Browse or Remove button to label).
+    expect(keys).toHaveLength(57);
     expect(flat["brandingStudio.title"]).toBeTruthy();
     expect(flattenMessages(catalogs.es)["brandingStudio.title"]).toBeTruthy();
     expect(flat["brandingStudio.errors.conflict"]).toContain("already taken");
