@@ -24,7 +24,6 @@ adaptation.submitting
 adaptation.suggestion
 adaptation.title
 adaptation.upToDate
-admin.comingSoon
 admin.eyebrow
 admin.notice.body
 admin.notice.title
@@ -75,7 +74,6 @@ auth.signup.title
 billing.actions.checkoutError
 billing.actions.invalidPromotion
 billing.actions.redirecting
-billing.description
 billing.feature.memory_retrieval
 billing.feature.memory_write
 billing.feature.plan_generation
@@ -102,7 +100,6 @@ billing.loading.description
 billing.loading.progressAria
 billing.loading.title
 billing.navLabel
-billing.plan.comparePlans
 billing.plan.currentLabel
 billing.plan.descriptionFree
 billing.plan.descriptionPro
@@ -152,7 +149,6 @@ billing.trial.expiredDescription
 billing.trial.expiredTitle
 billing.upgrade.cta
 billing.upgrade.description
-billing.upgrade.title
 billing.usage.emptyDescription
 billing.usage.emptyTitle
 billing.usage.footer
@@ -160,7 +156,6 @@ billing.usage.limitNote
 billing.usage.memberTitle
 billing.usage.meterAria
 billing.usage.periodLabel
-billing.usage.row
 billing.usage.tenantTitle
 brandingStudio.contrast.accentPair
 brandingStudio.contrast.label
@@ -177,12 +172,10 @@ brandingStudio.groups.brand
 brandingStudio.groups.surfaces
 brandingStudio.groups.text
 brandingStudio.logo.alt
-brandingStudio.logo.browse
 brandingStudio.logo.dropHint
 brandingStudio.logo.empty
 brandingStudio.logo.formats
 brandingStudio.logo.label
-brandingStudio.logo.remove
 brandingStudio.logo.tooLarge
 brandingStudio.logo.unsupported
 brandingStudio.logo.uploadError
@@ -241,7 +234,6 @@ chat.mode.assistant
 chat.mode.formulario
 chat.mode.toggleAria
 chat.panel.editAria
-chat.panel.empty
 chat.panel.generate
 chat.panel.generateError
 chat.panel.notSet
@@ -255,10 +247,8 @@ chat.teaser.description
 chat.teaser.eyebrow
 chat.teaser.title
 chat.threadAria
-chat.value.daysPerWeek
 chat.value.equipmentCount
 chat.value.limitationsCount
-chat.value.sessionDuration
 clients.accessRestrictedBody
 clients.accessRestrictedTitle
 clients.createPlan.daysPerWeekLabel
@@ -269,7 +259,6 @@ clients.createPlan.locationLabel
 clients.createPlan.sessionDurationLabel
 clients.createPlan.submit
 clients.createPlan.submitting
-clients.createPlan.success
 clients.createPlan.title
 clients.createPlanCta
 clients.emptyState
@@ -295,7 +284,6 @@ cta.primary
 cta.secondary
 cta.subtitle
 cta.title
-dashboard.authenticated
 dashboard.checkExercise
 dashboard.coachApplied
 dashboard.coachAppliedToast
@@ -378,12 +366,10 @@ exercises.detail.media.positionLabel
 exercises.detail.media.toggleLabel
 exercises.detail.media.unavailable
 exercises.detail.muscleGroup
-exercises.detail.musclesHeading
 exercises.detail.noSecondaryMuscles
 exercises.detail.stats.bodyPart
 exercises.detail.stats.secondary
 exercises.detail.stats.target
-exercises.detail.stepsHeading
 exercises.detail.summary
 exercises.detail.tabs.execution
 exercises.detail.tabs.muscles
@@ -406,7 +392,6 @@ exercises.library.empty.description
 exercises.library.empty.title
 exercises.library.error.description
 exercises.library.error.title
-exercises.library.filterAll
 exercises.library.filters.bodyPart
 exercises.library.filters.equipment
 exercises.library.filters.target
@@ -561,13 +546,10 @@ history.trend.flat
 history.trend.up
 hiw.eyebrow
 hiw.step1.desc
-hiw.step1.num
 hiw.step1.title
 hiw.step2.desc
-hiw.step2.num
 hiw.step2.title
 hiw.step3.desc
-hiw.step3.num
 hiw.step3.title
 hiw.subtitle
 hiw.title
@@ -588,7 +570,6 @@ logs.columns.tenant
 logs.columns.time
 logs.cursorNote
 logs.description
-logs.empty
 logs.emptyDescription
 logs.emptyEyebrow
 logs.emptyTitle
@@ -619,9 +600,7 @@ logs.resultsTitle
 logs.title
 marketing.cinemaAlt
 marketing.comoImgAlt
-marketing.cta
 marketing.strengthImgAlt
-marketing.subtitle
 marketing.title
 memory.confirm.cancel
 memory.confirm.deleteBody
@@ -662,7 +641,6 @@ memory.status.deleted
 memory.status.disabled
 memory.status.enabled
 memory.title
-mobileTracker.autoClosed
 mobileTracker.backHome
 mobileTracker.complete.body
 mobileTracker.complete.title
@@ -729,7 +707,6 @@ phone.streakLabel
 phone.workoutDuration
 phone.workoutToday
 plan.archived.badge
-plan.backToDashboard
 plan.branding.byTrainer
 plan.day.detailClose
 plan.day.label
@@ -743,7 +720,6 @@ plan.error.retryCta
 plan.error.title
 plan.est_duration
 plan.exercises.count
-plan.exercises.label
 plan.failed.desc
 plan.failed.title
 plan.generating.aria
@@ -760,7 +736,6 @@ plan.hero.pillToday
 plan.hero.startCta
 plan.limitation.advisory
 plan.limitation.title
-plan.limitation.warningLabel
 plan.name.fieldLabel
 plan.name.placeholder
 plan.nav.empty.cta
@@ -770,12 +745,8 @@ plan.nav.loadError.desc
 plan.nav.loadError.title
 plan.ready.title
 plan.regenerate.cta
-plan.reps.label
-plan.rest.label
 plan.selector.label
 plan.selector.option
-plan.session.day
-plan.sets.label
 plan.start.autoClosed
 plan.start.conflict
 plan.start.conflict_generic
@@ -1017,18 +988,13 @@ progress.muscle.legs
 progress.muscle.quads
 progress.muscle.shoulders
 progress.muscle.triceps
-sidebar.logout
-sidebar.logoutLabel
-sidebar.userAreaAria
 stats.deltaNew
 stats.deltaSuffix
 stats.description
-stats.distributionComingSoon
 stats.distributionEmpty
 stats.distributionTitle
 stats.durationLabel
 stats.error
-stats.prComingSoon
 stats.prDateHeader
 stats.prEmpty
 stats.prEstimatedHeader
@@ -1140,9 +1106,6 @@ tracker.restartLabel
 tracker.resumeLabel
 tracker.rpe
 tracker.set.heading
-tracker.start.cta
-tracker.status.active
-tracker.status.completed
 tracker.steppers.aria
 tracker.stubSoon
 tracker.sync.auth_required

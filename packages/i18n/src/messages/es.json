@@ -1,8 +1,6 @@
 {
   "marketing": {
     "title": "kInorA",
-    "subtitle": "Entrenamiento personalizado con IA",
-    "cta": "Empezar",
     "cinemaAlt": "Atleta tomando un descanso activo entre series, sentado en el suelo del gimnasio con las manos apoyadas en las rodillas",
     "comoImgAlt": "Mujer realizando una sentadilla con barra cargada en el gimnasio, con postura correcta y concentración total",
     "strengthImgAlt": "Manos con magnesio sujetando una barra de pesas antes de un levantamiento, listos para ejecutar el movimiento"
@@ -68,17 +66,14 @@
     "title": "De tu objetivo a tu rutina en tres pasos",
     "subtitle": "Sin plantillas genéricas. Le cuentas qué quieres lograr y kInorA construye un plan a tu medida que mejora contigo.",
     "step1": {
-      "num": "01",
       "title": "Cuéntale tu objetivo",
       "desc": "Habla o escribe: ganar fuerza, perder grasa, correr más. La IA aprende tu nivel, tu disponibilidad y tu equipamiento."
     },
     "step2": {
-      "num": "02",
       "title": "La IA crea tu plan",
       "desc": "En segundos obtienes una rutina semanal con ejercicios, series, repeticiones y descansos diseñados para ti."
     },
     "step3": {
-      "num": "03",
       "title": "Entrena y mejora cada semana",
       "desc": "Registra tus sesiones y la IA ajusta cargas y volumen para que sigas progresando sin estancarte."
     }
@@ -237,28 +232,13 @@
     "regenerate": {
       "cta": "Regenerar plan"
     },
-    "session": {
-      "day": "Día"
-    },
     "exercises": {
-      "label": "Ejercicios",
       "count": "ejercicios"
     },
-    "sets": {
-      "label": "series"
-    },
-    "reps": {
-      "label": "reps"
-    },
-    "rest": {
-      "label": "descanso"
-    },
     "limitation": {
-      "warningLabel": "Nota",
       "title": "Nota importante",
       "advisory": "Consulta con un profesional antes de realizar ejercicios que exijan estas zonas."
     },
-    "backToDashboard": "Volver al dashboard",
     "nav": {
       "empty": {
         "title": "Sin plan todavía",
@@ -352,16 +332,9 @@
     }
   },
   "tracker": {
-    "start": {
-      "cta": "Empezar entrenamiento"
-    },
     "live": {
       "eyebrow": "Sesión activa",
       "title": "Entrenamiento en vivo"
-    },
-    "status": {
-      "active": "Activo",
-      "completed": "Completado"
     },
     "tracking": {
       "day": "Día {n}"
@@ -606,7 +579,6 @@
   },
   "dashboard": {
     "title": "Panel",
-    "authenticated": "Has iniciado sesión.",
     "logout": "Cerrar sesión",
     "pageTitle": "Tu centro de entrenamiento",
     "weekLabel": "Semana {week}",
@@ -752,7 +724,6 @@
       "searchSubmit": "Buscar",
       "applyFilters": "Aplicar filtros",
       "clearFilters": "Quitar filtros",
-      "filterAll": "Todos",
       "filters": {
         "bodyPart": "Zona del cuerpo",
         "equipment": "Material",
@@ -803,8 +774,6 @@
         "execution": "Ejecución",
         "muscles": "Músculos implicados"
       },
-      "stepsHeading": "Pasos de ejecución",
-      "musclesHeading": "Músculos implicados",
       "noSecondaryMuscles": "Este ejercicio no tiene músculos asistentes registrados.",
       "viewHistory": "Ver mi historial",
       "error": {
@@ -929,10 +898,8 @@
     "volumeTrendPreviousLabel": "Periodo anterior",
     "volumeTrendEmpty": "Todavía no hay datos suficientes para mostrar una tendencia.",
     "distributionTitle": "Series por grupo muscular",
-    "distributionComingSoon": "La distribución por grupo muscular estará disponible pronto.",
     "distributionEmpty": "Todavía no hay ejercicios clasificados — registra un entrenamiento para ver este gráfico.",
     "prTitle": "Récords personales",
-    "prComingSoon": "Los récords personales estarán disponibles pronto.",
     "prEmpty": "Todavía no hay récords personales.",
     "prExerciseHeader": "Ejercicio",
     "prEstimatedHeader": "1RM estimado",
@@ -1089,7 +1056,6 @@
   "billing": {
     "navLabel": "Facturación",
     "title": "Facturación",
-    "description": "Revisa tu plan, el estado de prueba y el uso de esta cuenta.",
     "subtitle": "Gestiona tu plan y tu uso.",
     "loading": {
       "title": "Cargando tu facturación…",
@@ -1132,13 +1098,11 @@
       "metaRenewal": "Renovación",
       "valueNotSet": "—",
       "renewalNone": "Sin renovación",
-      "comparePlans": "Comparar planes",
       "priceFree": "Gratis"
     },
     "usage": {
       "tenantTitle": "Uso de la cuenta este periodo",
       "memberTitle": "Tu uso este periodo",
-      "row": "{feature} — {used}/{limit} usados",
       "emptyTitle": "Aún no hay uso registrado",
       "emptyDescription": "El uso de este periodo de facturación aparecerá aquí en cuanto comience.",
       "periodLabel": "Periodo {period}",
@@ -1207,7 +1171,6 @@
       "endedDescription": "Ahora estás en el plan Gratis. Mejora tu plan para recuperar las funciones premium."
     },
     "upgrade": {
-      "title": "Desbloquea las funciones Pro",
       "description": "Mejora a Pro para obtener límites mensuales amplios en generación de planes y memoria premium.",
       "cta": "Ver opciones de mejora"
     }
@@ -1269,7 +1232,6 @@
       "discardCancel": "Cancelar",
       "discardFailed": "No pudimos descartar esa sesión. Vuelve a intentarlo."
     },
-    "autoClosed": "Cerramos tu sesión sin terminar del {date, date, medium}.",
     "retry": "Reintentar",
     "rpe": {
       "a11y": "RPE, opcional, de 0 a 10"
@@ -1294,7 +1256,6 @@
     },
     "panel": {
       "title": "Datos extraídos",
-      "empty": "Los detalles de tu plan aparecerán aquí mientras conversamos.",
       "editAria": "Editar {field}",
       "notSet": "—",
       "generate": "Generar plan",
@@ -1310,8 +1271,6 @@
       "level": "Nivel"
     },
     "value": {
-      "daysPerWeek": "{n, plural, one {# día} other {# días}}",
-      "sessionDuration": "{n} min",
       "equipmentCount": "{n, plural, =0 {Ninguno} one {# elemento} other {# elementos}}",
       "limitationsCount": "{n, plural, =0 {Ninguna} one {# nota} other {# notas}}"
     },
@@ -1357,11 +1316,6 @@
     "roleYou": "Tú",
     "roleCoach": "kInorA"
   },
-  "sidebar": {
-    "logout": "Cerrar sesión",
-    "logoutLabel": "Cerrar sesión",
-    "userAreaAria": "Menú de usuario"
-  },
   "clients": {
     "pageTitle": "Mis clientes",
     "pageDescription": "Invita a clientes y crea planes en su nombre.",
@@ -1395,7 +1349,6 @@
       "locationLabel": "Lugar de entrenamiento",
       "submit": "Crear plan",
       "submitting": "Creando…",
-      "success": "Plan creado.",
       "errorGeneric": "No se pudo crear el plan. Inténtalo de nuevo.",
       "errorForbidden": "No tienes autorización para crear un plan para este cliente."
     }
@@ -1403,7 +1356,6 @@
   "admin": {
     "pageTitle": "Administración",
     "pageDescription": "Gestiona la configuración y las herramientas a nivel de plataforma.",
-    "comingSoon": "Próximamente",
     "sections": {
       "aiConfig": {
         "title": "Configuración de IA",
@@ -1500,13 +1452,11 @@
     "logo": {
       "label": "Logotipo",
       "dropHint": "Arrastra y suelta o haz clic para subir",
-      "browse": "Elegir archivo",
       "formats": "PNG, JPEG, SVG o WebP · hasta 5 MB",
       "uploading": "Subiendo…",
       "uploadError": "No se pudo subir el logotipo. Inténtalo de nuevo.",
       "unsupported": "Ese tipo de archivo no es compatible. Usa PNG, JPEG, SVG o WebP.",
       "tooLarge": "El logotipo es demasiado grande. El límite es 5 MB.",
-      "remove": "Quitar logotipo",
       "alt": "Logotipo del gimnasio",
       "empty": "Aún no hay logotipo"
     },
@@ -1598,7 +1548,6 @@
     },
     "loadMore": "Cargar más",
     "loadingMore": "Cargando…",
-    "empty": "Ningún evento de registro coincide con los filtros.",
     "errors": {
       "forbidden": "Acceso denegado.",
       "invalid": "Revisa los filtros e inténtalo de nuevo.",

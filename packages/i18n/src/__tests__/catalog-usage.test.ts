@@ -39,54 +39,33 @@ const SKIPPED_DIRS = /^(node_modules|dist|build|coverage|\.next|\.expo|android|i
 const SELF = join("packages", "i18n");
 
 /**
- * Keys that were already unreferenced when this guard landed. They are dead
- * copy from surfaces that changed shape (the marketing "how it works" step
- * numbers, the removed sidebar user area, the pre-`stats` "coming soon"
- * placeholders, and so on). Deleting one is always welcome — remove the key
- * from both catalogs and the line from here, in the same commit.
+ * Keys that are shipped but rendered nowhere. It is EMPTY, and that is the
+ * point: the guard now holds the catalog to "every key has a call site" with
+ * no exemptions at all.
  *
- * Nothing may be ADDED to this list to make a new key pass. A key nobody
- * renders is copy that drifts out of sync with the product in silence.
+ * It landed with 37 entries — the dead copy this guard found on its first run,
+ * carried for one release so 37 keys of catalog churn would not collide with
+ * the branches then in flight — and kno/kInorA#436 deleted all 37 from both
+ * catalogs. Every one was checked against its own history first, because a key
+ * dead because its feature was REMOVED should go, while a key dead because its
+ * feature is half-built is a signal about the feature. All 37 were the former:
+ *
+ * - `stats.{distributionComingSoon,prComingSoon}` read like placeholders for
+ *   unbuilt surfaces, and were not. Both surfaces SHIPPED in b3a022e (09c
+ *   slice 3b), which replaced the placeholder paragraphs with the real
+ *   distribution chart and PR table and left the copy behind.
+ * - `sidebar.*` was dead as a whole namespace because the component was
+ *   replaced, not because strings drifted: `SidebarNav` renders `appNav.*`.
+ * - `plan.{sets,reps,rest}.label` and `tracker.start.cta` died with the legacy
+ *   plan list in #340; the live tracker renders `tracker.{rest,load}.label`.
+ * - `hiw.step*.num` never had a call site — `LandingHowItWorks` hardcodes the
+ *   step numbers "01"/"02"/"03", which are not translatable copy.
+ *
+ * Nothing may be ADDED here to make a new key pass, and there is no longer any
+ * precedent for doing so. A key nobody renders is copy that drifts out of sync
+ * with the product in silence; author it in the commit that renders it.
  */
-const KNOWN_UNREFERENCED_KEYS = [
-  "admin.comingSoon",
-  "billing.description",
-  "billing.plan.comparePlans",
-  "billing.upgrade.title",
-  "billing.usage.row",
-  "brandingStudio.logo.browse",
-  "brandingStudio.logo.remove",
-  "chat.panel.empty",
-  "chat.value.daysPerWeek",
-  "chat.value.sessionDuration",
-  "clients.createPlan.success",
-  "dashboard.authenticated",
-  "exercises.detail.musclesHeading",
-  "exercises.detail.stepsHeading",
-  "exercises.library.filterAll",
-  "hiw.step1.num",
-  "hiw.step2.num",
-  "hiw.step3.num",
-  "logs.empty",
-  "marketing.cta",
-  "marketing.subtitle",
-  "mobileTracker.autoClosed",
-  "plan.backToDashboard",
-  "plan.exercises.label",
-  "plan.limitation.warningLabel",
-  "plan.reps.label",
-  "plan.rest.label",
-  "plan.session.day",
-  "plan.sets.label",
-  "sidebar.logout",
-  "sidebar.logoutLabel",
-  "sidebar.userAreaAria",
-  "stats.distributionComingSoon",
-  "stats.prComingSoon",
-  "tracker.start.cta",
-  "tracker.status.active",
-  "tracker.status.completed",
-] as const;
+const KNOWN_UNREFERENCED_KEYS: readonly string[] = [];
 
 /** `const t = useTranslations("ns")`, `const t = await getTranslations()`, … */
 const TRANSLATOR_BINDING =
