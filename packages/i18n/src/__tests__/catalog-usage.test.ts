@@ -190,21 +190,53 @@ function reconciliation(): Reconciliation {
   return cached;
 }
 
+/**
+ * Timeout for the repository-wide scan above (#423's shape, third occurrence).
+ *
+ * The default 5s was not protecting anything here, and a pre-push run hit
+ * 5466ms against it with several worktrees loading the machine. Measured on
+ * this tree (~950 `.ts`/`.tsx` files under `apps/` and `packages/`):
+ *
+ * | condition                              | time      |
+ * |----------------------------------------|-----------|
+ * | this file standalone, warm             | 178–275ms |
+ * | this file in the package suite, idle   | 322–393ms |
+ * | this file under `-r test:coverage`     | 340–679ms |
+ * | this file in the package suite, loaded | 3602ms, 4392ms (two runs during a parallel gate) |
+ * | another agent's pre-push, loaded       | 5466ms (FAILED) |
+ *
+ * The work is ~250ms; everything above that is page-cache misses and CPU
+ * starvation, and 5s sits inside that spread — so the guard failed for reasons
+ * that say nothing about the catalog. 30s matches the two #423 guards rather
+ * than inventing a third number; it is 5.5x the worst observed run, and its
+ * only job is to catch an unbounded hang. A scan of two source roots that
+ * honestly takes 30s is a real signal; one that takes 5.5s on a loaded laptop
+ * is not.
+ *
+ * Unlike #423's guards, the timeout goes on ALL THREE tests rather than one:
+ * they share a single memoized scan, so whichever test runs first pays for it.
+ * That is test 1 in declaration order today, but `--shuffle`, `.only` or a
+ * retry moves the cost, and a limit that only covers today's ordering would
+ * reintroduce the same flake from a different direction. Every other test in
+ * the package keeps the default 5s.
+ */
+const SCAN_TIMEOUT_MS = 30_000;
+
 describe("catalog key usage", () => {
-  it("ships every key the web and mobile code renders", () => {
+  it("ships every key the web and mobile code renders", { timeout: SCAN_TIMEOUT_MS }, () => {
     // THE merge guard: a resolution that discarded another branch's keys
     // leaves their call sites behind, and this names them. It does not care
     // whether the drop came from the catalogs, a manifest, or both.
     expect(reconciliation().missing).toEqual([]);
   });
 
-  it("ships no key that web or mobile never renders", () => {
+  it("ships no key that web or mobile never renders", { timeout: SCAN_TIMEOUT_MS }, () => {
     const known = new Set<string>(KNOWN_UNREFERENCED_KEYS);
 
     expect(reconciliation().unreferenced.filter((key) => !known.has(key))).toEqual([]);
   });
 
-  it("keeps the known-unreferenced list free of entries that no longer apply", () => {
+  it("keeps the known-unreferenced list free of entries that no longer apply", { timeout: SCAN_TIMEOUT_MS }, () => {
     const unreferenced = new Set(reconciliation().unreferenced);
 
     // An entry that is now rendered — or gone from the catalog — must be
