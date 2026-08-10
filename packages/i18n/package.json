@@ -23,6 +23,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "type-check": "tsc --noEmit",
+    "keys:sync": "node scripts/sync-catalog-keys.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"
   },
