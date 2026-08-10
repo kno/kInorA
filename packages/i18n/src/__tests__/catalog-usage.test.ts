@@ -201,7 +201,7 @@ function reconciliation(): Reconciliation {
  * |----------------------------------------|-----------|
  * | this file standalone, warm             | 178–275ms |
  * | this file in the package suite, idle   | 322–393ms |
- * | this file under `-r test:coverage`     | 340–679ms |
+ * | this file under `-r test:coverage`     | 340–762ms |
  * | this file in the package suite, loaded | 3602ms, 4392ms (two runs during a parallel gate) |
  * | another agent's pre-push, loaded       | 5466ms (FAILED) |
  *
