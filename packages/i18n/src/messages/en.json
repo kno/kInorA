@@ -205,7 +205,16 @@
     "emailPlaceholder": "you@email.com",
     "passwordLabel": "Password",
     "passwordPlaceholder": "At least 8 characters",
-    "separator": "or continue with"
+    "separator": "or continue with",
+    "validation": {
+      "invalidEmail": "Enter a valid email address",
+      "passwordTooShort": "The password must be at least 8 characters long"
+    },
+    "error": {
+      "retry": "The email or the password do not match. Check them and try again.",
+      "network": "Could not reach the server.",
+      "noSession": "No session received."
+    }
   },
   "footer": {
     "tagline": "The AI coach that builds your plan, adjusts it every week, and trains with you.",

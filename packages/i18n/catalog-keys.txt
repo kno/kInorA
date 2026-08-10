@@ -60,6 +60,9 @@ appNav.profile
 appNav.statistics
 auth.emailLabel
 auth.emailPlaceholder
+auth.error.network
+auth.error.noSession
+auth.error.retry
 auth.login.google
 auth.login.gymLogoAlt
 auth.login.pending
@@ -96,6 +99,8 @@ auth.signup.subtitle
 auth.signup.switchLink
 auth.signup.switchPrompt
 auth.signup.title
+auth.validation.invalidEmail
+auth.validation.passwordTooShort
 billing.actions.checkoutError
 billing.actions.invalidPromotion
 billing.actions.redirecting
