@@ -62,12 +62,42 @@ describe("LoginPage", () => {
     expect(password?.props.type).toBe("password");
     expect(password?.props.required).toBe(true);
 
-    const submit = findFirst(page, (el) => el.props.type === "submit");
+    // kno/kInorA#445 — the submit control is now `AuthSubmitButton`, the one
+    // client component on this page (it needs `useFormStatus` to render the
+    // screen's submitting state). It renders `<button type="submit">`, but
+    // this suite inspects the element tree WITHOUT rendering, so the marker
+    // is the component's own `pendingLabel` prop rather than `type`.
+    const submit = findFirst(page, (el) => typeof el.props.pendingLabel === "string");
     expect(submit).toBeDefined();
+    expect(textOf(submit)).toContain("Log in");
 
     const google = findFirst(page, (el) => typeof el.props.href === "string");
     expect(google?.props.href).toBe("/auth/social/login?provider=google");
     expect(textOf(google)).toMatch(/google/i);
+  });
+
+  // kno/kInorA#445 — the screen's `Estados` sections. There is no new state:
+  // both are the existing `?error=` query parameter, rendered the way
+  // `web-login.html` draws it.
+  it("marks both credential fields invalid when the submission was rejected", async () => {
+    const page = await LoginPage({
+      searchParams: Promise.resolve({ error: "invalid_credentials" }),
+    });
+
+    const marked = findAll(page, (el) => el.props["data-invalid"] === "");
+    expect(marked).toHaveLength(2);
+  });
+
+  it("leaves the fields unmarked when there is no error", async () => {
+    const page = await LoginPage({ searchParams: Promise.resolve({}) });
+
+    expect(findAll(page, (el) => el.props["data-invalid"] === "")).toEqual([]);
+  });
+
+  it("renders the supporting poster copy beside the form", async () => {
+    const page = await LoginPage({ searchParams: Promise.resolve({}) });
+
+    expect(textOf(page)).toContain("The plan adapts. You just train.");
   });
 
   it("shows the error message when an error query param is present", async () => {
@@ -193,6 +223,19 @@ function findFirst(
     }
   }
   return undefined;
+}
+
+function findAll(
+  node: ReactNode,
+  match: (el: AnyElement) => boolean,
+  out: AnyElement[] = []
+): AnyElement[] {
+  if (isReactElement(node)) {
+    if (match(node)) out.push(node);
+    findAll(node.props.children, match, out);
+  }
+  if (Array.isArray(node)) for (const child of node) findAll(child, match, out);
+  return out;
 }
 
 function textOf(node: ReactNode): string {
