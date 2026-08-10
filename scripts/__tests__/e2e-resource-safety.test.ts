@@ -59,10 +59,15 @@ async function loadPlaywrightWebServers(env: {
   E2E_API_PORT?: string;
   API_BASE_URL?: string;
   E2E_PWA_PRODUCTION?: string;
+  CI?: string;
 }): Promise<PlaywrightWebServer[]> {
   vi.stubEnv("E2E_API_PORT", env.E2E_API_PORT);
   vi.stubEnv("API_BASE_URL", env.API_BASE_URL);
   vi.stubEnv("E2E_PWA_PRODUCTION", env.E2E_PWA_PRODUCTION);
+  // CI is stubbed on every load — unstubbed it leaks the ambient value, and
+  // `reuseExistingServer` depends on it. Callers that do not care still get a
+  // deterministic absence rather than "whatever the host happens to export".
+  vi.stubEnv("CI", env.CI);
   vi.resetModules();
   const { default: config } = await import("../../playwright.config.ts");
   return config.webServer as PlaywrightWebServer[];
@@ -128,12 +133,32 @@ describe("Playwright PWA production mode", () => {
     });
   });
 
-  it("keeps reuse enabled for normal dev mode but disables it for production PWA mode", async () => {
-    const devServers = await loadPlaywrightWebServers({});
-    expect(devServers[1]?.reuseExistingServer).toBe(true);
+  // `reuseExistingServer: pwaProduction ? false : !process.env.CI` has TWO
+  // inputs, so both are pinned here rather than left to the ambient
+  // environment. The original single assertion read the host's own CI
+  // variable: it expected dev-mode reuse to be `true`, which holds on a
+  // developer machine and is false on CI by design — a stale server must never
+  // be reused there. Stubbing CI in both directions turns an assertion that
+  // depended on where it ran into one that states the actual rule.
+  it("keeps reuse enabled for local dev runs but never on CI", async () => {
+    const localServers = await loadPlaywrightWebServers({});
+    expect(localServers[1]?.reuseExistingServer).toBe(true);
 
-    const productionServers = await loadPlaywrightWebServers({ E2E_PWA_PRODUCTION: "true" });
-    expect(productionServers[1]?.reuseExistingServer).toBe(false);
+    const ciServers = await loadPlaywrightWebServers({ CI: "true" });
+    expect(ciServers[1]?.reuseExistingServer).toBe(false);
+  });
+
+  it("disables reuse for production PWA mode regardless of CI", async () => {
+    const localProduction = await loadPlaywrightWebServers({
+      E2E_PWA_PRODUCTION: "true",
+    });
+    expect(localProduction[1]?.reuseExistingServer).toBe(false);
+
+    const ciProduction = await loadPlaywrightWebServers({
+      E2E_PWA_PRODUCTION: "true",
+      CI: "true",
+    });
+    expect(ciProduction[1]?.reuseExistingServer).toBe(false);
   });
 
   it("uses a dedicated project for production PWA tests", async () => {
