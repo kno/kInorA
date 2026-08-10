@@ -1,5 +1,6 @@
 /**
- * Structural guard: no integration suite may empty a shared table (#405).
+ * Structural guard: no integration suite may empty OR count a shared table
+ * (#405).
  *
  * Every `*.integration.test.ts` runs against ONE scratch database, and vitest
  * runs test files in parallel workers. An unscoped `db.delete(table)` therefore
@@ -13,6 +14,15 @@
  * and the read. The isolation that actually holds is a PRIVATE scope — a random
  * tenant id, a private cohort week, a unique event name — so this guard forbids
  * the wipe rather than trying to schedule around it.
+ *
+ * The unscoped whole-table READ is the same defect seen from the other side.
+ * `workout-session` counted all of `set_records` and `session_exercises` before
+ * and after an auto-close and asserted an exact delta; three rows from a
+ * concurrent worker turned that into `expected 17 to be 14`. Reading everything
+ * and filtering in JavaScript has the same hole, because the rows that arrive
+ * between the two reads are indistinguishable from the ones under test. Scope
+ * the read in SQL instead — join through to the owning tenant/user row when the
+ * table carries no scope column of its own.
  *
  * Hermetic: reads the suite sources off disk, needs no database, and so runs in
  * the `ci` job on every PR rather than only where Postgres is wired.
@@ -45,6 +55,21 @@ function integrationSuites(dir: string): string[] {
  */
 const UNSCOPED_DELETE = /\.delete\(\s*[A-Za-z_$][\w$]*\s*\)(?!\s*\.where\()/g;
 
+/**
+ * A drizzle `.from(<table>)` that never narrows — no `.where(`, and no join
+ * that would carry a `.where(` of its own further down the chain.
+ *
+ * Anchored on the closing paren of the preceding builder call (`db.select()`,
+ * `.select({ ... })`), which is what makes this safe to run over whole files:
+ * without that anchor a plain `.from(` also matches `Array.from(rows)`, and a
+ * guard that misfires on ordinary JavaScript would be worse than no guard.
+ * The join keywords are allowed through because joining and then filtering is
+ * the only way to scope a table that carries no tenant/user column of its own
+ * (`set_records` reaches its owner through `session_exercises`).
+ */
+const UNSCOPED_READ =
+  /\)\s*\.from\(\s*[A-Za-z_$][\w$]*\s*\)(?!\s*\.(?:where|innerJoin|leftJoin|rightJoin|fullJoin)\()/g;
+
 describe("integration suite isolation", () => {
   const suites = integrationSuites(API_SRC);
 
@@ -54,15 +79,31 @@ describe("integration suite isolation", () => {
     expect(suites.length).toBeGreaterThan(10);
   });
 
-  it("no integration suite deletes from a shared table without a WHERE clause", () => {
-    const offenders: string[] = [];
+  function offenders(pattern: RegExp): string[] {
+    const found: string[] = [];
     for (const suite of suites) {
       const source = readFileSync(suite, "utf8");
-      for (const match of source.matchAll(UNSCOPED_DELETE)) {
+      for (const match of source.matchAll(pattern)) {
         const line = source.slice(0, match.index).split("\n").length;
-        offenders.push(`${suite}:${line}: ${match[0]}`);
+        found.push(`${suite}:${line}: ${match[0].trim()}`);
       }
     }
-    expect(offenders).toEqual([]);
+    return found;
+  }
+
+  it("no integration suite deletes from a shared table without a WHERE clause", () => {
+    expect(offenders(UNSCOPED_DELETE)).toEqual([]);
+  });
+
+  it("no integration suite reads a shared table without a WHERE clause", () => {
+    expect(offenders(UNSCOPED_READ)).toEqual([]);
+  });
+
+  it("the read pattern does not fire on ordinary JavaScript that happens to call .from", () => {
+    // `Array.from(rows)` is `.from(<identifier>)` too. Two suites already build
+    // fixtures with `Array.from`, so a guard that flagged it would block every
+    // PR touching them. Pinned here so the anchor is never "simplified" away.
+    expect("const list = Array.from(rows);".match(UNSCOPED_READ)).toBeNull();
+    expect("await db.select().from(setRecords);".match(UNSCOPED_READ)).not.toBeNull();
   });
 });
