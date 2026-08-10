@@ -149,22 +149,72 @@
   },
   "auth": {
     "login": {
-      "title": "Iniciar sesión",
+      "title": "Bienvenido de vuelta",
+      "subtitle": "Entra para retomar tu plan justo donde lo dejaste.",
       "submit": "Iniciar sesión",
+      "pending": "Comprobando…",
       "google": "Iniciar sesión con Google",
       "switchPrompt": "¿No tienes una cuenta?",
       "switchLink": "Crear cuenta",
-      "gymLogoAlt": "Logotipo del gimnasio"
+      "gymLogoAlt": "Logotipo del gimnasio",
+      "poster": {
+        "badge": "Tu entrenador, siempre despierto",
+        "title": "El plan se adapta. Tú solo entrenas.",
+        "body": "kInorA lee tu adherencia, tu RPE y tu descanso, y ajusta la semana antes de que el estancamiento aparezca.",
+        "stat1": {
+          "value": "1.300+",
+          "label": "Ejercicios guiados"
+        },
+        "stat2": {
+          "value": "4 min",
+          "label": "De cero a plan"
+        },
+        "stat3": {
+          "value": "Semanal",
+          "label": "Reajuste automático"
+        }
+      }
     },
     "signup": {
       "title": "Crear cuenta",
+      "subtitle": "Tu primer plan de entrenamiento personalizado está a un par de minutos.",
       "submit": "Crear cuenta",
+      "pending": "Creando cuenta…",
       "google": "Registrarse con Google",
       "switchPrompt": "¿Ya tienes una cuenta?",
-      "switchLink": "Iniciar sesión"
+      "switchLink": "Iniciar sesión",
+      "poster": {
+        "badge": "Empieza gratis, sin tarjeta",
+        "title": "Cuéntanos tu objetivo. Nosotros hacemos el resto.",
+        "body": "En cuatro minutos generamos tu primer plan a partir de tu experiencia, tu material disponible y tus días libres — y lo seguimos ajustando cada semana.",
+        "step1": {
+          "title": "Crea tu cuenta",
+          "desc": "Solo correo y contraseña"
+        },
+        "step2": {
+          "title": "Cuéntanos tu objetivo",
+          "desc": "Fuerza, hipertrofia, resistencia…"
+        },
+        "step3": {
+          "title": "Entrena hoy mismo",
+          "desc": "Plan generado al instante"
+        }
+      }
     },
     "emailLabel": "Correo electrónico",
-    "passwordLabel": "Contraseña"
+    "emailPlaceholder": "tu@correo.com",
+    "passwordLabel": "Contraseña",
+    "passwordPlaceholder": "Mínimo 8 caracteres",
+    "separator": "o continúa con",
+    "validation": {
+      "invalidEmail": "Introduce un correo electrónico válido",
+      "passwordTooShort": "La contraseña debe tener al menos 8 caracteres"
+    },
+    "error": {
+      "retry": "El correo o la contraseña no coinciden. Revísalos e inténtalo de nuevo.",
+      "network": "No se ha podido conectar con el servidor.",
+      "noSession": "No se ha recibido ninguna sesión."
+    }
   },
   "footer": {
     "tagline": "El entrenador con IA que arma tu plan, lo adapta cada semana y entrena contigo.",
