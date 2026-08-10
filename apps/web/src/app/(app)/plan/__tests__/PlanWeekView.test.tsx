@@ -447,11 +447,16 @@ describe("PlanWeekView — trainer branding render (15b-v2 S4)", () => {
   });
 });
 
-describe("PlanWeekView — hero is the real session, not mockup copy (kno/kInorA#411)", () => {
+describe("PlanWeekView — the route renders real data, not mockup copy (kno/kInorA#411, #420)", () => {
   // The hero used to render literal catalog strings ("Today · Fri 12",
   // "68 min", "6 exercises", "Upper-body strength") as if they were the user's
   // data. Each assertion below is triangulated against a SECOND fixture, so a
   // regression to any hardcoded string fails rather than coincidentally passing.
+  //
+  // #420 extended this guard past the hero to the whole data-wired route: the
+  // side rail's fabricated readiness/biometric figures and its AI-coach
+  // prescriptions were the same defect with higher stakes, so they are checked
+  // here rather than in a second guard that could drift from this one.
 
   afterEach(() => {
     vi.useRealTimers();
@@ -548,5 +553,92 @@ describe("PlanWeekView — hero is the real session, not mockup copy (kno/kInorA
 
     const edit = container.querySelector('a[href="/create-plan"]');
     expect(edit?.textContent).toBe("Edit plan");
+  });
+
+  // --- #420: the side rail's fabricated health data and coaching ---
+
+  it("renders no readiness score, and no sleep / soreness / last-push figure", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
+    const { container } = renderWithIntl(<>{view}</>);
+
+    // The app takes none of these measurements, so none of their labels,
+    // values or the ring that framed them may reach the DOM.
+    for (const gone of [
+      "Readiness",
+      "Ready to push, not to improvise.",
+      "Sleep",
+      "7h 35m",
+      "Muscle soreness",
+      "Last push",
+      "96 h",
+      "Recommendation",
+    ]) {
+      expect(screen.queryByText(gone)).toBeNull();
+    }
+    // The `82` was a literal in JSX, and its aria-label offered it to a screen
+    // reader as a measured percentage — the most quietly harmful part of all.
+    expect(container.textContent).not.toContain("82");
+    expect(screen.queryByRole("img", { name: /Readiness/i })).toBeNull();
+  });
+
+  it("renders no training prescription — no weight, set or RPE advice from static copy", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
+    const { container } = renderWithIntl(<>{view}</>);
+
+    for (const gone of [
+      "Add 2.5 kg",
+      "82.5 kg",
+      "Keep bench at 82.5 kg",
+      "RPE 7–8",
+      "Coach AI",
+      "Suggested adjustments",
+      "+2.5 kg if it's clean",
+    ]) {
+      expect(container.textContent).not.toContain(gone);
+    }
+  });
+
+  it("renders no control that reports applying a change to the plan", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
+    const { container } = renderWithIntl(<>{view}</>);
+
+    for (const gone of ["Adjust fatigue", "Prepare progression"]) {
+      expect(screen.queryByRole("button", { name: new RegExp(gone) })).toBeNull();
+    }
+    // Neither the toast those buttons raised nor the note they swapped in.
+    expect(container.textContent).not.toContain("Suggestion applied to your plan");
+    expect(container.textContent).not.toContain("accessories reduced");
+  });
+
+  it("shows today's exercises only from the real session, never a second invented list", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
+    const { container } = renderWithIntl(<>{view}</>);
+
+    // The six mockup exercises stood beside the hero's REAL session and
+    // disagreed with it. The real ones are the fixture's.
+    for (const invented of [
+      "Flat bench press",
+      "Barbell row",
+      "Overhead press",
+      "Weighted pull-ups",
+      "Barbell curl",
+      "Triceps pushdown",
+    ]) {
+      expect(container.textContent).not.toContain(invented);
+    }
+    expect(screen.getByRole("heading", { level: 2, name: "Push Day" })).toBeDefined();
+  });
+
+  it("the eyebrow and the metrics group describe only what the plan supplies", async () => {
+    const view = await PlanWeekView({ program: twoSessionProgram, planId: "plan-x" });
+    const { container } = renderWithIntl(<>{view}</>);
+
+    // "Weekly control · strength block" asserted a block type no plan carries.
+    expect(container.textContent).not.toContain("strength block");
+    expect(screen.getByText("Weekly control")).toBeDefined();
+    // The metrics grid is sessions / rest / duration / volume — labelling it
+    // "Muscle focus" was left over from the body-map removed in #411.
+    expect(container.querySelector('[aria-label="Muscle focus"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Plan summary"]')).not.toBeNull();
   });
 });
