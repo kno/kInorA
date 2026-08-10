@@ -999,6 +999,7 @@ stats.prDateHeader
 stats.prEmpty
 stats.prEstimatedHeader
 stats.prExerciseHeader
+stats.prEyebrow
 stats.prLabel
 stats.prTitle
 stats.prTrendHeader
