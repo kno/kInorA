@@ -192,6 +192,8 @@ describe("StatsPage", () => {
     const children = childrenOf(card);
     const header = children.find((child) => hasClass(child, "prCardHeader"));
     expect(header).toBeDefined();
+    // Two lines, eyebrow above the title, as on the screen.
+    expect(textOf(header)).toContain("History");
     expect(textOf(header)).toContain("Personal records");
     // Sibling of the header, not nested inside it or inside a padded body.
     expect(children.some((child) => child.type === "table")).toBe(true);
@@ -256,6 +258,7 @@ describe("StatsPage", () => {
     // Coarse muscle-group labels + PR table copy also come from the ES catalog.
     expect(text).toContain("Espalda");
     expect(text).toContain("Pierna");
+    expect(text).toContain("Historial");
     expect(text).toContain("Sentadilla con barra");
   });
 

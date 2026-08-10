@@ -107,6 +107,7 @@ function StatsBody({ summary, t }: StatsBodyProps) {
         </article>
         <article className={styles.prCard}>
           <div className={styles.prCardHeader}>
+            <div className={styles.prEyebrow}>{t("stats.prEyebrow")}</div>
             <h2 className="kin-title">{t("stats.prTitle")}</h2>
           </div>
           {PersonalRecordsTable({ personalRecords: summary.personalRecords, t })}

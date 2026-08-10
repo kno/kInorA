@@ -239,6 +239,21 @@
 }
 
 /*
+ * The screen's `.eyebrow` (web-stats.html:135), the small label above the
+ * card title. Kept local to this module rather than promoted to a global:
+ * `/admin` already carries its own copy in `admin.module.css`, and the two
+ * are not yet reconciled into one shared primitive.
+ */
+.prEyebrow {
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/*
  * The empty state is the one child that is not the edge-to-edge table, so it
  * supplies the padding the card no longer has.
  */
