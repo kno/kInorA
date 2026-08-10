@@ -100,13 +100,15 @@ function StatsBody({ summary, t }: StatsBodyProps) {
         {VolumeTrend({ trend: summary.volumeTrend, t })}
       </article>
 
-      <div className={styles.placeholderRow}>
+      <div className={styles.secondaryRow}>
         <article className={styles.card}>
           <h2 className="kin-title">{t("stats.distributionTitle")}</h2>
           {MuscleGroupDistribution({ distribution: summary.muscleGroupDistribution, t })}
         </article>
-        <article className={styles.card}>
-          <h2 className="kin-title">{t("stats.prTitle")}</h2>
+        <article className={styles.prCard}>
+          <div className={styles.prCardHeader}>
+            <h2 className="kin-title">{t("stats.prTitle")}</h2>
+          </div>
           {PersonalRecordsTable({ personalRecords: summary.personalRecords, t })}
         </article>
       </div>
@@ -148,7 +150,13 @@ interface PersonalRecordsTableProps {
 
 function PersonalRecordsTable({ personalRecords, t }: PersonalRecordsTableProps) {
   if (personalRecords.length === 0) {
-    return <p className="kin-text kin-muted">{t("stats.prEmpty")}</p>;
+    // The PR card has no padding of its own (see `.prCard`), so the empty
+    // state brings its own rather than sitting flush against the border.
+    return (
+      <div className={styles.prCardBody}>
+        <p className="kin-text kin-muted">{t("stats.prEmpty")}</p>
+      </div>
+    );
   }
 
   return (

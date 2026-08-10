@@ -18,7 +18,8 @@
  *
  * `.stats-placeholder` was NOT carried across: it had no reference anywhere in
  * `apps/`, a leftover from the Slice 3a placeholder sections.
- * `.stats-placeholder-row` — kept here as `.placeholderRow` — is the live one.
+ * `.stats-placeholder-row` is the live one, and now carries the screen's own
+ * name, `.secondaryRow` (kno/kInorA#435).
  *
  * Everything resolves through the existing globals.css tokens (`--surface`,
  * `--border`, `--accent`, `--r-card`, `--r-pill`); no literal is introduced.
@@ -115,7 +116,18 @@
   padding: var(--sp-4);
 }
 
-.placeholderRow {
+/*
+ * The screen's `secondary-row` (web-stats.html:336) — renamed from the
+ * `.placeholderRow` the Slice 3a era left behind, when both cards under it
+ * were placeholders. Both hold real data now.
+ *
+ * The screen hardcodes `grid-template-columns: 1fr 1fr`; this stays on
+ * `auto-fit`/`minmax` so the pair collapses to a single column on a narrow
+ * viewport instead of squeezing two charts into it. The screen is a
+ * fixed-width mockup and does not model that case, so this is a deliberate
+ * improvement on it rather than a divergence to correct.
+ */
+.secondaryRow {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: var(--sp-3);
@@ -202,10 +214,41 @@
   text-align: right;
 }
 
+/*
+ * The personal-records card is built deliberately unlike its siblings on the
+ * screen (`.pr-card`, web-stats.html:368): no padding of its own and
+ * `overflow: hidden`, with the heading in its own band that carries the
+ * `border-bottom`. The table then runs edge to edge under that rule, so the
+ * `border-top` between rows meets the card border on both sides instead of
+ * stopping short of it — which is what reusing the generic padded `.card`
+ * here used to produce (kno/kInorA#435).
+ *
+ * `.card` is left alone: it is still the right wrapper for every other
+ * section on the page.
+ */
+.prCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+
+.prCardHeader {
+  padding: 20px var(--sp-4) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+/*
+ * The empty state is the one child that is not the edge-to-edge table, so it
+ * supplies the padding the card no longer has.
+ */
+.prCardBody {
+  padding: var(--sp-4);
+}
+
 .prTable {
   width: 100%;
   border-collapse: collapse;
-  margin-top: var(--sp-2);
 }
 
 .prTable th {
@@ -214,12 +257,12 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
-  padding: 8px 12px;
+  padding: 8px var(--sp-4);
   text-align: left;
 }
 
 .prTable td {
-  padding: 10px 12px;
+  padding: 10px var(--sp-4);
   font-size: var(--fs-sm);
   border-top: 1px solid var(--border);
 }
