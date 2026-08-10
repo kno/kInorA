@@ -85,8 +85,10 @@ Implementation follows `openspec/specs/03-v1-quality-tdd/spec.md`.
 - Keep accessibility built in: semantic HTML, keyboard behavior, focus states, labels, and meaningful error text.
 - Do not hardcode one-off colors, spacing, typography, or breakpoints when tokens or primitives exist.
 - UI copy in source files defaults to English unless the product requirement explicitly says otherwise.
-- Keep user-facing literals in the i18n catalogs, not hardcoded in components. The web catalogs live at `apps/web/src/i18n/messages/en.json` and `es.json` (flat snake_case keys grouped by feature prefix, `{name}` interpolation placeholders).
-- Whenever you add, rename, or change a user-facing literal, update BOTH `en.json` and `es.json` in the same change. Every key must exist in both languages with matching placeholders. Spanish values use neutral/professional Spanish. The `catalog-parity` test (`apps/web/src/i18n/__tests__/catalog-parity.test.ts`) enforces this and must stay green.
+- Keep user-facing literals in the i18n catalogs, not hardcoded in components. Web and mobile share one catalog pair: `packages/i18n/src/messages/en.json` and `es.json` (nested keys grouped by feature namespace, `{name}` ICU interpolation placeholders).
+- Whenever you add, rename, or change a user-facing literal, update BOTH `en.json` and `es.json` in the same change. Every key must exist in both languages with matching placeholders. Spanish values use neutral/professional Spanish. `validateCatalogParity` enforces this and must stay green.
+- After adding or removing keys, run `pnpm --filter @kinora/i18n keys:sync` and review the diff it prints — it regenerates `packages/i18n/catalog-keys.txt`, the by-name record that replaced the frozen key total (kno/kInorA#428). Never run it to make a red suite green after a merge without reading what it removed.
+- If a scoped per-namespace count test does need a new number, do not compute it: change the catalog, run the suite, and read the number out of the failure message. Arithmetic on your own key count silently absorbs another branch's concurrent removals.
 
 ## Dependency and library policy
 
