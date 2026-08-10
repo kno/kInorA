@@ -61,235 +61,25 @@ describe("@kinora/i18n package assembly", () => {
     expect(result.valid).toBe(true);
   });
 
-  it("the full catalog carries all 430 migrated leaf keys per locale", () => {
-    // 329 web-migrated keys + 23 `mobileTracker.*` keys authored in slice 9
-    // for the mobile-unique tracker copy that has no EN/web equivalent (see
-    // 9.3.1 enumeration in tasks.md) + 10 `history.*` keys authored in 09b
-    // Phase 3 (Session History) for the web/mobile history surfaces + 3
-    // `tracker.sync.*` keys authored in 09b Phase 4 (Web Offline) for the
-    // stale-Server-Action "reload to sync" prompt (`reload_required`), the
-    // Judgment Day PR4 fixes' session-expired-mid-flush prompt
-    // (`auth_required`), and the poison-drop-must-surface prompt (`dropped`)
-    // + 15 `dashboard.*` keys authored in 09c-v1-progress-dashboard-stats
-    // Slice 2 for the data-backed dashboard (hero, streak, weekly progress,
-    // week-route strip, empty state) + 17 `stats.*` keys authored in
-    // 09c-v1-progress-dashboard-stats Slice 3a for the KPI cards, period
-    // toggle, volume trend, and the Slice-3b "coming soon" placeholders
-    // + 6 `stats.*` keys authored in Slice 3b for the real distribution/PR
-    // empty states and PR table headers + 12 `progress.muscle.<slug>` keys
-    // authored in Slice 3b (10 primary `MuscleGroup` labels + 2 composite
-    // "legs"/"arms" presentation labels for the web-only coarse collapse)
-    // + 6 `plan.week.*` keys authored in Slice 4a (weekly board visual
-    // realignment, closes #128) for the board header eyebrow/title and the
-    // inert (disabled) week-nav's aria-labels + static week label
-    // + 4 `plan.dayState.*` keys and 5 `exercises.history.*` keys authored
-    // in Slice 4b for the real done/active/rest/soon day-state labels and
-    // the read-only exercise-history section.
-    // + 44 `dashboard.*` keys added when the web dashboard was realigned to
-    // the full web-dashboard.html mockup (topbar, hero session copy + stats,
-    // readiness ring, streak chip, Coach AI card, next-session card, and the
-    // "Bloque de hoy" exercise list — presentational modules included).
-    // + 68 `plan.*` keys added when the web plan page was realigned to the
-    // full web-plan.html mockup (25 `plan.hero.*` topbar/hero cockpit copy +
-    // metrics/body-map, 11 `plan.readiness.*`, 22 `plan.today.*` side-rail
-    // exercise blocks, 10 `plan.coach.*` — the side rail is presentational).
-    // 59 of those 68 were later removed as fabricated copy: see the #411 and
-    // #420 lines below.
-    // + 18 `profile.*` keys authored in 10a for the /profile experience
-    // (3 `profile.loading.*` loading-state keys + 12 `profile.form.*`
-    // heading/labels/placeholders/feedback + 3 `profile.experience.*`
-    // level labels; goal select reuses wizard.goal.*)
-    // + 5 `wizard.preferences.*` keys authored in 10a Slice 5 for the
-    // defaults step title/labels and preferences-save error feedback.
-    // + 39 `memory.*` keys authored in 10b for the memory-management surface.
-    //
-    // NOTE (review correction, 11a Phase 4 / Slice 4): this whole-catalog
-    // magic total is intentionally FROZEN at 609 (its value before the
-    // `billing.*` namespace was added) by excluding `billing.*` keys from
-    // this count, rather than bumping the total again. A global total that
-    // every future namespace addition must edit is exactly the brittleness
-    // flagged in review — it breaks on ANY unrelated key addition, not just
-    // regressions. New namespaces from here on should add their OWN scoped
-    // count test (see "the billing namespace is present with EN+ES parity"
-    // below, mirroring the mobileTracker pattern) and exclude themselves
-    // here, instead of bumping this number.
-    const flat = flattenMessages(catalogs.en);
-    const nonBillingKeys = Object.keys(flat).filter(
-      (key) =>
-        !key.startsWith("billing.") &&
-        !key.startsWith("chat.") &&
-        !key.startsWith("voice.") &&
-        // 14a-v1.1 Slice B1: the `adaptation.*` namespace has its own scoped
-        // count test below, per the frozen-total convention noted above.
-        !key.startsWith("adaptation.") &&
-        // 14a-v1.1 Slice C2: the `planStatus.*` mobile plan-status-screen
-        // namespace has its own scoped count test below.
-        !key.startsWith("planStatus.") &&
-        // 14a-v1.1 Slice C3: the `home.*` mobile home-screen namespace has its
-        // own scoped count test below.
-        !key.startsWith("home.") &&
-        // 15a-v2-trainer-account-access Slice 5: the `clients.*` trainer
-        // client-list/create-plan-for-client namespace has its own scoped
-        // count test below, per the frozen-total convention.
-        !key.startsWith("clients.") &&
-        // 15b-v2-trainer-dashboard-branding Slice S5: the `trainerPlan.*`
-        // client-facing branded-plan-view namespace has its own scoped count
-        // test below, per the frozen-total convention.
-        !key.startsWith("trainerPlan.") &&
-        // GH #294: the `appNav.*` web app-shell nav-label namespace has its
-        // own scoped count test below, per the frozen-total convention.
-        !key.startsWith("appNav.") &&
-        // GH #306: the `admin.*` /admin landing-page namespace has its own
-        // scoped count test below, per the frozen-total convention.
-        !key.startsWith("admin.") &&
-        // GH #307: the `tenantProvisioning.*` /admin/tenants namespace has its
-        // own scoped count test below, per the frozen-total convention.
-        !key.startsWith("tenantProvisioning.") &&
-        // GH #310: the `logs.*` /admin/logs observability namespace has its own
-        // scoped count test below, per the frozen-total convention.
-        !key.startsWith("logs.") &&
-        // GH #309: the `platformStats.*` /admin/stats platform-statistics
-        // namespace has its own scoped count test below, per the frozen-total
-        // convention. (Distinct from the existing progress-dashboard `stats.*`.)
-        !key.startsWith("platformStats.") &&
-        // 16a-v3-gym-white-label: the `brandingStudio.*` /branding white-label
-        // studio namespace has its own scoped count test below, per the
-        // frozen-total convention.
-        !key.startsWith("brandingStudio.") &&
-        // 17d PR A: the `plans.*` /plans list namespace has its own scoped
-        // count test below, per the frozen-total convention.
-        !key.startsWith("plans.") &&
-        // 17d PR D: the `planEdit.*` program-editor namespace has its own
-        // scoped count test below, per the frozen-total convention.
-        !key.startsWith("planEdit."),
-    );
-    // +1 `tracker.restartLabel` authored for #251 (restart-timer control on
-    // the live tracker topbar; pause/restart now persist across navigation).
-    // +3 `tracker.load.{stepLabel,stepGroupLabel,stepOptionA11y}` authored for
-    // #253 (granular load-step selector: 0.5/1/2.5/5 kg increments on the web
-    // tracker; stepOptionA11y interpolates {step}).
-    // +1 `plan.limitation.advisory` authored for #250 (single localized advisory
-    // line shown once below the cleaned limitation bullets on the web plan
-    // screens).
-    // + 1 `mobileTracker.rpe.a11y` authored for 14b-v1.1 Slice B (mobile RPE
-    // capture input accessibility label — the `tracker.rpe` label itself is a
-    // shared key already counted).
-    // + 1 `plan.branding.byTrainer` authored for 15b-v2 Slice S4 (web trainer
-    // branding byline shown below the branded plan title).
-    // + 1 `auth.login.gymLogoAlt` authored for 16a-v3-gym-white-label Slice
-    // S4 (accessible alt text for the host-resolved gym logo on the login
-    // page).
-    // +43 `exercises.{library,detail,attribution}.*` authored for the exercise
-    // library: the searchable/filterable `/exercises` grid, the
-    // `/exercises/[id]` detail view (media toggle, stats, execution and
-    // muscle tabs) and the Gym visual / exercises-dataset attribution block
-    // that must accompany the media wherever it is displayed.
-    // +1 `exercises.detail.media.unavailable` — the exercise animation is a
-    // third-party cross-origin asset, so the media card degrades to the
-    // self-hosted still on a load failure and says so rather than showing a
-    // broken image.
-    // +1 `exercises.detail.summary` — the dataset has no summary field, so the
-    // detail page composes one from `equipment`/`target`/`bodyPart`.
-    // +85 `exercises.taxonomy.*` — the dataset's controlled vocabulary (10 body
-    // parts, 28 equipment, 19 targets, 40 secondary muscles, deduplicated into
-    // one flat map keyed by the raw catalog value). See
-    // `exercise-taxonomy.test.ts`, which fails when a catalog regeneration
-    // introduces a term this map does not cover.
-    // +3 `exercises.library.outOfRange.*` — an `?offset=` past the end of a
-    // NON-empty result set is not "nothing matched"; the card says so and
-    // links back to the first page (the pager is skipped on that branch).
-    // +4 `exercises.history.{empty,error}.*` — "View my history" navigates
-    // whether or not the exercise was ever logged, so the target page must
-    // answer in both cases instead of rendering nothing at all.
-    // +2 `exercises.technique.*` (#352 slice A) — the technique link rendered
-    // beside a plan/tracker exercise. Two keys, not one: the visible label is
-    // the same short word on every row, so the link also needs an accessible
-    // name that says WHICH exercise it opens.
-    // +7 `plan.start.{autoClosed,resume,discard,discardConfirm,
-    // discardConfirmYes,discardCancel,discardFailed}` (17b scope A) — the
-    // actionable under-24h conflict banner's Resume/Discard actions and the
-    // auto-close notice.
-    // +7 `mobileTracker.{autoClosed,conflict.resume,conflict.discard,
-    // conflict.discardConfirm,conflict.discardConfirmYes,
-    // conflict.discardCancel,conflict.discardFailed}` (17b scope A) — the
-    // mobile equivalent (see the mobileTracker namespace test below, whose
-    // own count also moves by +7).
-    // +1 `history.abandoned` (17b PR 3) — the read-only history label shown
-    // on an abandoned session, web and mobile.
-    // +9 `profile.form.selfDescribedSex.{label,placeholder,female,male,
-    // nonBinary,other,preferNotToSay}` + `profile.form.{heightCm,
-    // heightCmPlaceholder}` (17c PR1) — the body-metric scalars on the
-    // profile form.
-    // +11 `profile.weightEntry.{heading,weightLabel,weightPlaceholder,
-    // dateLabel,submit,saving,invalidWeight,invalidDate,error,listHeading,
-    // listEmpty}` (17c PR2) — the bodyweight-series entry form and list.
-    // +2 `profile.weight.{volumeShiftNotice,dismiss}` (17c PR4) — the
-    // first-entry volume-shift notice on the web weight-entry form.
-    // +1 `profile.weightEntry.loadError` (kno/kInorA#378) — distinguishes a
-    // failed weight-history fetch from an empty list on mobile ProfileScreen.
-    // +6 `dashboard.{errorTitle,errorBody,retry}`, `history.error`,
-    // `stats.error`, `aiConfig.errors.loadFailed` (kno/kInorA#378) — the
-    // remaining five collapsed-error sites (web dashboard/history/stats,
-    // mobile history, and the admin AI-config panel) now render a visible,
-    // distinguishable error instead of silently falling back to an empty or
-    // default state.
-    // `brandingStudio.errors.loadFailed` (kno/kInorA#378, a sixth
-    // collapsed-error site) is NOT counted here — `brandingStudio.*` has its
-    // own scoped count test below, per the frozen-total convention.
-    // +2 `plan.nav.loadError.{title,desc}` (17d PR A) — the `/plan` page's
-    // swallowed-error fix: a distinguishable error state, separate from the
-    // pre-existing `plan.nav.empty.*` genuinely-zero-plans copy.
-    // `plans.*` itself is NOT counted here — it has its own scoped count
-    // test below, per the frozen-total convention.
-    // +1 `plan.archived.badge` (17d PR B) — the archived-plan week-view
-    // indicator shown when a plan reached via `/plan?planId=X` is archived.
-    // +1 `mobileTracker.error.planArchived` (17d PR C) — the mobile tracker's
-    // message for PR B's `409 plan_archived`, which otherwise collapsed into
-    // the generic "couldn't start the session, try again" and invited a retry
-    // that can never succeed. `mobileTracker.*` is counted BOTH here and in
-    // its own scoped test below, so both numbers move together.
-    // +2 `mobileTracker.error.{dayNotInPlan,dayNotInPlanNoDays}`
-    // (kno/kInorA#409) — the mobile tracker's words for the API's
-    // `404 day_not_in_plan`, which the web plan editor made reachable by
-    // removing a day. Two keys because the refusal has two shapes: some days
-    // remain (name them) or none do.
-    // +6 `aiConfig.*` (kno/kInorA#414) — the /admin/ai-config panel gained an
-    // API-keys notice and a server-configuration summary, both of which needed
-    // real catalog copy instead of more hardcoded literals.
-    // -16 `plan.hero.*` (kno/kInorA#411) — the plan hero shipped the Open
-    // Design mockup's copy as if it were the user's data. 17 keys removed:
-    // the fabricated session copy (`sessionTitle`, `sessionLead`, `pillFocus`),
-    // the whole muscle body-map (`badge`, `imageAlt`, `focusValue`,
-    // `chip{Today,Next}{Label,Text,Alt}`), and three controls that reported
-    // success for actions that wrote nothing (`swapCta`/`swapToast`
-    // "Move to Saturday", `rebalanceCta`/`rebalanceToast` "Rebalance week",
-    // and `startToast`, the toast a start button raised when no real start
-    // handler was wired). +1 `noSessionTitle` for the honest empty case.
-    // The three surviving value keys (`pillToday`, `pillDuration`,
-    // `pillExercises`) became ICU templates fed by the real clock and the
-    // real recommended session. Net 25 -> 9.
-    //
-    // -43 `plan.{readiness,today,coach}.*` (kno/kInorA#420) — the plan side
-    // rail. 11 `plan.readiness.*` (a ring whose score was a JSX literal, plus
-    // sleep / soreness / last-push figures this app never measures and an
-    // "Add 2.5 kg" recommendation derived from nothing), 22 `plan.today.*`
-    // (six invented exercises with loads, standing beside the hero's REAL
-    // session and disagreeing with it) and 10 `plan.coach.*` (an "AI Coach"
-    // prescribing "Keep bench at 82.5 kg" with two buttons that toasted
-    // "Suggestion applied to your plan" and wrote nothing). Removed, not
-    // restyled: there is no wearable integration, no sleep or soreness input,
-    // and no coaching engine. Real adaptation exists (14a/14b) and is where a
-    // coaching surface belongs.
-    // ±0 `plan.hero.focusLabel` -> `plan.hero.metricsLabel` (same issue) — the
-    // metrics grid's accessible name still said "Muscle focus", left over from
-    // the body-map removed in #411.
-    //
-    // NOTE: this total is the one line every concurrent branch edits, so a
-    // merge that takes either side wholesale stays GREEN on a number matching
-    // whichever catalog survived. It is derived from the merged catalogs, never
-    // carried over from one side: 813 (post-#409/#414) - 16 - 43 = 754.
-    expect(nonBillingKeys).toHaveLength(754);
-  });
+  // The whole-catalog key TOTAL that used to be asserted here is gone
+  // (kno/kInorA#428). It was a frozen number on a single line, so every
+  // concurrent branch conflicted on it, and the natural resolution — take
+  // either side — stayed GREEN while discarding the other side's keys: the
+  // number matched whichever catalog survived the merge.
+  //
+  // Its coverage now lives in two derived guards that need no hand-computed
+  // aggregate:
+  // - `catalog-manifest.test.ts` — every shipped key is listed by NAME in
+  //   `catalog-keys.txt`, so a merge that drops keys fails and says which.
+  // - `catalog-usage.test.ts` — no key the apps never render.
+  // EN/ES parity stays where it always was: `validateCatalogParity`, above.
+  //
+  // The scoped per-namespace counts below are unaffected. They already merge
+  // cleanly, because two branches touching different namespaces edit different
+  // regions. If you do have to move one, do not compute it: edit the catalog
+  // first, run the suite, and read the number out of the failure message
+  // (`expected [ … ] to have a length of 34 but got 35`). Subtracting your own
+  // key count by hand silently absorbs another branch's concurrent removals.
 
   it("the chat namespace is present with EN+ES parity (12 Slice 3)", () => {
     expect(catalogs.en.chat).toBeDefined();
