@@ -55,6 +55,10 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// `pnpm-workspace.yaml` is parsed in exactly one place for the whole repository
+// — the second copy of that answer is how deps-guard's package list drifted.
+import { parseWorkspaceGlobs } from "./workspace-packages.mjs";
+
 const ROOT = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), ".."));
 
 /** Files vitest treats as suites here. Playwright specs (`*.spec.ts`) are excluded. */
@@ -90,39 +94,6 @@ export function discoverProjects(files) {
     dirs.add(file.includes("/") ? dirname(file) : ".");
   }
   return [...dirs].sort();
-}
-
-/**
- * Directory globs from `pnpm-workspace.yaml`, as regexes over root-relative
- * directory paths. `pnpm -r` visits a package only if it matches one of these,
- * so a config outside them is unreachable however well it is written.
- */
-export function parseWorkspaceGlobs(yaml) {
-  const globs = [];
-  let inPackages = false;
-  for (const rawLine of yaml.split("\n")) {
-    const line = rawLine.trimEnd();
-    if (/^packages:\s*$/.test(line)) {
-      inPackages = true;
-      continue;
-    }
-    if (!inPackages) continue;
-    const match = line.match(/^\s+-\s*["']?([^"'#]+?)["']?\s*$/);
-    if (match) {
-      globs.push(match[1]);
-      continue;
-    }
-    if (line.trim() !== "") inPackages = false;
-  }
-  return globs.map(
-    (glob) =>
-      new RegExp(
-        `^${glob
-          .split("*")
-          .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-          .join("[^/]*")}$`,
-      ),
-  );
 }
 
 /**
