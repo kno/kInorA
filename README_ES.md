@@ -238,7 +238,7 @@ Dos cosas viven deliberadamente fuera de la base de datos. El **catálogo de eje
 
 ### Definición del plan de entrenamiento
 
-- Modo tarjetas: asistente de 7 pasos (objetivo, días, duración, lugar, material, limitaciones y confirmación)
+- Modo tarjetas: asistente de 6 pasos — objetivo, lugar, frecuencia, duración, material y limitaciones. El lugar va antes que el material porque condiciona qué opciones de material se ofrecen. La confirmación es la acción de cierre, no un paso.
 - Modo conversacional: chat guiado por IA con extracción incremental de datos, con entrada y salida por voz
 - Cambio fluido entre ambos modos sin perder lo avanzado
 

@@ -238,7 +238,7 @@ Two things deliberately live outside the database. The **exercise catalog** is a
 
 ### Training Plan Definition
 
-- Card mode: 7-step wizard (goal, days, duration, location, equipment, limitations, confirmation)
+- Card mode: 6-step wizard — goal, location, frequency, duration, equipment, limitations. Location precedes equipment because the chosen location constrains which equipment options are offered. Confirmation is the finish action, not a step.
 - Conversational mode: AI-guided chat with incremental data extraction, voice input and output supported
 - Seamless switching between both modes without progress loss
 
