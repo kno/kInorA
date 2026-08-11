@@ -229,7 +229,7 @@ function pill(s, x, y, d, txt) {
 // =====================================================================
 {
   const s = base(
-    "[2:02–2:47] Vamos a verlo. Definir un plan tiene dos caminos. El asistente de tarjetas son seis pasos, dos minutos si uno sabe lo que quiere. El asistente por voz es una conversación, mejor cuando la situación tiene matices que ningún formulario recoge, que es el caso de quien arrastra una lesión. [DEMO 20 s: recorrer el asistente de tarjetas y después el modo conversación.]"
+    "[2:02–2:47] Vamos a verlo. Definir un plan tiene dos caminos. El asistente de tarjetas son seis pasos, dos minutos si uno sabe lo que quiere. El lugar va antes que el material, porque entrenar en casa o en un gimnasio cambia lo que tiene sentido ofrecer. El asistente por voz es una conversación, mejor cuando la situación tiene matices que ningún formulario recoge, que es el caso de quien arrastra una lesión. [DEMO 20 s: recorrer el asistente de tarjetas y después el modo conversación.]"
   );
   title(s, "Definir el plan", "Dos caminos hacia la misma estructura de datos");
 
@@ -238,12 +238,11 @@ function pill(s, x, y, d, txt) {
   s.addText(
     [
       { text: "Objetivo", options: { bullet: true, breakLine: true } },
+      { text: "Lugar de entrenamiento", options: { bullet: true, breakLine: true } },
       { text: "Días por semana", options: { bullet: true, breakLine: true } },
       { text: "Duración de sesión", options: { bullet: true, breakLine: true } },
-      { text: "Lugar de entrenamiento", options: { bullet: true, breakLine: true } },
       { text: "Material disponible", options: { bullet: true, breakLine: true } },
-      { text: "Limitaciones físicas", options: { bullet: true, breakLine: true } },
-      { text: "Confirmación", options: { bullet: true } },
+      { text: "Limitaciones físicas", options: { bullet: true } },
     ],
     { x: M + 0.4, y: 2.95, w: 5.0, h: 2.4, fontFace: BODY_FONT, fontSize: 14, color: FG, paraSpaceAfter: 7, margin: 0 }
   );
