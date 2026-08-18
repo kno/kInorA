@@ -773,6 +773,11 @@ export async function buildApp(
     // the `GET /me/trainer-plan` response. Reuses the SAME
     // `PlanSpecRepository` instance every other confirmed-spec read uses.
     specRepo: planSpecRepo,
+    // GH #447 — enables `GET /trainer/clients/:clientUserId/progress/
+    // {stats,exercise-detail,weekly-overview}`. Reuses the SAME
+    // `WorkoutSessionRepository` instance `progressRoutes`' `repo` option
+    // above uses — no new repository construction.
+    progressRepo: workoutSessionRepo,
     // #310 — records `owner_access.denied` on trainer-authorization denials.
     observability: observabilityLogger,
   });
