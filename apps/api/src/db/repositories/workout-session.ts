@@ -53,11 +53,29 @@ import type {
   WorkoutSessionRecord,
 } from "@kinora/contracts";
 import type { Database } from "../client.js";
-import { planSpecs, sessionExercises, setRecords, users, workoutPlans, workoutSessions } from "../schema.js";
+import {
+  planSpecs,
+  sessionExercises,
+  setRecords,
+  userProfiles,
+  users,
+  workoutPlans,
+  workoutSessions,
+} from "../schema.js";
 import { abandonedSessionCutoff } from "../session-abandonment.js";
 
 /** 14b-v1.1 — session-count window for the RPE-fold's session fetch (mirrors `RPE_WINDOW_SESSIONS`). */
 const RPE_WINDOW_SESSIONS = 3;
+
+/**
+ * Rolling completion-rate window for `getClientListMeta` — MUST match
+ * `computeCompletionRate`'s own internal 28-day window (`rpe-trend.ts`) so
+ * the SQL-side date filter and the domain function agree on which sessions
+ * are "recent". Only used to bound the batched query; the actual
+ * planned/completed/percent math still runs entirely inside
+ * `computeCompletionRate`.
+ */
+const COMPLETION_RATE_WINDOW_MS = 28 * 24 * 60 * 60 * 1000;
 
 interface WorkoutPlanRow {
   id: string;
@@ -1149,6 +1167,147 @@ export class WorkoutSessionRepository {
     }));
 
     return { rpeTrend, completionRate, recentSessions };
+  }
+
+  /**
+   * Batched trainer client-list enrichment (GH client-list-meta) — the
+   * client's display name, most recent COMPLETED session timestamp, and
+   * rolling 28-day completion-rate percent, for the WHOLE roster in ONE
+   * round-trip per data source (never a per-client N+1). Backs
+   * `GET /trainer/clients`'s `name`/`lastSessionAt`/`completionRate` fields.
+   *
+   * `completionRate` reuses `computeCompletionRate` — the SAME pure
+   * function `getClientDashboard` above uses — so the adherence semantics
+   * are identical everywhere (rolling 28 days, `planned =
+   * plannedSessionsPerWeek * 4`, `percent = min(100, round(completed /
+   * planned * 100))`). It is `null` only when the client has never
+   * completed a single session (never a fabricated 0%); a client with
+   * completed history but nothing in the last 28 days gets `0`.
+   *
+   * Four batched queries, each scoped to `(tenantId, clientUserIds)` and
+   * NONE looped per client:
+   *   1. `user_profiles` — display name.
+   *   2. `workout_sessions` GROUP BY `user_id` — `max(completed_at)` for
+   *      `lastSessionAt` (all-time, so it is never truncated by the 28-day
+   *      window below).
+   *   3. `workout_sessions` filtered to the rolling 28-day window — feeds
+   *      `computeCompletionRate`'s `completedAtDates` input directly (kept
+   *      as individual rows, not a Postgres `array_agg`, so the driver never
+   *      has to parse an array-typed `timestamptz[]` result).
+   *   4. `workout_plans` (`status = 'ready'`), ordered by `createdAt` desc —
+   *      the first row seen per `userId` is that client's latest ready plan
+   *      (mirrors `getClientDashboard`'s single-plan lookup, batched here).
+   *
+   * `clientUserIds = []` short-circuits before touching the database.
+   */
+  async getClientListMeta(
+    tenantId: string,
+    clientUserIds: string[],
+    now: Date = new Date()
+  ): Promise<
+    Array<{
+      clientUserId: string;
+      name: string | null;
+      lastSessionAt: string | null;
+      completionRate: number | null;
+    }>
+  > {
+    if (clientUserIds.length === 0) return [];
+
+    const windowStart = new Date(now.getTime() - COMPLETION_RATE_WINDOW_MS);
+
+    const [profileRows, lastSessionRows, recentSessionRows, planRows] = await Promise.all([
+      this.db
+        .select({ userId: userProfiles.userId, name: userProfiles.name })
+        .from(userProfiles)
+        .where(inArray(userProfiles.userId, clientUserIds)),
+      this.db
+        .select({
+          userId: workoutSessions.userId,
+          lastSessionAt: sql<Date | string | null>`max(${workoutSessions.completedAt})`,
+        })
+        .from(workoutSessions)
+        .where(
+          and(
+            eq(workoutSessions.tenantId, tenantId),
+            inArray(workoutSessions.userId, clientUserIds),
+            eq(workoutSessions.status, "completed")
+          )
+        )
+        .groupBy(workoutSessions.userId),
+      this.db
+        .select({ userId: workoutSessions.userId, completedAt: workoutSessions.completedAt })
+        .from(workoutSessions)
+        .where(
+          and(
+            eq(workoutSessions.tenantId, tenantId),
+            inArray(workoutSessions.userId, clientUserIds),
+            eq(workoutSessions.status, "completed"),
+            gte(workoutSessions.completedAt, windowStart),
+            lte(workoutSessions.completedAt, now)
+          )
+        ),
+      this.db
+        .select({ userId: workoutPlans.userId, programJson: workoutPlans.programJson })
+        .from(workoutPlans)
+        .where(
+          and(
+            eq(workoutPlans.tenantId, tenantId),
+            inArray(workoutPlans.userId, clientUserIds),
+            eq(workoutPlans.status, "ready")
+          )
+        )
+        .orderBy(desc(workoutPlans.createdAt)) as Promise<
+        Array<{ userId: string; programJson: WorkoutProgram | null }>
+      >,
+    ]);
+
+    const nameByUser = new Map(profileRows.map((row) => [row.userId, row.name]));
+
+    const lastSessionByUser = new Map(
+      lastSessionRows.map((row) => [
+        row.userId,
+        row.lastSessionAt ? new Date(row.lastSessionAt).toISOString() : null,
+      ])
+    );
+
+    const recentDatesByUser = new Map<string, string[]>();
+    for (const row of recentSessionRows) {
+      if (!row.completedAt) continue;
+      const dates = recentDatesByUser.get(row.userId) ?? [];
+      dates.push(row.completedAt.toISOString());
+      recentDatesByUser.set(row.userId, dates);
+    }
+
+    // First occurrence per userId wins — rows are ordered by createdAt desc
+    // across ALL clients, so the first row seen for a given userId is that
+    // client's latest ready plan (mirrors getClientDashboard's `.limit(1)`
+    // per-client lookup, batched here without a per-client query).
+    const plannedPerWeekByUser = new Map<string, number>();
+    for (const row of planRows) {
+      if (plannedPerWeekByUser.has(row.userId)) continue;
+      plannedPerWeekByUser.set(row.userId, row.programJson?.weeklySessions.length ?? 0);
+    }
+
+    return clientUserIds.map((clientUserId) => {
+      const hasCompletedSession = lastSessionByUser.has(clientUserId);
+      const completionRate = hasCompletedSession
+        ? computeCompletionRate(
+            {
+              completedAtDates: recentDatesByUser.get(clientUserId) ?? [],
+              plannedSessionsPerWeek: plannedPerWeekByUser.get(clientUserId) ?? 0,
+            },
+            now
+          ).percent
+        : null;
+
+      return {
+        clientUserId,
+        name: nameByUser.get(clientUserId) ?? null,
+        lastSessionAt: lastSessionByUser.get(clientUserId) ?? null,
+        completionRate,
+      };
+    });
   }
 
   /**

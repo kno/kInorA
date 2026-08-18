@@ -918,11 +918,29 @@ export interface InviteClientRequest {
 
 /**
  * Trainer-facing client-list row. Wired to a route in Slice 3.
+ *
+ * `name`/`lastSessionAt`/`completionRate` (GH client-list-meta) are ADDITIVE
+ * and OPTIONAL/nullable — the mobile app also consumes this DTO from the same
+ * `GET /trainer/clients` endpoint, so a client without these fields (or a
+ * server that has not yet populated them) keeps compiling and rendering
+ * unchanged. `null` means "resolved, no data" (no profile / no completed
+ * sessions); `undefined` means "not populated by this response".
  */
 export interface ClientSummaryDTO {
   clientUserId: UserId;
   email: string;
   status: TrainerAssignmentStatus;
+  /** Display name from `user_profiles.name`; `null` when the client has no profile yet. */
+  name?: string | null;
+  /** ISO timestamp of the client's most recent COMPLETED workout session; `null` when they have none. */
+  lastSessionAt?: string | null;
+  /**
+   * Rolling 28-day completion-rate percent — the SAME semantics as
+   * `ClientDashboardDTO.completionRate.percent` (`min(100, round(completed /
+   * (plannedSessionsPerWeek * 4) * 100))`). `null` when the client has no
+   * completed sessions at all (never a fabricated 0).
+   */
+  completionRate?: number | null;
 }
 
 /**

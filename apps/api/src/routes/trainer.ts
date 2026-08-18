@@ -86,6 +86,26 @@ interface TrainerRouteDashboardRepo {
 }
 
 /**
+ * Local structural port for the batched client-list enrichment
+ * (`WorkoutSessionRepository.getClientListMeta`, GH client-list-meta) — the
+ * route never imports the DB layer directly (architecture rule
+ * `routes-no-db-layer`). One call for the WHOLE roster, never per-client.
+ */
+interface TrainerRouteClientListMetaRepo {
+  getClientListMeta(
+    tenantId: string,
+    clientUserIds: string[],
+  ): Promise<
+    Array<{
+      clientUserId: string;
+      name: string | null;
+      lastSessionAt: string | null;
+      completionRate: number | null;
+    }>
+  >;
+}
+
+/**
  * Local structural port for the trainer-scoped progress reads (GH #447) —
  * `GET /trainer/clients/:clientUserId/progress/{stats,exercise-detail,
  * weekly-overview}`. Same three `ProgressRouteRepo` methods `progress.ts`'s
@@ -190,6 +210,13 @@ export interface TrainerRoutesOptions {
    * `trainerAccess`-gated conditional registration in plan.ts).
    */
   progressRepo?: TrainerRouteProgressRepo;
+  /**
+   * Backs `GET /trainer/clients`'s `name`/`lastSessionAt`/`completionRate`
+   * enrichment (GH client-list-meta). Optional so existing registrations/
+   * tests keep compiling unchanged; when absent the route serves the base
+   * `{ clientUserId, email, status }` shape exactly as before this change.
+   */
+  metaRepo?: TrainerRouteClientListMetaRepo;
   /** Backs `GET /me/trainer-plan` (15b-v2, Phase S2 — #283). */
   planRepo: TrainerRoutePlanRepo;
   /**
@@ -252,6 +279,7 @@ export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fa
     planRepo,
     specRepo,
     progressRepo,
+    metaRepo,
     observability,
     seatSync,
   } = options;
@@ -619,6 +647,30 @@ export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fa
           email: user?.email ?? "",
           status: assignment.status,
         });
+      }
+
+      // GH client-list-meta: enrich with name/lastSessionAt/completionRate in
+      // ONE batched call for the whole roster (never per-client). `metaRepo`
+      // is optional (back-compat for pre-this-change registrations/tests);
+      // absent ⇒ the base ClientSummaryDTO shape ships unchanged. An empty
+      // roster short-circuits before calling out at all. A meta-read failure
+      // is NOT caught here and propagates like any other repository read in
+      // this route (e.g. `assignmentRepo.listByTrainer`/`userRepo.findById`
+      // above) — nothing in this handler already tolerates a partial
+      // failure, so a broken enrichment source fails the whole request with
+      // the default 500 rather than silently shipping unenriched rows.
+      if (metaRepo && clients.length > 0) {
+        const meta = await metaRepo.getClientListMeta(
+          ctx.tenantId,
+          clients.map((client) => client.clientUserId),
+        );
+        const metaByClientId = new Map(meta.map((entry) => [entry.clientUserId, entry]));
+        for (const client of clients) {
+          const entry = metaByClientId.get(client.clientUserId);
+          client.name = entry?.name ?? null;
+          client.lastSessionAt = entry?.lastSessionAt ?? null;
+          client.completionRate = entry?.completionRate ?? null;
+        }
       }
 
       return reply.code(200).send(clients);
