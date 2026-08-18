@@ -48,6 +48,7 @@ aiConfig.providerLabel
 aiConfig.summaryTitle
 appNav.admin
 appNav.branding
+appNav.clients
 appNav.createPlan
 appNav.dashboard
 appNav.exercises

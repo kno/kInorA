@@ -13,7 +13,7 @@ interface TabItem {
   labelKey: string;
   label?: string;
   href: string;
-  icon: "home" | "plan" | "plans" | "stats" | "history" | "exercises" | "profile" | "memory" | "billing" | "admin" | "branding";
+  icon: "home" | "plan" | "plans" | "stats" | "history" | "exercises" | "profile" | "memory" | "billing" | "admin" | "branding" | "clients";
 }
 
 // Primary destinations always visible in the bottom bar.
@@ -50,11 +50,13 @@ export function MobileNav({
   billingNavLabel,
   isAdmin,
   isGym,
+  isTrainer,
 }: {
   memoryNavLabel?: string;
   billingNavLabel?: string;
   isAdmin?: boolean;
   isGym?: boolean;
+  isTrainer?: boolean;
 } = {}) {
   const t = useTranslations();
   const pathname = usePathname();
@@ -70,6 +72,9 @@ export function MobileNav({
       : []),
     ...(billingNavLabel
       ? [{ labelKey: "", label: billingNavLabel, href: "/billing", icon: "billing" as const }]
+      : []),
+    ...(isTrainer === true
+      ? [{ labelKey: "appNav.clients", href: "/clients", icon: "clients" as const }]
       : []),
     ...(isAdmin === true
       ? [{ labelKey: "appNav.admin", href: "/admin", icon: "admin" as const }]
@@ -261,6 +266,8 @@ function TabIcon({ name }: { name: TabItem["icon"] }) {
       return <UserIcon className={styles.icon} size={22} />;
     case "branding":
       return <BrandingIcon className={styles.icon} size={22} />;
+    case "clients":
+      return <UserIcon className={styles.icon} size={22} />;
   }
 }
 

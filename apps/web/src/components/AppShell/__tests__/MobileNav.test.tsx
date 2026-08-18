@@ -134,6 +134,28 @@ describe("MobileNav", () => {
     expect(screen.queryByRole("menuitem", { name: /Branding/i })).toBeNull();
   });
 
+  it("shows Clients in the overflow menu when isTrainer is true (GH #449)", () => {
+    renderWithIntl(<MobileNav isTrainer />);
+
+    fireEvent.click(screen.getByRole("button", { name: /More/i }));
+
+    expect(screen.getByRole("menuitem", { name: /Clients/i })).toBeTruthy();
+  });
+
+  it("omits Clients from the overflow menu when isTrainer is false or not provided", () => {
+    renderWithIntl(<MobileNav />);
+
+    fireEvent.click(screen.getByRole("button", { name: /More/i }));
+
+    expect(screen.queryByRole("menuitem", { name: /Clients/i })).toBeNull();
+  });
+
+  it("does NOT render Clients as a primary bar tab even when isTrainer is true", () => {
+    renderWithIntl(<MobileNav isTrainer />);
+
+    expect(screen.queryByRole("link", { name: /^Clients$/i })).toBeNull();
+  });
+
   it("does NOT render Branding as a primary bar tab even when isGym is true", () => {
     renderWithIntl(<MobileNav isGym />);
 

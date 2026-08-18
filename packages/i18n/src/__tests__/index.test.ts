@@ -345,7 +345,9 @@ describe("@kinora/i18n package assembly", () => {
     // (conditional entry visible only to gym-tier tenants, mirroring admin).
     // + 1 `appNav.plans` authored for 17d PR A (the /plans nav entry, shared
     // SidebarNav.NAV_ITEMS + MobileNav.SECONDARY_TABS).
-    expect(appNavKeys).toHaveLength(12);
+    // + 1 `appNav.clients` authored for GH #449 (the trainer-only Clients nav
+    // entry, gated on the server-resolved `fetchClients` trainer check).
+    expect(appNavKeys).toHaveLength(13);
     expect(flat["appNav.dashboard"]).toBe("Dashboard");
     expect(flattenMessages(catalogs.es)["appNav.dashboard"]).toBe("Panel");
     expect(flat["appNav.admin"]).toBeTruthy();
@@ -354,6 +356,8 @@ describe("@kinora/i18n package assembly", () => {
     expect(flattenMessages(catalogs.es)["appNav.branding"]).toBeTruthy();
     expect(flat["appNav.plans"]).toBe("Plans");
     expect(flattenMessages(catalogs.es)["appNav.plans"]).toBe("Planes");
+    expect(flat["appNav.clients"]).toBeTruthy();
+    expect(flattenMessages(catalogs.es)["appNav.clients"]).toBeTruthy();
   });
 
   it("the plans namespace is present with EN+ES parity (17d PR A — /plans list)", () => {

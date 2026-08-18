@@ -8,6 +8,7 @@ import { AppShell } from "@/components/AppShell/AppShell";
 import type { SidebarUser } from "@/components/AppShell/SidebarNav";
 import { fetchProfile } from "./auth/profile-client";
 import { fetchOwnBranding } from "./auth/gym-branding-client";
+import { fetchClients } from "./clients/trainer-client";
 
 /**
  * (app) route group layout — renders the responsive AppShell around all
@@ -45,6 +46,14 @@ import { fetchOwnBranding } from "./auth/gym-branding-client";
  * Branding Studio nav gate (GH #322, a gym-tier entitlement), never to drive
  * the theme. Both fetches (own-tenant for nav, public-by-slug for the theme)
  * run concurrently alongside the profile fetch.
+ *
+ * `isTrainer` (GH #449, PR 2/2 — the "Clients" nav entry) is resolved the
+ * same deny-by-default way: `fetchProfile` exposes no `role`/`tier` to the
+ * web app today (see `trainer-client.ts`'s header comment), so the ONLY
+ * trustworthy signal is the real server gate itself — `GET /trainer/clients`
+ * (role='trainer' AND tier='trainer') via the existing `fetchClients`. Only
+ * `kind: "ok"` means "show the entry"; `forbidden`, `error`, and no-session
+ * all resolve to `false`. This never runs client-side.
  */
 export default async function AppLayout({
   children,
@@ -63,14 +72,17 @@ export default async function AppLayout({
   let brandingStyle: string | null = null;
   let isAdmin = false;
   let isGym = false;
+  let isTrainer = false;
   if (token) {
-    // Concurrent fetches: profile + own-tenant branding (both token-gated),
-    // plus the PUBLIC host-slug branding (only needs the slug) that drives the
-    // theme. `null` when there is no gym slug (apex, www, localhost).
-    const [profile, branding, hostBranding] = await Promise.all([
+    // Concurrent fetches: profile + own-tenant branding + the trainer-clients
+    // gate (all token-gated), plus the PUBLIC host-slug branding (only needs
+    // the slug) that drives the theme. `null` when there is no gym slug
+    // (apex, www, localhost).
+    const [profile, branding, hostBranding, clientsResult] = await Promise.all([
       fetchProfile(token),
       fetchOwnBranding(token),
       gymSlug ? fetchPublicBranding(gymSlug) : Promise.resolve(null),
+      fetchClients(token),
     ]);
     if (profile) {
       user = {
@@ -90,6 +102,9 @@ export default async function AppLayout({
     // Independent of the host: a gym owner on the apex still sees the nav
     // entry even though no gym theme is applied there.
     isGym = branding.kind === "ok" || branding.kind === "not_found";
+    // GH #449: deny-by-default — only an explicit "ok" from the real server
+    // gate shows the Clients nav entry; "forbidden"/"error" both hide it.
+    isTrainer = clientsResult.kind === "ok";
   }
 
   return (
@@ -101,6 +116,7 @@ export default async function AppLayout({
         billingNavLabel={t("billing.navLabel")}
         isAdmin={isAdmin}
         isGym={isGym}
+        isTrainer={isTrainer}
       >
         {children}
       </AppShell>
