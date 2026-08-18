@@ -57,6 +57,34 @@ describe("trainer account access contracts (15a v2 Slice 1)", () => {
       clientUserId: UserId;
       email: string;
       status: TrainerAssignmentStatus;
+      name?: string | null;
+      lastSessionAt?: string | null;
+      completionRate?: number | null;
     }>();
+  });
+
+  it("keeps the client-list meta fields optional so a bare-minimum row still satisfies ClientSummaryDTO (mobile/web back-compat)", () => {
+    const bare: ClientSummaryDTO = {
+      clientUserId: "u1" as UserId,
+      email: "client@example.com",
+      status: "active",
+    };
+    expect(bare.name).toBeUndefined();
+
+    const enriched: ClientSummaryDTO = {
+      ...bare,
+      name: "Client One",
+      lastSessionAt: "2026-08-01T09:00:00.000Z",
+      completionRate: 75,
+    };
+    expect(enriched.completionRate).toBe(75);
+
+    const nulled: ClientSummaryDTO = {
+      ...bare,
+      name: null,
+      lastSessionAt: null,
+      completionRate: null,
+    };
+    expect(nulled.name).toBeNull();
   });
 });

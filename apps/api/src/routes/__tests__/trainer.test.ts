@@ -92,6 +92,7 @@ function buildRepos(
     planRepo: Record<string, unknown>;
     specRepo: Record<string, unknown>;
     progressRepo: Record<string, unknown>;
+    metaRepo: Record<string, unknown>;
     seatSync: Record<string, unknown>;
   }> = {},
 ) {
@@ -149,6 +150,11 @@ function buildRepos(
       syncSeats: vi.fn().mockResolvedValue(undefined),
       ...overrides.seatSync,
     },
+    // Deliberately absent unless an override supplies it — `metaRepo` is
+    // OPTIONAL on `TrainerRoutesOptions` (GH client-list-meta), so every
+    // pre-existing test in this file (which never overrides it) must keep
+    // exercising the route's back-compat "no enrichment" path unchanged.
+    ...(overrides.metaRepo ? { metaRepo: overrides.metaRepo } : {}),
   };
 }
 
@@ -924,6 +930,131 @@ describe("GET /trainer/clients", () => {
       { clientUserId: CLIENT_ID, email: "client@example.com", status: "active" },
     ]);
     expect(repos.assignmentRepo.listByTrainer).toHaveBeenCalledWith(TENANT_ID, TRAINER_ID);
+  });
+
+  it("does not call metaRepo (or add meta fields) when it is absent (back-compat)", async () => {
+    const repos = buildRepos({
+      assignmentRepo: {
+        listByTrainer: vi.fn().mockResolvedValue([
+          { id: "a1", tenantId: TENANT_ID, trainerUserId: TRAINER_ID, clientUserId: CLIENT_ID, status: "active" },
+        ]),
+      },
+    });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/trainer/clients",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([
+      { clientUserId: CLIENT_ID, email: "client@example.com", status: "active" },
+    ]);
+  });
+
+  it("merges name/lastSessionAt/completionRate from metaRepo into each row (GH client-list-meta)", async () => {
+    const OTHER_CLIENT_ID = "aaaaaaaa-0000-0000-0000-000000000004";
+    const getClientListMeta = vi.fn().mockResolvedValue([
+      { clientUserId: CLIENT_ID, name: "Client One", lastSessionAt: "2026-08-01T09:00:00.000Z", completionRate: 75 },
+      { clientUserId: OTHER_CLIENT_ID, name: null, lastSessionAt: null, completionRate: null },
+    ]);
+    const repos = buildRepos({
+      assignmentRepo: {
+        listByTrainer: vi.fn().mockResolvedValue([
+          { id: "a1", tenantId: TENANT_ID, trainerUserId: TRAINER_ID, clientUserId: CLIENT_ID, status: "active" },
+          { id: "a2", tenantId: TENANT_ID, trainerUserId: TRAINER_ID, clientUserId: OTHER_CLIENT_ID, status: "active" },
+        ]),
+      },
+      userRepo: {
+        findById: vi.fn().mockImplementation(async (id: string) => ({ id, email: `${id}@example.com` })),
+      },
+      metaRepo: { getClientListMeta },
+    });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/trainer/clients",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([
+      {
+        clientUserId: CLIENT_ID,
+        email: `${CLIENT_ID}@example.com`,
+        status: "active",
+        name: "Client One",
+        lastSessionAt: "2026-08-01T09:00:00.000Z",
+        completionRate: 75,
+      },
+      {
+        clientUserId: OTHER_CLIENT_ID,
+        email: `${OTHER_CLIENT_ID}@example.com`,
+        status: "active",
+        name: null,
+        lastSessionAt: null,
+        completionRate: null,
+      },
+    ]);
+    // Called exactly once, with the tenant + the EXACT set of client ids —
+    // never a per-client call (no N+1).
+    expect(getClientListMeta).toHaveBeenCalledTimes(1);
+    expect(getClientListMeta).toHaveBeenCalledWith(TENANT_ID, [CLIENT_ID, OTHER_CLIENT_ID]);
+  });
+
+  it("gives a client with no profile/no sessions null meta fields, never fabricated values", async () => {
+    const getClientListMeta = vi.fn().mockResolvedValue([
+      { clientUserId: CLIENT_ID, name: null, lastSessionAt: null, completionRate: null },
+    ]);
+    const repos = buildRepos({
+      assignmentRepo: {
+        listByTrainer: vi.fn().mockResolvedValue([
+          { id: "a1", tenantId: TENANT_ID, trainerUserId: TRAINER_ID, clientUserId: CLIENT_ID, status: "active" },
+        ]),
+      },
+      metaRepo: { getClientListMeta },
+    });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/trainer/clients",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([
+      {
+        clientUserId: CLIENT_ID,
+        email: "client@example.com",
+        status: "active",
+        name: null,
+        lastSessionAt: null,
+        completionRate: null,
+      },
+    ]);
+  });
+
+  it("short-circuits an empty client list — never calls metaRepo", async () => {
+    const getClientListMeta = vi.fn();
+    const repos = buildRepos({
+      assignmentRepo: { listByTrainer: vi.fn().mockResolvedValue([]) },
+      metaRepo: { getClientListMeta },
+    });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/trainer/clients",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+    expect(getClientListMeta).not.toHaveBeenCalled();
   });
 });
 

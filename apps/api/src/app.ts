@@ -765,6 +765,11 @@ export async function buildApp(
     // `GET /trainer/clients/:clientUserId/dashboard`. Reuses the SAME
     // `WorkoutSessionRepository` instance every other progress read uses.
     dashboardRepo: workoutSessionRepo,
+    // GH client-list-meta — enables the name/lastSessionAt/completionRate
+    // fields on `GET /trainer/clients`. Reuses the SAME
+    // `WorkoutSessionRepository` instance every other progress/dashboard
+    // read above uses — no new repository construction.
+    metaRepo: workoutSessionRepo,
     // 15b-v2-trainer-dashboard-branding, Phase S2 (#283) — enables
     // `GET /me/trainer-plan`. Reuses the SAME `WorkoutPlanRepository`
     // instance every other plan read uses.
