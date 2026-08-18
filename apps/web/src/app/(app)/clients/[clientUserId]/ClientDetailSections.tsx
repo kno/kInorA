@@ -32,6 +32,18 @@ import styles from "./client-detail.module.css";
 export type Translator = (key: string, values?: Record<string, string | number | Date>) => string;
 export type DetailTab = "dashboard" | "progress" | "plan";
 
+/**
+ * Joins a query-string fragment onto `base`, using `?` when `base` has no
+ * query yet and `&` when it already does. The `/clients` master-detail
+ * workspace passes `hrefBase="/clients?client=<id>"` (already carrying a
+ * query), while the standalone route's default base (`/clients/:id`) has
+ * none — naively appending a literal `?` at every join site produced a
+ * malformed double-`?` URL for the workspace shape (GH #460 review).
+ */
+export function appendParams(base: string, query: string): string {
+  return `${base}${base.includes("?") ? "&" : "?"}${query}`;
+}
+
 export function initialsOf(email: string): string {
   return email.slice(0, 2).toUpperCase();
 }
@@ -40,11 +52,19 @@ export interface ClientDetailHeaderProps {
   client: ClientSummaryDTO;
   tab: DetailTab;
   t: Translator;
+  /**
+   * Base path for the tab links, defaulting to the standalone detail route
+   * (`/clients/:clientUserId`). The `/clients` master-detail workspace passes
+   * `/clients?client=:clientUserId` instead, so selecting a tab stays on the
+   * SAME page rather than navigating to the standalone route (GH #447
+   * workspace closeout).
+   */
+  hrefBase?: string;
 }
 
-export function ClientDetailHeader({ client, tab, t }: ClientDetailHeaderProps) {
+export function ClientDetailHeader({ client, tab, t, hrefBase }: ClientDetailHeaderProps) {
   const isActive = client.status === "active";
-  const base = `/clients/${client.clientUserId}`;
+  const base = hrefBase ?? `/clients/${client.clientUserId}`;
 
   return (
     <>
@@ -70,7 +90,7 @@ export function ClientDetailHeader({ client, tab, t }: ClientDetailHeaderProps) 
           <a
             key={option}
             className={`${styles.tab}${option === tab ? ` ${styles.tabActive}` : ""}`}
-            href={`${base}?tab=${option}`}
+            href={appendParams(base, `tab=${option}`)}
             aria-current={option === tab ? "page" : undefined}
             data-testid={`client-detail-tab-${option}`}
           >
@@ -160,11 +180,21 @@ export interface ProgressTabProps {
   exerciseTitle?: string;
   exerciseResult?: FetchClientExerciseDetailResult;
   t: Translator;
+  /** See {@link ClientDetailHeaderProps.hrefBase}. */
+  hrefBase?: string;
 }
 
 const RANGES: StatsRange[] = ["week", "month", "year"];
 
-export function ProgressTab({ clientUserId, range, statsResult, exerciseTitle, exerciseResult, t }: ProgressTabProps) {
+export function ProgressTab({
+  clientUserId,
+  range,
+  statsResult,
+  exerciseTitle,
+  exerciseResult,
+  t,
+  hrefBase,
+}: ProgressTabProps) {
   if (statsResult.kind === "forbidden") {
     return ForbiddenNotice({ t });
   }
@@ -177,7 +207,7 @@ export function ProgressTab({ clientUserId, range, statsResult, exerciseTitle, e
   }
 
   const { summary } = statsResult;
-  const base = `/clients/${clientUserId}?tab=progress`;
+  const base = appendParams(hrefBase ?? `/clients/${clientUserId}`, "tab=progress");
 
   return (
     <div data-testid="client-progress-tab">
@@ -186,7 +216,7 @@ export function ProgressTab({ clientUserId, range, statsResult, exerciseTitle, e
           <a
             key={option}
             className={`${styles.tab}${option === range ? ` ${styles.tabActive}` : ""}`}
-            href={`${base}&range=${option}`}
+            href={appendParams(base, `range=${option}`)}
             aria-current={option === range ? "page" : undefined}
             data-testid={`client-progress-range-${option}`}
           >
@@ -217,7 +247,8 @@ export function ProgressTab({ clientUserId, range, statsResult, exerciseTitle, e
         {PersonalRecordsTable({
           personalRecords: summary.personalRecords,
           t,
-          exerciseHref: (title) => `${base}&range=${range}&exercise=${encodeURIComponent(title)}`,
+          exerciseHref: (title) =>
+            appendParams(appendParams(base, `range=${range}`), `exercise=${encodeURIComponent(title)}`),
         })}
       </section>
 
@@ -264,9 +295,11 @@ export interface PlanTabProps {
   clientUserId: string;
   weekResult: FetchClientWeeklyOverviewResult;
   t: Translator;
+  /** See {@link ClientDetailHeaderProps.hrefBase}. */
+  hrefBase?: string;
 }
 
-export function PlanTab({ clientUserId, weekResult, t }: PlanTabProps) {
+export function PlanTab({ clientUserId, weekResult, t, hrefBase }: PlanTabProps) {
   if (weekResult.kind === "forbidden") {
     return ForbiddenNotice({ t });
   }
@@ -279,16 +312,16 @@ export function PlanTab({ clientUserId, weekResult, t }: PlanTabProps) {
   }
 
   const { overview } = weekResult;
-  const base = `/clients/${clientUserId}?tab=plan`;
+  const base = appendParams(hrefBase ?? `/clients/${clientUserId}`, "tab=plan");
 
   return (
     <div data-testid="client-plan-tab">
       <div className={styles.weekNav}>
-        <a className="kin-btn" href={`${base}&weekStart=${overview.previousWeekStart}`}>
+        <a className="kin-btn" href={appendParams(base, `weekStart=${overview.previousWeekStart}`)}>
           {t("clients.plan.previousWeek")}
         </a>
         <h2 className="kin-title">{overview.weekLabel}</h2>
-        <a className="kin-btn" href={`${base}&weekStart=${overview.nextWeekStart}`}>
+        <a className="kin-btn" href={appendParams(base, `weekStart=${overview.nextWeekStart}`)}>
           {t("clients.plan.nextWeek")}
         </a>
       </div>

@@ -311,8 +311,16 @@ describe("@kinora/i18n package assembly", () => {
     // GH #447 (trainer client-detail surface, PR 2/2) adds 27: quick-action
     // links on the list row (quickActionsAria + quickActions.* = 4), the
     // detail-page tabs (tabsAria + tabs.* + notFound + loadError = 6), the
-    // Dashboard tab (6), the Progress tab (3), and the Plan tab (8).
-    expect(clientsKeys).toHaveLength(63);
+    // Dashboard tab (6), the Progress tab (3), and the Plan tab (8) = 63.
+    // GH #447 workspace closeout (the /clients two-column master-detail,
+    // rich rows, search/filters and the invite sheet) adds 16: workspace.
+    // detailAria (1), roster.* (searchLabel/searchPlaceholder/filtersAria/
+    // filters.all/noMatches/pendingInvite/adherence/recency.{none,today,
+    // yesterday,daysAgo} = 11), and invite.* (eyebrow/description/closeAria/
+    // cancel = 4) — and removes 1 (`inviteFormAria`: the always-visible
+    // inline invite panel it labelled was replaced by the invite sheet,
+    // which has its own `aria-labelledby`) = 63 + 16 - 1 = 78.
+    expect(clientsKeys).toHaveLength(78);
     expect(flat["clients.pageTitle"]).toBe("My Clients");
     expect(flattenMessages(catalogs.es)["clients.pageTitle"]).toBe("Mis clientes");
   });
