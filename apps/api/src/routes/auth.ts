@@ -2,12 +2,18 @@ import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { AuthService, AuthError } from "../auth/service.js";
 import { requireAuth } from "../auth/plugin.js";
 import type { RegisterRequest, LoginRequest } from "@kinora/contracts";
+import type { EntitlementReaderPort } from "../billing/entitlement.js";
+import { isTrainerEntitled } from "../trainer/owner-access.js";
 
 /**
- * Plugin options: the auth service instance to delegate auth operations to.
+ * Plugin options: the auth service instance to delegate auth operations to,
+ * plus the entitlement reader GET /auth/profile reuses to resolve
+ * `isTrainer` (#453) — the SAME port every other billing decision in the
+ * app reads through, never a DB import in this route file.
  */
 export interface AuthRoutesOptions {
   authService: AuthService;
+  entitlementReader: Pick<EntitlementReaderPort, "loadContext">;
 }
 
 /**
@@ -53,7 +59,7 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
   fastify,
   options
 ) => {
-  const { authService } = options;
+  const { authService, entitlementReader } = options;
 
   fastify.post(
     "/auth/register",
@@ -125,17 +131,39 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
    * display name and the source for initials (first character of the local
    * part, uppercased). The plan badge defaults to "Free" until billing is
    * implemented.
+   *
+   * Also returns `isTrainer` (#453) — the SAME two-step gate
+   * `assertTrainerEntitled` enforces (`role === "trainer"` AND the resolved
+   * billing tier is exactly `"trainer"`), via the non-throwing
+   * `isTrainerEntitled` helper: a profile read is not a denial, so it must
+   * never emit an `owner_access.denied` observability event. `role` is
+   * already on `authContext` (zero extra query); the entitlement read only
+   * runs when the role check already passed (ascending-cost order, matching
+   * the real gate). Deny-by-default: any failure to resolve the entitlement
+   * context resolves `isTrainer` to `false` rather than failing the whole
+   * profile response.
    */
   fastify.get(
     "/auth/profile",
     { preHandler: requireAuth() },
     async (request: FastifyRequest) => {
-      const { userId } = request.authContext!;
+      const { userId, tenantId, role } = request.authContext!;
       const profile = await authService.getProfile(userId);
       if (!profile) {
         throw new AuthError("User not found");
       }
-      return profile;
+
+      let isTrainer = false;
+      try {
+        isTrainer = await isTrainerEntitled(
+          { tenantId, actorUserId: userId, role },
+          { entitlementReader }
+        );
+      } catch {
+        isTrainer = false;
+      }
+
+      return { ...profile, isTrainer };
     }
   );
 };

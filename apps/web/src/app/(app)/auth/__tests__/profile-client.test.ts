@@ -68,3 +68,70 @@ describe("fetchProfile — isAdmin threading (GH #306)", () => {
     expect(result?.isAdmin).toBe(false);
   });
 });
+
+/**
+ * `isTrainer` threading (#453): the layout's Clients nav entry is derived
+ * from this field instead of a separate `GET /trainer/clients` round-trip.
+ * Mirrors the `isAdmin` mapping above.
+ */
+describe("fetchProfile — isTrainer threading (#453)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("maps isTrainer: true through from the API payload", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          email: "trainer@example.com",
+          initials: "T",
+          tenantName: "trainer's workspace",
+          isTrainer: true,
+        }),
+      })),
+    );
+
+    const result = await fetchProfile("session-token-123");
+
+    expect(result?.isTrainer).toBe(true);
+  });
+
+  it("maps isTrainer: false when the API payload says false", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          email: "user@example.com",
+          initials: "U",
+          tenantName: "user's workspace",
+          isTrainer: false,
+        }),
+      })),
+    );
+
+    const result = await fetchProfile("session-token-123");
+
+    expect(result?.isTrainer).toBe(false);
+  });
+
+  it("defaults to isTrainer: false when the API payload omits the field (backward compatibility)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          email: "user@example.com",
+          initials: "U",
+          tenantName: "user's workspace",
+        }),
+      })),
+    );
+
+    const result = await fetchProfile("session-token-123");
+
+    expect(result?.isTrainer).toBe(false);
+  });
+});

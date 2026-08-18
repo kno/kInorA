@@ -364,9 +364,15 @@ export async function buildApp(
   // Health routes
   await app.register(healthRoute);
 
+  // 11a billing core reader — constructed here (ahead of every other billing
+  // wiring below) so GET /auth/profile can resolve `isTrainer` off the SAME
+  // instance every other billing decision in this file reuses (#453).
+  const billingStateReader = new BillingStateReaderRepository(database);
+
   // Auth routes (register + login + logout + profile)
   await app.register(authRoutes, {
     authService: new AuthService(database, observabilityLogger),
+    entitlementReader: billingStateReader,
   });
 
   // Social login routes (OIDC provider abstraction + Google)
@@ -443,7 +449,9 @@ export async function buildApp(
   // 11a billing core — entitlement + atomic hybrid quota consume.
   // Repositories live in the infra layer; the pure use cases depend only on
   // their ports. The composition root is the sole place they are wired.
-  const billingStateReader = new BillingStateReaderRepository(database);
+  // `billingStateReader` itself is constructed earlier (ahead of `authRoutes`
+  // registration, #453) so GET /auth/profile can reuse the SAME instance to
+  // resolve `isTrainer` — no separate reader is ever built for that check.
   const quotaLedgerRepo = new QuotaLedgerRepository(database);
   const checkEntitlement = new CheckEntitlement(billingStateReader);
   const checkAndConsumeQuota = new CheckAndConsumeQuota(checkEntitlement, quotaLedgerRepo);
