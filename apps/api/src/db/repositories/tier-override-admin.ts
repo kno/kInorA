@@ -76,14 +76,27 @@ export class TierOverrideAdminRepository implements TierOverrideAdminPort {
    * leaves the tenant granted-but-not-yet-promoted; that state self-heals on
    * the next replay of the SAME grant (operationKey) or on any admin
    * re-grant, since this update is idempotent (0 rows when already at `to`).
+   *
+   * Single-membership guard: no code path can create a second `from`-role row
+   * per tenant (provisioning inserts exactly one `owner`; invites always
+   * insert `member`), so >1 matched rows means a data anomaly (e.g. a manual
+   * SQL fix gone wrong). The update runs in a transaction and throws — rolling
+   * the transition back — rather than silently mutating multiple memberships.
    */
   async setTenantOwnerRole(tenantId: string, from: MembershipRole, to: MembershipRole): Promise<number> {
-    const updated = await this.db
-      .update(memberships)
-      .set({ role: to })
-      .where(and(eq(memberships.tenantId, tenantId), eq(memberships.role, from)))
-      .returning({ id: memberships.id });
-    return updated.length;
+    return this.db.transaction(async (tx) => {
+      const updated = await tx
+        .update(memberships)
+        .set({ role: to })
+        .where(and(eq(memberships.tenantId, tenantId), eq(memberships.role, from)))
+        .returning({ id: memberships.id });
+      if (updated.length > 1) {
+        throw new Error(
+          `expected at most one '${from}' membership for tenant ${tenantId}, matched ${updated.length}`,
+        );
+      }
+      return updated.length;
+    });
   }
 
   /**

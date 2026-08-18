@@ -404,6 +404,37 @@ describe.skipIf(!hasDb)("TierOverrideAdminRepository (real Postgres)", () => {
     expect(afterDemote[0]?.role).toBe("owner");
   });
 
+  it("setTenantOwnerRole throws and rolls back when more than one membership matches the from-role (#449)", async () => {
+    // Two `owner` rows in one tenant cannot be produced by any code path
+    // (provisioning creates exactly one, invites always insert `member`) —
+    // only by a manual data fix gone wrong. The guard must surface that
+    // anomaly instead of silently transitioning both rows.
+    const [tenant] = await db.insert(tenants).values({ name: "anomaly-tenant" }).returning({ id: tenants.id });
+    const [ownerA] = await db
+      .insert(users)
+      .values({ email: `owner-a-${Date.now()}-${Math.random()}@example.com` })
+      .returning({ id: users.id });
+    const [ownerB] = await db
+      .insert(users)
+      .values({ email: `owner-b-${Date.now()}-${Math.random()}@example.com` })
+      .returning({ id: users.id });
+    await db.insert(memberships).values([
+      { tenantId: tenant!.id, userId: ownerA!.id, role: "owner", status: "active" },
+      { tenantId: tenant!.id, userId: ownerB!.id, role: "owner", status: "active" },
+    ]);
+
+    await expect(repo.setTenantOwnerRole(tenant!.id, "owner", "trainer")).rejects.toThrow(
+      /expected at most one/i,
+    );
+
+    // The transaction rolled back — NEITHER row was transitioned.
+    const rows = await db
+      .select({ role: memberships.role })
+      .from(memberships)
+      .where(eq(memberships.tenantId, tenant!.id));
+    expect(rows.map((r) => r.role)).toEqual(["owner", "owner"]);
+  });
+
   it("grants a trainer override then revokes it: the owner membership round-trips owner -> trainer -> owner (#449)", async () => {
     const { tenantId, superadminId } = await seedTenantAndSuperadmin();
     const [owner] = await db
