@@ -1403,6 +1403,47 @@
       "submitting": "Creando…",
       "errorGeneric": "No se pudo crear el plan. Inténtalo de nuevo.",
       "errorForbidden": "No tienes autorización para crear un plan para este cliente."
+    },
+    "quickActionsAria": "Acciones rápidas de {email}",
+    "quickActions": {
+      "dashboard": "Dashboard",
+      "progress": "Progreso",
+      "plan": "Plan"
+    },
+    "detail": {
+      "tabsAria": "Secciones del cliente",
+      "tabs": {
+        "dashboard": "Dashboard",
+        "progress": "Progreso",
+        "plan": "Plan"
+      },
+      "notFound": "Este cliente no está en tu cartera.",
+      "loadError": "No se pudo cargar esta sección. Inténtalo de nuevo."
+    },
+    "dashboard": {
+      "completionRateLabel": "Cumplimiento a 28 días",
+      "completionRateSub": "{completed} de {planned} sesiones planificadas",
+      "rpeTrendTitle": "Tendencia de RPE (8 semanas)",
+      "noRpeData": "Aún no hay suficientes series valoradas.",
+      "recentSessionsTitle": "Sesiones recientes",
+      "noSessions": "Todavía no hay sesiones completadas."
+    },
+    "progress": {
+      "rangeAria": "Periodo de progreso",
+      "exerciseDetailTitle": "Historial — {exercise}",
+      "exerciseDetailEmpty": "Todavía no hay historial registrado."
+    },
+    "plan": {
+      "previousWeek": "Semana anterior",
+      "nextWeek": "Semana siguiente",
+      "weekAria": "Tablero semanal del plan",
+      "empty": "No hay plan programado esta semana.",
+      "status": {
+        "done": "Hecho",
+        "active": "Activo",
+        "rest": "Descanso",
+        "soon": "Próximo"
+      }
     }
   },
   "admin": {

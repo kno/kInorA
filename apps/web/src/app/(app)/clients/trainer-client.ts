@@ -20,14 +20,19 @@ import "server-only";
  * treats it as "not a trainer" and renders an access-restricted state instead
  * of the list.
  */
-import type { ClientSummaryDTO } from "@kinora/contracts";
+import type { ClientSummaryDTO, ClientDashboardDTO, ExerciseDetailDTO, StatsSummaryDTO, WeeklyOverviewDTO } from "@kinora/contracts";
 import { apiBaseUrl } from "@/app/(app)/create-plan/plan-draft-client";
+import type { StatsRange } from "@/app/(app)/stats/stats-client";
 import type {
   ClientPlanDetail,
   CreatePlanForClientInput,
   CreatePlanForClientResult,
+  FetchClientDashboardResult,
+  FetchClientExerciseDetailResult,
   FetchClientPlanResult,
+  FetchClientProgressStatsResult,
   FetchClientsResult,
+  FetchClientWeeklyOverviewResult,
   InviteClientResult,
 } from "./trainer-client-types";
 
@@ -35,8 +40,12 @@ export type {
   ClientPlanDetail,
   CreatePlanForClientInput,
   CreatePlanForClientResult,
+  FetchClientDashboardResult,
+  FetchClientExerciseDetailResult,
   FetchClientPlanResult,
+  FetchClientProgressStatsResult,
   FetchClientsResult,
+  FetchClientWeeklyOverviewResult,
   InviteClientResult,
 } from "./trainer-client-types";
 
@@ -223,4 +232,198 @@ export async function fetchClientPlan(
   }
 
   return { kind: "ok", plan: body };
+}
+
+/**
+ * Read an assigned client's dashboard summary via
+ * `GET /trainer/clients/:clientUserId/dashboard` (GH #447). Authorization
+ * (role + trainer entitlement + ACTIVE assignment) is entirely server-side;
+ * a `403` is the only denial this function distinguishes.
+ */
+export async function fetchClientDashboard(
+  clientUserId: string,
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<FetchClientDashboardResult> {
+  if (!token) {
+    return { kind: "error", message: "no_session" };
+  }
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}/trainer/clients/${encodeURIComponent(clientUserId)}/dashboard`, {
+      method: "GET",
+      headers: { authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (res.status === 403) {
+    return { kind: "forbidden" };
+  }
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? "fetch_client_dashboard_failed" };
+  }
+
+  const body = (await res.json().catch(() => null)) as ClientDashboardDTO | null;
+  if (!body || !Array.isArray(body.rpeTrend) || !Array.isArray(body.recentSessions)) {
+    return { kind: "error", message: "invalid_response" };
+  }
+
+  return { kind: "ok", dashboard: body };
+}
+
+/**
+ * Read an assigned client's statistics summary via
+ * `GET /trainer/clients/:clientUserId/progress/stats?range=` (GH #447).
+ * Mirrors `fetchStatsSummary` (the self-scoped equivalent) with the extra
+ * `forbidden` branch this trainer-scoped route can return.
+ */
+export async function fetchClientProgressStats(
+  clientUserId: string,
+  range: StatsRange,
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<FetchClientProgressStatsResult> {
+  if (!token) {
+    return { kind: "error", message: "no_session" };
+  }
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(
+      `${base}/trainer/clients/${encodeURIComponent(clientUserId)}/progress/stats?range=${range}`,
+      {
+        method: "GET",
+        headers: { authorization: `Bearer ${token}` },
+        cache: "no-store",
+      },
+    );
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (res.status === 403) {
+    return { kind: "forbidden" };
+  }
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? "fetch_client_stats_failed" };
+  }
+
+  const body = (await res.json().catch(() => null)) as StatsSummaryDTO | null;
+  if (!body || typeof body.totalVolumeKg?.value !== "number") {
+    return { kind: "error", message: "invalid_response" };
+  }
+
+  return { kind: "ok", summary: body };
+}
+
+/**
+ * Read an assigned client's exercise-history reference via
+ * `GET /trainer/clients/:clientUserId/progress/exercise-detail?title=`
+ * (GH #447). Mirrors `fetchExerciseDetail`.
+ */
+export async function fetchClientExerciseDetail(
+  clientUserId: string,
+  title: string,
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<FetchClientExerciseDetailResult> {
+  if (!token) {
+    return { kind: "error", message: "no_session" };
+  }
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(
+      `${base}/trainer/clients/${encodeURIComponent(clientUserId)}/progress/exercise-detail?title=${encodeURIComponent(title)}`,
+      {
+        method: "GET",
+        headers: { authorization: `Bearer ${token}` },
+        cache: "no-store",
+      },
+    );
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (res.status === 403) {
+    return { kind: "forbidden" };
+  }
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? "fetch_client_exercise_detail_failed" };
+  }
+
+  const body = (await res.json().catch(() => null)) as ExerciseDetailDTO | null;
+  if (!body || typeof body.exerciseTitle !== "string" || !Array.isArray(body.recentSets)) {
+    return { kind: "error", message: "invalid_response" };
+  }
+
+  return { kind: "ok", detail: body };
+}
+
+/**
+ * Read an assigned client's weekly plan-board overview via
+ * `GET /trainer/clients/:clientUserId/progress/weekly-overview` (GH #447).
+ * Mirrors `fetchWeeklyOverview`. `weekStart` is passed through verbatim (an
+ * ISO `YYYY-MM-DD` date, or `undefined` for the current week).
+ */
+export async function fetchClientWeeklyOverview(
+  clientUserId: string,
+  weekStart: string | undefined,
+  token: string | undefined,
+  options: ClientOptions = {},
+): Promise<FetchClientWeeklyOverviewResult> {
+  if (!token) {
+    return { kind: "error", message: "no_session" };
+  }
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const path = `${base}/trainer/clients/${encodeURIComponent(clientUserId)}/progress/weekly-overview`;
+  const url = weekStart ? `${path}?weekStart=${encodeURIComponent(weekStart)}` : path;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(url, {
+      method: "GET",
+      headers: { authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (res.status === 403) {
+    return { kind: "forbidden" };
+  }
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? "fetch_client_weekly_overview_failed" };
+  }
+
+  const body = (await res.json().catch(() => null)) as WeeklyOverviewDTO | null;
+  if (!body || typeof body.weekStart !== "string" || !Array.isArray(body.days)) {
+    return { kind: "error", message: "invalid_response" };
+  }
+
+  return { kind: "ok", overview: body };
 }

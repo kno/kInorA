@@ -1403,6 +1403,47 @@
       "submitting": "Creating…",
       "errorGeneric": "We couldn't create the plan. Please try again.",
       "errorForbidden": "You are not authorized to create a plan for this client."
+    },
+    "quickActionsAria": "Quick actions for {email}",
+    "quickActions": {
+      "dashboard": "Dashboard",
+      "progress": "Progress",
+      "plan": "Plan"
+    },
+    "detail": {
+      "tabsAria": "Client sections",
+      "tabs": {
+        "dashboard": "Dashboard",
+        "progress": "Progress",
+        "plan": "Plan"
+      },
+      "notFound": "This client isn't in your roster.",
+      "loadError": "We couldn't load this section. Please try again."
+    },
+    "dashboard": {
+      "completionRateLabel": "28-day completion",
+      "completionRateSub": "{completed} of {planned} planned sessions",
+      "rpeTrendTitle": "RPE trend (8 weeks)",
+      "noRpeData": "Not enough rated sets yet.",
+      "recentSessionsTitle": "Recent sessions",
+      "noSessions": "No completed sessions yet."
+    },
+    "progress": {
+      "rangeAria": "Progress period",
+      "exerciseDetailTitle": "History — {exercise}",
+      "exerciseDetailEmpty": "No history recorded yet."
+    },
+    "plan": {
+      "previousWeek": "Previous week",
+      "nextWeek": "Next week",
+      "weekAria": "Weekly plan board",
+      "empty": "No plan scheduled for this week.",
+      "status": {
+        "done": "Done",
+        "active": "Active",
+        "rest": "Rest",
+        "soon": "Upcoming"
+      }
     }
   },
   "admin": {
