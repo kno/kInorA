@@ -1,0 +1,7 @@
+/* Trainer client-list quick-action row (GH #447). */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}

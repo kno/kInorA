@@ -9,6 +9,7 @@
  */
 import type { ClientSummaryDTO } from "@kinora/contracts";
 import type { PlanGoal, PlanLimitation, TrainingLocation } from "@kinora/contracts";
+import type { ClientDashboardDTO, ExerciseDetailDTO, StatsSummaryDTO, WeeklyOverviewDTO } from "@kinora/contracts";
 
 export type FetchClientsResult =
   | { kind: "ok"; clients: ClientSummaryDTO[] }
@@ -57,4 +58,31 @@ export type FetchClientPlanResult =
   | { kind: "ok"; plan: ClientPlanDetail }
   | { kind: "forbidden" }
   | { kind: "notFound" }
+  | { kind: "error"; message: string };
+
+/**
+ * Trainer-scoped progress reads (GH #447). Each backing route resolves the
+ * SAME `resolveAuthorizedOwner` choke point as `fetchClientPlan` — a `403`
+ * is the only denial shape (there is no `notFound`: an authorized read
+ * always returns 200, an empty DTO on no data, never a 404 — design.md
+ * "Exercise detail").
+ */
+export type FetchClientDashboardResult =
+  | { kind: "ok"; dashboard: ClientDashboardDTO }
+  | { kind: "forbidden" }
+  | { kind: "error"; message: string };
+
+export type FetchClientProgressStatsResult =
+  | { kind: "ok"; summary: StatsSummaryDTO }
+  | { kind: "forbidden" }
+  | { kind: "error"; message: string };
+
+export type FetchClientExerciseDetailResult =
+  | { kind: "ok"; detail: ExerciseDetailDTO }
+  | { kind: "forbidden" }
+  | { kind: "error"; message: string };
+
+export type FetchClientWeeklyOverviewResult =
+  | { kind: "ok"; overview: WeeklyOverviewDTO }
+  | { kind: "forbidden" }
   | { kind: "error"; message: string };

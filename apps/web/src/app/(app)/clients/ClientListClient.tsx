@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import type { ClientSummaryDTO } from "@kinora/contracts";
 import type { InviteClientResult } from "./trainer-client-types";
+import styles from "./client-list.module.css";
 
 export interface ClientListClientProps {
   initialClients: ClientSummaryDTO[];
@@ -107,18 +108,40 @@ export function ClientListClient({
 
       {clients.length > 0 && (
         <ul className="kin-list" aria-label={t("clients.listAria")}>
-          {clients.map((client) => (
-            <li key={client.clientUserId} data-testid="client-row">
-              <span>{client.email}</span>
-              <span>{t(`clients.status.${client.status}`)}</span>
-              <a
-                className="kin-btn"
-                href={`/clients/${client.clientUserId}/create-plan`}
-              >
-                {t("clients.createPlanCta")}
-              </a>
-            </li>
-          ))}
+          {clients.map((client) => {
+            const isActive = client.status === "active";
+            return (
+              <li key={client.clientUserId} data-testid="client-row">
+                <span>{client.email}</span>
+                <span>{t(`clients.status.${client.status}`)}</span>
+                <span
+                  className={styles.actions}
+                  aria-label={t("clients.quickActionsAria", { email: client.email })}
+                >
+                  <a className="kin-btn" href={`/clients/${client.clientUserId}?tab=dashboard`}>
+                    {t("clients.quickActions.dashboard")}
+                  </a>
+                  <a className="kin-btn" href={`/clients/${client.clientUserId}?tab=progress`}>
+                    {t("clients.quickActions.progress")}
+                  </a>
+                  <a
+                    className="kin-btn"
+                    href={`/clients/${client.clientUserId}?tab=plan`}
+                    aria-disabled={!isActive}
+                  >
+                    {t("clients.quickActions.plan")}
+                  </a>
+                  <a
+                    className="kin-btn kin-btn--accent"
+                    href={`/clients/${client.clientUserId}/create-plan`}
+                    aria-disabled={!isActive}
+                  >
+                    {t("clients.createPlanCta")}
+                  </a>
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </main>

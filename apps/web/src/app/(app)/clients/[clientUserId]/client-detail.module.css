@@ -1,0 +1,130 @@
+/* Trainer client-detail surface (GH #447) — built to `web-clients.html`'s
+   detail panel: identity header, tab nav, and per-tab sections. Uses the
+   shared `.kin-*` surface/button primitives for cards and CTAs; only the
+   layout/grid rules this route actually needs live here. */
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid var(--kin-border, #2a2a30);
+  background: var(--kin-surface-2, #1c1c22);
+  font-weight: 700;
+}
+
+.quickActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tabs {
+  display: flex;
+  gap: 20px;
+  border-bottom: 1px solid var(--kin-border, #2a2a30);
+  margin-bottom: 20px;
+}
+
+.tab {
+  padding: 10px 0;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: inherit;
+  opacity: 0.6;
+  border-bottom: 2px solid transparent;
+}
+
+.tabActive {
+  opacity: 1;
+  border-bottom-color: currentColor;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.statCard {
+  padding: 16px;
+  border: 1px solid var(--kin-border, #2a2a30);
+  border-radius: 16px;
+}
+
+.sessionList {
+  display: grid;
+  gap: 8px;
+}
+
+.sessionRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--kin-border, #2a2a30);
+}
+
+.sessionRow:first-child {
+  border-top: none;
+}
+
+.weekNav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.weekGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.weekDay {
+  min-height: 90px;
+  padding: 10px 8px;
+  border: 1px solid var(--kin-border, #2a2a30);
+  border-radius: 12px;
+}
+
+.weekDayDone {
+  border-color: var(--kin-accent, #a8f060);
+}
+
+.setsList {
+  display: grid;
+  gap: 6px;
+}
+
+.setRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--kin-border, #2a2a30);
+}
+
+.setRow:first-child {
+  border-top: none;
+}
