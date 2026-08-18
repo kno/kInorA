@@ -6,6 +6,14 @@ export interface SidebarProfile {
   initials: string;
   tenantName: string;
   isAdmin?: boolean;
+  /**
+   * True iff the caller's role is "trainer" AND their resolved billing tier
+   * is exactly "trainer" (#453) — the SAME gate `assertTrainerEntitled`
+   * enforces server-side. Drives the layout's Clients nav entry directly off
+   * this profile fetch instead of a separate `GET /trainer/clients`
+   * round-trip (`fetchClients`, removed).
+   */
+  isTrainer?: boolean;
 }
 
 /**
@@ -35,5 +43,6 @@ export async function fetchProfile(token: string): Promise<SidebarProfile | null
     initials: payload.initials,
     tenantName: payload.tenantName ?? "",
     isAdmin: payload.isAdmin === true,
+    isTrainer: payload.isTrainer === true,
   };
 }

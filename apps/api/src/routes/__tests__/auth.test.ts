@@ -57,9 +57,24 @@ function createMockDb(opts: {
   } as unknown as Database;
 }
 
+/** Default entitlement reader stub — always resolves to a non-trainer tier.
+ * Tests exercising `isTrainer: true` pass their own trainer-tier reader. */
+function fakeEntitlementReader(tier: "free" | "pro" | "trainer" = "free") {
+  return {
+    loadContext: vi.fn().mockResolvedValue({
+      membershipStatus: "active",
+      billing: { tier, status: "active", source: "system", trialStartedAt: null, trialEndsAt: null },
+      activeOverrideTier: null,
+    }),
+  };
+}
+
 // Each test builds its own app via buildApp so the DB is wired in.
 // We replicate the registration order used by index.ts.
-async function buildTestApp(db: Database) {
+async function buildTestApp(
+  db: Database,
+  entitlementReader: { loadContext: ReturnType<typeof vi.fn> } = fakeEntitlementReader(),
+) {
   const app = Fastify();
   const authService = new AuthService(db);
 
@@ -81,7 +96,7 @@ async function buildTestApp(db: Database) {
 
   await app.register(authPlugin, { db });
   app.decorate("authService", authService);
-  await app.register(authRoutes, { authService });
+  await app.register(authRoutes, { authService, entitlementReader });
 
   return app;
 }
@@ -322,7 +337,7 @@ describe("Auth routes integration", () => {
      * membership check) before the handler calls authService.getProfile
      * (2 more selects: user lookup + user_profiles lookup) — 4 selects total.
      */
-    function buildProfileDb(opts: { isAdmin: boolean }) {
+    function buildProfileDb(opts: { isAdmin: boolean; role?: "owner" | "member" | "trainer" }) {
       const rawToken = "a".repeat(64);
       return {
         select: vi
@@ -344,7 +359,7 @@ describe("Auth routes integration", () => {
                 id: "m-1",
                 tenantId: "tenant-uuid-1",
                 userId: "user-uuid-1",
-                role: "owner",
+                role: opts.role ?? "owner",
                 status: "active",
               },
             ]),
@@ -382,6 +397,119 @@ describe("Auth routes integration", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json().isAdmin).toBe(false);
+    });
+  });
+
+  describe("GET /auth/profile — isTrainer (#453, removes the layout's fetchClients round-trip)", () => {
+    function buildProfileDb(opts: { role: "owner" | "member" | "trainer" }) {
+      const rawToken = "a".repeat(64);
+      return {
+        select: vi
+          .fn()
+          .mockReturnValueOnce(
+            selectChain([
+              {
+                tokenHash: computeTokenHash(rawToken),
+                userId: "user-uuid-1",
+                tenantId: "tenant-uuid-1",
+                createdAt: new Date(),
+                expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+              },
+            ]),
+          )
+          .mockReturnValueOnce(
+            selectChain([
+              {
+                id: "m-1",
+                tenantId: "tenant-uuid-1",
+                userId: "user-uuid-1",
+                role: opts.role,
+                status: "active",
+              },
+            ]),
+          )
+          .mockReturnValueOnce(
+            selectChain([{ id: "user-uuid-1", email: "user@example.com", isAdmin: false }]),
+          )
+          .mockReturnValueOnce(selectChain([])),
+      } as unknown as Database;
+    }
+
+    it("returns isTrainer: true when role is trainer AND the resolved tier is trainer", async () => {
+      const db = buildProfileDb({ role: "trainer" });
+      app = await buildTestApp(db, fakeEntitlementReader("trainer"));
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/auth/profile",
+        headers: { authorization: `Bearer ${"a".repeat(64)}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().isTrainer).toBe(true);
+    });
+
+    it("returns isTrainer: false when role is trainer but the resolved tier is NOT trainer", async () => {
+      const db = buildProfileDb({ role: "trainer" });
+      app = await buildTestApp(db, fakeEntitlementReader("pro"));
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/auth/profile",
+        headers: { authorization: `Bearer ${"a".repeat(64)}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().isTrainer).toBe(false);
+    });
+
+    it("returns isTrainer: false for an owner role, and never calls the entitlement reader (ascending-cost order)", async () => {
+      const db = buildProfileDb({ role: "owner" });
+      const entitlementReader = fakeEntitlementReader("trainer");
+      app = await buildTestApp(db, entitlementReader);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/auth/profile",
+        headers: { authorization: `Bearer ${"a".repeat(64)}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().isTrainer).toBe(false);
+      expect(entitlementReader.loadContext).not.toHaveBeenCalled();
+    });
+
+    it("returns isTrainer: false for a member role, and never calls the entitlement reader", async () => {
+      const db = buildProfileDb({ role: "member" });
+      const entitlementReader = fakeEntitlementReader("trainer");
+      app = await buildTestApp(db, entitlementReader);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/auth/profile",
+        headers: { authorization: `Bearer ${"a".repeat(64)}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().isTrainer).toBe(false);
+      expect(entitlementReader.loadContext).not.toHaveBeenCalled();
+    });
+
+    it("deny-by-default: resolves isTrainer: false (never a 500) when the entitlement reader throws", async () => {
+      const db = buildProfileDb({ role: "trainer" });
+      const entitlementReader = {
+        loadContext: vi.fn().mockRejectedValue(new Error("billing context unavailable")),
+      };
+      app = await buildTestApp(db, entitlementReader);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/auth/profile",
+        headers: { authorization: `Bearer ${"a".repeat(64)}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().isTrainer).toBe(false);
     });
   });
 });
