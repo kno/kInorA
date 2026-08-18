@@ -1,7 +1,9 @@
 import { and, eq, gt, lte, sql } from "drizzle-orm";
+import type { MembershipRole } from "@kinora/contracts";
 import type { Database } from "../client.js";
-import { billingAuditEvents, tenantBillingOverrides, tenants } from "../schema.js";
+import { billingAuditEvents, memberships, tenantBillingOverrides, tenants } from "../schema.js";
 import type {
+  ActiveTierOverrideRow,
   GrantTierOverrideInput,
   RevokeTierOverrideInput,
   TenantBillingOverrideRow,
@@ -41,9 +43,9 @@ export class TierOverrideAdminRepository implements TierOverrideAdminPort {
     return row ?? null;
   }
 
-  async loadActiveOverride(tenantId: string, now: Date): Promise<{ id: string } | null> {
+  async loadActiveOverride(tenantId: string, now: Date): Promise<ActiveTierOverrideRow | null> {
     const [row] = await this.db
-      .select({ id: tenantBillingOverrides.id })
+      .select({ id: tenantBillingOverrides.id, tier: tenantBillingOverrides.tier })
       .from(tenantBillingOverrides)
       .where(
         and(
@@ -54,6 +56,34 @@ export class TierOverrideAdminRepository implements TierOverrideAdminPort {
       )
       .orderBy(tenantBillingOverrides.endsAt);
     return row ?? null;
+  }
+
+  /**
+   * Transitions the tenant OWNER membership's role (#449). Scoped
+   * `WHERE tenant_id = $1 AND role = $2` so it can only ever move the ONE
+   * `from`-role membership row for this tenant — it never matches `member`
+   * rows (invited clients live in the same tenant). Returns the affected row
+   * count; `0` is a normal idempotent outcome, not an error.
+   *
+   * Placement (design decision, #449): `GrantTenantTierOverride` /
+   * `RevokeTenantTierOverride` call this as a SEPARATE port round-trip AFTER
+   * `grantTierOverride`/`revokeTierOverride` resolves successfully — it is
+   * NOT nested inside those methods' `db.transaction(...)` blocks. This
+   * mirrors the existing use-case shape, where `loadTenant`,
+   * `loadActiveOverride`, and `grantTierOverride` are already three separate
+   * round trips orchestrated by the pure (db-free) use case rather than one
+   * combined adapter call. A crash between the override write and this call
+   * leaves the tenant granted-but-not-yet-promoted; that state self-heals on
+   * the next replay of the SAME grant (operationKey) or on any admin
+   * re-grant, since this update is idempotent (0 rows when already at `to`).
+   */
+  async setTenantOwnerRole(tenantId: string, from: MembershipRole, to: MembershipRole): Promise<number> {
+    const updated = await this.db
+      .update(memberships)
+      .set({ role: to })
+      .where(and(eq(memberships.tenantId, tenantId), eq(memberships.role, from)))
+      .returning({ id: memberships.id });
+    return updated.length;
   }
 
   /**
