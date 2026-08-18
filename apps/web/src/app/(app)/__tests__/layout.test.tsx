@@ -77,6 +77,15 @@ vi.mock("@/lib/gym-branding-client", () => ({
   fetchPublicBranding: (...args: [string]) => fetchPublicBranding(...args),
 }));
 
+// GH #449 (PR 2/2) — the trainer-only Clients nav entry is gated on the SAME
+// real server gate the /clients page already uses (`GET /trainer/clients` via
+// `fetchClients`), never a client-side check. Default to "forbidden" so
+// pre-existing tests keep their prior no-Clients-entry behavior.
+const fetchClients = vi.fn(async (_token: string | undefined) => ({ kind: "forbidden" }) as unknown);
+vi.mock("../clients/trainer-client", () => ({
+  fetchClients: (...args: [string | undefined]) => fetchClients(...args),
+}));
+
 vi.mocked(usePathname);
 
 describe("AppLayout (app route group)", () => {
@@ -162,6 +171,7 @@ describe("AppLayout — gym branding (host-based theming)", () => {
     fetchOwnBranding.mockReset().mockResolvedValue({ kind: "forbidden" });
     extractGymSlugFromHost.mockReset().mockReturnValue(null);
     fetchPublicBranding.mockReset().mockResolvedValue(null);
+    fetchClients.mockReset().mockResolvedValue({ kind: "forbidden" });
   });
 
   it("injects an inline <style> with the host gym's --gym-* palette on a gym subdomain", async () => {
@@ -241,6 +251,7 @@ describe("AppLayout — isGym derivation for the Branding nav entry (GH #322)", 
     fetchOwnBranding.mockReset().mockResolvedValue({ kind: "forbidden" });
     extractGymSlugFromHost.mockReset().mockReturnValue(null);
     fetchPublicBranding.mockReset().mockResolvedValue(null);
+    fetchClients.mockReset().mockResolvedValue({ kind: "forbidden" });
   });
 
   it("wires isGym=true through to the AppShell when the branding fetch resolves ok", async () => {
@@ -315,5 +326,65 @@ describe("AppLayout — isGym derivation for the Branding nav entry (GH #322)", 
     // Nav entry present (gym-tier) even though NO gym theme is injected.
     expect(html).toContain('href="/branding"');
     expect(html).not.toContain("--gym-accent");
+  });
+});
+
+// GH #449 (PR 2/2) — the trainer-only Clients nav entry is gated on the SAME
+// real server gate the /clients page already uses: `GET /trainer/clients`
+// (role='trainer' AND tier='trainer') via `fetchClients`. Deny-by-default:
+// only "ok" shows the entry; "forbidden", "error", and no-session all hide
+// it. This never runs client-side.
+describe("AppLayout — isTrainer derivation for the Clients nav entry (GH #449)", () => {
+  afterEach(() => {
+    jarGet.mockReset().mockReturnValue(undefined);
+    headersGet.mockReset().mockReturnValue(undefined);
+    fetchOwnBranding.mockReset().mockResolvedValue({ kind: "forbidden" });
+    extractGymSlugFromHost.mockReset().mockReturnValue(null);
+    fetchPublicBranding.mockReset().mockResolvedValue(null);
+    fetchClients.mockReset().mockResolvedValue({ kind: "forbidden" });
+  });
+
+  it("wires isTrainer=true through to the AppShell when fetchClients resolves ok", async () => {
+    jarGet.mockReturnValue({ value: "session-token-123" });
+    fetchClients.mockResolvedValue({ kind: "ok", clients: [] });
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    expect(html).toContain('href="/clients"');
+  });
+
+  it("wires isTrainer=false through to the AppShell when fetchClients resolves forbidden", async () => {
+    jarGet.mockReturnValue({ value: "session-token-123" });
+    fetchClients.mockResolvedValue({ kind: "forbidden" });
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    expect(html).not.toContain('href="/clients"');
+  });
+
+  it("wires isTrainer=false through to the AppShell when fetchClients resolves error", async () => {
+    jarGet.mockReturnValue({ value: "session-token-123" });
+    fetchClients.mockResolvedValue({ kind: "error", message: "api_unreachable" });
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    expect(html).not.toContain('href="/clients"');
+  });
+
+  it("wires isTrainer=false through to the AppShell when there is no session token", async () => {
+    jarGet.mockReturnValue(undefined);
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    expect(fetchClients).not.toHaveBeenCalled();
+    expect(html).not.toContain('href="/clients"');
   });
 });

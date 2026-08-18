@@ -14,7 +14,7 @@ interface NavItem {
   labelKey?: string;
   label?: string;
   href: string;
-  icon: "home" | "plan" | "plans" | "stats" | "history" | "create" | "exercises" | "memory" | "billing" | "admin" | "branding";
+  icon: "home" | "plan" | "plans" | "stats" | "history" | "create" | "exercises" | "memory" | "billing" | "admin" | "branding" | "clients";
 }
 
 /** Minimal identity shape for the sidebar user area. */
@@ -55,12 +55,14 @@ export function SidebarNav({
   billingNavLabel,
   isAdmin,
   isGym,
+  isTrainer,
 }: {
   user?: SidebarUser;
   memoryNavLabel?: string;
   billingNavLabel?: string;
   isAdmin?: boolean;
   isGym?: boolean;
+  isTrainer?: boolean;
 } = {}) {
   const t = useTranslations();
   const pathname = usePathname();
@@ -72,6 +74,9 @@ export function SidebarNav({
       : []),
     ...(billingNavLabel
       ? [{ label: billingNavLabel, href: "/billing", icon: "billing" as const }]
+      : []),
+    ...(isTrainer === true
+      ? [{ labelKey: "appNav.clients", href: "/clients", icon: "clients" as const }]
       : []),
     ...(isAdmin === true
       ? [{ labelKey: "appNav.admin", href: "/admin", icon: "admin" as const }]
@@ -168,5 +173,7 @@ function NavIcon({ name }: { name: NavItem["icon"] }) {
       return <UserIcon className={styles.icon} size={20} />;
     case "branding":
       return <BrandingIcon className={styles.icon} size={20} />;
+    case "clients":
+      return <UserIcon className={styles.icon} size={20} />;
   }
 }

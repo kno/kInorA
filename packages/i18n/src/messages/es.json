@@ -26,7 +26,8 @@
     "logout": "Cerrar sesión",
     "admin": "Administración",
     "branding": "Marca",
-    "plans": "Planes"
+    "plans": "Planes",
+    "clients": "Clientes"
   },
   "hero": {
     "eyebrow": "Entrenador con IA",
