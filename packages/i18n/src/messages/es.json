@@ -1369,13 +1369,18 @@
     "roleCoach": "kInorA"
   },
   "clients": {
+    "eyebrow": "Espacio de entrenador",
     "pageTitle": "Mis clientes",
     "pageDescription": "Invita a clientes y crea planes en su nombre.",
     "navLabel": "Clientes",
     "loadingLabel": "Cargando clientes…",
     "retryLabel": "Reintentar",
     "loadError": "No se pudieron cargar tus clientes. Inténtalo de nuevo.",
+    "emptyTitle": "Todavía no tienes clientes",
     "emptyState": "Todavía no tienes clientes. Invita a uno a continuación.",
+    "inviteCta": "Invitar cliente",
+    "rosterTitle": "Tu cartera",
+    "rosterCount": "{count, plural, one {# cliente} other {# clientes}}",
     "listAria": "Lista de clientes",
     "accessRestrictedTitle": "Se requiere una cuenta de entrenador",
     "accessRestrictedBody": "Esta página solo está disponible para cuentas de entrenador.",

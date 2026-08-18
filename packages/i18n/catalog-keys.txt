@@ -305,6 +305,9 @@ clients.detail.tabs.plan
 clients.detail.tabs.progress
 clients.detail.tabsAria
 clients.emptyState
+clients.emptyTitle
+clients.eyebrow
+clients.inviteCta
 clients.inviteEmailLabel
 clients.inviteErrorAlreadyAssigned
 clients.inviteErrorGeneric
@@ -335,6 +338,8 @@ clients.quickActions.plan
 clients.quickActions.progress
 clients.quickActionsAria
 clients.retryLabel
+clients.rosterCount
+clients.rosterTitle
 clients.status.active
 clients.status.invited
 clients.status.revoked

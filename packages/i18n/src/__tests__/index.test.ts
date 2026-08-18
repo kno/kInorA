@@ -312,7 +312,7 @@ describe("@kinora/i18n package assembly", () => {
     // links on the list row (quickActionsAria + quickActions.* = 4), the
     // detail-page tabs (tabsAria + tabs.* + notFound + loadError = 6), the
     // Dashboard tab (6), the Progress tab (3), and the Plan tab (8).
-    expect(clientsKeys).toHaveLength(58);
+    expect(clientsKeys).toHaveLength(63);
     expect(flat["clients.pageTitle"]).toBe("My Clients");
     expect(flattenMessages(catalogs.es)["clients.pageTitle"]).toBe("Mis clientes");
   });
