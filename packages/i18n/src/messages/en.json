@@ -1369,13 +1369,18 @@
     "roleCoach": "kInorA"
   },
   "clients": {
+    "eyebrow": "Trainer space",
     "pageTitle": "My Clients",
     "pageDescription": "Invite clients and create plans on their behalf.",
     "navLabel": "Clients",
     "loadingLabel": "Loading clients…",
     "retryLabel": "Retry",
     "loadError": "We couldn't load your clients. Please try again.",
+    "emptyTitle": "You don't have any clients yet",
     "emptyState": "You don't have any clients yet. Invite one below.",
+    "inviteCta": "Invite client",
+    "rosterTitle": "Your roster",
+    "rosterCount": "{count, plural, one {# client} other {# clients}}",
     "listAria": "Client list",
     "accessRestrictedTitle": "Trainer access required",
     "accessRestrictedBody": "This page is only available to trainer accounts.",
