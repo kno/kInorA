@@ -26,6 +26,7 @@ function buildPort(overrides: Partial<TierOverrideAdminPort> = {}): TierOverride
       endsAt: OPEN_ENDED_SENTINEL,
     }),
     revokeTierOverride: vi.fn().mockResolvedValue({ id: "override-1", endsAt: NOW }),
+    setTenantOwnerRole: vi.fn().mockResolvedValue(1),
     ...overrides,
   };
 }
@@ -258,12 +259,105 @@ describe("GrantTenantTierOverride", () => {
     expect(outcome).toEqual({ ok: false, reason: "invalid_date_range" });
     expect(port.grantTierOverride).not.toHaveBeenCalled();
   });
+
+  describe("owner-role promotion (#449)", () => {
+    it("promotes the tenant owner membership to trainer after a successful trainer grant", async () => {
+      const port = buildPort();
+      const useCase = new GrantTenantTierOverride(port);
+
+      const outcome = await useCase.execute(
+        { tenantId: TENANT_ID, actorUserId: ACTOR_ID, tier: "trainer", reason: "trainer pilot" },
+        NOW,
+      );
+
+      expect(outcome.ok).toBe(true);
+      expect(port.setTenantOwnerRole).toHaveBeenCalledWith(TENANT_ID, "owner", "trainer");
+    });
+
+    it("does NOT touch membership roles after a successful gym grant", async () => {
+      const port = buildPort();
+      const useCase = new GrantTenantTierOverride(port);
+
+      const outcome = await useCase.execute(
+        { tenantId: TENANT_ID, actorUserId: ACTOR_ID, tier: "gym", reason: "gym pilot" },
+        NOW,
+      );
+
+      expect(outcome.ok).toBe(true);
+      expect(port.setTenantOwnerRole).not.toHaveBeenCalled();
+    });
+
+    it("does NOT promote roles when the grant is denied (unknown tenant)", async () => {
+      const port = buildPort({ loadTenant: vi.fn().mockResolvedValue(null) });
+      const useCase = new GrantTenantTierOverride(port);
+
+      const outcome = await useCase.execute(
+        { tenantId: TENANT_ID, actorUserId: ACTOR_ID, tier: "trainer", reason: "x" },
+        NOW,
+      );
+
+      expect(outcome.ok).toBe(false);
+      expect(port.setTenantOwnerRole).not.toHaveBeenCalled();
+    });
+
+    it("does NOT promote roles when the grant is denied (active override conflict)", async () => {
+      const port = buildPort({
+        loadActiveOverride: vi.fn().mockResolvedValue({ id: "existing-override", tier: "gym" }),
+      });
+      const useCase = new GrantTenantTierOverride(port);
+
+      const outcome = await useCase.execute(
+        { tenantId: TENANT_ID, actorUserId: ACTOR_ID, tier: "trainer", reason: "x" },
+        NOW,
+      );
+
+      expect(outcome.ok).toBe(false);
+      expect(port.setTenantOwnerRole).not.toHaveBeenCalled();
+    });
+
+    it("does NOT promote roles when the adapter's transactional re-check loses the race", async () => {
+      const port = buildPort({ grantTierOverride: vi.fn().mockResolvedValue(null) });
+      const useCase = new GrantTenantTierOverride(port);
+
+      const outcome = await useCase.execute(
+        { tenantId: TENANT_ID, actorUserId: ACTOR_ID, tier: "trainer", reason: "x" },
+        NOW,
+      );
+
+      expect(outcome.ok).toBe(false);
+      expect(port.setTenantOwnerRole).not.toHaveBeenCalled();
+    });
+
+    it("still ensures the role is set on an idempotent replayed trainer grant (#313)", async () => {
+      const port = buildPort({
+        loadActiveOverride: vi.fn().mockResolvedValue({ id: "existing-override", tier: "trainer" }),
+        grantTierOverride: vi
+          .fn()
+          .mockResolvedValue({ id: "override-1", startsAt: NOW, endsAt: OPEN_ENDED_SENTINEL }),
+      });
+      const useCase = new GrantTenantTierOverride(port);
+
+      const outcome = await useCase.execute(
+        {
+          tenantId: TENANT_ID,
+          actorUserId: ACTOR_ID,
+          tier: "trainer",
+          reason: "retry-safe",
+          operationKey: "op-key-abc",
+        },
+        NOW,
+      );
+
+      expect(outcome.ok).toBe(true);
+      expect(port.setTenantOwnerRole).toHaveBeenCalledWith(TENANT_ID, "owner", "trainer");
+    });
+  });
 });
 
 describe("RevokeTenantTierOverride", () => {
   it("revokes the active override, setting endsAt to now via the port", async () => {
     const port = buildPort({
-      loadActiveOverride: vi.fn().mockResolvedValue({ id: "override-1" }),
+      loadActiveOverride: vi.fn().mockResolvedValue({ id: "override-1", tier: "gym" }),
       revokeTierOverride: vi.fn().mockResolvedValue({ id: "override-1", endsAt: NOW }),
     });
     const useCase = new RevokeTenantTierOverride(port);
@@ -290,5 +384,43 @@ describe("RevokeTenantTierOverride", () => {
 
     expect(outcome).toEqual({ ok: false, reason: "no_active_override" });
     expect(port.revokeTierOverride).not.toHaveBeenCalled();
+  });
+
+  describe("owner-role demotion (#449)", () => {
+    it("demotes the tenant owner membership from trainer back to owner after revoking a trainer override", async () => {
+      const port = buildPort({
+        loadActiveOverride: vi.fn().mockResolvedValue({ id: "override-1", tier: "trainer" }),
+        revokeTierOverride: vi.fn().mockResolvedValue({ id: "override-1", endsAt: NOW }),
+      });
+      const useCase = new RevokeTenantTierOverride(port);
+
+      const outcome = await useCase.execute({ tenantId: TENANT_ID, actorUserId: ACTOR_ID }, NOW);
+
+      expect(outcome.ok).toBe(true);
+      expect(port.setTenantOwnerRole).toHaveBeenCalledWith(TENANT_ID, "trainer", "owner");
+    });
+
+    it("does NOT touch membership roles after revoking a gym override", async () => {
+      const port = buildPort({
+        loadActiveOverride: vi.fn().mockResolvedValue({ id: "override-1", tier: "gym" }),
+        revokeTierOverride: vi.fn().mockResolvedValue({ id: "override-1", endsAt: NOW }),
+      });
+      const useCase = new RevokeTenantTierOverride(port);
+
+      const outcome = await useCase.execute({ tenantId: TENANT_ID, actorUserId: ACTOR_ID }, NOW);
+
+      expect(outcome.ok).toBe(true);
+      expect(port.setTenantOwnerRole).not.toHaveBeenCalled();
+    });
+
+    it("does NOT touch membership roles when there is no active override to revoke", async () => {
+      const port = buildPort({ loadActiveOverride: vi.fn().mockResolvedValue(null) });
+      const useCase = new RevokeTenantTierOverride(port);
+
+      const outcome = await useCase.execute({ tenantId: TENANT_ID, actorUserId: ACTOR_ID }, NOW);
+
+      expect(outcome.ok).toBe(false);
+      expect(port.setTenantOwnerRole).not.toHaveBeenCalled();
+    });
   });
 });

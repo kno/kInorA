@@ -626,6 +626,7 @@ export async function buildApp(
       loadActiveOverride: (tenantId, now) => tierOverrideAdminRepo.loadActiveOverride(tenantId, now),
       grantTierOverride: (input) => tierOverrideAdminRepo.grantTierOverride(input),
       revokeTierOverride: (input) => tierOverrideAdminRepo.revokeTierOverride(input),
+      setTenantOwnerRole: (tenantId, from, to) => tierOverrideAdminRepo.setTenantOwnerRole(tenantId, from, to),
     },
   });
 
