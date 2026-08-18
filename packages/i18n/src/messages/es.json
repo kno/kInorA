@@ -1384,7 +1384,6 @@
     "listAria": "Lista de clientes",
     "accessRestrictedTitle": "Se requiere una cuenta de entrenador",
     "accessRestrictedBody": "Esta página solo está disponible para cuentas de entrenador.",
-    "inviteFormAria": "Invitar a un cliente",
     "inviteTitle": "Invitar a un cliente",
     "inviteEmailLabel": "Correo del cliente",
     "inviteSubmit": "Enviar invitación",
@@ -1414,6 +1413,32 @@
       "dashboard": "Dashboard",
       "progress": "Progreso",
       "plan": "Plan"
+    },
+    "workspace": {
+      "detailAria": "Detalle del cliente"
+    },
+    "roster": {
+      "searchLabel": "Buscar clientes",
+      "searchPlaceholder": "Buscar por nombre o correo",
+      "filtersAria": "Filtrar clientes",
+      "filters": {
+        "all": "Todos"
+      },
+      "noMatches": "No hay clientes que coincidan con la búsqueda.",
+      "pendingInvite": "Pendiente de aceptar",
+      "adherence": "{percent}% adherencia",
+      "recency": {
+        "none": "Sin sesiones todavía",
+        "today": "Sesión hoy",
+        "yesterday": "Sesión ayer",
+        "daysAgo": "{days, plural, one {Sesión hace # día} other {Sesión hace # días}}"
+      }
+    },
+    "invite": {
+      "eyebrow": "Nueva asignación",
+      "description": "Enviaremos una invitación personal a su correo. No se genera ningún enlace para compartir.",
+      "closeAria": "Cerrar",
+      "cancel": "Cancelar"
     },
     "detail": {
       "tabsAria": "Secciones del cliente",

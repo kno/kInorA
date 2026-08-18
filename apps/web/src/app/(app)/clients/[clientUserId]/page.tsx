@@ -1,14 +1,7 @@
-import type { ReactNode } from "react";
 import { getTranslations } from "next-intl/server";
-import type { StatsRange } from "@/app/(app)/stats/stats-client";
-import {
-  getClientDashboardAction,
-  getClientExerciseDetailAction,
-  getClientProgressStatsAction,
-  getClientsAction,
-  getClientWeeklyOverviewAction,
-} from "../actions";
-import { ClientDetailHeader, DashboardTab, ProgressTab, PlanTab, type DetailTab } from "./ClientDetailSections";
+import { getClientsAction } from "../actions";
+import { loadClientDetailBody, normalizeTab } from "../client-detail-loader";
+import { ClientDetailHeader } from "./ClientDetailSections";
 
 /**
  * Trainer client-detail page (GH #447, PR 2/2 — web). Built to
@@ -26,14 +19,6 @@ import { ClientDetailHeader, DashboardTab, ProgressTab, PlanTab, type DetailTab 
 interface ClientDetailPageProps {
   params: Promise<{ clientUserId: string }>;
   searchParams: Promise<{ tab?: string; range?: string; exercise?: string; weekStart?: string }>;
-}
-
-function normalizeTab(value: string | undefined): DetailTab {
-  return value === "progress" || value === "plan" ? value : "dashboard";
-}
-
-function normalizeRange(value: string | undefined): StatsRange {
-  return value === "week" || value === "year" ? value : "month";
 }
 
 export default async function ClientDetailPage({ params, searchParams }: ClientDetailPageProps) {
@@ -74,24 +59,7 @@ export default async function ClientDetailPage({ params, searchParams }: ClientD
     );
   }
 
-  // Called as plain functions (not JSX tags) — mirrors `stats/page.tsx`'s
-  // `StatsBody({...})` convention: a JSX element wrapping an async/lazily-
-  // evaluated component would defer the fetch and the render past this
-  // function's own `await` boundary, which both breaks tests that inspect
-  // the returned element tree synchronously-after-await and (in the
-  // "progress" case) would fetch exercise detail as an unawaited side effect.
-  let body: ReactNode;
-  if (tab === "dashboard") {
-    body = DashboardTab({ result: await getClientDashboardAction(clientUserId), t });
-  } else if (tab === "progress") {
-    const range = normalizeRange(sp.range);
-    const statsResult = await getClientProgressStatsAction(clientUserId, range);
-    const exerciseResult = sp.exercise ? await getClientExerciseDetailAction(clientUserId, sp.exercise) : undefined;
-    body = ProgressTab({ clientUserId, range, statsResult, exerciseTitle: sp.exercise, exerciseResult, t });
-  } else {
-    const weekResult = await getClientWeeklyOverviewAction(clientUserId, sp.weekStart);
-    body = PlanTab({ clientUserId, weekResult, t });
-  }
+  const body = await loadClientDetailBody(clientUserId, tab, sp, t);
 
   return (
     <main className="kin-page" data-testid="client-detail-page">

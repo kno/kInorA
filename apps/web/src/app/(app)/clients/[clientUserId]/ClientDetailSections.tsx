@@ -40,11 +40,19 @@ export interface ClientDetailHeaderProps {
   client: ClientSummaryDTO;
   tab: DetailTab;
   t: Translator;
+  /**
+   * Base path for the tab links, defaulting to the standalone detail route
+   * (`/clients/:clientUserId`). The `/clients` master-detail workspace passes
+   * `/clients?client=:clientUserId` instead, so selecting a tab stays on the
+   * SAME page rather than navigating to the standalone route (GH #447
+   * workspace closeout).
+   */
+  hrefBase?: string;
 }
 
-export function ClientDetailHeader({ client, tab, t }: ClientDetailHeaderProps) {
+export function ClientDetailHeader({ client, tab, t, hrefBase }: ClientDetailHeaderProps) {
   const isActive = client.status === "active";
-  const base = `/clients/${client.clientUserId}`;
+  const base = hrefBase ?? `/clients/${client.clientUserId}`;
 
   return (
     <>
@@ -160,11 +168,21 @@ export interface ProgressTabProps {
   exerciseTitle?: string;
   exerciseResult?: FetchClientExerciseDetailResult;
   t: Translator;
+  /** See {@link ClientDetailHeaderProps.hrefBase}. */
+  hrefBase?: string;
 }
 
 const RANGES: StatsRange[] = ["week", "month", "year"];
 
-export function ProgressTab({ clientUserId, range, statsResult, exerciseTitle, exerciseResult, t }: ProgressTabProps) {
+export function ProgressTab({
+  clientUserId,
+  range,
+  statsResult,
+  exerciseTitle,
+  exerciseResult,
+  t,
+  hrefBase,
+}: ProgressTabProps) {
   if (statsResult.kind === "forbidden") {
     return ForbiddenNotice({ t });
   }
@@ -177,7 +195,7 @@ export function ProgressTab({ clientUserId, range, statsResult, exerciseTitle, e
   }
 
   const { summary } = statsResult;
-  const base = `/clients/${clientUserId}?tab=progress`;
+  const base = `${hrefBase ?? `/clients/${clientUserId}`}?tab=progress`;
 
   return (
     <div data-testid="client-progress-tab">
@@ -264,9 +282,11 @@ export interface PlanTabProps {
   clientUserId: string;
   weekResult: FetchClientWeeklyOverviewResult;
   t: Translator;
+  /** See {@link ClientDetailHeaderProps.hrefBase}. */
+  hrefBase?: string;
 }
 
-export function PlanTab({ clientUserId, weekResult, t }: PlanTabProps) {
+export function PlanTab({ clientUserId, weekResult, t, hrefBase }: PlanTabProps) {
   if (weekResult.kind === "forbidden") {
     return ForbiddenNotice({ t });
   }
@@ -279,7 +299,7 @@ export function PlanTab({ clientUserId, weekResult, t }: PlanTabProps) {
   }
 
   const { overview } = weekResult;
-  const base = `/clients/${clientUserId}?tab=plan`;
+  const base = `${hrefBase ?? `/clients/${clientUserId}`}?tab=plan`;
 
   return (
     <div data-testid="client-plan-tab">
