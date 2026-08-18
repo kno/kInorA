@@ -1,7 +1,195 @@
-/* Trainer client-list quick-action row (GH #447). */
+/* Trainer client-list surface (GH #447) — built to `web-clients.html`'s
+   roster panel: page header + CTA, an invite card, and a roster card whose
+   rows are avatar + identity/status + a quick-action row. Composes the
+   shared `.kin-*` surface/button/form primitives (globals.css) for cards,
+   inputs and buttons; only the layout this route actually needs lives here. */
+
+.frame {
+  width: 100%;
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+/* -- Header ------------------------------------------------------------- */
+
+.topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.topbarLead {
+  max-width: 46ch;
+  margin-top: var(--sp-1);
+}
+
+.topbarActions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+/* -- Invite card ---------------------------------------------------------
+   The mock opens this in a modal sheet triggered by the header CTA; this
+   route keeps it as an always-visible inline card (no new open/close
+   functionality) and instead has the header CTA focus the email field. */
+
+.invitePanel {
+  gap: var(--sp-3);
+}
+
+.invitePanel form {
+  align-items: flex-start;
+}
+
+/* -- Empty / error states -------------------------------------------------*/
+
+.stateCard {
+  color: var(--fg);
+}
+
+.emptyState {
+  gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-4);
+}
+
+/* -- Roster --------------------------------------------------------------*/
+
+.roster {
+  overflow: hidden;
+}
+
+.rosterHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.rosterHead h2 {
+  font-size: var(--fs-h3);
+}
+
+.rosterCount {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.list li:last-child {
+  border-bottom: none;
+}
+
+.row:hover {
+  background: var(--surface-2);
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-2);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.email {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.statusActive {
+  border-color: transparent;
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.statusInvited {
+  border-color: color-mix(in oklch, var(--info), transparent 68%);
+  background: color-mix(in oklch, var(--info), transparent 92%);
+  color: var(--info);
+}
+
 .actions {
+  grid-column: 2 / -1;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.actions a {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.actions a[aria-disabled="true"] {
+  opacity: 0.38;
+  pointer-events: none;
 }
