@@ -86,14 +86,14 @@ describe("ClientsWorkspaceClient", () => {
     expect(screen.getByText("Pending acceptance")).toBeDefined();
   });
 
-  it("marks the selected row with aria-selected", () => {
+  it("marks the selected row with aria-current='page'", () => {
     renderWithIntl(
       <ClientsWorkspaceClient clients={clients} selectedClientUserId="user_2" inviteClientAction={vi.fn()} />,
     );
 
-    const options = screen.getAllByRole("option");
-    expect(options[0]?.getAttribute("aria-selected")).toBe("false");
-    expect(options[1]?.getAttribute("aria-selected")).toBe("true");
+    const rows = screen.getAllByTestId("client-row");
+    expect(rows[0]?.getAttribute("aria-current")).toBeNull();
+    expect(rows[1]?.getAttribute("aria-current")).toBe("page");
   });
 
   it("filters the roster by search term, over name/email", () => {
@@ -132,7 +132,7 @@ describe("ClientsWorkspaceClient", () => {
       <ClientsWorkspaceClient clients={clients} selectedClientUserId="user_1" inviteClientAction={vi.fn()} />,
     );
 
-    const link = screen.getAllByRole("option")[0] as HTMLAnchorElement;
+    const link = screen.getAllByTestId("client-row")[0] as HTMLAnchorElement;
     expect(link.getAttribute("href")).toBe("/clients?client=user_1");
   });
 
@@ -142,7 +142,7 @@ describe("ClientsWorkspaceClient", () => {
       <ClientsWorkspaceClient clients={clients} selectedClientUserId="user_1" inviteClientAction={vi.fn()} />,
     );
 
-    const link = screen.getAllByRole("option")[0] as HTMLAnchorElement;
+    const link = screen.getAllByTestId("client-row")[0] as HTMLAnchorElement;
     expect(link.getAttribute("href")).toBe("/clients/user_1");
   });
 

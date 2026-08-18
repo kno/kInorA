@@ -88,6 +88,11 @@ describe("sessionRecency", () => {
   it("is 'daysAgo' with the day count for older sessions", () => {
     expect(sessionRecency("2026-08-09T08:00:00Z", now)).toEqual({ kind: "daysAgo", days: 9 });
   });
+
+  it("is 'today' for a future timestamp (clock skew), never a negative day count", () => {
+    const future = new Date(now.getTime() + 60 * 60 * 1000); // now + 1 hour
+    expect(sessionRecency(future.toISOString(), now)).toEqual({ kind: "today" });
+  });
 });
 
 describe("matchesSearch", () => {

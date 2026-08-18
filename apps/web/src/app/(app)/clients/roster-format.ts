@@ -50,8 +50,13 @@ export function sessionRecency(lastSessionAt: string | null | undefined, now: Da
   const then = new Date(lastSessionAt);
   if (Number.isNaN(then.getTime())) return { kind: "none" };
 
-  const days = Math.floor((now.getTime() - then.getTime()) / MS_PER_DAY);
-  if (days <= 0) return { kind: "today" };
+  // Clamp to >= 0: a `lastSessionAt` in the future (clock skew between the
+  // client's device and the server, or a slightly-ahead server clock) must
+  // never produce a negative day count. This is intentional, not a bug — a
+  // future timestamp deliberately reads as "today" rather than surfacing a
+  // nonsensical "-1 days ago" (GH #460 review).
+  const days = Math.max(0, Math.floor((now.getTime() - then.getTime()) / MS_PER_DAY));
+  if (days === 0) return { kind: "today" };
   if (days === 1) return { kind: "yesterday" };
   return { kind: "daysAgo", days };
 }

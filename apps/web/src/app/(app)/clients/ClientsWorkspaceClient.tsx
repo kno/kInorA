@@ -347,7 +347,7 @@ export function ClientsWorkspaceClient({
                   {t("clients.roster.noMatches")}
                 </p>
               ) : (
-                <ul className={styles.list} role="listbox" aria-label={t("clients.listAria")}>
+                <ul className={styles.list} aria-label={t("clients.listAria")}>
                   {visibleClients.map((client) => {
                     const isActive = client.status === "active";
                     const isSelected = client.clientUserId === selectedClientUserId;
@@ -361,8 +361,7 @@ export function ClientsWorkspaceClient({
                       <li key={client.clientUserId}>
                         <a
                           href={rowHref(client.clientUserId)}
-                          role="option"
-                          aria-selected={isSelected}
+                          aria-current={isSelected ? "page" : undefined}
                           data-testid="client-row"
                           className={`${styles.rowSelect}${isSelected ? ` ${styles.rowSelectActive}` : ""}`}
                         >
