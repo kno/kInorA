@@ -54,6 +54,58 @@ interface ClientOptions {
   apiBaseUrl?: string;
 }
 
+/** Discriminated result of {@link trainerGet}, before DTO shape validation. */
+type TrainerGetResult<TBody> =
+  | { kind: "forbidden" }
+  | { kind: "error"; message: string }
+  | { kind: "ok"; body: TBody | null };
+
+/**
+ * Shared `GET` orchestration for the trainer-scoped client read endpoints
+ * (`fetchClientDashboard`, `fetchClientProgressStats`,
+ * `fetchClientExerciseDetail`, `fetchClientWeeklyOverview`): session check,
+ * base URL / `fetchImpl` resolution, the network try/catch, the 403 →
+ * `forbidden` mapping, and non-`ok` → error-code mapping. Callers own URL
+ * construction and DTO shape validation (the `"invalid_response"` checks
+ * differ per endpoint).
+ */
+async function trainerGet<TBody>(
+  path: string,
+  token: string | undefined,
+  options: ClientOptions,
+  fallbackErrorCode: string,
+): Promise<TrainerGetResult<TBody>> {
+  if (!token) {
+    return { kind: "error", message: "no_session" };
+  }
+
+  const base = options.apiBaseUrl ?? apiBaseUrl();
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${base}${path}`, {
+      method: "GET",
+      headers: { authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+  } catch {
+    return { kind: "error", message: "api_unreachable" };
+  }
+
+  if (res.status === 403) {
+    return { kind: "forbidden" };
+  }
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: "error", message: payload.error ?? fallbackErrorCode };
+  }
+
+  const body = (await res.json().catch(() => null)) as TBody | null;
+  return { kind: "ok", body };
+}
+
 /** Fetch the caller's assigned clients via `GET /trainer/clients`. */
 export async function fetchClients(
   token: string | undefined,
@@ -245,34 +297,18 @@ export async function fetchClientDashboard(
   token: string | undefined,
   options: ClientOptions = {},
 ): Promise<FetchClientDashboardResult> {
-  if (!token) {
-    return { kind: "error", message: "no_session" };
+  const result = await trainerGet<ClientDashboardDTO>(
+    `/trainer/clients/${encodeURIComponent(clientUserId)}/dashboard`,
+    token,
+    options,
+    "fetch_client_dashboard_failed",
+  );
+
+  if (result.kind !== "ok") {
+    return result;
   }
 
-  const base = options.apiBaseUrl ?? apiBaseUrl();
-  const fetchImpl = options.fetchImpl ?? fetch;
-
-  let res: Response;
-  try {
-    res = await fetchImpl(`${base}/trainer/clients/${encodeURIComponent(clientUserId)}/dashboard`, {
-      method: "GET",
-      headers: { authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-  } catch {
-    return { kind: "error", message: "api_unreachable" };
-  }
-
-  if (res.status === 403) {
-    return { kind: "forbidden" };
-  }
-
-  if (!res.ok) {
-    const payload = (await res.json().catch(() => ({}))) as { error?: string };
-    return { kind: "error", message: payload.error ?? "fetch_client_dashboard_failed" };
-  }
-
-  const body = (await res.json().catch(() => null)) as ClientDashboardDTO | null;
+  const body = result.body;
   if (!body || !Array.isArray(body.rpeTrend) || !Array.isArray(body.recentSessions)) {
     return { kind: "error", message: "invalid_response" };
   }
@@ -292,37 +328,18 @@ export async function fetchClientProgressStats(
   token: string | undefined,
   options: ClientOptions = {},
 ): Promise<FetchClientProgressStatsResult> {
-  if (!token) {
-    return { kind: "error", message: "no_session" };
+  const result = await trainerGet<StatsSummaryDTO>(
+    `/trainer/clients/${encodeURIComponent(clientUserId)}/progress/stats?range=${range}`,
+    token,
+    options,
+    "fetch_client_stats_failed",
+  );
+
+  if (result.kind !== "ok") {
+    return result;
   }
 
-  const base = options.apiBaseUrl ?? apiBaseUrl();
-  const fetchImpl = options.fetchImpl ?? fetch;
-
-  let res: Response;
-  try {
-    res = await fetchImpl(
-      `${base}/trainer/clients/${encodeURIComponent(clientUserId)}/progress/stats?range=${range}`,
-      {
-        method: "GET",
-        headers: { authorization: `Bearer ${token}` },
-        cache: "no-store",
-      },
-    );
-  } catch {
-    return { kind: "error", message: "api_unreachable" };
-  }
-
-  if (res.status === 403) {
-    return { kind: "forbidden" };
-  }
-
-  if (!res.ok) {
-    const payload = (await res.json().catch(() => ({}))) as { error?: string };
-    return { kind: "error", message: payload.error ?? "fetch_client_stats_failed" };
-  }
-
-  const body = (await res.json().catch(() => null)) as StatsSummaryDTO | null;
+  const body = result.body;
   if (!body || typeof body.totalVolumeKg?.value !== "number") {
     return { kind: "error", message: "invalid_response" };
   }
@@ -341,37 +358,18 @@ export async function fetchClientExerciseDetail(
   token: string | undefined,
   options: ClientOptions = {},
 ): Promise<FetchClientExerciseDetailResult> {
-  if (!token) {
-    return { kind: "error", message: "no_session" };
+  const result = await trainerGet<ExerciseDetailDTO>(
+    `/trainer/clients/${encodeURIComponent(clientUserId)}/progress/exercise-detail?title=${encodeURIComponent(title)}`,
+    token,
+    options,
+    "fetch_client_exercise_detail_failed",
+  );
+
+  if (result.kind !== "ok") {
+    return result;
   }
 
-  const base = options.apiBaseUrl ?? apiBaseUrl();
-  const fetchImpl = options.fetchImpl ?? fetch;
-
-  let res: Response;
-  try {
-    res = await fetchImpl(
-      `${base}/trainer/clients/${encodeURIComponent(clientUserId)}/progress/exercise-detail?title=${encodeURIComponent(title)}`,
-      {
-        method: "GET",
-        headers: { authorization: `Bearer ${token}` },
-        cache: "no-store",
-      },
-    );
-  } catch {
-    return { kind: "error", message: "api_unreachable" };
-  }
-
-  if (res.status === 403) {
-    return { kind: "forbidden" };
-  }
-
-  if (!res.ok) {
-    const payload = (await res.json().catch(() => ({}))) as { error?: string };
-    return { kind: "error", message: payload.error ?? "fetch_client_exercise_detail_failed" };
-  }
-
-  const body = (await res.json().catch(() => null)) as ExerciseDetailDTO | null;
+  const body = result.body;
   if (!body || typeof body.exerciseTitle !== "string" || !Array.isArray(body.recentSets)) {
     return { kind: "error", message: "invalid_response" };
   }
@@ -391,36 +389,19 @@ export async function fetchClientWeeklyOverview(
   token: string | undefined,
   options: ClientOptions = {},
 ): Promise<FetchClientWeeklyOverviewResult> {
-  if (!token) {
-    return { kind: "error", message: "no_session" };
+  const path = `/trainer/clients/${encodeURIComponent(clientUserId)}/progress/weekly-overview`;
+  const result = await trainerGet<WeeklyOverviewDTO>(
+    weekStart ? `${path}?weekStart=${encodeURIComponent(weekStart)}` : path,
+    token,
+    options,
+    "fetch_client_weekly_overview_failed",
+  );
+
+  if (result.kind !== "ok") {
+    return result;
   }
 
-  const base = options.apiBaseUrl ?? apiBaseUrl();
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const path = `${base}/trainer/clients/${encodeURIComponent(clientUserId)}/progress/weekly-overview`;
-  const url = weekStart ? `${path}?weekStart=${encodeURIComponent(weekStart)}` : path;
-
-  let res: Response;
-  try {
-    res = await fetchImpl(url, {
-      method: "GET",
-      headers: { authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-  } catch {
-    return { kind: "error", message: "api_unreachable" };
-  }
-
-  if (res.status === 403) {
-    return { kind: "forbidden" };
-  }
-
-  if (!res.ok) {
-    const payload = (await res.json().catch(() => ({}))) as { error?: string };
-    return { kind: "error", message: payload.error ?? "fetch_client_weekly_overview_failed" };
-  }
-
-  const body = (await res.json().catch(() => null)) as WeeklyOverviewDTO | null;
+  const body = result.body;
   if (!body || typeof body.weekStart !== "string" || !Array.isArray(body.days)) {
     return { kind: "error", message: "invalid_response" };
   }
