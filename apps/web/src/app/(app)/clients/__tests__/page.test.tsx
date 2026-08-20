@@ -12,6 +12,7 @@ vi.mock("next-intl/server", () => ({
     "clients.accessRestrictedTitle": "Trainer access required",
     "clients.accessRestrictedBody": "This page is only available to trainer accounts.",
   })[key] ?? key),
+  getLocale: async () => "en",
 }));
 
 vi.mock("next/headers", () => ({ cookies: (...args: unknown[]) => cookies(...args) }));
@@ -92,6 +93,20 @@ describe("ClientsPage", () => {
 
     expect(page.props.selectedClientUserId).toBe("u2");
     expect(getClientDashboardAction).toHaveBeenCalledWith("u2");
+  });
+
+  it("renders the honest 'invitation pending' body for a selected INVITED client, without fetching any tab body", async () => {
+    cookies.mockResolvedValue({ get: vi.fn(() => ({ value: "session-token" })) });
+    fetchClients.mockResolvedValue({
+      kind: "ok",
+      clients: [{ clientUserId: "u1", email: "a@test.com", status: "invited" }],
+    });
+
+    const page = await ClientsPage({ searchParams: searchParams() });
+    const text = JSON.stringify(page.props.detailBody);
+
+    expect(text).toContain("client-detail-pending");
+    expect(getClientDashboardAction).not.toHaveBeenCalled();
   });
 
   it("reports detailNotFound for a ?client= not in the trainer's roster, without crashing", async () => {

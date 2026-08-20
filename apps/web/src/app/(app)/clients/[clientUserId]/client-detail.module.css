@@ -36,6 +36,15 @@
   gap: 8px;
 }
 
+.quickActions a[aria-disabled="true"] {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.pending {
+  padding: 24px 0;
+}
+
 .tabs {
   display: flex;
   gap: 20px;

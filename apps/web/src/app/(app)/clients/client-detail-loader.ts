@@ -47,9 +47,11 @@ export async function loadClientDetailBody(
   t: Translator,
   /** See {@link import("./[clientUserId]/ClientDetailSections").ClientDetailHeaderProps.hrefBase}. */
   hrefBase?: string,
+  /** Active app locale, threaded to `DashboardTab` for its date formatting. */
+  locale?: string,
 ): Promise<ReactNode> {
   if (tab === "dashboard") {
-    return DashboardTab({ result: await getClientDashboardAction(clientUserId), t });
+    return DashboardTab({ result: await getClientDashboardAction(clientUserId), t, locale });
   }
 
   if (tab === "progress") {

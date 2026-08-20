@@ -14,6 +14,7 @@ import {
   formatDuration,
   formatVolume,
 } from "@/app/(app)/stats/StatsSections";
+import { displayName, formatShortDate, initialsOf } from "../roster-format";
 import styles from "./client-detail.module.css";
 
 /**
@@ -44,10 +45,6 @@ export function appendParams(base: string, query: string): string {
   return `${base}${base.includes("?") ? "&" : "?"}${query}`;
 }
 
-export function initialsOf(email: string): string {
-  return email.slice(0, 2).toUpperCase();
-}
-
 export interface ClientDetailHeaderProps {
   client: ClientSummaryDTO;
   tab: DetailTab;
@@ -71,11 +68,11 @@ export function ClientDetailHeader({ client, tab, t, hrefBase }: ClientDetailHea
       <div className={styles.header}>
         <div className={styles.identity}>
           <span className={styles.avatar} aria-hidden="true">
-            {initialsOf(client.email)}
+            {initialsOf(client)}
           </span>
           <div>
-            <h1 className="kin-title">{client.email}</h1>
-            <p className="kin-text kin-muted">{t(`clients.status.${client.status}`)}</p>
+            <h1 className="kin-title">{displayName(client)}</h1>
+            <p className="kin-text kin-muted">{client.email}</p>
           </div>
         </div>
         <div className={styles.quickActions}>
@@ -102,12 +99,31 @@ export function ClientDetailHeader({ client, tab, t, hrefBase }: ClientDetailHea
   );
 }
 
+/**
+ * Honest state for a selected client who hasn't accepted their invitation
+ * yet (`status !== "active"`). Rendered INSTEAD OF fetching any tab body —
+ * an invited client has no dashboard/progress/plan data to fetch, and the
+ * previous behaviour (fetching anyway, then rendering the tab's generic 403
+ * copy) falsely told the trainer they lacked entitlement rather than that
+ * the client simply hasn't joined yet (real-browser finding #447 follow-up).
+ */
+export function ClientDetailPendingNotice({ t }: { t: Translator }) {
+  return (
+    <div className={styles.pending} data-testid="client-detail-pending">
+      <h2 className="kin-title">{t("clients.detail.pendingTitle")}</h2>
+      <p className="kin-text kin-muted">{t("clients.detail.pendingBody")}</p>
+    </div>
+  );
+}
+
 export interface DashboardTabProps {
   result: FetchClientDashboardResult;
   t: Translator;
+  /** Active app locale, for formatting the RPE-trend and recent-session dates (defaults to `"en"`). */
+  locale?: string;
 }
 
-export function DashboardTab({ result, t }: DashboardTabProps) {
+export function DashboardTab({ result, t, locale = "en" }: DashboardTabProps) {
   if (result.kind === "forbidden") {
     return ForbiddenNotice({ t });
   }
@@ -143,7 +159,7 @@ export function DashboardTab({ result, t }: DashboardTabProps) {
           <ul className={styles.sessionList} aria-label={t("clients.dashboard.rpeTrendTitle")}>
             {dashboard.rpeTrend.map((point) => (
               <li className={styles.sessionRow} key={point.weekStart}>
-                <span>{point.weekStart}</span>
+                <span>{formatShortDate(point.weekStart, locale)}</span>
                 <span className="num">{point.meanRpe === null ? "—" : point.meanRpe.toFixed(1)}</span>
               </li>
             ))}
@@ -161,7 +177,7 @@ export function DashboardTab({ result, t }: DashboardTabProps) {
           <ul className={styles.sessionList} aria-label={t("clients.dashboard.recentSessionsTitle")}>
             {dashboard.recentSessions.map((session) => (
               <li className={styles.sessionRow} key={session.date}>
-                <span>{session.date}</span>
+                <span>{formatShortDate(session.date, locale)}</span>
                 <span className="num">{formatVolume(session.volumeKg)}</span>
                 <span className="num">{session.meanRpe === null ? "—" : `RPE ${session.meanRpe.toFixed(1)}`}</span>
               </li>
@@ -346,10 +362,15 @@ export function PlanTab({ clientUserId, weekResult, t, hrefBase }: PlanTabProps)
   );
 }
 
+/**
+ * A genuine per-client 403 on an ACTIVE client (the trainer isn't assigned to
+ * THIS one) — distinct from the top-level "trainer account required" state
+ * and from the "invitation pending" state, neither of which apply here.
+ */
 function ForbiddenNotice({ t }: { t: Translator }) {
   return (
     <p className="kin-text" role="alert" data-testid="client-detail-forbidden">
-      {t("clients.accessRestrictedBody")}
+      {t("clients.detail.forbiddenBody")}
     </p>
   );
 }
