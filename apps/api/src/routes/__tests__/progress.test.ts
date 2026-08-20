@@ -40,6 +40,19 @@ function buildSessionDb() {
   });
 }
 
+/** Default entitlement reader stub — always resolves to a non-trainer tier.
+ * Mirrors `auth.test.ts`'s `fakeEntitlementReader` (#453/#454 pattern): tests
+ * exercising `viewerIsTrainer: true` pass their own trainer-tier reader. */
+function fakeEntitlementReader(tier: "free" | "pro" | "trainer" = "free") {
+  return {
+    loadContext: vi.fn().mockResolvedValue({
+      membershipStatus: "active",
+      billing: { tier, status: "active", source: "system", trialStartedAt: null, trialEndsAt: null },
+      activeOverrideTier: null,
+    }),
+  };
+}
+
 const emptyWeeklyOverview: WeeklyOverviewDTO = {
   weekStart: "2026-07-13",
   weekLabel: "13–19 Jul",
@@ -75,7 +88,11 @@ function buildRepoMock(
   };
 }
 
-async function buildTestApp(repo = buildRepoMock(), db = buildSessionDb()): Promise<FastifyInstance> {
+async function buildTestApp(
+  repo = buildRepoMock(),
+  db = buildSessionDb(),
+  entitlementReader: { loadContext: ReturnType<typeof vi.fn> } = fakeEntitlementReader(),
+): Promise<FastifyInstance> {
   const app = Fastify();
 
   app.setErrorHandler((error, _request, reply) => {
@@ -86,7 +103,7 @@ async function buildTestApp(repo = buildRepoMock(), db = buildSessionDb()): Prom
   });
 
   await app.register(authPlugin, { db });
-  await app.register(progressRoutes, { repo: repo as never });
+  await app.register(progressRoutes, { repo: repo as never, entitlementReader });
   return app;
 }
 
@@ -120,17 +137,44 @@ describe("GET /progress/dashboard", () => {
     expect(repo.getDashboardSummary).toHaveBeenCalledWith(TENANT_A, USER_A);
   });
 
-  // 15b/#294 — the trainer-only mobile nav (Clients, Trainer plan) needs a
-  // signal on the existing dashboard response, derived from the session's
-  // membership role (never a new endpoint/request).
-  it("returns viewerIsTrainer=true when the authenticated membership role is trainer", async () => {
+  // #452 — `viewerIsTrainer` must be gate-equivalent to `isTrainerEntitled`
+  // (role === "trainer" AND resolved billing tier === "trainer"), not
+  // role-only. Otherwise a `trainer`-role membership whose tier lapsed/was
+  // never granted sees trainer-only mobile nav (Clients, Trainer plan) that
+  // leads straight to a 403.
+  it("returns viewerIsTrainer=false for a non-trainer role (member/owner), and never calls the entitlement reader (ascending-cost order)", async () => {
     const repo = buildRepoMock();
+    const entitlementReader = fakeEntitlementReader("trainer");
+    app = await buildTestApp(
+      repo,
+      createCyclingAuthMockDb({
+        sessionRows: [buildSessionRow({ tenantId: TENANT_A, userId: USER_A })],
+        membershipRows: [buildActiveMembershipRow({ tenantId: TENANT_A, userId: USER_A, role: "owner" })],
+      }),
+      entitlementReader
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/progress/dashboard",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().viewerIsTrainer).toBe(false);
+    expect(entitlementReader.loadContext).not.toHaveBeenCalled();
+  });
+
+  it("returns viewerIsTrainer=true when role is trainer AND the resolved billing tier is trainer", async () => {
+    const repo = buildRepoMock();
+    const entitlementReader = fakeEntitlementReader("trainer");
     app = await buildTestApp(
       repo,
       createCyclingAuthMockDb({
         sessionRows: [buildSessionRow({ tenantId: TENANT_A, userId: USER_A })],
         membershipRows: [buildActiveMembershipRow({ tenantId: TENANT_A, userId: USER_A, role: "trainer" })],
-      })
+      }),
+      entitlementReader
     );
 
     const response = await app.inject({
@@ -143,14 +187,40 @@ describe("GET /progress/dashboard", () => {
     expect(response.json().viewerIsTrainer).toBe(true);
   });
 
-  it("returns viewerIsTrainer=false when the authenticated membership role is member or owner", async () => {
+  it("returns viewerIsTrainer=false when role is trainer but the resolved billing tier is NOT trainer (lapsed/never granted)", async () => {
     const repo = buildRepoMock();
+    const entitlementReader = fakeEntitlementReader("free");
     app = await buildTestApp(
       repo,
       createCyclingAuthMockDb({
         sessionRows: [buildSessionRow({ tenantId: TENANT_A, userId: USER_A })],
-        membershipRows: [buildActiveMembershipRow({ tenantId: TENANT_A, userId: USER_A, role: "owner" })],
-      })
+        membershipRows: [buildActiveMembershipRow({ tenantId: TENANT_A, userId: USER_A, role: "trainer" })],
+      }),
+      entitlementReader
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/progress/dashboard",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().viewerIsTrainer).toBe(false);
+  });
+
+  it("deny-by-default: resolves viewerIsTrainer=false (never a 500) when the entitlement reader throws", async () => {
+    const repo = buildRepoMock();
+    const entitlementReader = {
+      loadContext: vi.fn().mockRejectedValue(new Error("billing context unavailable")),
+    };
+    app = await buildTestApp(
+      repo,
+      createCyclingAuthMockDb({
+        sessionRows: [buildSessionRow({ tenantId: TENANT_A, userId: USER_A })],
+        membershipRows: [buildActiveMembershipRow({ tenantId: TENANT_A, userId: USER_A, role: "trainer" })],
+      }),
+      entitlementReader
     );
 
     const response = await app.inject({

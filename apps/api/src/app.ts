@@ -600,8 +600,12 @@ export async function buildApp(
   // Dashboard progress summary (09c-v1-progress-dashboard-stats, Slice 2).
   // Reuses the same WorkoutSessionRepository instance (getDashboardSummary
   // is one more bounded read method alongside listSessionHistory).
+  // `entitlementReader` (#452) reuses the SAME `billingStateReader` instance
+  // every other billing decision in this file uses, so `viewerIsTrainer` on
+  // GET /progress/dashboard stays gate-equivalent to `isTrainerEntitled`.
   await app.register(progressRoutes, {
     repo: workoutSessionRepo,
+    entitlementReader: billingStateReader,
   });
 
   // Exercise library — GET /exercises/catalog(/:id|/facets), requireAuth().
