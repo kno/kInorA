@@ -1,0 +1,90 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Manual de uso de kInorA</title><style>
+@page { size: A4; margin: 18mm 16mm; }
+body { font: 11pt/1.55 "Helvetica Neue", Arial, sans-serif; color: #1b1d22; max-width: 100%; }
+h1 { font-size: 22pt; margin: 0 0 8pt; } h1:not(:first-of-type) { page-break-before: always; }
+h2 { font-size: 15pt; margin: 18pt 0 6pt; } h3 { font-size: 12pt; margin: 14pt 0 4pt; }
+hr { border: 0; border-top: 1px solid #d5d8de; margin: 14pt 0; }
+figure { margin: 10pt 0; page-break-inside: avoid; }
+img { max-width: 100%; border: 1px solid #d5d8de; border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 10pt; }
+th, td { border: 1px solid #d5d8de; padding: 5pt 7pt; text-align: left; }
+th { background: #f0f2f5; }
+code { font-family: Menlo, monospace; font-size: 9.5pt; background: #f0f2f5; padding: 1px 4px; border-radius: 3px; }
+ul { margin: 6pt 0; padding-left: 18pt; }
+</style></head><body><h1>Manual de uso de kInorA</h1>
+<p>kInorA es una plataforma de entrenamiento personalizado con tres perfiles de uso: el <strong>usuario que entrena por su cuenta</strong>, el <strong>entrenador personal</strong> que gestiona una cartera de clientes, y el <strong>gimnasio</strong> que ofrece la plataforma a sus socios con su propia marca.</p>
+<p>Todas las capturas de este manual se han tomado navegando la aplicación real con las cuentas de prueba listadas al final.</p>
+<hr>
+<h2>1. Acceso</h2>
+<p>Entra en la aplicación con tu correo y contraseña, o con tu cuenta de Google. Si aún no tienes cuenta, el enlace <strong>Crear cuenta</strong> te registra en menos de un minuto.</p>
+<figure><img src="01-login.png" alt="Pantalla de inicio de sesión"></figure>
+<p>Tras iniciar sesión, la barra lateral izquierda es tu navegación permanente: <strong>Panel</strong>, <strong>Plan</strong>, <strong>Planes</strong>, <strong>Estadísticas</strong>, <strong>Historial</strong>, <strong>Crear plan</strong>, <strong>Ejercicios</strong>, <strong>Memoria</strong> y <strong>Facturación</strong>. Algunas entradas adicionales aparecen según tu perfil: <strong>Clientes</strong> si eres entrenador, <strong>Marca</strong> si gestionas un gimnasio.</p>
+<hr>
+<h2>2. Usuario: entrenar con kInorA</h2>
+<h3>2.1 El Panel, tu centro de entrenamiento</h3>
+<p>Al entrar aterrizas en el <strong>Panel</strong>: la sesión recomendada de hoy (con duración y volumen previstos), tu <em>readiness</em>, la racha activa, el progreso de la semana y la ruta de carga semanal. El bloque <strong>Coach AI</strong> te propone ajustes concretos — aplícalos o descártalos con un clic.</p>
+<figure><img src="02-dashboard.png" alt="Panel del usuario"></figure>
+<ul><li><strong>Empezar sesión</strong> te lleva directamente al entrenamiento de hoy.</li><li>El plan semanal muestra qué toca cada día (Empuje, Tracción, Pierna…).</li></ul>
+<h3>2.2 El plan semanal</h3>
+<p>En <strong>Plan</strong> ves la semana completa: cada día con su estado (completado, pendiente, descanso) y el detalle de la sesión. Desde aquí se inicia el registro de un entrenamiento.</p>
+<figure><img src="03-plan.png" alt="Vista del plan"></figure>
+<h3>2.3 Estadísticas</h3>
+<p><strong>Estadísticas</strong> resume tu progreso con selector de periodo (<strong>Semana / Mes / Año</strong>): volumen total con comparación al periodo anterior, sesiones, tiempo total, récords personales (1RM estimado por ejercicio y su tendencia), tendencia de volumen y distribución por grupo muscular. Cada récord enlaza al historial del ejercicio.</p>
+<figure><img src="04-stats.png" alt="Estadísticas"></figure>
+<h3>2.4 Historial y Ejercicios</h3>
+<ul><li><strong>Historial</strong>: todas tus sesiones completadas, con volumen y RPE medio de cada una.</li><li><strong>Ejercicios</strong>: la biblioteca de ejercicios guiados, con búsqueda.</li></ul>
+<figure><img src="05-history.png" alt="Historial"></figure>
+<figure><img src="06-exercises.png" alt="Biblioteca de ejercicios"></figure>
+<h3>2.5 Crear un plan</h3>
+<p><strong>Crear plan</strong> abre el asistente de seis pasos: objetivo, días por semana, duración de sesión, lugar de entrenamiento, material disponible y limitaciones físicas. Con eso kInorA genera un plan adaptado; si declaras una limitación (por ejemplo, lumbar), el plan sustituye los ejercicios de riesgo y te lo indica.</p>
+<figure><img src="07-create-plan.png" alt="Asistente de creación de plan"></figure>
+<h3>2.6 Perfil y facturación</h3>
+<ul><li><strong>Perfil</strong>: tu nombre, objetivo, nivel de experiencia y datos corporales (altura, serie de peso).</li><li><strong>Facturación</strong>: tu plan actual (Free o Pro) y la mejora a Pro, que desbloquea el chat interactivo con el coach, la voz y límites ampliados.</li></ul>
+<figure><img src="08-profile.png" alt="Perfil"></figure>
+<figure><img src="09-billing.png" alt="Facturación"></figure>
+<hr>
+<h2>3. Entrenador: gestionar tu cartera de clientes</h2>
+<p>Una cuenta de entrenador ve todo lo anterior <strong>más</strong> la entrada <strong>Clientes</strong> en la navegación. El rol de entrenador lo activa el administrador de la plataforma; al concederlo, la entrada aparece automáticamente.</p>
+<h3>3.1 El espacio de clientes</h3>
+<p><strong>Clientes</strong> es tu espacio de trabajo a dos columnas: a la izquierda <strong>tu cartera</strong> — con buscador, contador y filtros <em>Todos / Activo / Invitado</em> — y a la derecha el <strong>detalle del cliente seleccionado</strong>. Cada fila muestra el nombre, el correo, cuándo entrenó por última vez y su <strong>adherencia de los últimos 28 días</strong>, junto al estado de la invitación.</p>
+<figure><img src="10-trainer-clients.png" alt="Espacio de clientes del entrenador"></figure>
+<p>Cada cliente tiene cuatro accesos rápidos: <strong>Dashboard</strong>, <strong>Progreso</strong>, <strong>Plan</strong> y <strong>Crear plan</strong> (los dos últimos se activan cuando el cliente acepta la invitación).</p>
+<h3>3.2 El detalle del cliente</h3>
+<p>El panel derecho tiene tres pestañas:</p>
+<ul><li><strong>Dashboard</strong>: cumplimiento a 28 días, tendencia de RPE de las últimas 8 semanas y sesiones recientes con volumen y RPE.</li><li><strong>Progreso</strong>: las mismas estadísticas que ve el cliente — KPIs con selector Semana/Mes/Año, tendencia de volumen, series por grupo muscular y la tabla de récords personales; cada récord enlaza al historial de ese ejercicio.</li><li><strong>Plan</strong>: el tablero semanal del cliente, con lo planificado frente a lo realizado y navegación entre semanas.</li></ul>
+<figure><img src="11-trainer-client-progress.png" alt="Progreso de un cliente"></figure>
+<h3>3.3 Invitar a un cliente</h3>
+<p>El botón <strong>Invitar cliente</strong> abre una ventana donde introduces el correo del cliente. La invitación es personal a ese correo — no se genera ningún enlace para compartir. El cliente debe tener cuenta en kInorA; cuando acepte la invitación pasará de <em>Invitado</em> a <em>Activo</em> y podrás ver su progreso y crearle planes.</p>
+<figure><img src="12-trainer-invite.png" alt="Invitar a un cliente"></figure>
+<h3>3.4 Crear un plan para un cliente</h3>
+<p>Desde la ficha del cliente (o su acceso rápido), <strong>Crear plan</strong> abre el formulario directo: objetivo, días por semana, duración, lugar y material. El plan generado pertenece al cliente — él lo ve y lo entrena como cualquier plan propio, y tú sigues su adherencia desde tu espacio.</p>
+<figure><img src="13-trainer-create-plan.png" alt="Crear plan para un cliente"></figure>
+<h3>3.5 En el móvil</h3>
+<p>En la app móvil, el menú de inicio de una cuenta de entrenador muestra las entradas <strong>Clientes</strong> (lista, invitación y creación de planes) y <strong>Plan de entrenador</strong>. Estas entradas solo aparecen si tu cuenta de entrenador está activa y al corriente.</p>
+<hr>
+<h2>4. Gimnasio: tu marca, tus socios</h2>
+<p>Una cuenta de gimnasio añade la entrada <strong>Marca</strong> a la navegación: el <strong>Estudio de marca</strong> con el que personalizas la experiencia de tus socios.</p>
+<h3>4.1 Estudio de marca</h3>
+<p>En <strong>Marca</strong> configuras:</p>
+<ul><li><strong>Subdominio</strong>: la dirección de acceso de tus socios (por ejemplo, <code>norte.kinora.aitsai.com</code>).</li><li><strong>Logotipo</strong>: PNG, JPEG, SVG o WebP de hasta 5 MB.</li><li><strong>Paleta</strong>: colores de acento, superficie y texto.</li></ul>
+<p>La <strong>vista previa en tiempo real</strong> de la derecha muestra cómo verán tus socios la aplicación con tu identidad antes de guardar nada.</p>
+<figure><img src="14-gym-branding.png" alt="Estudio de marca del gimnasio"></figure>
+<p>Cuando un socio entra por el subdominio del gimnasio, toda la aplicación se muestra con la marca configurada.</p>
+<h3>4.2 Facturación del gimnasio</h3>
+<p><strong>Facturación</strong> muestra el plan del gimnasio y su estado. El plan de gimnasio escala por número de plazas (socios).</p>
+<figure><img src="15-gym-billing.png" alt="Facturación del gimnasio"></figure>
+<h3>4.3 Socios y entrenadores del gimnasio</h3>
+<p>Los socios del gimnasio usan la aplicación como cualquier usuario (sección 2), con la marca del gimnasio. La gestión completa de la organización — alta de socios por el propio gimnasio y entrenadores de plantilla dentro del gimnasio — está en desarrollo; hoy los socios se registran con su cuenta y acceden por el subdominio del gimnasio.</p>
+<hr>
+<h2>5. Cuentas de prueba</h2>
+<p>Contraseña de todas las cuentas: <code>Kinora.Test.2026!</code></p>
+<table><thead><tr><th>Cuenta</th><th>Correo</th><th>Perfil</th></tr></thead><tbody>
+<tr><td>Ana Vega</td><td><code>ana.solo@kinora.test</code></td><td>Usuaria independiente, con plan e historial de 6 semanas</td></tr>
+<tr><td>Marta</td><td><code>trainer.marta@kinora.test</code></td><td>Entrenadora con dos clientes activos</td></tr>
+<tr><td>Luis Ortega</td><td><code>cliente.luis@kinora.test</code></td><td>Cliente de Marta (81 % de adherencia)</td></tr>
+<tr><td>Sara Vidal</td><td><code>cliente.sara@kinora.test</code></td><td>Cliente de Marta (94 % de adherencia)</td></tr>
+<tr><td>Gimnasio</td><td><code>gym.owner@kinora.test</code></td><td>Cuenta de gimnasio con marca "norte" configurada</td></tr>
+<tr><td>Entrenador de gimnasio</td><td><code>gym.trainer@kinora.test</code></td><td>Miembro del gimnasio (rol de plantilla, en desarrollo)</td></tr>
+<tr><td>Socio</td><td><code>gym.socio@kinora.test</code></td><td>Socio del gimnasio</td></tr>
+</tbody></table>
+<p>Para levantar el entorno local: <code>podman machine start &amp;&amp; podman start kinora-postgres</code>, y <code>pnpm dev</code> desde la raíz del repositorio (la web queda en el puerto 3000, o el siguiente libre si está ocupado).</p></body></html>
