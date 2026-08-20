@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import { requireAuth } from "../auth/plugin.js";
 import type { DashboardSummaryDTO, ExerciseDetailDTO, StatsSummaryDTO, WeeklyOverviewDTO } from "@kinora/contracts";
+import type { EntitlementReaderPort } from "../billing/entitlement.js";
+import { isTrainerEntitled } from "../trainer/owner-access.js";
 
 export type StatsRange = "week" | "month" | "year";
 
@@ -43,6 +45,14 @@ export interface ProgressRouteRepo {
 
 export interface ProgressRoutesOptions {
   repo: ProgressRouteRepo;
+  /**
+   * The entitlement reader `viewerIsTrainer` (#452) reuses to resolve the
+   * SAME two-step gate `isTrainerEntitled` enforces (`role === "trainer"`
+   * AND the resolved billing tier is exactly `"trainer"`) — the SAME port
+   * every other billing decision in the app reads through, never a DB
+   * import in this route file.
+   */
+  entitlementReader: Pick<EntitlementReaderPort, "loadContext">;
 }
 
 /**
@@ -54,7 +64,7 @@ export interface ProgressRoutesOptions {
  * from the authenticated session, never from client input.
  */
 export const progressRoutes: FastifyPluginAsync<ProgressRoutesOptions> = async (fastify, options) => {
-  const repo = options.repo;
+  const { repo, entitlementReader } = options;
 
   fastify.get(
     "/progress/dashboard",
@@ -62,7 +72,27 @@ export const progressRoutes: FastifyPluginAsync<ProgressRoutesOptions> = async (
     async (request, reply) => {
       const { tenantId, userId, role } = request.authContext!;
       const summary = await repo.getDashboardSummary(tenantId, userId);
-      return reply.code(200).send({ ...summary, viewerIsTrainer: role === "trainer" });
+
+      // #452 — role-only was wrong: a `trainer`-role membership whose
+      // billing tier lapsed/was never granted must NOT see the mobile
+      // trainer-only nav (Clients, Trainer plan), which gates on this flag.
+      // Reuses the SAME non-throwing gate `GET /auth/profile`'s `isTrainer`
+      // uses (#453/#454) — never `assertTrainerEntitled`, which throws and
+      // logs an `owner_access.denied` event; a dashboard read is not a
+      // denial. Deny-by-default: any failure to resolve the entitlement
+      // context resolves `viewerIsTrainer` to `false` rather than failing
+      // the whole dashboard response.
+      let viewerIsTrainer = false;
+      try {
+        viewerIsTrainer = await isTrainerEntitled(
+          { tenantId, actorUserId: userId, role },
+          { entitlementReader }
+        );
+      } catch {
+        viewerIsTrainer = false;
+      }
+
+      return reply.code(200).send({ ...summary, viewerIsTrainer });
     }
   );
 
