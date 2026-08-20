@@ -1448,7 +1448,10 @@
         "plan": "Plan"
       },
       "notFound": "This client isn't in your roster.",
-      "loadError": "We couldn't load this section. Please try again."
+      "loadError": "We couldn't load this section. Please try again.",
+      "forbiddenBody": "You don't have access to this client's data.",
+      "pendingTitle": "Invitation pending",
+      "pendingBody": "This client hasn't accepted their invitation yet. Their data will appear here once they do."
     },
     "dashboard": {
       "completionRateLabel": "28-day completion",

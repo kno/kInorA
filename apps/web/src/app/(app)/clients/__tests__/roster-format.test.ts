@@ -3,6 +3,7 @@ import type { ClientSummaryDTO } from "@kinora/contracts";
 import {
   adherenceLabel,
   displayName,
+  formatShortDate,
   initialsOf,
   localPart,
   matchesFilter,
@@ -92,6 +93,24 @@ describe("sessionRecency", () => {
   it("is 'today' for a future timestamp (clock skew), never a negative day count", () => {
     const future = new Date(now.getTime() + 60 * 60 * 1000); // now + 1 hour
     expect(sessionRecency(future.toISOString(), now)).toEqual({ kind: "today" });
+  });
+});
+
+describe("formatShortDate", () => {
+  it("formats a full ISO timestamp as a locale-aware short date, never the raw ISO string", () => {
+    expect(formatShortDate("2026-06-29T00:00:00.000Z", "en")).toBe("Jun 29, 2026");
+  });
+
+  it("formats a date-only string identically (no UTC day shift)", () => {
+    expect(formatShortDate("2026-08-17", "en")).toBe("Aug 17, 2026");
+  });
+
+  it("uses Spanish month names for the es locale", () => {
+    expect(formatShortDate("2026-06-29T00:00:00.000Z", "es")).toContain("jun");
+  });
+
+  it("falls back to the raw value for an unparsable date", () => {
+    expect(formatShortDate("not-a-date", "en")).toBe("not-a-date");
   });
 });
 

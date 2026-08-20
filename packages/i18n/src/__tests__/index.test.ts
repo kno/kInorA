@@ -320,7 +320,13 @@ describe("@kinora/i18n package assembly", () => {
     // cancel = 4) — and removes 1 (`inviteFormAria`: the always-visible
     // inline invite panel it labelled was replaced by the invite sheet,
     // which has its own `aria-labelledby`) = 63 + 16 - 1 = 78.
-    expect(clientsKeys).toHaveLength(78);
+    // Client-detail real-browser findings fix (kno/kInorA, 2026-08) adds 3:
+    // `detail.forbiddenBody` (a genuine per-client 403 on an ACTIVE client,
+    // distinct from the top-level accessRestricted copy) and
+    // `detail.{pendingTitle,pendingBody}` (the honest "invitation pending"
+    // state rendered instead of fetching a tab body for a non-active
+    // selected client) = 78 + 3 = 81.
+    expect(clientsKeys).toHaveLength(81);
     expect(flat["clients.pageTitle"]).toBe("My Clients");
     expect(flattenMessages(catalogs.es)["clients.pageTitle"]).toBe("Mis clientes");
   });

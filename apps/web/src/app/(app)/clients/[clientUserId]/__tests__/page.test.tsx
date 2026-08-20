@@ -12,6 +12,7 @@ import type { ClientDashboardDTO, ClientSummaryDTO, StatsSummaryDTO, WeeklyOverv
 
 vi.mock("next-intl/server", () => ({
   getTranslations: vi.fn(async () => createServerTranslator()),
+  getLocale: vi.fn(async () => "en"),
 }));
 
 const getClientsAction = vi.fn();
@@ -101,6 +102,32 @@ describe("ClientDetailPage", () => {
     expect(text).toContain("client-dashboard-tab");
     expect(text).toContain("83");
     expect(text).toContain("elena@test.com");
+  });
+
+  it("renders an honest 'invitation pending' state for a selected INVITED client, without fetching any tab body", async () => {
+    getClientsAction.mockResolvedValue({
+      kind: "ok",
+      clients: [{ clientUserId: "user_1", email: "elena@test.com", status: "invited" }],
+    });
+
+    const page = await renderPage();
+    const text = JSON.stringify(page);
+
+    expect(text).toContain("client-detail-pending");
+    expect(text).not.toContain("client-dashboard-tab");
+    expect(text).not.toContain("client-detail-forbidden");
+    expect(getClientDashboardAction).not.toHaveBeenCalled();
+  });
+
+  it("renders the create-plan CTA aria-disabled for an invited client", async () => {
+    getClientsAction.mockResolvedValue({
+      kind: "ok",
+      clients: [{ clientUserId: "user_1", email: "elena@test.com", status: "invited" }],
+    });
+
+    const page = await renderPage();
+
+    expect(JSON.stringify(page)).toContain('"aria-disabled":true');
   });
 
   it("renders the forbidden state on the dashboard tab distinctly from a generic error", async () => {

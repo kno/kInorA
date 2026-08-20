@@ -1,7 +1,7 @@
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { getClientsAction } from "../actions";
 import { loadClientDetailBody, normalizeTab } from "../client-detail-loader";
-import { ClientDetailHeader } from "./ClientDetailSections";
+import { ClientDetailHeader, ClientDetailPendingNotice } from "./ClientDetailSections";
 
 /**
  * Trainer client-detail page (GH #447, PR 2/2 — web). Built to
@@ -59,7 +59,17 @@ export default async function ClientDetailPage({ params, searchParams }: ClientD
     );
   }
 
-  const body = await loadClientDetailBody(clientUserId, tab, sp, t);
+  if (client.status !== "active") {
+    return (
+      <main className="kin-page" data-testid="client-detail-page">
+        {ClientDetailHeader({ client, tab, t })}
+        {ClientDetailPendingNotice({ t })}
+      </main>
+    );
+  }
+
+  const locale = await getLocale();
+  const body = await loadClientDetailBody(clientUserId, tab, sp, t, undefined, locale);
 
   return (
     <main className="kin-page" data-testid="client-detail-page">

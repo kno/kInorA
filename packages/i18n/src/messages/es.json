@@ -1448,7 +1448,10 @@
         "plan": "Plan"
       },
       "notFound": "Este cliente no está en tu cartera.",
-      "loadError": "No se pudo cargar esta sección. Inténtalo de nuevo."
+      "loadError": "No se pudo cargar esta sección. Inténtalo de nuevo.",
+      "forbiddenBody": "No tienes acceso a los datos de este cliente.",
+      "pendingTitle": "Invitación pendiente",
+      "pendingBody": "Este cliente todavía no ha aceptado la invitación. Sus datos aparecerán aquí en cuanto lo haga."
     },
     "dashboard": {
       "completionRateLabel": "Cumplimiento a 28 días",

@@ -98,6 +98,22 @@ export function recencyLabel(recency: SessionRecency, t: Translator): string {
 }
 
 /**
+ * Formats an ISO timestamp (or date-only string) as a short, locale-aware
+ * date — `"29 jun 2026"` (es) / `"Jun 29, 2026"` (en) — never the raw ISO
+ * string a trainer would otherwise see in the Dashboard tab's RPE-trend and
+ * recent-sessions lists. Uses UTC so a date-only input (`"2026-08-17"`) never
+ * shifts by a day under a negative-offset locale. An unparsable value falls
+ * back to itself rather than throwing or rendering "Invalid Date".
+ */
+export function formatShortDate(value: string, locale: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(
+    date,
+  );
+}
+
+/**
  * The roster row's adherence copy. `null`/`undefined` (invited client, or an
  * active one with no completed sessions) renders an honest dash — never a
  * fabricated percentage (#420).

@@ -298,8 +298,11 @@ clients.dashboard.noRpeData
 clients.dashboard.noSessions
 clients.dashboard.recentSessionsTitle
 clients.dashboard.rpeTrendTitle
+clients.detail.forbiddenBody
 clients.detail.loadError
 clients.detail.notFound
+clients.detail.pendingBody
+clients.detail.pendingTitle
 clients.detail.tabs.dashboard
 clients.detail.tabs.plan
 clients.detail.tabs.progress

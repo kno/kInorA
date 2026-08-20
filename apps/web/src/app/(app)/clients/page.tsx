@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { SESSION_COOKIE } from "@/auth/session-cookie";
 import { fetchClients } from "./trainer-client";
 import { inviteClientAction } from "./actions";
 import { loadClientDetailBody, normalizeTab, type ClientDetailSearchParams } from "./client-detail-loader";
-import { ClientDetailHeader } from "./[clientUserId]/ClientDetailSections";
+import { ClientDetailHeader, ClientDetailPendingNotice } from "./[clientUserId]/ClientDetailSections";
 import { ClientsWorkspaceClient } from "./ClientsWorkspaceClient";
 
 /**
@@ -69,7 +69,12 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
     const tab = normalizeTab(sp.tab);
     const hrefBase = `/clients?client=${selectedClient.clientUserId}`;
     detailHeader = ClientDetailHeader({ client: selectedClient, tab, t, hrefBase });
-    detailBody = await loadClientDetailBody(selectedClient.clientUserId, tab, sp, t, hrefBase);
+    if (selectedClient.status !== "active") {
+      detailBody = ClientDetailPendingNotice({ t });
+    } else {
+      const locale = await getLocale();
+      detailBody = await loadClientDetailBody(selectedClient.clientUserId, tab, sp, t, hrefBase, locale);
+    }
   }
 
   return (
