@@ -1,0 +1,14 @@
+{
+  "name": "presentation",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Generators for the thesis defence decks (product and technical). Build scripts, not an app.",
+  "scripts": {
+    "build:product": "node product/build.js",
+    "build:technical": "node technical/build.js",
+    "build": "npm run build:product && npm run build:technical"
+  },
+  "dependencies": {
+    "pptxgenjs": "^4.0.1"
+  }
+}
