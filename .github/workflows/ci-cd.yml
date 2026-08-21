@@ -409,6 +409,11 @@ jobs:
             echo "ERROR: API_BASE_URL secret is required for the web→API proxy (e.g. https://kinora.aitsai.com/api)."
             errors=$((errors + 1))
           fi
+          if [ -z "${{ secrets.TS_AUTHKEY }}" ]; then
+            echo "ERROR: TS_AUTHKEY secret is required to join the tailnet."
+            echo "The VPS is only reachable over Tailscale; without it the SSH step times out."
+            errors=$((errors + 1))
+          fi
           # NOTE: OPENROUTER_API_KEY, OPENROUTER_MODEL, LANGFUSE_PUBLIC_KEY,
           # LANGFUSE_SECRET_KEY, LANGFUSE_HOST are NOT GitHub secrets. They are
           # provided via a persistent .env file on the VPS ($VPS_DEPLOY_DIR/.env)
@@ -419,6 +424,15 @@ jobs:
             exit 1
           fi
           echo "All required secrets are configured."
+
+      # The VPS sits behind a residential NAT with only 80/443 forwarded, so it is
+      # reachable exclusively over Tailscale. The runner joins the tailnet as an
+      # ephemeral node and is removed automatically when the job ends.
+      - name: Join tailnet
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          statedir: /tmp/tailscale-state/
 
       - name: Configure SSH
         run: |

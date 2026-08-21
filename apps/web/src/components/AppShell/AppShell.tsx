@@ -23,6 +23,7 @@ export function AppShell({
   billingNavLabel,
   isAdmin,
   isGym,
+  isTrainer,
 }: {
   children: React.ReactNode;
   user?: SidebarUser;
@@ -30,6 +31,7 @@ export function AppShell({
   billingNavLabel?: string;
   isAdmin?: boolean;
   isGym?: boolean;
+  isTrainer?: boolean;
 }) {
   const [isDesktop, setIsDesktop] = useState(false);
 
@@ -51,6 +53,7 @@ export function AppShell({
           billingNavLabel={billingNavLabel}
           isAdmin={isAdmin}
           isGym={isGym}
+          isTrainer={isTrainer}
         />
       ) : null}
       <main className={styles.main}>{children}</main>
@@ -60,6 +63,7 @@ export function AppShell({
           billingNavLabel={billingNavLabel}
           isAdmin={isAdmin}
           isGym={isGym}
+          isTrainer={isTrainer}
         />
       ) : null}
     </div>

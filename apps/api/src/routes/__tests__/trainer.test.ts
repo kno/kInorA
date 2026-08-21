@@ -53,6 +53,35 @@ function activeClientAssignment() {
   };
 }
 
+const emptyStatsSummary = {
+  range: "month" as const,
+  totalVolumeKg: { value: 0, deltaVsPreviousPeriod: null },
+  sessionCount: { value: 0, deltaVsPreviousPeriod: null },
+  totalDurationMin: { value: 0, deltaVsPreviousPeriod: null },
+  prCount: { value: 0, deltaVsPreviousPeriod: null },
+  volumeTrend: { current: [], previous: [] },
+  muscleGroupDistribution: [],
+  personalRecords: [],
+};
+
+const emptyWeeklyOverview = {
+  weekStart: "2026-07-13",
+  weekLabel: "13–19 Jul",
+  days: [
+    { date: "2026-07-13", status: "rest" as const },
+    { date: "2026-07-14", status: "rest" as const },
+    { date: "2026-07-15", status: "rest" as const },
+    { date: "2026-07-16", status: "rest" as const },
+    { date: "2026-07-17", status: "rest" as const },
+    { date: "2026-07-18", status: "rest" as const },
+    { date: "2026-07-19", status: "rest" as const },
+  ],
+  previousWeekStart: "2026-07-06",
+  nextWeekStart: "2026-07-20",
+};
+
+const emptyExerciseDetail = { exerciseTitle: "Bench Press", recentSets: [] };
+
 function buildRepos(
   overrides: Partial<{
     assignmentRepo: Record<string, unknown>;
@@ -62,6 +91,8 @@ function buildRepos(
     dashboardRepo: Record<string, unknown>;
     planRepo: Record<string, unknown>;
     specRepo: Record<string, unknown>;
+    progressRepo: Record<string, unknown>;
+    metaRepo: Record<string, unknown>;
     seatSync: Record<string, unknown>;
   }> = {},
 ) {
@@ -109,10 +140,21 @@ function buildRepos(
       findConfirmedById: vi.fn().mockResolvedValue(undefined),
       ...overrides.specRepo,
     },
+    progressRepo: {
+      getStatsRange: vi.fn().mockResolvedValue(emptyStatsSummary),
+      getWeeklyOverview: vi.fn().mockResolvedValue(emptyWeeklyOverview),
+      getExerciseDetail: vi.fn().mockResolvedValue(emptyExerciseDetail),
+      ...overrides.progressRepo,
+    },
     seatSync: {
       syncSeats: vi.fn().mockResolvedValue(undefined),
       ...overrides.seatSync,
     },
+    // Deliberately absent unless an override supplies it — `metaRepo` is
+    // OPTIONAL on `TrainerRoutesOptions` (GH client-list-meta), so every
+    // pre-existing test in this file (which never overrides it) must keep
+    // exercising the route's back-compat "no enrichment" path unchanged.
+    ...(overrides.metaRepo ? { metaRepo: overrides.metaRepo } : {}),
   };
 }
 
@@ -375,6 +417,270 @@ describe("GET /trainer/clients/:clientUserId/dashboard", () => {
   });
 });
 
+describe("GET /trainer/clients/:clientUserId/progress/stats (GH #447)", () => {
+  let app: FastifyInstance;
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("denies a non-trainer role with 403, no repo call", async () => {
+    const repos = buildRepos();
+    app = await buildTestApp(repos, "member", MEMBER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/stats`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.progressRepo.getStatsRange).not.toHaveBeenCalled();
+  });
+
+  it("denies a trainer-role actor without the trainer entitlement with 403, no repo call", async () => {
+    const repos = buildRepos({ entitlementReader: entitlementReader("pro") });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/stats`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.progressRepo.getStatsRange).not.toHaveBeenCalled();
+  });
+
+  it("denies a trainer with no active assignment to the client with 403, no repo call", async () => {
+    const repos = buildRepos({ assignmentRepo: { findActiveAssignment: vi.fn().mockResolvedValue(undefined) } });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/stats`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.progressRepo.getStatsRange).not.toHaveBeenCalled();
+  });
+
+  it("denies with 403 when the assignment is revoked (findActiveAssignment collapses revoked and missing)", async () => {
+    // Documents the requirement: a REVOKED row is a real row in
+    // `trainer_client_assignments`, but `findActiveAssignment` only ever
+    // matches `status = "active"` (see owner-access.ts doc comment), so a
+    // revoked assignment resolves to `undefined` here — identical to no
+    // assignment at all, and denies identically.
+    // A revoked row would look like `{ ...activeAssignment(), status: "revoked" }`
+    // in `trainer_client_assignments`, but the repository's query filters
+    // `WHERE status = 'active'`, so it resolves to `undefined` here too.
+    const repos = buildRepos({ assignmentRepo: { findActiveAssignment: vi.fn().mockResolvedValue(undefined) } });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/stats`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.progressRepo.getStatsRange).not.toHaveBeenCalled();
+  });
+
+  it("returns the StatsSummaryDTO for the CLIENT's userId, not the actor's", async () => {
+    const repos = buildRepos();
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/stats?range=week`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(emptyStatsSummary);
+    expect(repos.progressRepo.getStatsRange).toHaveBeenCalledWith(TENANT_ID, CLIENT_ID, "week");
+  });
+});
+
+describe("GET /trainer/clients/:clientUserId/progress/exercise-detail (GH #447)", () => {
+  let app: FastifyInstance;
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("denies a non-trainer role with 403, no repo call", async () => {
+    const repos = buildRepos();
+    app = await buildTestApp(repos, "member", MEMBER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/exercise-detail?title=Bench+Press`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.progressRepo.getExerciseDetail).not.toHaveBeenCalled();
+  });
+
+  it("denies a trainer-role actor without the trainer entitlement with 403, no repo call", async () => {
+    const repos = buildRepos({ entitlementReader: entitlementReader("pro") });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/exercise-detail?title=Bench+Press`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.progressRepo.getExerciseDetail).not.toHaveBeenCalled();
+  });
+
+  it("denies a trainer with no active assignment to the client with 403, no repo call", async () => {
+    const repos = buildRepos({ assignmentRepo: { findActiveAssignment: vi.fn().mockResolvedValue(undefined) } });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/exercise-detail?title=Bench+Press`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.progressRepo.getExerciseDetail).not.toHaveBeenCalled();
+  });
+
+  it("denies with 403 when the assignment is revoked (findActiveAssignment collapses revoked and missing)", async () => {
+    // A revoked row would look like `{ ...activeAssignment(), status: "revoked" }`
+    // in `trainer_client_assignments`, but the repository's query filters
+    // `WHERE status = 'active'`, so it resolves to `undefined` here too.
+    const repos = buildRepos({ assignmentRepo: { findActiveAssignment: vi.fn().mockResolvedValue(undefined) } });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/exercise-detail?title=Bench+Press`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.progressRepo.getExerciseDetail).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when ?title= is missing, even for an authorized trainer", async () => {
+    const repos = buildRepos();
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/exercise-detail`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(repos.progressRepo.getExerciseDetail).not.toHaveBeenCalled();
+  });
+
+  it("returns the ExerciseDetailDTO for the CLIENT's userId, not the actor's", async () => {
+    const repos = buildRepos();
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/exercise-detail?title=Bench+Press`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(emptyExerciseDetail);
+    expect(repos.progressRepo.getExerciseDetail).toHaveBeenCalledWith(TENANT_ID, CLIENT_ID, "Bench Press");
+  });
+});
+
+describe("GET /trainer/clients/:clientUserId/progress/weekly-overview (GH #447)", () => {
+  let app: FastifyInstance;
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it("denies a non-trainer role with 403, no repo call", async () => {
+    const repos = buildRepos();
+    app = await buildTestApp(repos, "member", MEMBER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/weekly-overview`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.progressRepo.getWeeklyOverview).not.toHaveBeenCalled();
+  });
+
+  it("denies a trainer-role actor without the trainer entitlement with 403, no repo call", async () => {
+    const repos = buildRepos({ entitlementReader: entitlementReader("pro") });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/weekly-overview`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.progressRepo.getWeeklyOverview).not.toHaveBeenCalled();
+  });
+
+  it("denies a trainer with no active assignment to the client with 403, no repo call", async () => {
+    const repos = buildRepos({ assignmentRepo: { findActiveAssignment: vi.fn().mockResolvedValue(undefined) } });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/weekly-overview`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.progressRepo.getWeeklyOverview).not.toHaveBeenCalled();
+  });
+
+  it("denies with 403 when the assignment is revoked (findActiveAssignment collapses revoked and missing)", async () => {
+    // A revoked row would look like `{ ...activeAssignment(), status: "revoked" }`
+    // in `trainer_client_assignments`, but the repository's query filters
+    // `WHERE status = 'active'`, so it resolves to `undefined` here too.
+    const repos = buildRepos({ assignmentRepo: { findActiveAssignment: vi.fn().mockResolvedValue(undefined) } });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/weekly-overview`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(repos.progressRepo.getWeeklyOverview).not.toHaveBeenCalled();
+  });
+
+  it("returns the WeeklyOverviewDTO for the CLIENT's userId, not the actor's", async () => {
+    const repos = buildRepos();
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/trainer/clients/${CLIENT_ID}/progress/weekly-overview?weekStart=2026-07-06`,
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(emptyWeeklyOverview);
+    const calledWith = (repos.progressRepo.getWeeklyOverview as ReturnType<typeof vi.fn>).mock.calls[0]![2] as Date;
+    expect(calledWith.toISOString().slice(0, 10)).toBe("2026-07-06");
+    expect(repos.progressRepo.getWeeklyOverview).toHaveBeenCalledWith(TENANT_ID, CLIENT_ID, expect.any(Date));
+  });
+});
+
 describe("GET /me/trainer-plan (15b-v2 Phase S2 — #283)", () => {
   let app: FastifyInstance;
   afterEach(async () => {
@@ -624,6 +930,131 @@ describe("GET /trainer/clients", () => {
       { clientUserId: CLIENT_ID, email: "client@example.com", status: "active" },
     ]);
     expect(repos.assignmentRepo.listByTrainer).toHaveBeenCalledWith(TENANT_ID, TRAINER_ID);
+  });
+
+  it("does not call metaRepo (or add meta fields) when it is absent (back-compat)", async () => {
+    const repos = buildRepos({
+      assignmentRepo: {
+        listByTrainer: vi.fn().mockResolvedValue([
+          { id: "a1", tenantId: TENANT_ID, trainerUserId: TRAINER_ID, clientUserId: CLIENT_ID, status: "active" },
+        ]),
+      },
+    });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/trainer/clients",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([
+      { clientUserId: CLIENT_ID, email: "client@example.com", status: "active" },
+    ]);
+  });
+
+  it("merges name/lastSessionAt/completionRate from metaRepo into each row (GH client-list-meta)", async () => {
+    const OTHER_CLIENT_ID = "aaaaaaaa-0000-0000-0000-000000000004";
+    const getClientListMeta = vi.fn().mockResolvedValue([
+      { clientUserId: CLIENT_ID, name: "Client One", lastSessionAt: "2026-08-01T09:00:00.000Z", completionRate: 75 },
+      { clientUserId: OTHER_CLIENT_ID, name: null, lastSessionAt: null, completionRate: null },
+    ]);
+    const repos = buildRepos({
+      assignmentRepo: {
+        listByTrainer: vi.fn().mockResolvedValue([
+          { id: "a1", tenantId: TENANT_ID, trainerUserId: TRAINER_ID, clientUserId: CLIENT_ID, status: "active" },
+          { id: "a2", tenantId: TENANT_ID, trainerUserId: TRAINER_ID, clientUserId: OTHER_CLIENT_ID, status: "active" },
+        ]),
+      },
+      userRepo: {
+        findById: vi.fn().mockImplementation(async (id: string) => ({ id, email: `${id}@example.com` })),
+      },
+      metaRepo: { getClientListMeta },
+    });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/trainer/clients",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([
+      {
+        clientUserId: CLIENT_ID,
+        email: `${CLIENT_ID}@example.com`,
+        status: "active",
+        name: "Client One",
+        lastSessionAt: "2026-08-01T09:00:00.000Z",
+        completionRate: 75,
+      },
+      {
+        clientUserId: OTHER_CLIENT_ID,
+        email: `${OTHER_CLIENT_ID}@example.com`,
+        status: "active",
+        name: null,
+        lastSessionAt: null,
+        completionRate: null,
+      },
+    ]);
+    // Called exactly once, with the tenant + the EXACT set of client ids —
+    // never a per-client call (no N+1).
+    expect(getClientListMeta).toHaveBeenCalledTimes(1);
+    expect(getClientListMeta).toHaveBeenCalledWith(TENANT_ID, [CLIENT_ID, OTHER_CLIENT_ID]);
+  });
+
+  it("gives a client with no profile/no sessions null meta fields, never fabricated values", async () => {
+    const getClientListMeta = vi.fn().mockResolvedValue([
+      { clientUserId: CLIENT_ID, name: null, lastSessionAt: null, completionRate: null },
+    ]);
+    const repos = buildRepos({
+      assignmentRepo: {
+        listByTrainer: vi.fn().mockResolvedValue([
+          { id: "a1", tenantId: TENANT_ID, trainerUserId: TRAINER_ID, clientUserId: CLIENT_ID, status: "active" },
+        ]),
+      },
+      metaRepo: { getClientListMeta },
+    });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/trainer/clients",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([
+      {
+        clientUserId: CLIENT_ID,
+        email: "client@example.com",
+        status: "active",
+        name: null,
+        lastSessionAt: null,
+        completionRate: null,
+      },
+    ]);
+  });
+
+  it("short-circuits an empty client list — never calls metaRepo", async () => {
+    const getClientListMeta = vi.fn();
+    const repos = buildRepos({
+      assignmentRepo: { listByTrainer: vi.fn().mockResolvedValue([]) },
+      metaRepo: { getClientListMeta },
+    });
+    app = await buildTestApp(repos, "trainer", TRAINER_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/trainer/clients",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+    expect(getClientListMeta).not.toHaveBeenCalled();
   });
 });
 

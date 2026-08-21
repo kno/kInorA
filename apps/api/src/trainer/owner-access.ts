@@ -143,8 +143,34 @@ export async function assertTrainerEntitled(
   ctx: ActorOwnerContext,
   deps: Pick<OwnerAccessDeps, "entitlementReader" | "observability">,
 ): Promise<void> {
-  if (ctx.role !== "trainer") {
+  if (!(await isTrainerEntitled(ctx, deps))) {
     denyOwnerAccess(ctx, deps.observability);
+  }
+}
+
+/**
+ * Non-throwing, side-effect-free check of the SAME two-step gate
+ * `assertTrainerEntitled` enforces (`role === "trainer"` AND the resolved
+ * billing tier is exactly `"trainer"`), for callers that need a plain
+ * boolean instead of a deny-and-log outcome.
+ *
+ * `GET /auth/profile`'s `isTrainer` flag (#453) is the motivating case: it is
+ * informational display state for the sidebar nav, not an authorization
+ * decision, so it must never emit an `owner_access.denied` observability
+ * event or throw `ForbiddenOwnerAccess` — that event means "someone was
+ * denied access to a resource," which is not what a normal profile read is.
+ * `assertTrainerEntitled` above delegates to this helper so the two never
+ * drift apart; only the throw+log wrapper differs between them.
+ *
+ * Ascending-cost order preserved: the entitlement read only runs once the
+ * in-memory role check has already passed.
+ */
+export async function isTrainerEntitled(
+  ctx: Pick<ActorOwnerContext, "tenantId" | "actorUserId" | "role">,
+  deps: Pick<OwnerAccessDeps, "entitlementReader">,
+): Promise<boolean> {
+  if (ctx.role !== "trainer") {
+    return false;
   }
 
   const entitlementCtx = await deps.entitlementReader.loadContext({
@@ -152,7 +178,5 @@ export async function assertTrainerEntitled(
     userId: ctx.actorUserId,
   });
   const effective = resolveEffectiveTier(entitlementCtx, new Date());
-  if (effective.tier !== "trainer") {
-    denyOwnerAccess(ctx, deps.observability);
-  }
+  return effective.tier === "trainer";
 }

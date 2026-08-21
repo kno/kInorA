@@ -1,12 +1,21 @@
 import type { FastifyPluginAsync } from "fastify";
 import { requireAuth } from "../auth/plugin.js";
 import type { DashboardSummaryDTO, ExerciseDetailDTO, StatsSummaryDTO, WeeklyOverviewDTO } from "@kinora/contracts";
+import type { EntitlementReaderPort } from "../billing/entitlement.js";
+import { isTrainerEntitled } from "../trainer/owner-access.js";
 
-type StatsRange = "week" | "month" | "year";
+export type StatsRange = "week" | "month" | "year";
 
 const STATS_RANGES: readonly StatsRange[] = ["week", "month", "year"];
 
-function parseStatsRange(value: unknown): StatsRange {
+/**
+ * Parses `?range=` into a validated `StatsRange`, defaulting to `"month"` for
+ * a missing/invalid value. Exported (09c-v1-progress-dashboard-stats +
+ * #447) so the trainer-scoped `.../progress/stats` route (trainer.ts) can
+ * reuse the EXACT SAME query parsing the self-scoped `/progress/stats` route
+ * uses below, rather than duplicating it.
+ */
+export function parseStatsRange(value: unknown): StatsRange {
   return typeof value === "string" && (STATS_RANGES as readonly string[]).includes(value)
     ? (value as StatsRange)
     : "month";
@@ -15,9 +24,11 @@ function parseStatsRange(value: unknown): StatsRange {
 /**
  * Parses `?weekStart=YYYY-MM-DD` into a `Date` (Slice 4b). Falls back to
  * `new Date()` (the current week) for a missing or invalid value — never a
- * 400, mirroring `parseStatsRange`'s fail-open default.
+ * 400, mirroring `parseStatsRange`'s fail-open default. Exported (#447) so
+ * the trainer-scoped `.../progress/weekly-overview` route (trainer.ts) can
+ * reuse this EXACT SAME parser instead of duplicating it.
  */
-function parseWeekStart(value: unknown): Date {
+export function parseWeekStart(value: unknown): Date {
   if (typeof value !== "string") {
     return new Date();
   }
@@ -34,6 +45,14 @@ export interface ProgressRouteRepo {
 
 export interface ProgressRoutesOptions {
   repo: ProgressRouteRepo;
+  /**
+   * The entitlement reader `viewerIsTrainer` (#452) reuses to resolve the
+   * SAME two-step gate `isTrainerEntitled` enforces (`role === "trainer"`
+   * AND the resolved billing tier is exactly `"trainer"`) — the SAME port
+   * every other billing decision in the app reads through, never a DB
+   * import in this route file.
+   */
+  entitlementReader: Pick<EntitlementReaderPort, "loadContext">;
 }
 
 /**
@@ -45,7 +64,7 @@ export interface ProgressRoutesOptions {
  * from the authenticated session, never from client input.
  */
 export const progressRoutes: FastifyPluginAsync<ProgressRoutesOptions> = async (fastify, options) => {
-  const repo = options.repo;
+  const { repo, entitlementReader } = options;
 
   fastify.get(
     "/progress/dashboard",
@@ -53,7 +72,27 @@ export const progressRoutes: FastifyPluginAsync<ProgressRoutesOptions> = async (
     async (request, reply) => {
       const { tenantId, userId, role } = request.authContext!;
       const summary = await repo.getDashboardSummary(tenantId, userId);
-      return reply.code(200).send({ ...summary, viewerIsTrainer: role === "trainer" });
+
+      // #452 — role-only was wrong: a `trainer`-role membership whose
+      // billing tier lapsed/was never granted must NOT see the mobile
+      // trainer-only nav (Clients, Trainer plan), which gates on this flag.
+      // Reuses the SAME non-throwing gate `GET /auth/profile`'s `isTrainer`
+      // uses (#453/#454) — never `assertTrainerEntitled`, which throws and
+      // logs an `owner_access.denied` event; a dashboard read is not a
+      // denial. Deny-by-default: any failure to resolve the entitlement
+      // context resolves `viewerIsTrainer` to `false` rather than failing
+      // the whole dashboard response.
+      let viewerIsTrainer = false;
+      try {
+        viewerIsTrainer = await isTrainerEntitled(
+          { tenantId, actorUserId: userId, role },
+          { entitlementReader }
+        );
+      } catch {
+        viewerIsTrainer = false;
+      }
+
+      return reply.code(200).send({ ...summary, viewerIsTrainer });
     }
   );
 

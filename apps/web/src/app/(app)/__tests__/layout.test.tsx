@@ -43,9 +43,13 @@ vi.mock("next-intl/server", () => ({
   })[key] ?? key),
 }));
 
-// Profile client is called only when a token exists (mocked as undefined above).
+// Profile client is called only when a token exists (mocked as undefined
+// above). Controllable `vi.fn` (not a plain inline arrow) so the #453
+// isTrainer tests below can drive `isTrainer` through the mocked profile
+// payload instead of a separate `fetchClients` call.
+const fetchProfile = vi.fn(async (_token: string) => null as unknown);
 vi.mock("../auth/profile-client", () => ({
-  fetchProfile: vi.fn(async () => null),
+  fetchProfile: (...args: [string]) => fetchProfile(...args),
 }));
 
 // 16a-v3-gym-white-label, Slice 5 — own-tenant branding fetch, called only
@@ -315,5 +319,92 @@ describe("AppLayout — isGym derivation for the Branding nav entry (GH #322)", 
     // Nav entry present (gym-tier) even though NO gym theme is injected.
     expect(html).toContain('href="/branding"');
     expect(html).not.toContain("--gym-accent");
+  });
+});
+
+// GH #453 — the trainer-only Clients nav entry is now gated on `isTrainer`
+// straight off GET /auth/profile (the SAME `role === "trainer"` AND
+// resolved-tier === "trainer" gate the server enforces), instead of a
+// separate `GET /trainer/clients` round-trip via `fetchClients` (removed).
+// Deny-by-default: `isTrainer !== true` on the profile payload — absent,
+// explicitly false, or no profile at all (no session, or the fetch failed) —
+// all hide the entry. This never runs client-side.
+describe("AppLayout — isTrainer derivation for the Clients nav entry (GH #453)", () => {
+  afterEach(() => {
+    jarGet.mockReset().mockReturnValue(undefined);
+    headersGet.mockReset().mockReturnValue(undefined);
+    fetchOwnBranding.mockReset().mockResolvedValue({ kind: "forbidden" });
+    extractGymSlugFromHost.mockReset().mockReturnValue(null);
+    fetchPublicBranding.mockReset().mockResolvedValue(null);
+    fetchProfile.mockReset().mockResolvedValue(null);
+  });
+
+  it("wires isTrainer=true through to the AppShell when the profile's isTrainer is true", async () => {
+    jarGet.mockReturnValue({ value: "session-token-123" });
+    fetchProfile.mockResolvedValue({
+      email: "trainer@example.com",
+      initials: "T",
+      tenantName: "Acme",
+      isTrainer: true,
+    });
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    expect(html).toContain('href="/clients"');
+  });
+
+  it("wires isTrainer=false through to the AppShell when the profile's isTrainer is false", async () => {
+    jarGet.mockReturnValue({ value: "session-token-123" });
+    fetchProfile.mockResolvedValue({
+      email: "member@example.com",
+      initials: "M",
+      tenantName: "Acme",
+      isTrainer: false,
+    });
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    expect(html).not.toContain('href="/clients"');
+  });
+
+  it("wires isTrainer=false through to the AppShell when the profile omits isTrainer entirely", async () => {
+    jarGet.mockReturnValue({ value: "session-token-123" });
+    fetchProfile.mockResolvedValue({
+      email: "member@example.com",
+      initials: "M",
+      tenantName: "Acme",
+    });
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    expect(html).not.toContain('href="/clients"');
+  });
+
+  it("wires isTrainer=false through to the AppShell when there is no session token (fetchProfile never called)", async () => {
+    jarGet.mockReturnValue(undefined);
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    expect(fetchProfile).not.toHaveBeenCalled();
+    expect(html).not.toContain('href="/clients"');
+  });
+
+  it("wires isTrainer=false through to the AppShell when the profile fetch fails (fetchProfile resolves null)", async () => {
+    jarGet.mockReturnValue({ value: "session-token-123" });
+    fetchProfile.mockResolvedValue(null);
+
+    const html = renderToStringWithIntl(
+      await AppLayout({ children: <p>Page content here</p> })
+    );
+
+    expect(html).not.toContain('href="/clients"');
   });
 });

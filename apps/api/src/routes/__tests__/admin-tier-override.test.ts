@@ -47,6 +47,7 @@ function buildRepo(
       id: "override-1",
       endsAt: new Date("2026-08-02T13:00:00Z"),
     }),
+    setTenantOwnerRole: vi.fn().mockResolvedValue(1),
     ...overrides,
   };
 }
@@ -205,7 +206,7 @@ describe("POST /admin/tenants/:tenantId/tier-override/revoke", () => {
 
   it("returns 200 for a successful revoke", async () => {
     const repo = buildRepo(ADMIN_USER_ROW, {
-      loadActiveOverride: vi.fn().mockResolvedValue({ id: "override-1" }),
+      loadActiveOverride: vi.fn().mockResolvedValue({ id: "override-1", tier: "trainer" }),
     });
     app = await buildTestApp(ADMIN_USER_ROW, repo);
 

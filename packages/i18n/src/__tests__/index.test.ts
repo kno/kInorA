@@ -307,8 +307,26 @@ describe("@kinora/i18n package assembly", () => {
     const clientsKeys = Object.keys(flat).filter((key) => key.startsWith("clients."));
     // Trainer client-list (19) + status.* (3) + createPlan.* (10) = 32,
     // − 1 (kno/kInorA#436: `createPlan.success` — the web and mobile forms both
-    //   navigate away on success rather than rendering a confirmation).
-    expect(clientsKeys).toHaveLength(31);
+    //   navigate away on success rather than rendering a confirmation) = 31.
+    // GH #447 (trainer client-detail surface, PR 2/2) adds 27: quick-action
+    // links on the list row (quickActionsAria + quickActions.* = 4), the
+    // detail-page tabs (tabsAria + tabs.* + notFound + loadError = 6), the
+    // Dashboard tab (6), the Progress tab (3), and the Plan tab (8) = 63.
+    // GH #447 workspace closeout (the /clients two-column master-detail,
+    // rich rows, search/filters and the invite sheet) adds 16: workspace.
+    // detailAria (1), roster.* (searchLabel/searchPlaceholder/filtersAria/
+    // filters.all/noMatches/pendingInvite/adherence/recency.{none,today,
+    // yesterday,daysAgo} = 11), and invite.* (eyebrow/description/closeAria/
+    // cancel = 4) — and removes 1 (`inviteFormAria`: the always-visible
+    // inline invite panel it labelled was replaced by the invite sheet,
+    // which has its own `aria-labelledby`) = 63 + 16 - 1 = 78.
+    // Client-detail real-browser findings fix (kno/kInorA, 2026-08) adds 3:
+    // `detail.forbiddenBody` (a genuine per-client 403 on an ACTIVE client,
+    // distinct from the top-level accessRestricted copy) and
+    // `detail.{pendingTitle,pendingBody}` (the honest "invitation pending"
+    // state rendered instead of fetching a tab body for a non-active
+    // selected client) = 78 + 3 = 81.
+    expect(clientsKeys).toHaveLength(81);
     expect(flat["clients.pageTitle"]).toBe("My Clients");
     expect(flattenMessages(catalogs.es)["clients.pageTitle"]).toBe("Mis clientes");
   });
@@ -345,7 +363,9 @@ describe("@kinora/i18n package assembly", () => {
     // (conditional entry visible only to gym-tier tenants, mirroring admin).
     // + 1 `appNav.plans` authored for 17d PR A (the /plans nav entry, shared
     // SidebarNav.NAV_ITEMS + MobileNav.SECONDARY_TABS).
-    expect(appNavKeys).toHaveLength(12);
+    // + 1 `appNav.clients` authored for GH #449 (the trainer-only Clients nav
+    // entry, gated on the server-resolved `fetchClients` trainer check).
+    expect(appNavKeys).toHaveLength(13);
     expect(flat["appNav.dashboard"]).toBe("Dashboard");
     expect(flattenMessages(catalogs.es)["appNav.dashboard"]).toBe("Panel");
     expect(flat["appNav.admin"]).toBeTruthy();
@@ -354,6 +374,8 @@ describe("@kinora/i18n package assembly", () => {
     expect(flattenMessages(catalogs.es)["appNav.branding"]).toBeTruthy();
     expect(flat["appNav.plans"]).toBe("Plans");
     expect(flattenMessages(catalogs.es)["appNav.plans"]).toBe("Planes");
+    expect(flat["appNav.clients"]).toBeTruthy();
+    expect(flattenMessages(catalogs.es)["appNav.clients"]).toBeTruthy();
   });
 
   it("the plans namespace is present with EN+ES parity (17d PR A — /plans list)", () => {

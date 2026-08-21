@@ -2,10 +2,13 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import type {
   ClientDashboardDTO,
   ClientSummaryDTO,
+  ExerciseDetailDTO,
   InviteClientRequest,
   PlanBranding,
+  StatsSummaryDTO,
   TrainerClientAssignmentDTO,
   UserId,
+  WeeklyOverviewDTO,
 } from "@kinora/contracts";
 import { requireRole, requireAuth } from "../auth/plugin.js";
 import { assertTrainerEntitled, resolveAuthorizedOwner, ForbiddenOwnerAccess } from "../trainer/owner-access.js";
@@ -13,6 +16,8 @@ import type { ObservabilityLogger } from "../observability/event-logger.js";
 import type { ActorOwnerContext } from "../trainer/owner-access.js";
 import { resolveClientTrainerTenant } from "../trainer/client-access.js";
 import type { EntitlementReaderPort } from "../billing/entitlement.js";
+import { parseStatsRange, parseWeekStart } from "./progress.js";
+import type { StatsRange } from "./progress.js";
 
 /**
  * Trainer invite/assignment/list-clients routes (15a-v2-trainer-account-
@@ -78,6 +83,44 @@ interface TrainerRouteAssignmentRepo {
  */
 interface TrainerRouteDashboardRepo {
   getClientDashboard(tenantId: string, ownerUserId: string, now?: Date): Promise<ClientDashboardDTO>;
+}
+
+/**
+ * Local structural port for the batched client-list enrichment
+ * (`WorkoutSessionRepository.getClientListMeta`, GH client-list-meta) — the
+ * route never imports the DB layer directly (architecture rule
+ * `routes-no-db-layer`). One call for the WHOLE roster, never per-client.
+ */
+interface TrainerRouteClientListMetaRepo {
+  getClientListMeta(
+    tenantId: string,
+    clientUserIds: string[],
+  ): Promise<
+    Array<{
+      clientUserId: string;
+      name: string | null;
+      lastSessionAt: string | null;
+      completionRate: number | null;
+    }>
+  >;
+}
+
+/**
+ * Local structural port for the trainer-scoped progress reads (GH #447) —
+ * `GET /trainer/clients/:clientUserId/progress/{stats,exercise-detail,
+ * weekly-overview}`. Same three `ProgressRouteRepo` methods `progress.ts`'s
+ * self-scoped routes call, declared locally (not imported) so this route
+ * never imports the DB layer directly (architecture rule
+ * `routes-no-db-layer`) — the concrete `WorkoutSessionRepository` (wired in
+ * app.ts, the SAME instance `progressRoutes`' `repo` option uses) satisfies
+ * this structurally. `tenantId`/`userId` signatures are byte-identical to
+ * `ProgressRouteRepo`'s — the resolved owner id (never the actor id) is what
+ * gets passed as `userId`.
+ */
+interface TrainerRouteProgressRepo {
+  getStatsRange(tenantId: string, userId: string, range: StatsRange): Promise<StatsSummaryDTO>;
+  getWeeklyOverview(tenantId: string, userId: string, weekStart: Date): Promise<WeeklyOverviewDTO>;
+  getExerciseDetail(tenantId: string, userId: string, title: string): Promise<ExerciseDetailDTO>;
 }
 
 /**
@@ -159,6 +202,21 @@ export interface TrainerRoutesOptions {
   entitlementReader: Pick<EntitlementReaderPort, "loadContext">;
   /** Backs `GET /trainer/clients/:clientUserId/dashboard` (15b-v2, Phase S1). */
   dashboardRepo: TrainerRouteDashboardRepo;
+  /**
+   * Backs `GET /trainer/clients/:clientUserId/progress/{stats,exercise-
+   * detail,weekly-overview}` (GH #447). Optional so existing registrations/
+   * tests that predate #447 keep compiling unchanged; when absent, these
+   * three routes are not registered at all (mirrors `planRoutes`'
+   * `trainerAccess`-gated conditional registration in plan.ts).
+   */
+  progressRepo?: TrainerRouteProgressRepo;
+  /**
+   * Backs `GET /trainer/clients`'s `name`/`lastSessionAt`/`completionRate`
+   * enrichment (GH client-list-meta). Optional so existing registrations/
+   * tests keep compiling unchanged; when absent the route serves the base
+   * `{ clientUserId, email, status }` shape exactly as before this change.
+   */
+  metaRepo?: TrainerRouteClientListMetaRepo;
   /** Backs `GET /me/trainer-plan` (15b-v2, Phase S2 — #283). */
   planRepo: TrainerRoutePlanRepo;
   /**
@@ -220,6 +278,8 @@ export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fa
     dashboardRepo,
     planRepo,
     specRepo,
+    progressRepo,
+    metaRepo,
     observability,
     seatSync,
   } = options;
@@ -276,6 +336,107 @@ export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fa
       return reply.code(200).send(dashboard);
     },
   );
+
+  // GET /trainer/clients/:clientUserId/progress/{stats,exercise-detail,
+  // weekly-overview} (GH #447). Registered only when `progressRepo` is
+  // wired (see doc comment on the option) — mirrors `planRoutes`'
+  // `trainerAccess`-gated conditional registration in plan.ts. Each route
+  // resolves `ownerUserId` through the EXACT SAME `resolveAuthorizedOwner`
+  // choke point `GET /trainer/clients/:clientUserId/dashboard` above uses
+  // (role → tier → ACTIVE assignment, deny-by-default, flat 403 on any
+  // failure — never leaking which check failed). The resolved owner id is
+  // then passed as `userId` to the SAME `ProgressRouteRepo`-shaped methods
+  // the self-scoped `/progress/*` routes call (progress.ts) — same DTOs,
+  // same repository signatures, no widening beyond the resolved owner.
+  if (progressRepo) {
+    fastify.get(
+      "/trainer/clients/:clientUserId/progress/stats",
+      { preHandler: requireAuth() },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        const ctx = toActorOwnerContext(request);
+        const { clientUserId } = request.params as { clientUserId: string };
+
+        let ownerUserId: UserId;
+        try {
+          ownerUserId = await resolveAuthorizedOwner(
+            ctx,
+            { assignmentRepo, entitlementReader, observability },
+            clientUserId as UserId,
+          );
+        } catch (err) {
+          if (err instanceof ForbiddenOwnerAccess) {
+            return reply.code(403).send({ error: "forbidden" });
+          }
+          throw err;
+        }
+
+        const range = parseStatsRange((request.query as { range?: string } | undefined)?.range);
+        const summary = await progressRepo.getStatsRange(ctx.tenantId, ownerUserId, range);
+        return reply.code(200).send(summary);
+      },
+    );
+
+    fastify.get(
+      "/trainer/clients/:clientUserId/progress/exercise-detail",
+      { preHandler: requireAuth() },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        const ctx = toActorOwnerContext(request);
+        const { clientUserId } = request.params as { clientUserId: string };
+
+        let ownerUserId: UserId;
+        try {
+          ownerUserId = await resolveAuthorizedOwner(
+            ctx,
+            { assignmentRepo, entitlementReader, observability },
+            clientUserId as UserId,
+          );
+        } catch (err) {
+          if (err instanceof ForbiddenOwnerAccess) {
+            return reply.code(403).send({ error: "forbidden" });
+          }
+          throw err;
+        }
+
+        // Same "?title= required" contract as the self-scoped route
+        // (progress.ts) — a missing/blank title 400s BEFORE the repo call,
+        // regardless of whether the caller was authorized to reach it.
+        const title = (request.query as { title?: string } | undefined)?.title;
+        if (typeof title !== "string" || title.trim() === "") {
+          return reply.code(400).send({ error: "title_required" });
+        }
+
+        const detail = await progressRepo.getExerciseDetail(ctx.tenantId, ownerUserId, title);
+        return reply.code(200).send(detail);
+      },
+    );
+
+    fastify.get(
+      "/trainer/clients/:clientUserId/progress/weekly-overview",
+      { preHandler: requireAuth() },
+      async (request: FastifyRequest, reply: FastifyReply) => {
+        const ctx = toActorOwnerContext(request);
+        const { clientUserId } = request.params as { clientUserId: string };
+
+        let ownerUserId: UserId;
+        try {
+          ownerUserId = await resolveAuthorizedOwner(
+            ctx,
+            { assignmentRepo, entitlementReader, observability },
+            clientUserId as UserId,
+          );
+        } catch (err) {
+          if (err instanceof ForbiddenOwnerAccess) {
+            return reply.code(403).send({ error: "forbidden" });
+          }
+          throw err;
+        }
+
+        const weekStart = parseWeekStart((request.query as { weekStart?: string } | undefined)?.weekStart);
+        const overview = await progressRepo.getWeeklyOverview(ctx.tenantId, ownerUserId, weekStart);
+        return reply.code(200).send(overview);
+      },
+    );
+  }
 
   // GET /me/trainer-plan (15b-v2-trainer-dashboard-branding, Phase S2 — #283).
   // `resolveClientTrainerTenant` is the DEDICATED deny-by-default client→
@@ -486,6 +647,30 @@ export const trainerRoutes: FastifyPluginAsync<TrainerRoutesOptions> = async (fa
           email: user?.email ?? "",
           status: assignment.status,
         });
+      }
+
+      // GH client-list-meta: enrich with name/lastSessionAt/completionRate in
+      // ONE batched call for the whole roster (never per-client). `metaRepo`
+      // is optional (back-compat for pre-this-change registrations/tests);
+      // absent ⇒ the base ClientSummaryDTO shape ships unchanged. An empty
+      // roster short-circuits before calling out at all. A meta-read failure
+      // is NOT caught here and propagates like any other repository read in
+      // this route (e.g. `assignmentRepo.listByTrainer`/`userRepo.findById`
+      // above) — nothing in this handler already tolerates a partial
+      // failure, so a broken enrichment source fails the whole request with
+      // the default 500 rather than silently shipping unenriched rows.
+      if (metaRepo && clients.length > 0) {
+        const meta = await metaRepo.getClientListMeta(
+          ctx.tenantId,
+          clients.map((client) => client.clientUserId),
+        );
+        const metaByClientId = new Map(meta.map((entry) => [entry.clientUserId, entry]));
+        for (const client of clients) {
+          const entry = metaByClientId.get(client.clientUserId);
+          client.name = entry?.name ?? null;
+          client.lastSessionAt = entry?.lastSessionAt ?? null;
+          client.completionRate = entry?.completionRate ?? null;
+        }
       }
 
       return reply.code(200).send(clients);

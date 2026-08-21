@@ -26,7 +26,8 @@
     "logout": "Log out",
     "admin": "Admin",
     "branding": "Branding",
-    "plans": "Plans"
+    "plans": "Plans",
+    "clients": "Clients"
   },
   "hero": {
     "eyebrow": "AI Coach",
@@ -1368,17 +1369,21 @@
     "roleCoach": "kInorA"
   },
   "clients": {
+    "eyebrow": "Trainer space",
     "pageTitle": "My Clients",
     "pageDescription": "Invite clients and create plans on their behalf.",
     "navLabel": "Clients",
     "loadingLabel": "Loading clients…",
     "retryLabel": "Retry",
     "loadError": "We couldn't load your clients. Please try again.",
+    "emptyTitle": "You don't have any clients yet",
     "emptyState": "You don't have any clients yet. Invite one below.",
+    "inviteCta": "Invite client",
+    "rosterTitle": "Your roster",
+    "rosterCount": "{count, plural, one {# client} other {# clients}}",
     "listAria": "Client list",
     "accessRestrictedTitle": "Trainer access required",
     "accessRestrictedBody": "This page is only available to trainer accounts.",
-    "inviteFormAria": "Invite a client",
     "inviteTitle": "Invite a client",
     "inviteEmailLabel": "Client email",
     "inviteSubmit": "Send invite",
@@ -1402,6 +1407,76 @@
       "submitting": "Creating…",
       "errorGeneric": "We couldn't create the plan. Please try again.",
       "errorForbidden": "You are not authorized to create a plan for this client."
+    },
+    "quickActionsAria": "Quick actions for {email}",
+    "quickActions": {
+      "dashboard": "Dashboard",
+      "progress": "Progress",
+      "plan": "Plan"
+    },
+    "workspace": {
+      "detailAria": "Client detail"
+    },
+    "roster": {
+      "searchLabel": "Search clients",
+      "searchPlaceholder": "Search by name or email",
+      "filtersAria": "Filter clients",
+      "filters": {
+        "all": "All"
+      },
+      "noMatches": "No clients match your search.",
+      "pendingInvite": "Pending acceptance",
+      "adherence": "{percent}% adherence",
+      "recency": {
+        "none": "No sessions yet",
+        "today": "Session today",
+        "yesterday": "Session yesterday",
+        "daysAgo": "{days, plural, one {Session # day ago} other {Session # days ago}}"
+      }
+    },
+    "invite": {
+      "eyebrow": "New assignment",
+      "description": "We'll send a personal invite to their email. No shareable link is generated.",
+      "closeAria": "Close",
+      "cancel": "Cancel"
+    },
+    "detail": {
+      "tabsAria": "Client sections",
+      "tabs": {
+        "dashboard": "Dashboard",
+        "progress": "Progress",
+        "plan": "Plan"
+      },
+      "notFound": "This client isn't in your roster.",
+      "loadError": "We couldn't load this section. Please try again.",
+      "forbiddenBody": "You don't have access to this client's data.",
+      "pendingTitle": "Invitation pending",
+      "pendingBody": "This client hasn't accepted their invitation yet. Their data will appear here once they do."
+    },
+    "dashboard": {
+      "completionRateLabel": "28-day completion",
+      "completionRateSub": "{completed} of {planned} planned sessions",
+      "rpeTrendTitle": "RPE trend (8 weeks)",
+      "noRpeData": "Not enough rated sets yet.",
+      "recentSessionsTitle": "Recent sessions",
+      "noSessions": "No completed sessions yet."
+    },
+    "progress": {
+      "rangeAria": "Progress period",
+      "exerciseDetailTitle": "History — {exercise}",
+      "exerciseDetailEmpty": "No history recorded yet."
+    },
+    "plan": {
+      "previousWeek": "Previous week",
+      "nextWeek": "Next week",
+      "weekAria": "Weekly plan board",
+      "empty": "No plan scheduled for this week.",
+      "status": {
+        "done": "Done",
+        "active": "Active",
+        "rest": "Rest",
+        "soon": "Upcoming"
+      }
     }
   },
   "admin": {

@@ -1,3 +1,4 @@
+import type { MembershipRole } from "@kinora/contracts";
 import type { BillingTier } from "./types.js";
 
 /**
@@ -19,6 +20,17 @@ export interface TenantBillingOverrideRow {
   id: string;
   startsAt: Date;
   endsAt: Date;
+}
+
+/**
+ * Shape returned by `loadActiveOverride`. `tier` is required (#449) so
+ * `RevokeTenantTierOverride` can decide whether the override being revoked is
+ * a `trainer` override — the only tier that requires demoting the tenant
+ * owner's `memberships.role` back to `owner`.
+ */
+export interface ActiveTierOverrideRow {
+  id: string;
+  tier: BillingTier;
 }
 
 export interface GrantTierOverrideInput {
@@ -53,7 +65,7 @@ export interface RevokeTierOverrideInput {
  */
 export interface TierOverrideAdminPort {
   loadTenant(tenantId: string): Promise<{ id: string } | null>;
-  loadActiveOverride(tenantId: string, now: Date): Promise<{ id: string } | null>;
+  loadActiveOverride(tenantId: string, now: Date): Promise<ActiveTierOverrideRow | null>;
   /**
    * Grants the override. The adapter runs this as ONE transaction that
    * (1) takes a per-tenant Postgres advisory lock, (2) when an `operationKey`
@@ -76,6 +88,21 @@ export interface TierOverrideAdminPort {
    * `{ id, endsAt }` (idempotent success for an already-revoked override).
    */
   revokeTierOverride(input: RevokeTierOverrideInput): Promise<{ id: string; endsAt: Date }>;
+  /**
+   * Transitions the tenant's OWNER membership role (#449) — grants of the
+   * `trainer` tier must ALSO promote `memberships.role` from `owner` to
+   * `trainer` so `assertTrainerEntitled` (owner-access.ts), which requires
+   * BOTH role and entitlement, actually admits an admin-provisioned trainer.
+   * Revoking a `trainer` override symmetrically demotes `trainer` back to
+   * `owner`.
+   *
+   * Scoped `WHERE tenant_id = $1 AND role = $2` — MUST NEVER match a
+   * `member` row (invited clients share the same tenant). Resolves the
+   * number of rows updated: `0` is a normal idempotent outcome (e.g. the
+   * owner membership is already `trainer` on a replayed grant), never an
+   * error.
+   */
+  setTenantOwnerRole(tenantId: string, from: MembershipRole, to: MembershipRole): Promise<number>;
 }
 
 /** Request shape from the route layer — `tier` is unvalidated user input. */
@@ -182,6 +209,18 @@ export class GrantTenantTierOverride {
       return { ok: false, reason: "active_override_exists" };
     }
 
+    // Role promotion (#449): a `trainer` grant ALSO promotes the tenant
+    // owner's membership role, so `assertTrainerEntitled` (which requires
+    // BOTH role and entitlement) admits this tenant. Runs AFTER the override
+    // write succeeds — a denied/failed grant never touches roles — and on
+    // EVERY successful trainer grant, including an idempotent replay
+    // (#313), so a retried grant still ends up with the role set even if
+    // the original attempt's role write was lost. `gym` grants never touch
+    // roles.
+    if (input.tier === "trainer") {
+      await this.port.setTenantOwnerRole(input.tenantId, "owner", "trainer");
+    }
+
     return {
       ok: true,
       override: {
@@ -219,6 +258,13 @@ export class RevokeTenantTierOverride {
       actorUserId: input.actorUserId,
       now,
     });
+
+    // Role demotion (#449): revoking a `trainer` override symmetrically
+    // demotes the tenant owner's membership role back to `owner`. Revoking a
+    // `gym` override never touches roles.
+    if (activeOverride.tier === "trainer") {
+      await this.port.setTenantOwnerRole(input.tenantId, "trainer", "owner");
+    }
 
     return {
       ok: true,

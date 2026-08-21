@@ -364,9 +364,15 @@ export async function buildApp(
   // Health routes
   await app.register(healthRoute);
 
+  // 11a billing core reader — constructed here (ahead of every other billing
+  // wiring below) so GET /auth/profile can resolve `isTrainer` off the SAME
+  // instance every other billing decision in this file reuses (#453).
+  const billingStateReader = new BillingStateReaderRepository(database);
+
   // Auth routes (register + login + logout + profile)
   await app.register(authRoutes, {
     authService: new AuthService(database, observabilityLogger),
+    entitlementReader: billingStateReader,
   });
 
   // Social login routes (OIDC provider abstraction + Google)
@@ -443,7 +449,9 @@ export async function buildApp(
   // 11a billing core — entitlement + atomic hybrid quota consume.
   // Repositories live in the infra layer; the pure use cases depend only on
   // their ports. The composition root is the sole place they are wired.
-  const billingStateReader = new BillingStateReaderRepository(database);
+  // `billingStateReader` itself is constructed earlier (ahead of `authRoutes`
+  // registration, #453) so GET /auth/profile can reuse the SAME instance to
+  // resolve `isTrainer` — no separate reader is ever built for that check.
   const quotaLedgerRepo = new QuotaLedgerRepository(database);
   const checkEntitlement = new CheckEntitlement(billingStateReader);
   const checkAndConsumeQuota = new CheckAndConsumeQuota(checkEntitlement, quotaLedgerRepo);
@@ -592,8 +600,12 @@ export async function buildApp(
   // Dashboard progress summary (09c-v1-progress-dashboard-stats, Slice 2).
   // Reuses the same WorkoutSessionRepository instance (getDashboardSummary
   // is one more bounded read method alongside listSessionHistory).
+  // `entitlementReader` (#452) reuses the SAME `billingStateReader` instance
+  // every other billing decision in this file uses, so `viewerIsTrainer` on
+  // GET /progress/dashboard stays gate-equivalent to `isTrainerEntitled`.
   await app.register(progressRoutes, {
     repo: workoutSessionRepo,
+    entitlementReader: billingStateReader,
   });
 
   // Exercise library — GET /exercises/catalog(/:id|/facets), requireAuth().
@@ -626,6 +638,7 @@ export async function buildApp(
       loadActiveOverride: (tenantId, now) => tierOverrideAdminRepo.loadActiveOverride(tenantId, now),
       grantTierOverride: (input) => tierOverrideAdminRepo.grantTierOverride(input),
       revokeTierOverride: (input) => tierOverrideAdminRepo.revokeTierOverride(input),
+      setTenantOwnerRole: (tenantId, from, to) => tierOverrideAdminRepo.setTenantOwnerRole(tenantId, from, to),
     },
   });
 
@@ -756,6 +769,11 @@ export async function buildApp(
     // `GET /trainer/clients/:clientUserId/dashboard`. Reuses the SAME
     // `WorkoutSessionRepository` instance every other progress read uses.
     dashboardRepo: workoutSessionRepo,
+    // GH client-list-meta — enables the name/lastSessionAt/completionRate
+    // fields on `GET /trainer/clients`. Reuses the SAME
+    // `WorkoutSessionRepository` instance every other progress/dashboard
+    // read above uses — no new repository construction.
+    metaRepo: workoutSessionRepo,
     // 15b-v2-trainer-dashboard-branding, Phase S2 (#283) — enables
     // `GET /me/trainer-plan`. Reuses the SAME `WorkoutPlanRepository`
     // instance every other plan read uses.
@@ -764,6 +782,11 @@ export async function buildApp(
     // the `GET /me/trainer-plan` response. Reuses the SAME
     // `PlanSpecRepository` instance every other confirmed-spec read uses.
     specRepo: planSpecRepo,
+    // GH #447 — enables `GET /trainer/clients/:clientUserId/progress/
+    // {stats,exercise-detail,weekly-overview}`. Reuses the SAME
+    // `WorkoutSessionRepository` instance `progressRoutes`' `repo` option
+    // above uses — no new repository construction.
+    progressRepo: workoutSessionRepo,
     // #310 — records `owner_access.denied` on trainer-authorization denials.
     observability: observabilityLogger,
   });

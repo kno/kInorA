@@ -26,7 +26,8 @@
     "logout": "Cerrar sesión",
     "admin": "Administración",
     "branding": "Marca",
-    "plans": "Planes"
+    "plans": "Planes",
+    "clients": "Clientes"
   },
   "hero": {
     "eyebrow": "Entrenador con IA",
@@ -1368,17 +1369,21 @@
     "roleCoach": "kInorA"
   },
   "clients": {
+    "eyebrow": "Espacio de entrenador",
     "pageTitle": "Mis clientes",
     "pageDescription": "Invita a clientes y crea planes en su nombre.",
     "navLabel": "Clientes",
     "loadingLabel": "Cargando clientes…",
     "retryLabel": "Reintentar",
     "loadError": "No se pudieron cargar tus clientes. Inténtalo de nuevo.",
+    "emptyTitle": "Todavía no tienes clientes",
     "emptyState": "Todavía no tienes clientes. Invita a uno a continuación.",
+    "inviteCta": "Invitar cliente",
+    "rosterTitle": "Tu cartera",
+    "rosterCount": "{count, plural, one {# cliente} other {# clientes}}",
     "listAria": "Lista de clientes",
     "accessRestrictedTitle": "Se requiere una cuenta de entrenador",
     "accessRestrictedBody": "Esta página solo está disponible para cuentas de entrenador.",
-    "inviteFormAria": "Invitar a un cliente",
     "inviteTitle": "Invitar a un cliente",
     "inviteEmailLabel": "Correo del cliente",
     "inviteSubmit": "Enviar invitación",
@@ -1402,6 +1407,76 @@
       "submitting": "Creando…",
       "errorGeneric": "No se pudo crear el plan. Inténtalo de nuevo.",
       "errorForbidden": "No tienes autorización para crear un plan para este cliente."
+    },
+    "quickActionsAria": "Acciones rápidas de {email}",
+    "quickActions": {
+      "dashboard": "Dashboard",
+      "progress": "Progreso",
+      "plan": "Plan"
+    },
+    "workspace": {
+      "detailAria": "Detalle del cliente"
+    },
+    "roster": {
+      "searchLabel": "Buscar clientes",
+      "searchPlaceholder": "Buscar por nombre o correo",
+      "filtersAria": "Filtrar clientes",
+      "filters": {
+        "all": "Todos"
+      },
+      "noMatches": "No hay clientes que coincidan con la búsqueda.",
+      "pendingInvite": "Pendiente de aceptar",
+      "adherence": "{percent}% adherencia",
+      "recency": {
+        "none": "Sin sesiones todavía",
+        "today": "Sesión hoy",
+        "yesterday": "Sesión ayer",
+        "daysAgo": "{days, plural, one {Sesión hace # día} other {Sesión hace # días}}"
+      }
+    },
+    "invite": {
+      "eyebrow": "Nueva asignación",
+      "description": "Enviaremos una invitación personal a su correo. No se genera ningún enlace para compartir.",
+      "closeAria": "Cerrar",
+      "cancel": "Cancelar"
+    },
+    "detail": {
+      "tabsAria": "Secciones del cliente",
+      "tabs": {
+        "dashboard": "Dashboard",
+        "progress": "Progreso",
+        "plan": "Plan"
+      },
+      "notFound": "Este cliente no está en tu cartera.",
+      "loadError": "No se pudo cargar esta sección. Inténtalo de nuevo.",
+      "forbiddenBody": "No tienes acceso a los datos de este cliente.",
+      "pendingTitle": "Invitación pendiente",
+      "pendingBody": "Este cliente todavía no ha aceptado la invitación. Sus datos aparecerán aquí en cuanto lo haga."
+    },
+    "dashboard": {
+      "completionRateLabel": "Cumplimiento a 28 días",
+      "completionRateSub": "{completed} de {planned} sesiones planificadas",
+      "rpeTrendTitle": "Tendencia de RPE (8 semanas)",
+      "noRpeData": "Aún no hay suficientes series valoradas.",
+      "recentSessionsTitle": "Sesiones recientes",
+      "noSessions": "Todavía no hay sesiones completadas."
+    },
+    "progress": {
+      "rangeAria": "Periodo de progreso",
+      "exerciseDetailTitle": "Historial — {exercise}",
+      "exerciseDetailEmpty": "Todavía no hay historial registrado."
+    },
+    "plan": {
+      "previousWeek": "Semana anterior",
+      "nextWeek": "Semana siguiente",
+      "weekAria": "Tablero semanal del plan",
+      "empty": "No hay plan programado esta semana.",
+      "status": {
+        "done": "Hecho",
+        "active": "Activo",
+        "rest": "Descanso",
+        "soon": "Próximo"
+      }
     }
   },
   "admin": {

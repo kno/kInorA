@@ -45,6 +45,15 @@ import { fetchOwnBranding } from "./auth/gym-branding-client";
  * Branding Studio nav gate (GH #322, a gym-tier entitlement), never to drive
  * the theme. Both fetches (own-tenant for nav, public-by-slug for the theme)
  * run concurrently alongside the profile fetch.
+ *
+ * `isTrainer` (GH #453 — the "Clients" nav entry) now comes straight off the
+ * SAME `fetchProfile` call already made for the sidebar identity, via the
+ * `isTrainer` field `GET /auth/profile` returns (mirroring the real server
+ * gate: role='trainer' AND resolved tier='trainer'). This removes the
+ * separate `GET /trainer/clients` round-trip (`fetchClients`) the layout
+ * previously ran only to derive this flag (GH #449). Deny-by-default: a
+ * missing profile (no session, or the fetch failed) or a missing/false
+ * `isTrainer` field both resolve to `false`. This never runs client-side.
  */
 export default async function AppLayout({
   children,
@@ -63,10 +72,11 @@ export default async function AppLayout({
   let brandingStyle: string | null = null;
   let isAdmin = false;
   let isGym = false;
+  let isTrainer = false;
   if (token) {
     // Concurrent fetches: profile + own-tenant branding (both token-gated),
-    // plus the PUBLIC host-slug branding (only needs the slug) that drives the
-    // theme. `null` when there is no gym slug (apex, www, localhost).
+    // plus the PUBLIC host-slug branding (only needs the slug) that drives
+    // the theme. `null` when there is no gym slug (apex, www, localhost).
     const [profile, branding, hostBranding] = await Promise.all([
       fetchProfile(token),
       fetchOwnBranding(token),
@@ -79,6 +89,9 @@ export default async function AppLayout({
         plan: "Free",
       };
       isAdmin = profile.isAdmin === true;
+      // GH #453: deny-by-default — only an explicit `true` from the profile
+      // shows the Clients nav entry; missing/false/no-profile all hide it.
+      isTrainer = profile.isTrainer === true;
     }
     // Theme comes from the HOST's public branding, never the own tenant.
     if (hostBranding) {
@@ -101,6 +114,7 @@ export default async function AppLayout({
         billingNavLabel={t("billing.navLabel")}
         isAdmin={isAdmin}
         isGym={isGym}
+        isTrainer={isTrainer}
       >
         {children}
       </AppShell>

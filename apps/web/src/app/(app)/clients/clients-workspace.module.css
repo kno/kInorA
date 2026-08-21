@@ -1,0 +1,352 @@
+/* Trainer client workspace (GH #447 closeout) — built to `web-clients.html`:
+   a two-column master-detail (roster left, selected client's detail right)
+   on the SAME page, with a search + status-filter roster, rich rows (name,
+   recency, adherence) and an invite modal sheet replacing the old
+   always-visible invite card. Composes the shared `.kin-*` surface/button/
+   form primitives (globals.css); only the layout this route actually needs
+   lives here. */
+
+.frame {
+  width: 100%;
+  max-width: 1320px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+/* -- Header --------------------------------------------------------------*/
+
+.topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.topbarLead {
+  max-width: 46ch;
+  margin-top: var(--sp-1);
+}
+
+.topbarActions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+/* -- Empty / error states --------------------------------------------------*/
+
+.stateCard {
+  color: var(--fg);
+}
+
+.emptyState {
+  gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-4);
+}
+
+/* -- Two-column workspace --------------------------------------------------*/
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sp-3);
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .detailPanel {
+    display: none;
+  }
+}
+
+.rosterPanel {
+  position: sticky;
+  top: var(--sp-4);
+  overflow: hidden;
+}
+
+.panelHead {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.panelHead h2 {
+  font-size: var(--fs-h3);
+}
+
+/* -- Roster tools: search + filters + count --------------------------------*/
+
+.rosterTools {
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.searchWrap {
+  position: relative;
+}
+
+.searchInput {
+  padding-left: 38px;
+}
+
+.searchIcon {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  width: 16px;
+  height: 16px;
+  color: var(--muted-2, var(--muted));
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.rosterSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.rosterCount {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.filters {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--bg, transparent);
+}
+
+.filter {
+  border: 0;
+  border-radius: var(--r-pill);
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.filter[aria-pressed="true"] {
+  background: var(--surface-3, var(--surface-2));
+  color: var(--fg);
+}
+
+/* -- Roster rows -----------------------------------------------------------*/
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.list li:last-child .rowSelect {
+  border-bottom: none;
+}
+
+.rowSelect {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.rowSelect:hover {
+  background: var(--surface-2);
+}
+
+.rowSelectActive {
+  background: linear-gradient(90deg, var(--accent-dim), transparent 78%);
+  box-shadow: inset 3px 0 var(--accent);
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-2);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.identity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.name {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.email {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted-2, var(--muted));
+  font-size: 11px;
+}
+
+.metaDot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.statusActive {
+  border-color: transparent;
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.statusInvited {
+  border-color: color-mix(in oklch, var(--info, var(--accent)), transparent 68%);
+  background: color-mix(in oklch, var(--info, var(--accent)), transparent 92%);
+  color: var(--info, var(--accent));
+}
+
+.rowActions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 var(--sp-3) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.list li:last-child .rowActions {
+  border-bottom: none;
+}
+
+.rowActions a {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.rowActions a[aria-disabled="true"] {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.listEmpty {
+  padding: var(--sp-5) var(--sp-3);
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+/* -- Detail panel ------------------------------------------------------------*/
+
+.detailPanel {
+  min-height: 480px;
+  padding: var(--sp-4);
+}
+
+/* -- Invite sheet ------------------------------------------------------------*/
+
+.sheetOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-4);
+  background: rgb(0 0 0 / 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.sheetCard {
+  width: min(100%, 460px);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: 0 28px 90px rgb(0 0 0 / 0.5);
+}
+
+.sheetHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.sheetActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.closeBtn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}

@@ -361,6 +361,126 @@ describe.skipIf(!hasDb)("TierOverrideAdminRepository (real Postgres)", () => {
     expect(rows).toHaveLength(1);
   });
 
+  it("setTenantOwnerRole promotes the owner membership and is idempotent when replayed (#449)", async () => {
+    const [tenant] = await db.insert(tenants).values({ name: "role-transition-tenant" }).returning({ id: tenants.id });
+    const [owner] = await db
+      .insert(users)
+      .values({ email: `owner-${Date.now()}-${Math.random()}@example.com` })
+      .returning({ id: users.id });
+    const [member] = await db
+      .insert(users)
+      .values({ email: `member-${Date.now()}-${Math.random()}@example.com` })
+      .returning({ id: users.id });
+    await db.insert(memberships).values([
+      { tenantId: tenant!.id, userId: owner!.id, role: "owner", status: "active" },
+      { tenantId: tenant!.id, userId: member!.id, role: "member", status: "active" },
+    ]);
+
+    const promoted = await repo.setTenantOwnerRole(tenant!.id, "owner", "trainer");
+    expect(promoted).toBe(1);
+
+    const rows = await db
+      .select({ userId: memberships.userId, role: memberships.role })
+      .from(memberships)
+      .where(eq(memberships.tenantId, tenant!.id));
+    const ownerRow = rows.find((r) => r.userId === owner!.id);
+    const memberRow = rows.find((r) => r.userId === member!.id);
+    expect(ownerRow?.role).toBe("trainer");
+    // The `member` row must NEVER be touched by the role transition.
+    expect(memberRow?.role).toBe("member");
+
+    // Replaying the same transition matches zero rows (already `trainer`) —
+    // idempotent, not an error.
+    const replayed = await repo.setTenantOwnerRole(tenant!.id, "owner", "trainer");
+    expect(replayed).toBe(0);
+
+    // Demote back to owner.
+    const demoted = await repo.setTenantOwnerRole(tenant!.id, "trainer", "owner");
+    expect(demoted).toBe(1);
+    const afterDemote = await db
+      .select({ role: memberships.role })
+      .from(memberships)
+      .where(and(eq(memberships.tenantId, tenant!.id), eq(memberships.userId, owner!.id)));
+    expect(afterDemote[0]?.role).toBe("owner");
+  });
+
+  it("setTenantOwnerRole throws and rolls back when more than one membership matches the from-role (#449)", async () => {
+    // Two `owner` rows in one tenant cannot be produced by any code path
+    // (provisioning creates exactly one, invites always insert `member`) —
+    // only by a manual data fix gone wrong. The guard must surface that
+    // anomaly instead of silently transitioning both rows.
+    const [tenant] = await db.insert(tenants).values({ name: "anomaly-tenant" }).returning({ id: tenants.id });
+    const [ownerA] = await db
+      .insert(users)
+      .values({ email: `owner-a-${Date.now()}-${Math.random()}@example.com` })
+      .returning({ id: users.id });
+    const [ownerB] = await db
+      .insert(users)
+      .values({ email: `owner-b-${Date.now()}-${Math.random()}@example.com` })
+      .returning({ id: users.id });
+    await db.insert(memberships).values([
+      { tenantId: tenant!.id, userId: ownerA!.id, role: "owner", status: "active" },
+      { tenantId: tenant!.id, userId: ownerB!.id, role: "owner", status: "active" },
+    ]);
+
+    await expect(repo.setTenantOwnerRole(tenant!.id, "owner", "trainer")).rejects.toThrow(
+      /expected at most one/i,
+    );
+
+    // The transaction rolled back — NEITHER row was transitioned.
+    const rows = await db
+      .select({ role: memberships.role })
+      .from(memberships)
+      .where(eq(memberships.tenantId, tenant!.id));
+    expect(rows.map((r) => r.role)).toEqual(["owner", "owner"]);
+  });
+
+  it("grants a trainer override then revokes it: the owner membership round-trips owner -> trainer -> owner (#449)", async () => {
+    const { tenantId, superadminId } = await seedTenantAndSuperadmin();
+    const [owner] = await db
+      .insert(users)
+      .values({ email: `owner-${Date.now()}-${Math.random()}@example.com` })
+      .returning({ id: users.id });
+    await db.insert(memberships).values({ tenantId, userId: owner!.id, role: "owner", status: "active" });
+
+    const created = await repo.grantTierOverride({
+      tenantId,
+      actorUserId: superadminId,
+      tier: "trainer",
+      reason: "role round-trip",
+      startsAt: NOW,
+      endsAt: OPEN_ENDED,
+    });
+    expect(created).not.toBeNull();
+
+    // Mirrors the use-case orchestration: the port's grant write succeeds,
+    // THEN the role transition runs as its own statement.
+    const promoted = await repo.setTenantOwnerRole(tenantId, "owner", "trainer");
+    expect(promoted).toBe(1);
+
+    const afterGrant = await db
+      .select({ role: memberships.role })
+      .from(memberships)
+      .where(and(eq(memberships.tenantId, tenantId), eq(memberships.userId, owner!.id)));
+    expect(afterGrant[0]?.role).toBe("trainer");
+
+    const revokeTime = new Date("2026-08-02T13:00:00Z");
+    await repo.revokeTierOverride({
+      tenantId,
+      overrideId: created.id,
+      actorUserId: superadminId,
+      now: revokeTime,
+    });
+    const demoted = await repo.setTenantOwnerRole(tenantId, "trainer", "owner");
+    expect(demoted).toBe(1);
+
+    const afterRevoke = await db
+      .select({ role: memberships.role })
+      .from(memberships)
+      .where(and(eq(memberships.tenantId, tenantId), eq(memberships.userId, owner!.id)));
+    expect(afterRevoke[0]?.role).toBe("owner");
+  });
+
   it("regression: writeMemberAllocation audit insert is unaffected by the relaxed FK (actor IS a tenant member)", async () => {
     const [tenant] = await db.insert(tenants).values({ name: "regression-tenant" }).returning({ id: tenants.id });
     const [owner] = await db

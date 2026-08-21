@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { resolveAuthorizedOwner, ForbiddenOwnerAccess } from "../owner-access.js";
+import { resolveAuthorizedOwner, ForbiddenOwnerAccess, isTrainerEntitled } from "../owner-access.js";
 import type { EntitlementContext } from "../../billing/entitlement.js";
 import type { TrainerClientAssignmentDTO } from "@kinora/contracts";
 
@@ -233,5 +233,61 @@ describe("resolveAuthorizedOwner", () => {
 
     expect(result).toBe(ACTOR);
     expect(deps.entitlementReader.loadContext).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * isTrainerEntitled — the non-throwing, non-logging half of the SAME gate
+ * `assertTrainerEntitled` enforces (#453, GET /auth/profile's `isTrainer`).
+ * Every case here has a mirrored `assertTrainerEntitled` case above; this
+ * function must never throw or record an `owner_access.denied` event — it
+ * only ever resolves a boolean.
+ */
+describe("isTrainerEntitled", () => {
+  it("returns true when role is trainer and the resolved tier is trainer", async () => {
+    const deps = {
+      entitlementReader: entitlementReader({
+        billing: { tier: "trainer", status: "active", source: "system", trialStartedAt: null, trialEndsAt: null },
+      }),
+    };
+
+    await expect(
+      isTrainerEntitled({ tenantId: TENANT, actorUserId: ACTOR, role: "trainer" }, deps),
+    ).resolves.toBe(true);
+  });
+
+  it("returns false when role is trainer but the resolved tier is not trainer", async () => {
+    const deps = {
+      entitlementReader: entitlementReader({
+        billing: { tier: "pro", status: "active", source: "system", trialStartedAt: null, trialEndsAt: null },
+      }),
+    };
+
+    await expect(
+      isTrainerEntitled({ tenantId: TENANT, actorUserId: ACTOR, role: "trainer" }, deps),
+    ).resolves.toBe(false);
+  });
+
+  it("returns false for a non-trainer role WITHOUT calling the entitlement reader (ascending-cost order)", async () => {
+    const deps = {
+      entitlementReader: entitlementReader({
+        billing: { tier: "trainer", status: "active", source: "system", trialStartedAt: null, trialEndsAt: null },
+      }),
+    };
+
+    await expect(
+      isTrainerEntitled({ tenantId: TENANT, actorUserId: ACTOR, role: "member" }, deps),
+    ).resolves.toBe(false);
+    expect(deps.entitlementReader.loadContext).not.toHaveBeenCalled();
+  });
+
+  it("never throws ForbiddenOwnerAccess — it only ever resolves a boolean", async () => {
+    const deps = {
+      entitlementReader: entitlementReader({}),
+    };
+
+    await expect(
+      isTrainerEntitled({ tenantId: TENANT, actorUserId: ACTOR, role: "owner" }, deps),
+    ).resolves.toBe(false);
   });
 });
